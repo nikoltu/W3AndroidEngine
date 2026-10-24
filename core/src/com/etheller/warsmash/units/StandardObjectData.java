@@ -1,6 +1,5 @@
 package com.etheller.warsmash.units;
 
-import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -16,6 +15,8 @@ import com.etheller.warsmash.util.StringBundle;
 import com.etheller.warsmash.util.WorldEditStrings;
 
 public class StandardObjectData {
+	private static final String[] CLASSIC_QUALITIES = { "sd" };
+	private static final String[] CLASSIC_FALLBACK_QUALITIES = { "de" };
 	private WorldEditStrings worldEditStrings;
 	private DataSource source;
 
@@ -68,6 +69,7 @@ public class StandardObjectData {
 			if (unitWeaponsSkin != null) {
 				profile.readTXT(unitWeaponsSkin, true);
 			}
+			profile.applyQualitySuffixes(CLASSIC_QUALITIES, CLASSIC_FALLBACK_QUALITIES);
 		}
 		catch (final IOException e) {
 			throw new RuntimeException(e);
@@ -97,6 +99,7 @@ public class StandardObjectData {
 			if (itemSkin != null) {
 				profile.readTXT(itemSkin, true);
 			}
+			profile.applyQualitySuffixes(CLASSIC_QUALITIES, CLASSIC_FALLBACK_QUALITIES);
 		}
 		catch (final IOException e) {
 			throw new RuntimeException(e);
@@ -119,6 +122,7 @@ public class StandardObjectData {
 			if (unitSkin != null) {
 				destructableData.readTXT(unitSkin, true);
 			}
+			destructableData.applyQualitySuffixes(CLASSIC_QUALITIES, CLASSIC_FALLBACK_QUALITIES);
 		}
 		catch (final IOException e) {
 			throw new RuntimeException(e);
@@ -141,6 +145,7 @@ public class StandardObjectData {
 			if (unitSkin != null) {
 				destructableData.readTXT(unitSkin, true);
 			}
+			destructableData.applyQualitySuffixes(CLASSIC_QUALITIES, CLASSIC_FALLBACK_QUALITIES);
 		}
 		catch (final IOException e) {
 			throw new RuntimeException(e);
@@ -213,6 +218,7 @@ public class StandardObjectData {
 			if (unitSkin != null) {
 				profile.readTXT(unitSkin, true);
 			}
+			profile.applyQualitySuffixes(CLASSIC_QUALITIES, CLASSIC_FALLBACK_QUALITIES);
 
 			abilityData.readSLK(this.source.getResourceAsStream("Units\\AbilityData.slk"));
 		}
@@ -719,9 +725,6 @@ public class StandardObjectData {
 			}
 			return name;
 		}
-
-		BufferedImage storedImage = null;
-		String storedImagePath = null;
 
 		@Override
 		public Set<String> keySet() {

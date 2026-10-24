@@ -7,6 +7,7 @@ import com.badlogic.gdx.math.Vector2;
 import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.RenderUnit;
 
 public final class GameCameraManager extends CameraManager {
+	private Vector2 quickPosition;
 	private static final float TWO_PI = (float) Math.PI * 2;
 	private static final CameraRates INFINITE_CAMERA_RATES = new CameraRates(Float.POSITIVE_INFINITY,
 			Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY,
@@ -408,5 +409,23 @@ public final class GameCameraManager extends CameraManager {
 		clearPan();
 		this.panDestination = new Vector2(x, y);
 		this.panRate = new Vector2(this.cameraRates.strafe, this.cameraRates.forward);
+	}
+
+	public void setQuickPosition(final float x, final float y) {
+		if (this.quickPosition == null) {
+			this.quickPosition = new Vector2();
+		}
+		this.quickPosition.set(x, y);
+	}
+
+	/**
+	 * @return false when no script has set a quick position yet
+	 */
+	public boolean panToQuickPosition() {
+		if (this.quickPosition == null) {
+			return false;
+		}
+		panTo(this.quickPosition.x, this.quickPosition.y);
+		return true;
 	}
 }

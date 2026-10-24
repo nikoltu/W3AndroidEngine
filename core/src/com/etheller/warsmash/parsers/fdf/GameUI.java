@@ -382,8 +382,15 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 				// mapping
 				this.nameToFrame.put(frameDefinition.getName(), simpleFrame);
 				for (final FrameDefinition childDefinition : frameDefinition.getInnerFrames()) {
-					simpleFrame.add(inflate(childDefinition, simpleFrame, frameDefinition,
-							inDecorateFileNames || childDefinition.has("DecorateFileNames")));
+					final UIFrame inflatedChild = inflate(childDefinition, simpleFrame, frameDefinition,
+							inDecorateFileNames || childDefinition.has("DecorateFileNames"));
+					// A nested simple frame that gives no size or points covers its parent, as the 2.0 console's
+					// ConsoleTopBar and ConsoleBottomBarOverlay expect for their anchored textures.
+					if ((childDefinition.getFrameClass() == FrameClass.Frame)
+							&& "SIMPLEFRAME".equals(childDefinition.getFrameType()) && isUnplaced(childDefinition)) {
+						inflatedChild.setSetAllPoints(true);
+					}
+					simpleFrame.add(inflatedChild);
 				}
 				inflatedFrame = simpleFrame;
 			}
@@ -1568,6 +1575,12 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 
 	public UIFrame getFrameByName(final String name, final int createContext) {
 		return this.nameToFrame.get(name);
+	}
+
+	private static boolean isUnplaced(final FrameDefinition frameDefinition) {
+		return (frameDefinition.getFloat("Width") == null) && (frameDefinition.getFloat("Height") == null)
+				&& frameDefinition.getSetPoints().isEmpty() && frameDefinition.getAnchors().isEmpty()
+				&& !frameDefinition.has("SetAllPoints");
 	}
 
 	public static float convertX(final Viewport viewport, final float fdfX) {

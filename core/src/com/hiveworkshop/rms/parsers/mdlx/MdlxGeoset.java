@@ -105,7 +105,16 @@ public class MdlxGeoset implements MdlxBlock, MdlxChunk {
 			}
 
 			if (id == SKIN.getValue()) {
-				this.skin = reader.readUInt8Array(reader.readInt32());
+				if (version >= 1400) {
+					final int[] wideSkin = reader.readUInt16Array(reader.readInt32());
+					this.skin = new short[wideSkin.length];
+					for (int i = 0; i < wideSkin.length; i++) {
+						this.skin[i] = (short) wideSkin[i];
+					}
+				}
+				else {
+					this.skin = reader.readUInt8Array(reader.readInt32());
+				}
 
 				id = reader.readInt32(); // UVAS
 			}

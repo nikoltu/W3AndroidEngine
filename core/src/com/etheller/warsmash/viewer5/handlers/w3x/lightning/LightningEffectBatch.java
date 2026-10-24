@@ -168,7 +168,7 @@ public class LightningEffectBatch extends RenderBatch {
 		GL20 gl = Gdx.gl;
 		indexBuffer.flip();
 		gl.glBindBuffer(GL20.GL_ELEMENT_ARRAY_BUFFER, model.elementBuffer);
-		gl.glBufferData(GL20.GL_ELEMENT_ARRAY_BUFFER, indexBuffer.remaining(), indexBuffer, GL20.GL_DYNAMIC_DRAW);
+		gl.glBufferData(GL20.GL_ELEMENT_ARRAY_BUFFER, indexBuffer.remaining() * 2, indexBuffer, GL20.GL_DYNAMIC_DRAW);
 		// Update the buffer.
 		buffer.bindAndUpdate(count * LIGHTNING_EFFECT_INSTANCE_BYTES);
 	}

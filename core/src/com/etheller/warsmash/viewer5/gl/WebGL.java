@@ -2,8 +2,12 @@ package com.etheller.warsmash.viewer5.gl;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
+import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.GL20;
+import com.badlogic.gdx.graphics.glutils.GLVersion;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.glutils.ShaderProgram;
 import com.etheller.warsmash.viewer5.Texture;
@@ -14,6 +18,11 @@ import com.etheller.warsmash.viewer5.deprecated.ShaderUnitDeprecated;
  * a utility, not a webgl
  */
 public class WebGL {
+	private static final Pattern DESKTOP_VERSION = Pattern.compile("^\\s*#version\\s+(\\d+)[^\\n]*\\n");
+	// Shared snippets such as the light system use texture2D in both GLSL 1.x and
+	// 3.x shaders; ES 3.00 only has texture.
+	private static final String ES3_SAMPLER_PRECISION = "precision highp sampler2DArray;\nprecision highp usampler2D;\n"
+			+ "precision highp isampler2D;\nprecision highp sampler2DShadow;\n#define texture2D texture\n";
 	public GL20 gl;
 	public Map<Integer, ShaderUnitDeprecated> shaderUnits;
 	public Map<Integer, ShaderProgram> shaderPrograms;
@@ -56,8 +65,14 @@ public class WebGL {
 	}
 
 	public ShaderProgram createShaderProgram(String vertexSrc, String fragmentSrc) {
-		vertexSrc = vertexSrc.replace("mediump", "");
-		fragmentSrc = fragmentSrc.replace("mediump", "");
+		if (Gdx.graphics.getGLVersion().getType() == GLVersion.Type.GLES) {
+			vertexSrc = adaptToGLES(vertexSrc);
+			fragmentSrc = adaptToGLES(fragmentSrc);
+		}
+		else {
+			vertexSrc = vertexSrc.replace("mediump", "");
+			fragmentSrc = fragmentSrc.replace("mediump", "");
+		}
 		final Map<Integer, ShaderProgram> shaderPrograms = this.shaderPrograms;
 
 		final int hash = stringHash(vertexSrc + fragmentSrc);
@@ -78,6 +93,23 @@ public class WebGL {
 			}
 		}
 		return null;
+	}
+
+	/**
+	 * The shaders are written for desktop GLSL. OpenGL ES accepts the same bodies
+	 * once the version names an ES dialect and a default float precision is given.
+	 */
+	private static String adaptToGLES(final String source) {
+		final Matcher versionMatcher = DESKTOP_VERSION.matcher(source);
+		String header = "precision highp float;\nprecision highp int;\n";
+		String body = source;
+		if (versionMatcher.find()) {
+			if (Integer.parseInt(versionMatcher.group(1)) >= 300) {
+				header = "#version 300 es\n" + header + ES3_SAMPLER_PRECISION;
+			}
+			body = source.substring(versionMatcher.end());
+		}
+		return header + body;
 	}
 
 	public void enableVertexAttribs(final int start, final int end) {

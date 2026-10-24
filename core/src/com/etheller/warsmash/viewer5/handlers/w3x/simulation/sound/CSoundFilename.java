@@ -66,6 +66,13 @@ public class CSoundFilename implements CSound {
 	}
 
 	@Override
+	public void stop() {
+		if (this.sound != null) {
+			this.sound.stop();
+		}
+	}
+
+	@Override
 	public float getPredictedDuration() {
 		return Extensions.audio.getDuration(this.sound);
 	}

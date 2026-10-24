@@ -10,6 +10,9 @@ buildscript {
         maven { url "https://maven.nikr.net/" }
         google()
     }
+    dependencies {
+        classpath "com.android.tools.build:gradle:8.5.2"
+    }
 }
 
 allprojects {
@@ -88,11 +91,15 @@ project(":shared") {
 
 project(":fdfparser") {
     apply plugin: "antlr"
-
+    apply plugin: "java-library"
 
     dependencies {
         antlr "org.antlr:antlr4:$antlrVersion" // use antlr version 4
+        api "org.antlr:antlr4-runtime:$antlrVersion"
     }
+
+    // The antlr configuration is the code generator with ICU4J; the parsers only need the runtime.
+    configurations.api.setExtendsFrom(configurations.api.extendsFrom.findAll { it.name != "antlr" })
 }
 
 project(":jassparser") {
@@ -103,7 +110,10 @@ project(":jassparser") {
     dependencies {
         implementation project(":shared")
         antlr "org.antlr:antlr4:$antlrVersion" // use antlr version 4
+        api "org.antlr:antlr4-runtime:$antlrVersion"
     }
+
+    configurations.api.setExtendsFrom(configurations.api.extendsFrom.findAll { it.name != "antlr" })
 }
 
 tasks.eclipse.doLast {

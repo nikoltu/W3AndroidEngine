@@ -115,6 +115,22 @@ public class CompoundDataSource implements DataSource {
 		return false;
 	}
 
+	@Override
+	public String findFirst(final String... filepaths) {
+		for (final String filepath : filepaths) {
+			if (this.cache.containsKey(filepath)) {
+				return filepath;
+			}
+		}
+		for (int i = this.mpqList.size() - 1; i >= 0; i--) {
+			final String found = this.mpqList.get(i).findFirst(filepaths);
+			if (found != null) {
+				return found;
+			}
+		}
+		return null;
+	}
+
 	public void refresh(final List<DataSourceDescriptor> dataSourceDescriptors) {
 		for (final DataSource dataSource : this.mpqList) {
 			try {

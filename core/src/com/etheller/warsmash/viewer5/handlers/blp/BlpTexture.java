@@ -1,11 +1,16 @@
 package com.etheller.warsmash.viewer5.handlers.blp;
 
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
 
 import javax.imageio.ImageIO;
 
+import org.apache.commons.compress.utils.IOUtils;
+
+import com.etheller.warsmash.util.ImageUtils;
 import com.etheller.warsmash.viewer5.ModelViewer;
 import com.etheller.warsmash.viewer5.PathSolver;
 import com.etheller.warsmash.viewer5.RawOpenGLTextureResource;
@@ -27,7 +32,27 @@ public class BlpTexture extends RawOpenGLTextureResource {
 	protected void load(final InputStream src, final Object options) {
 		BufferedImage img;
 		try {
-			img = ImageIO.read(src);
+			final ByteBuffer data = ByteBuffer.wrap(IOUtils.toByteArray(src));
+			if (DdsDecoder.isDds(data)) {
+				// A missing .blp can resolve to its .dds; the ImageIO path uploaded those with
+				// the sRGB format as well.
+				final DdsDecoder image = DdsDecoder.decode(data);
+				update(image.getWidth(), image.getHeight(), image.getRgba(), true);
+				return;
+			}
+			if (BlpDecoder.isPalettedBlp1(data) || BlpDecoder.isJpegBlp1(data)) {
+				// The ImageIO plugin reads these colors as linear and the sRGB texture format
+				// undoes that, so the raw colors in a plain RGBA texture match it.
+				final BlpDecoder image = BlpDecoder.isJpegBlp1(data) ? BlpDecoder.decodeJpeg(data)
+						: BlpDecoder.decode(data);
+				update(image.getWidth(), image.getHeight(), image.getRgba(), false);
+				return;
+			}
+			if (!ImageUtils.IMAGE_IO_AVAILABLE) {
+				System.err.println("No decoder for this BLP on this platform, texture left empty");
+				return;
+			}
+			img = ImageIO.read(new ByteArrayInputStream(data.array()));
 			update(img, true);
 		}
 		catch (final IOException e) {

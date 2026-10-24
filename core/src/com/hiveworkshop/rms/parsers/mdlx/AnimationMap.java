@@ -90,6 +90,26 @@ public enum AnimationMap {
 	 * Light visibility
 	 */
 	KLAV(MdlUtils.TOKEN_VISIBILITY, MdlxTimelineDescriptor.FLOAT_TIMELINE),
+	/**
+	 * Light shadow casting start
+	 */
+	KLSS("ShadowCastingStart", MdlxTimelineDescriptor.FLOAT_TIMELINE),
+	/**
+	 * Light shadow casting end
+	 */
+	KLSE("ShadowCastingEnd", MdlxTimelineDescriptor.FLOAT_TIMELINE),
+	/**
+	 * Light quadratic falloff
+	 */
+	KLQF("QuadraticFalloff", MdlxTimelineDescriptor.FLOAT_TIMELINE),
+	/**
+	 * Light linear falloff
+	 */
+	KLLF("LinearFalloff", MdlxTimelineDescriptor.FLOAT_TIMELINE),
+	/**
+	 * Light damping
+	 */
+	KLDA("Damping", MdlxTimelineDescriptor.FLOAT_TIMELINE),
 	// Attachment
 	/**
 	 * Attachment visibility
@@ -220,6 +240,22 @@ public enum AnimationMap {
 	 * Camera source rotation
 	 */
 	KCRL(MdlUtils.TOKEN_ROTATION, MdlxTimelineDescriptor.FLOAT_TIMELINE),
+	/**
+	 * Camera visibility
+	 */
+	KCVS(MdlUtils.TOKEN_VISIBILITY, MdlxTimelineDescriptor.FLOAT_TIMELINE),
+	/**
+	 * Camera focus distance
+	 */
+	IDUF("FocusDistance", MdlxTimelineDescriptor.FLOAT_TIMELINE),
+	/**
+	 * Camera focal length
+	 */
+	ELAF("FocalLength", MdlxTimelineDescriptor.FLOAT_TIMELINE),
+	/**
+	 * Camera f-stop
+	 */
+	PTSF("FStop", MdlxTimelineDescriptor.FLOAT_TIMELINE),
 	// GenericObject
 	/**
 	 * Generic object translation

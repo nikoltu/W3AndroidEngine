@@ -1,6 +1,5 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.ui;
 
-import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayDeque;
@@ -64,6 +63,7 @@ import com.etheller.warsmash.parsers.fdf.frames.UIFrame;
 import com.etheller.warsmash.parsers.jass.Jass2.RootFrameListener;
 import com.etheller.warsmash.units.DataTable;
 import com.etheller.warsmash.units.Element;
+import com.etheller.warsmash.util.ArgbImage;
 import com.etheller.warsmash.util.FastNumberFormat;
 import com.etheller.warsmash.util.ImageUtils;
 import com.etheller.warsmash.util.RenderMathUtils;
@@ -329,7 +329,7 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 	private RenderUnit activeCommandUnit;
 	private MdxComplexInstance cursorModelInstance = null;
 	private MdxComplexInstance rallyPointInstance = null;
-	private BufferedImage cursorModelPathing;
+	private ArgbImage cursorModelPathing;
 	private Pixmap cursorModelUnderneathPathingRedGreenPixmap;
 	private Texture cursorModelUnderneathPathingRedGreenPixmapTexture;
 	private PixmapTextureData cursorModelUnderneathPathingRedGreenPixmapTextureData;
@@ -492,7 +492,7 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 		Texture minimapTexture = null;
 		if (war3MapViewer.dataSource.has("war3mapMap.tga")) {
 			try {
-				minimapTexture = ImageUtils.getTextureNoColorCorrection(TgaFile.readTGA("war3mapMap.tga",
+				minimapTexture = ImageUtils.getTextureNoColorCorrection(TgaFile.readTGAPixels("war3mapMap.tga",
 						war3MapViewer.dataSource.getResourceAsStream("war3mapMap.tga")));
 			}
 			catch (final IOException e) {
@@ -3996,6 +3996,9 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 				return true;
 			}
 		}
+		if ((keycode == Input.Keys.SPACE) && getCameraManager().panToQuickPosition()) {
+			return true;
+		}
 		final String keyString = Input.Keys.toString(keycode);
 		final char c = keyString.length() == 1 ? keyString.charAt(0) : ' ';
 		for (int j = 0; j < COMMAND_CARD_HEIGHT; j++) {
@@ -5146,11 +5149,41 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 	}
 
 	@Override
+	public void scriptSelectUnit(final CUnit unit, final boolean select) {
+		final RenderUnit renderUnit = this.war3MapViewer.getRenderPeer(unit);
+		if (renderUnit == null) {
+			return;
+		}
+		final List<RenderWidget> widgets = new ArrayList<>(this.selectedUnits);
+		if (select) {
+			if (!widgets.contains(renderUnit)) {
+				widgets.add(renderUnit);
+			}
+		}
+		else {
+			widgets.remove(renderUnit);
+		}
+		selectWidgets(widgets);
+		this.war3MapViewer.doSelectUnit(widgets);
+	}
+
+	@Override
+	public void scriptClearSelection() {
+		final List<RenderWidget> none = new ArrayList<>();
+		selectWidgets(none);
+		this.war3MapViewer.doSelectUnit(none);
+	}
+
+	@Override
 	public CTimerDialog createTimerDialog(final CTimer timer) {
 		final UIFrame timerDialog = this.rootFrame.createFrame("TimerDialog", this.rootFrame, 0, 0);
 		final StringFrame valueFrame = (StringFrame) this.rootFrame.getFrameByName("TimeDialogValue", 0);
 		final StringFrame titleFrame = (StringFrame) this.rootFrame.getFrameByName("TimerDialogTitle", 0);
-		return new CTimerDialog(timer, timerDialog, valueFrame, titleFrame);
+		final CTimerDialog dialog = new CTimerDialog(this.rootFrame, timer, timerDialog, valueFrame, titleFrame);
+		// Like in the game, a new timer dialog stays hidden until TimerDialogDisplay.
+		dialog.setVisible(false);
+		this.timerDialogs.add(dialog);
+		return dialog;
 	}
 
 	@Override

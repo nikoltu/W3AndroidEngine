@@ -16,7 +16,6 @@ import com.hiveworkshop.blizzard.casc.nio.MalformedCASCStructureException;
  * assembled using higher level logic into a continuous file.
  */
 public class BankStream {
-	private final StorageContainer container;
 	private final BLTEContent[] content;
 	private final ByteBuffer streamBuffer;
 	private int bank = 0;
@@ -35,25 +34,30 @@ public class BankStream {
 	 */
 	public BankStream(final ByteBuffer storageBuffer, final Key encodingKey) throws IOException {
 		ByteBuffer streamBuffer = storageBuffer.slice();
-		container = new StorageContainer(streamBuffer);
-		if ((encodingKey != null) && !container.getKey().equals(encodingKey)) {
-			throw new MalformedCASCStructureException("container encoding key mismatch");
-		}
 
-		final int storageSize = (int) container.getSize();
-		final int storageSizeDiff = Integer.compare(streamBuffer.capacity(), storageSize);
+		// Index entries may point directly at BLTE data, or at a container header
+		// that is zeroed. The index entry size is authoritative in both cases.
+		if (!BLTEContent.hasIdentifier(streamBuffer)) {
+			final StorageContainer container = new StorageContainer(streamBuffer);
+			if ((encodingKey == null) || container.getKey().equals(encodingKey)) {
+				final int storageSize = (int) container.getSize();
+				final int storageSizeDiff = Integer.compare(streamBuffer.capacity(), storageSize);
 
-		if (storageSizeDiff < 0) {
-			throw new MalformedCASCStructureException("container buffer smaller than container");
-		} else if ((encodingKey != null) && (storageSizeDiff != 0)) {
-			throw new MalformedCASCStructureException("container buffer size mismatch");
-		} else if (storageSizeDiff > 0) {
-			// resize buffer to match file
-			final int streamPos = streamBuffer.position();
-			streamBuffer.limit(storageSize);
-			streamBuffer.position(0);
-			streamBuffer = streamBuffer.slice();
-			streamBuffer.position(streamPos);
+				if (storageSizeDiff < 0) {
+					throw new MalformedCASCStructureException("container buffer smaller than container");
+				} else if ((encodingKey != null) && (storageSizeDiff != 0)) {
+					throw new MalformedCASCStructureException("container buffer size mismatch");
+				} else if (storageSizeDiff > 0) {
+					// resize buffer to match file
+					final int streamPos = streamBuffer.position();
+					streamBuffer.limit(storageSize);
+					streamBuffer.position(0);
+					streamBuffer = streamBuffer.slice();
+					streamBuffer.position(streamPos);
+				}
+			} else if (!BLTEContent.hasIdentifier(streamBuffer)) {
+				throw new MalformedCASCStructureException("container encoding key mismatch");
+			}
 		}
 
 		if (streamBuffer.hasRemaining()) {
@@ -117,8 +121,6 @@ public class BankStream {
 
 			final ByteBuffer encodedBuffer = ((ByteBuffer) streamBuffer.slice().limit((int) encodedSize)).slice();
 			final ByteBuffer decodedBuffer = ((ByteBuffer) bankBuffer.slice().limit((int) decodedSize)).slice();
-			final byte[] intermediateEncodedCopy = new byte[encodedBuffer.remaining()];
-			final byte[] intermediateDecodedCopy = new byte[decodedBuffer.remaining()];
 
 			final char encodingMode = (char) encodedBuffer.get();
 			switch (encodingMode) {
@@ -132,19 +134,36 @@ public class BankStream {
 			case 'Z':
 				// zlib compressed data
 				final Inflater zlib = new Inflater();
-				encodedBuffer.get(intermediateEncodedCopy, 0, encodedBuffer.remaining());
-				zlib.setInput(intermediateEncodedCopy);
-				final int resultSize;
+				if (encodedBuffer.hasArray()) {
+					zlib.setInput(encodedBuffer.array(), encodedBuffer.arrayOffset() + encodedBuffer.position(),
+							encodedBuffer.remaining());
+				} else {
+					final byte[] encodedBytes = new byte[encodedBuffer.remaining()];
+					encodedBuffer.duplicate().get(encodedBytes);
+					zlib.setInput(encodedBytes);
+				}
+				encodedBuffer.position(encodedBuffer.limit());
 				try {
-					resultSize = zlib.inflate(intermediateDecodedCopy);
-					decodedBuffer.put(intermediateDecodedCopy, 0, resultSize);
+					final int resultSize;
+					if (decodedBuffer.hasArray()) {
+						resultSize = zlib.inflate(decodedBuffer.array(),
+								decodedBuffer.arrayOffset() + decodedBuffer.position(), decodedBuffer.remaining());
+						decodedBuffer.position(decodedBuffer.position() + resultSize);
+					} else {
+						final byte[] decodedBytes = new byte[decodedBuffer.remaining()];
+						resultSize = zlib.inflate(decodedBytes);
+						decodedBuffer.put(decodedBytes, 0, resultSize);
+					}
+					if (resultSize != decodedSize) {
+						throw new MalformedCASCStructureException("not enough bytes generated: " + resultSize + "B");
+					} else if (!zlib.finished()) {
+						throw new MalformedCASCStructureException("unfinished inflate operation");
+					}
 				} catch (final DataFormatException e) {
 					throw new MalformedCASCStructureException("zlib inflate exception", e);
-				}
-				if (resultSize != decodedSize) {
-					throw new MalformedCASCStructureException("not enough bytes generated: " + resultSize + "B");
-				} else if (!zlib.finished()) {
-					throw new MalformedCASCStructureException("unfinished inflate operation");
+				} finally {
+					// releases native zlib memory now instead of whenever the GC runs
+					zlib.end();
 				}
 				break;
 			default:

@@ -97,6 +97,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.ui.menu.CampaignMenuData;
 import com.etheller.warsmash.viewer5.handlers.w3x.ui.menu.CampaignMenuUI;
 import com.etheller.warsmash.viewer5.handlers.w3x.ui.menu.CampaignMission;
 import com.etheller.warsmash.viewer5.handlers.w3x.ui.sound.KeyedSounds;
+import com.etheller.warsmash.viewer5.gl.Extensions;
 
 import net.warsmash.map.NetMapDownloader;
 import net.warsmash.uberserver.AccountCreationFailureReason;
@@ -818,6 +819,11 @@ public class MenuUI {
 				GameUI.convertX(this.uiViewport, 0.13f), GameUI.convertY(this.uiViewport, -0.08f)));
 		setMainMenuVisible(false);
 		this.rootFrame.getFrameByName("RealmSelect", 0).setVisible(false);
+		// 2.0 and later menus carry an age rating badge that the game shows only in the Korean region.
+		final UIFrame ratingsLogo = this.rootFrame.getFrameByName("RatingsLogo", 0);
+		if (ratingsLogo != null) {
+			ratingsLogo.setVisible(false);
+		}
 
 		this.glueSpriteLayerTopRight = (SpriteFrame) this.rootFrame.createFrameByType("SPRITE",
 				"SmashGlueSpriteLayerTopRight", this.rootFrame, "", 0);
@@ -2602,8 +2608,7 @@ public class MenuUI {
 			int validMusicCount = 0;
 			for (int i = 0; i < musics.length; i++) {
 				if (this.viewer.dataSource.has(musics[i])) {
-					final Music newMusic = Gdx.audio
-							.newMusic(new DataSourceFileHandle(this.viewer.dataSource, musics[i]));
+					final Music newMusic = Extensions.audio.newMusic(new DataSourceFileHandle(this.viewer.dataSource, musics[i]));
 					newMusic.setVolume(1.0f);
 					this.currentMusics[i] = newMusic;
 					validMusicCount++;

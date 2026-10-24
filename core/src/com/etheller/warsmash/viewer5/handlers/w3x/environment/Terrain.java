@@ -1,6 +1,5 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.environment;
 
-import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.Buffer;
@@ -35,7 +34,7 @@ import com.etheller.warsmash.parsers.w3x.wpm.War3MapWpm;
 import com.etheller.warsmash.units.DataTable;
 import com.etheller.warsmash.units.Element;
 import com.etheller.warsmash.util.ImageUtils;
-import com.etheller.warsmash.util.ImageUtils.AnyExtensionImage;
+import com.etheller.warsmash.util.ImageUtils.RgbaImage;
 import com.etheller.warsmash.util.RenderMathUtils;
 import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.util.WorldEditStrings;
@@ -270,12 +269,10 @@ public class Terrain {
 			}
 			final String texDir = cliffInfo.getField("texDir");
 			final String texFile = cliffInfo.getField("texFile");
-			final AnyExtensionImage imageInfo = ImageUtils.getAnyExtensionImageFixRGB(dataSource,
-					texDir + "\\" + texFile + texturesExt, "cliff texture");
-			final BufferedImage image = imageInfo.getRGBCorrectImageData();
-			this.cliffTextures
-					.add(new UnloadedTexture(image.getWidth(), image.getHeight(), ImageUtils.getTextureBuffer(image),
-							cliffInfo.getField("cliffModelDir"), cliffInfo.getField("rampModelDir")));
+			final RgbaImage image = ImageUtils.getAnyExtensionRgbaImage(dataSource,
+					texDir + "\\" + texFile + texturesExt, "cliff texture", true);
+			this.cliffTextures.add(new UnloadedTexture(image.getWidth(), image.getHeight(), image.getPixels(),
+					cliffInfo.getField("cliffModelDir"), cliffInfo.getField("rampModelDir")));
 			this.cliffTexturesSize = Math.max(this.cliffTexturesSize,
 					this.cliffTextures.get(this.cliffTextures.size() - 1).width);
 			this.cliffToGroundTexture.add(this.groundTextureToId.get(cliffInfo.getField("groundTile")));
@@ -378,19 +375,18 @@ public class Terrain {
 
 		if (waterInfo != null) {
 			final String fileName = waterInfo.getField("texFile");
-			final List<BufferedImage> waterTextures = new ArrayList<>();
+			final List<RgbaImage> waterTextures = new ArrayList<>();
 			boolean anyWaterTextureNeedsSRGB = false;
 			int waterImageDimension = 128;
 			for (int i = 0; i < this.waterTextureCount; i++) {
-				final AnyExtensionImage imageInfo = ImageUtils.getAnyExtensionImageFixRGB(dataSource,
-						fileName + (i < 10 ? "0" : "") + Integer.toString(i) + texturesExt, "water texture");
-				final BufferedImage image = imageInfo.getImageData();
+				final RgbaImage image = ImageUtils.getAnyExtensionRgbaImage(dataSource,
+						fileName + (i < 10 ? "0" : "") + Integer.toString(i) + texturesExt, "water texture", false);
 				if ((image.getWidth() != 128) || (image.getHeight() != 128)) {
 					System.err.println(
 							"Odd water texture size detected of " + image.getWidth() + " x " + image.getHeight());
 					waterImageDimension = image.getWidth();
 				}
-				anyWaterTextureNeedsSRGB |= imageInfo.isNeedsSRGBFix();
+				anyWaterTextureNeedsSRGB |= image.isNeedsSRGBFix();
 				waterTextures.add(image);
 			}
 			gl.glTexImage3D(GL30.GL_TEXTURE_2D_ARRAY, 0,
@@ -401,9 +397,9 @@ public class Terrain {
 			gl.glTexParameteri(GL30.GL_TEXTURE_2D_ARRAY, GL30.GL_TEXTURE_BASE_LEVEL, 0);
 
 			for (int i = 0; i < waterTextures.size(); i++) {
-				final BufferedImage image = waterTextures.get(i);
+				final RgbaImage image = waterTextures.get(i);
 				gl.glTexSubImage3D(GL30.GL_TEXTURE_2D_ARRAY, 0, 0, 0, i, image.getWidth(), image.getHeight(), 1,
-						GL30.GL_RGBA, GL30.GL_UNSIGNED_BYTE, ImageUtils.getTextureBuffer(image));
+						GL30.GL_RGBA, GL30.GL_UNSIGNED_BYTE, image.getPixels());
 			}
 		}
 
@@ -440,7 +436,7 @@ public class Terrain {
 
 		this.testArrayBuffer = gl.glGenBuffer();
 		gl.glBindBuffer(GL30.GL_ARRAY_BUFFER, this.testArrayBuffer);
-		gl.glBufferData(GL30.GL_ARRAY_BUFFER, this.softwareGroundMesh.vertices.length,
+		gl.glBufferData(GL30.GL_ARRAY_BUFFER, this.softwareGroundMesh.vertices.length * 4,
 				RenderMathUtils.wrap(this.softwareGroundMesh.vertices), GL30.GL_STATIC_DRAW);
 
 		this.testElementBuffer = gl.glGenBuffer();

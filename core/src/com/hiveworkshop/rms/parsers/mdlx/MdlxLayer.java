@@ -1,10 +1,15 @@
 package com.hiveworkshop.rms.parsers.mdlx;
 
+import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
+
+import com.etheller.warsmash.util.War3ID;
 
 import com.hiveworkshop.rms.parsers.mdlx.mdl.MdlTokenInputStream;
 import com.hiveworkshop.rms.parsers.mdlx.mdl.MdlTokenOutputStream;
 import com.hiveworkshop.rms.parsers.mdlx.mdl.MdlUtils;
+import com.hiveworkshop.rms.parsers.mdlx.timeline.MdlxTimeline;
 import com.hiveworkshop.rms.util.BinaryReader;
 import com.hiveworkshop.rms.util.BinaryWriter;
 
@@ -74,6 +79,20 @@ public class MdlxLayer extends MdlxAnimatedObject {
 	 * @since 1000
 	 */
 	public float fresnelTeamColor = 0;
+	/**
+	 * @since 1100
+	 */
+	public long shaderTypeId = 0;
+	/**
+	 * @since 1100
+	 */
+	public final List<Texture> textures = new ArrayList<>();
+
+	public static class Texture {
+		public int textureId;
+		public long slot;
+		public MdlxTimeline<?> flipbook;
+	}
 
 	@Override
 	public void readMdx(final BinaryReader reader, final int version) {
@@ -94,6 +113,26 @@ public class MdlxLayer extends MdlxAnimatedObject {
 				reader.readFloat32Array(this.fresnelColor);
 				this.fresnelOpacity = reader.readFloat32();
 				this.fresnelTeamColor = reader.readFloat32();
+			}
+		}
+
+		if (version >= 1100) {
+			this.shaderTypeId = reader.readUInt32();
+			final long textureCount = reader.readUInt32();
+			for (int i = 0; i < textureCount; i++) {
+				final Texture texture = new Texture();
+				texture.textureId = reader.readInt32();
+				texture.slot = reader.readUInt32();
+				final int tagPosition = reader.position();
+				final War3ID tag = new War3ID(reader.readTag());
+				if (AnimationMap.KMTF.getWar3id().equals(tag)) {
+					texture.flipbook = AnimationMap.KMTF.getImplementation().createTimeline();
+					texture.flipbook.readMdx(reader, tag);
+				}
+				else {
+					reader.position(tagPosition);
+				}
+				this.textures.add(texture);
 			}
 		}
 
@@ -285,6 +324,39 @@ public class MdlxLayer extends MdlxAnimatedObject {
 		}
 
 		return byteLength;
+	}
+
+	/**
+	 * Builds a pre-1100 style layer that uses the texture of the given slot.
+	 */
+	public MdlxLayer forTextureSlot(final long slot) {
+		final MdlxLayer layer = new MdlxLayer();
+		layer.filterMode = this.filterMode;
+		layer.flags = this.flags;
+		layer.textureAnimationId = this.textureAnimationId;
+		layer.coordId = this.coordId;
+		layer.alpha = this.alpha;
+		layer.emissiveGain = this.emissiveGain;
+		layer.fresnelColor = this.fresnelColor;
+		layer.fresnelOpacity = this.fresnelOpacity;
+		layer.fresnelTeamColor = this.fresnelTeamColor;
+		layer.shaderTypeId = this.shaderTypeId;
+		layer.timelines.addAll(this.timelines);
+
+		Texture texture = this.textures.isEmpty() ? null : this.textures.get(0);
+		for (final Texture candidate : this.textures) {
+			if (candidate.slot == slot) {
+				texture = candidate;
+				break;
+			}
+		}
+		if (texture != null) {
+			layer.textureId = texture.textureId;
+			if (texture.flipbook != null) {
+				layer.timelines.add(texture.flipbook);
+			}
+		}
+		return layer;
 	}
 
 	public FilterMode getFilterMode() {

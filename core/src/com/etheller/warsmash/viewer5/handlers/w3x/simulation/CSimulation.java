@@ -1,7 +1,5 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation;
 
-import java.awt.geom.Point2D;
-import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashMap;
@@ -26,6 +24,7 @@ import com.etheller.interpreter.ast.scope.variableevent.VariableEvent;
 import com.etheller.warsmash.parsers.jass.scope.CommonTriggerExecutionScope;
 import com.etheller.warsmash.units.DataTable;
 import com.etheller.warsmash.units.ObjectData;
+import com.etheller.warsmash.util.ArgbImage;
 import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.viewer5.handlers.w3x.AnimationTokens.PrimaryTag;
@@ -57,6 +56,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.data.CDestructableD
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.data.CItemData;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.data.CUnitData;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.data.CUpgradeData;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.pathing.CPathPoint;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.pathing.CPathfindingProcessor;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CAllianceType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CMapControl;
@@ -164,10 +164,9 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 		this.handleIdAllocator = new HandleIdAllocator();
 		this.worldCollision = new CWorldCollision(entireMapBounds, this.gameplayConstants.getMaxCollisionRadius());
 		this.regionManager = new CRegionManager(entireMapBounds, pathingGrid);
+		// Created on first use: each one allocates node grids for the whole map, which
+		// is too much memory to spend on every player slot.
 		this.pathfindingProcessors = new CPathfindingProcessor[WarsmashConstants.MAX_PLAYERS];
-		for (int i = 0; i < WarsmashConstants.MAX_PLAYERS; i++) {
-			this.pathfindingProcessors[i] = new CPathfindingProcessor(pathingGrid, this.worldCollision);
-		}
 		this.seededRandom = seededRandom;
 		this.players = new ArrayList<>();
 		this.defaultPlayerUnitOrderExecutors = new ArrayList<>();
@@ -290,7 +289,7 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 	}
 
 	public CUnit internalCreateUnit(final War3ID typeId, final int playerIndex, final float x, final float y,
-			final float facing, final BufferedImage buildingPathingPixelMap) {
+			final float facing, final ArgbImage buildingPathingPixelMap) {
 		final CUnit unit = this.unitData.create(this, playerIndex, typeId, x, y, facing, buildingPathingPixelMap,
 				this.handleIdAllocator);
 		this.newUnits.add(unit);
@@ -481,17 +480,24 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 
 	public void findNaiveSlowPath(final CUnit ignoreIntersectionsWithThisUnit,
 			final CUnit ignoreIntersectionsWithThisSecondUnit, final float startX, final float startY,
-			final Point2D.Float goal, final PathingGrid.MovementType movementType, final float collisionSize,
+			final CPathPoint goal, final PathingGrid.MovementType movementType, final float collisionSize,
 			final boolean allowSmoothing, final CBehaviorMove queueItem) {
 		final int playerIndex = queueItem.getUnit().getPlayerIndex();
-		this.pathfindingProcessors[playerIndex].findNaiveSlowPath(ignoreIntersectionsWithThisUnit,
-				ignoreIntersectionsWithThisSecondUnit, startX, startY, goal, movementType, collisionSize,
-				allowSmoothing, queueItem);
+		CPathfindingProcessor pathfindingProcessor = this.pathfindingProcessors[playerIndex];
+		if (pathfindingProcessor == null) {
+			pathfindingProcessor = new CPathfindingProcessor(this.pathingGrid, this.worldCollision);
+			this.pathfindingProcessors[playerIndex] = pathfindingProcessor;
+		}
+		pathfindingProcessor.findNaiveSlowPath(ignoreIntersectionsWithThisUnit, ignoreIntersectionsWithThisSecondUnit,
+				startX, startY, goal, movementType, collisionSize, allowSmoothing, queueItem);
 	}
 
 	public void removeFromPathfindingQueue(final CBehaviorMove behaviorMove) {
 		final int playerIndex = behaviorMove.getUnit().getPlayerIndex();
-		this.pathfindingProcessors[playerIndex].removeFromPathfindingQueue(behaviorMove);
+		final CPathfindingProcessor pathfindingProcessor = this.pathfindingProcessors[playerIndex];
+		if (pathfindingProcessor != null) {
+			pathfindingProcessor.removeFromPathfindingQueue(behaviorMove);
+		}
 	}
 
 	protected void updateFogOfWar() {
@@ -538,7 +544,9 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 		this.projectiles.addAll(this.newProjectiles);
 		this.newProjectiles.clear();
 		for (final CPathfindingProcessor pathfindingProcessor : this.pathfindingProcessors) {
-			pathfindingProcessor.update(this);
+			if (pathfindingProcessor != null) {
+				pathfindingProcessor.update(this);
+			}
 		}
 		this.gameTurnTick++;
 		final float timeOfDayBefore = getGameTimeOfDay();
@@ -1117,7 +1125,7 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 		this.unitData.addDefaultAbilitiesToUnit(this, this.handleIdAllocator, unitTypeInstance, true, manaInitial,
 				speed, unit);
 		this.unitData.applyPlayerUpgradesToUnit(this, unit.getPlayerIndex(), unitTypeInstance, unit);
-		final BufferedImage buildingPathingPixelMap = unitTypeInstance.getBuildingPathingPixelMap();
+		final ArgbImage buildingPathingPixelMap = unitTypeInstance.getBuildingPathingPixelMap();
 		if (buildingPathingPixelMap != null) {
 			unit.regeneratePathingInstance(this, buildingPathingPixelMap);
 		}

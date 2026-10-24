@@ -12,6 +12,9 @@ import com.hiveworkshop.rms.util.BinaryWriter;
 
 public class MdlxMaterial implements MdlxBlock, MdlxChunk {
 	public static final War3ID LAYS = War3ID.fromString("LAYS");
+	private static final long SHADER_TYPE_HD = 1;
+	private static final String HD_SHADER_NAME = "Shader_HD_DefaultUnit";
+	private static final int HD_TEXTURE_SLOTS = 6;
 	public int priorityPlane = 0;
 	public int flags;
 	/**
@@ -22,12 +25,13 @@ public class MdlxMaterial implements MdlxBlock, MdlxChunk {
 
 	@Override
 	public void readMdx(final BinaryReader reader, final int version) {
-		reader.readUInt32(); // Don't care about the size
+		final int position = reader.position();
+		final long size = reader.readUInt32();
 
 		this.priorityPlane = reader.readInt32();
 		this.flags = reader.readInt32();
 
-		if (version > 800) {
+		if ((version > 800) && (version < 1100)) {
 			this.shader = reader.read(80);
 		}
 
@@ -39,6 +43,33 @@ public class MdlxMaterial implements MdlxBlock, MdlxChunk {
 			layer.readMdx(reader, version);
 			this.layers.add(layer);
 		}
+
+		if (version >= 1100) {
+			splitLayerTextures();
+		}
+
+		reader.position((int) (position + size));
+	}
+
+	/**
+	 * Since 1100 a layer holds all of its PBR textures, while the renderer expects
+	 * the 900/1000 layout of one layer per texture slot.
+	 */
+	private void splitLayerTextures() {
+		final List<MdlxLayer> splitLayers = new ArrayList<>();
+		for (final MdlxLayer layer : this.layers) {
+			if (layer.shaderTypeId == SHADER_TYPE_HD) {
+				this.shader = HD_SHADER_NAME;
+				for (int slot = 0; slot < HD_TEXTURE_SLOTS; slot++) {
+					splitLayers.add(layer.forTextureSlot(slot));
+				}
+			}
+			else {
+				splitLayers.add(layer.forTextureSlot(0));
+			}
+		}
+		this.layers.clear();
+		this.layers.addAll(splitLayers);
 	}
 
 	@Override

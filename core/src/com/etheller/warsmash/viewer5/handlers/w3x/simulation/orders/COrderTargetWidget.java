@@ -51,6 +51,9 @@ public class COrderTargetWidget implements COrder {
 		ability.checkCanUse(game, caster, this.orderId, abilityActivationReceiver.reset());
 		if (abilityActivationReceiver.isUseOk()) {
 			final CWidget target = game.getWidget(this.targetHandleId);
+			if (target == null) {
+				return caster.pollNextOrderBehavior(game);
+			}
 			final ExternStringMsgTargetCheckReceiver<CWidget> targetReceiver = (ExternStringMsgTargetCheckReceiver<CWidget>) targetCheckReceiver;
 			ability.checkCanTarget(game, caster, this.orderId, target, targetReceiver.reset());
 			if (targetReceiver.getTarget() != null) {

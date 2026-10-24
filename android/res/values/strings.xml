@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Warsmash</string>
+    <string name="data_folder_title">Game data folder</string>
+    <string name="data_folder_hint">Choose the folder with your own copy of the game data: an installed game (CASC) or extracted files. Without extra permissions the app can read folders under %1$s.</string>
+    <string name="data_folder_check">Check</string>
+    <string name="data_folder_start">Start</string>
+    <string name="data_folder_casc">Installed game data found.</string>
+    <string name="data_folder_extracted">Extracted game data found.</string>
+    <string name="data_folder_missing">No game data found in this folder, or the app cannot read it.</string>
+    <string name="data_folder_write_failed">The engine configuration could not be written.</string>
+</resources>

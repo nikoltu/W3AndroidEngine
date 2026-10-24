@@ -13,6 +13,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import com.hiveworkshop.blizzard.casc.io.WarcraftIIICASC;
 import com.hiveworkshop.blizzard.casc.io.WarcraftIIICASC.FileSystem;
@@ -26,6 +27,9 @@ public class CascDataSource implements DataSource {
 	private FileSystem rootFileSystem;
 	private List<String> listFile;
 	private Map<String, String> fileAliases;
+	private final Map<String, Boolean> readableCache = new ConcurrentHashMap<>();
+	private final Map<String, File> extractedFiles = new ConcurrentHashMap<>();
+	private final File extractFolder = new File(System.getProperty("java.io.tmpdir"), "warsmash-casc");
 
 	public CascDataSource(final String warcraft3InstallPath, final String[] prefixes) {
 		this.prefixes = prefixes;
@@ -35,8 +39,11 @@ public class CascDataSource implements DataSource {
 			prefixes[prefixes.length - i - 1] = temp;
 		}
 
+		// Files left by a session that did not exit cleanly are not deleted by deleteOnExit.
+		deleteContents(this.extractFolder);
 		try {
-			this.warcraftIIICASC = new WarcraftIIICASC(Paths.get(warcraft3InstallPath), true);
+			// Plain reads are as fast as mapping here, and a mapping per read can exhaust a 32-bit address space.
+			this.warcraftIIICASC = new WarcraftIIICASC(Paths.get(warcraft3InstallPath), false);
 			this.rootFileSystem = this.warcraftIIICASC.getRootFileSystem();
 			this.listFile = this.rootFileSystem.enumerateFiles();
 			this.fileAliases = new HashMap<>();
@@ -96,7 +103,7 @@ public class CascDataSource implements DataSource {
 
 	private InputStream internalGetResourceAsStream(final String tempFilepath) {
 		try {
-			if (this.rootFileSystem.isFile(tempFilepath) && this.rootFileSystem.isFileAvailable(tempFilepath)) {
+			if (isReadable(tempFilepath)) {
 				final ByteBuffer buffer = this.rootFileSystem.readFileData(tempFilepath);
 				if (buffer.hasArray()) {
 					return new ByteArrayInputStream(buffer.array());
@@ -132,7 +139,7 @@ public class CascDataSource implements DataSource {
 
 	private ByteBuffer internalRead(final String tempFilepath) {
 		try {
-			if (this.rootFileSystem.isFile(tempFilepath) && this.rootFileSystem.isFileAvailable(tempFilepath)) {
+			if (isReadable(tempFilepath)) {
 				final ByteBuffer buffer = this.rootFileSystem.readFileData(tempFilepath);
 				return buffer;
 			}
@@ -166,15 +173,15 @@ public class CascDataSource implements DataSource {
 	}
 
 	private File internalGetFile(final String tempFilepath) {
+		final File extracted = this.extractedFiles.get(tempFilepath);
+		if ((extracted != null) && extracted.isFile()) {
+			return extracted;
+		}
 		try {
-			if (this.rootFileSystem.isFile(tempFilepath) && this.rootFileSystem.isFileAvailable(tempFilepath)) {
+			if (isReadable(tempFilepath)) {
 				final ByteBuffer buffer = this.rootFileSystem.readFileData(tempFilepath);
-				String tmpdir = System.getProperty("java.io.tmpdir");
-				if (!tmpdir.endsWith(File.separator)) {
-					tmpdir += File.separator;
-				}
-				final String tempDir = tmpdir + "MatrixEaterExtract/";
-				final File tempProduct = new File(tempDir + tempFilepath.replace('\\', File.separatorChar));
+				final File tempProduct = new File(this.extractFolder,
+						tempFilepath.replace('\\', File.separatorChar));
 				tempProduct.delete();
 				tempProduct.getParentFile().mkdirs();
 				try (final FileChannel fileChannel = FileChannel.open(tempProduct.toPath(), StandardOpenOption.CREATE,
@@ -182,6 +189,7 @@ public class CascDataSource implements DataSource {
 					fileChannel.write(buffer);
 				}
 				tempProduct.deleteOnExit();
+				this.extractedFiles.put(tempFilepath, tempProduct);
 				return tempProduct;
 			}
 		}
@@ -199,21 +207,52 @@ public class CascDataSource implements DataSource {
 			filepath = resolvedAlias;
 		}
 		for (final String prefix : this.prefixes) {
-			final String tempFilepath = prefix + "\\" + filepath;
-			try {
-				if (this.rootFileSystem.isFile(tempFilepath)) {
-					return true;
+			if (isReadable(prefix + "\\" + filepath)) {
+				return true;
+			}
+		}
+		return isReadable(filepath);
+	}
+
+	@Override
+	public String findFirst(final String... filepaths) {
+		final String[] resolvedPaths = new String[filepaths.length];
+		for (int i = 0; i < filepaths.length; i++) {
+			final String filepath = filepaths[i].toLowerCase(Locale.US).replace('/', '\\').replace(':', '\\');
+			final String resolvedAlias = this.fileAliases.get(filepath);
+			resolvedPaths[i] = resolvedAlias != null ? resolvedAlias : filepath;
+		}
+		for (final String prefix : this.prefixes) {
+			for (int i = 0; i < resolvedPaths.length; i++) {
+				if (isReadable(prefix + "\\" + resolvedPaths[i])) {
+					return filepaths[i];
 				}
 			}
-			catch (final IOException e) {
-				throw new RuntimeException("CASC parser error for: " + tempFilepath, e);
+		}
+		for (int i = 0; i < resolvedPaths.length; i++) {
+			if (isReadable(resolvedPaths[i])) {
+				return filepaths[i];
 			}
 		}
+		return null;
+	}
+
+	/**
+	 * The file system also lists files of other locales and platforms that are not
+	 * in local storage, so presence alone does not mean the file can be read.
+	 */
+	private boolean isReadable(final String tempFilepath) {
+		final Boolean cached = this.readableCache.get(tempFilepath);
+		if (cached != null) {
+			return cached;
+		}
 		try {
-			return this.rootFileSystem.isFile(filepath);
+			final boolean readable = this.rootFileSystem.isReadableFile(tempFilepath);
+			this.readableCache.put(tempFilepath, readable);
+			return readable;
 		}
 		catch (final IOException e) {
-			throw new RuntimeException("CASC parser error for: " + filepath, e);
+			throw new RuntimeException("CASC parser error for: " + tempFilepath, e);
 		}
 	}
 
@@ -225,6 +264,19 @@ public class CascDataSource implements DataSource {
 	@Override
 	public void close() throws IOException {
 		this.warcraftIIICASC.close();
+	}
+
+	private static void deleteContents(final File folder) {
+		final File[] children = folder.listFiles();
+		if (children == null) {
+			return;
+		}
+		for (final File child : children) {
+			if (child.isDirectory()) {
+				deleteContents(child);
+			}
+			child.delete();
+		}
 	}
 
 }

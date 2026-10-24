@@ -18,6 +18,10 @@ public class CMIDISound implements CSound {
 	}
 
 	@Override
+	public void stop() {
+	}
+
+	@Override
 	public float getPredictedDuration() {
 		return 0;
 	}

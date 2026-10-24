@@ -23,6 +23,11 @@ public abstract class Resource {
 
 	public void loadData(final InputStream src, final Object options) {
 		this.loaded = true;
+		if (src == null) {
+			// The viewer already reported the missing file; the resource stays empty
+			// instead of failing inside its decoder.
+			return;
+		}
 
 		try {
 			this.load(src, options);

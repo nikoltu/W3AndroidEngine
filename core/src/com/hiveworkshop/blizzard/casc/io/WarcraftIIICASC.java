@@ -3,6 +3,7 @@ package com.hiveworkshop.blizzard.casc.io;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -43,8 +44,18 @@ public class WarcraftIIICASC implements AutoCloseable {
 			final List<PathResult> pathResults = vfs.getAllFiles();
 			final ArrayList<String> filePathStrings = new ArrayList<String>(pathResults.size());
 
+			int undecodablePaths = 0;
 			for (final PathResult pathResult : pathResults) {
-				filePathStrings.add(pathResult.getPath());
+				try {
+					filePathStrings.add(pathResult.getPath());
+				}
+				catch (final CharacterCodingException e) {
+					// Reforged 3.x storage contains paths that are not valid UTF-8
+					undecodablePaths++;
+				}
+			}
+			if (undecodablePaths > 0) {
+				System.err.println("CASC: skipped " + undecodablePaths + " file paths that are not valid UTF-8");
 			}
 
 			return filePathStrings;
@@ -58,13 +69,21 @@ public class WarcraftIIICASC implements AutoCloseable {
 		 * @throws IOException In an exception occurs when resolving files.
 		 */
 		public boolean isFile(final String filePath) throws IOException {
-			final byte[][] pathFragments = VirtualFileSystem.convertFilePath(filePath);
-			try {
-				final PathResult resolveResult = vfs.resolvePath(pathFragments);
-				return resolveResult.isFile();
-			} catch (final FileNotFoundException e) {
-				return false;
-			}
+			final PathResult resolveResult = vfs.findPath(VirtualFileSystem.convertFilePath(filePath));
+			return (resolveResult != null) && resolveResult.isFile();
+		}
+
+		/**
+		 * Test if the specified file path is a file that can be read from local
+		 * storage, resolving the path only once.
+		 *
+		 * @param filePath Path of file to test.
+		 * @return True if path represents a file inside local storage, otherwise false.
+		 * @throws IOException In an exception occurs when resolving files.
+		 */
+		public boolean isReadableFile(final String filePath) throws IOException {
+			final PathResult resolveResult = vfs.findPath(VirtualFileSystem.convertFilePath(filePath));
+			return (resolveResult != null) && resolveResult.isFile() && resolveResult.existsInStorage();
 		}
 
 		/**

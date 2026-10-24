@@ -38,4 +38,18 @@ public class ReplaceableIds {
 	public static String getPathString(final long replaceableId) {
 		return REPLACEABLE_ID_TO_STR.get(replaceableId);
 	}
+
+	/**
+	 * Returns the texture a model shows for a replaceable ID when the instance does
+	 * not assign one, or null if the ID has no such default (for example 21, the
+	 * cursor's targeting icon, or IDs this table does not know).
+	 */
+	public static String getDefaultTexturePath(final long replaceableId) {
+		final String pathString = getPathString(replaceableId);
+		if ((pathString == null) || pathString.isEmpty()) {
+			return null;
+		}
+		final String idString = ((replaceableId == 1) || (replaceableId == 2)) ? getIdString(0) : "";
+		return "ReplaceableTextures\\" + pathString + idString + ".blp";
+	}
 }

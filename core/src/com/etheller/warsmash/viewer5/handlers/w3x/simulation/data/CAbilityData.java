@@ -24,6 +24,14 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.nightelf.
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.nightelf.moonwell.CAbilityMoonWell;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.nightelf.root.CAbilityEntangleGoldMine;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.human.bloodmage.phoenix.CAbilitySummonPhoenix;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.human.archmage.CAbilityBlizzard;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.human.archmage.CAbilityMassTeleport;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.human.archmage.CAbilitySummonWaterElemental;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.human.mountainking.CAbilityAvatar;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.human.mountainking.CAbilityThunderClap;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.human.paladin.CAbilityDivineShield;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.human.paladin.CAbilityHolyLight;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.human.paladin.CAbilityResurrect;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.human.mountainking.CAbilityThunderBolt;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.neutral.beastmaster.CAbilitySummonGrizzly;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.neutral.beastmaster.CAbilitySummonHawk;
@@ -106,30 +114,30 @@ public class CAbilityData {
 	private void registerCodes() {
 		// ----Human----
 		// Paladin:
-//		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AHhb"),
-//				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityHolyLight(handleId, alias)));
-//		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AHds"),
-//				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityDivineShield(handleId, alias)));
-//		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AHre"),
-//				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityResurrect(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AHhb"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityHolyLight(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AHds"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityDivineShield(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AHre"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityResurrect(handleId, alias)));
 		// Archmage
-//		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AHwe"), new CAbilityTypeDefinitionSpellBase(
-//				(handleId, alias) -> new CAbilitySummonWaterElemental(handleId, alias)));
-//		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AHbz"),
-//				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityBlizzard(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AHwe"), new CAbilityTypeDefinitionSpellBase(
+				(handleId, alias) -> new CAbilitySummonWaterElemental(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AHbz"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityBlizzard(handleId, alias)));
 //		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AHab"), new CAbilityTypeDefinitionSpellBase(
 //				(handleId, alias) -> new CAbilityBrilliance(handleId, alias, alias)));
-//		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AHmt"),
-//				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityMassTeleport(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AHmt"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityMassTeleport(handleId, alias)));
 		// Mountain King:
-//		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AHtb"),
-//				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityThunderBolt(handleId, alias)));
-//		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AHtc"),
-//				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityThunderClap(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AHtb"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityThunderBolt(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AHtc"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityThunderClap(handleId, alias)));
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("ANfb"),
 				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityThunderBolt(handleId, alias)));
-//		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AHav"),
-//				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityAvatar(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AHav"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityAvatar(handleId, alias)));
 
 		// Blood Mage:
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Apxf"), new CAbilityTypeDefinitionPhoenixFire());

@@ -331,6 +331,12 @@ public class DataTable implements ObjectData {
 		return this.dataTable.get(new StringKey(id));
 	}
 
+	public void applyQualitySuffixes(final String[] preferred, final String[] fallbacks) {
+		for (final Element element : this.dataTable.values()) {
+			element.applyQualitySuffixes(preferred, fallbacks);
+		}
+	}
+
 	@Override
 	public void cloneUnit(final String parentId, final String cloneId) {
 		final Element parentEntry = get(parentId);

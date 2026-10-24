@@ -13,7 +13,10 @@ public enum CCameraField implements CHandle {
 	NEARZ, // 1.32
 	LOCAL_PITCH,
 	LOCAL_YAW,
-	LOCAL_ROLL;
+	LOCAL_ROLL,
+	DEPTH_OF_FIELD_DISTANCE, // 3.0
+	DEPTH_OF_FIELD_SCALE,
+	ZABSOLUTE;
 
 	public static CCameraField[] VALUES = values();
 

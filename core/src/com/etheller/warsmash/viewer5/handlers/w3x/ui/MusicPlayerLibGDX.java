@@ -3,11 +3,11 @@ package com.etheller.warsmash.viewer5.handlers.w3x.ui;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.audio.Music;
 import com.etheller.warsmash.datasources.DataSource;
 import com.etheller.warsmash.units.DataTable;
 import com.etheller.warsmash.util.DataSourceFileHandle;
+import com.etheller.warsmash.viewer5.gl.Extensions;
 
 public class MusicPlayerLibGDX implements MusicPlayer {
 	private static final float GAME_MSECS_DIVISOR = 1000f;
@@ -129,7 +129,7 @@ public class MusicPlayerLibGDX implements MusicPlayer {
 		int validMusicCount = 0;
 		for (int i = 0; i < musics.length; i++) {
 			if (this.dataSource.has(musics[i])) {
-				final Music newMusic = Gdx.audio.newMusic(new DataSourceFileHandle(this.dataSource, musics[i]));
+				final Music newMusic = Extensions.audio.newMusic(new DataSourceFileHandle(this.dataSource, musics[i]));
 				newMusic.setVolume(this.volume);
 				this.currentMusics[i] = newMusic;
 				validMusicCount++;

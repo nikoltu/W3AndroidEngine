@@ -7,21 +7,23 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.timers.CTimer;
 
 public class CTimerDialog {
+	private final GameUI rootFrame;
 	private final CTimer timer;
 	private final UIFrame timerDialogFrame;
 	private final StringFrame valueFrame;
 	private final StringFrame titleFrame;
 
-	public CTimerDialog(final CTimer timer, final UIFrame timerDialogFrame, final StringFrame valueFrame,
-			final StringFrame titleFrame) {
+	public CTimerDialog(final GameUI rootFrame, final CTimer timer, final UIFrame timerDialogFrame,
+			final StringFrame valueFrame, final StringFrame titleFrame) {
+		this.rootFrame = rootFrame;
 		this.timer = timer;
 		this.timerDialogFrame = timerDialogFrame;
 		this.valueFrame = valueFrame;
 		this.titleFrame = titleFrame;
 	}
 
-	public void setTitle(final GameUI rootFrame, final String title) {
-		rootFrame.setText(this.titleFrame, title);
+	public void setTitle(final String title) {
+		this.rootFrame.setText(this.titleFrame, title);
 	}
 
 	public void setValue(final GameUI rootFrame, final String value) {
@@ -32,6 +34,10 @@ public class CTimerDialog {
 		this.timerDialogFrame.setVisible(visible);
 	}
 
+	public boolean isVisible() {
+		return this.timerDialogFrame.isVisible();
+	}
+
 	public void update(final GameUI rootFrame, final CSimulation simulation) {
 		if (this.timerDialogFrame.isVisible() && (this.timer != null)) {
 			final float remaining = this.timer.getRemaining(simulation);
@@ -39,7 +45,7 @@ public class CTimerDialog {
 			final int minutes = secondsRemaining / 60;
 			final int seconds = secondsRemaining % 60;
 
-			rootFrame.setText(this.valueFrame, minutes + ":" + seconds);
+			rootFrame.setText(this.valueFrame, minutes + ":" + (seconds < 10 ? "0" : "") + seconds);
 		}
 	}
 

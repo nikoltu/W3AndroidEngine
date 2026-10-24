@@ -50,6 +50,22 @@ public interface DataSource {
 	boolean has(String filepath);
 
 	/**
+	 * Returns the first of the given paths that exists, searching layer by layer so
+	 * that a higher priority layer wins over the order of the paths.
+	 *
+	 * @param filepaths
+	 * @return the matching path, or null if none exists
+	 */
+	default String findFirst(final String... filepaths) {
+		for (final String filepath : filepaths) {
+			if (has(filepath)) {
+				return filepath;
+			}
+		}
+		return null;
+	}
+
+	/**
 	 * @return a list of data source contents, or null if no list is provided
 	 */
 	Collection<String> getListfile();

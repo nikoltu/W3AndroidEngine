@@ -29,8 +29,20 @@ public class CSoundFromLabel implements CSound {
 
 	@Override
 	public void start() {
-		this.sound.play(this.audioContext, 0, 0, 0);
+		if (this.looping) {
+			this.sound.play(this.audioContext, 0, 0, 0, true);
+		}
+		else {
+			this.sound.play(this.audioContext, 0, 0, 0);
+		}
 		this.lastStartTimestamp = TimeUtils.millis();
+	}
+
+	@Override
+	public void stop() {
+		if (this.sound.getLastPlayedSound() != null) {
+			this.sound.getLastPlayedSound().stop();
+		}
 	}
 
 	@Override

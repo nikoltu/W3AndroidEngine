@@ -225,13 +225,14 @@ public final class VirtualFileSystem {
 	private static int compareNodePathFragments(final byte[][] pathFragments, final int fragmentIndex,
 			final int fragmentOffset, final PathNode node) {
 		final int nodeFragmentCount = node.getPathFragmentCount();
+		final byte[] fragment = pathFragments[fragmentIndex];
 		if (nodeFragmentCount == 0) {
-			// nodes without fragments have no path fragment presence so always match
-			return 0;
+			// nodes without fragments end the path here, so they sort before siblings
+			// that continue it, such as "a.js" before "a.js.license"
+			return (fragment.length - fragmentOffset) > 0 ? 1 : 0;
 		}
 
 		final byte[] nodeFragment = node.getFragment(0);
-		final byte[] fragment = pathFragments[fragmentIndex];
 		if ((nodeFragment.length == 0) && ((fragment.length - fragmentOffset) > 0)) {
 			// node with termination fragment are always before all other child nodes
 			return 1;
@@ -633,6 +634,25 @@ public final class VirtualFileSystem {
 	 *
 	 */
 	public PathResult resolvePath(final byte[][] pathFragments) throws IOException {
+		final PathResult result = findPath(pathFragments);
+		if (result == null) {
+			throw new FileNotFoundException("path not in storage");
+		}
+
+		return result;
+	}
+
+	/**
+	 * Resolves a file from the specified path fragments like resolvePath, but
+	 * returns null instead of throwing when the path does not exist. Lookups of
+	 * missing paths are frequent, and building an exception for each is costly.
+	 *
+	 * @param pathFragments File path fragments.
+	 * @return Path result for a file, or null if the path does not exist.
+	 * @throws IOException If an exception occurs when resolving the path
+	 *                     fragments.
+	 */
+	public PathResult findPath(final byte[][] pathFragments) throws IOException {
 		if (pathFragments.length == 0) {
 			throw new IllegalArgumentException("pathFragments.length must be greater than 0");
 		}
@@ -643,7 +663,7 @@ public final class VirtualFileSystem {
 
 		final FileNode result = recursiveResolvePathFragments(pathFragments, 0, 0, tvfsRoot.getRootNode(0));
 		if (result == null) {
-			throw new FileNotFoundException("path not in storage");
+			return null;
 		}
 
 		return new PathResult(result, pathFragments);

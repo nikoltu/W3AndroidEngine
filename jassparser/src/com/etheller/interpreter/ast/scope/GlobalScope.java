@@ -374,6 +374,9 @@ public final class GlobalScope {
 
 	public void resetGlobalInitialization() {
 		this.lastGlobalsBlockEndInstructionPtr = -1;
+		// Scripts loaded later (Preloader, LoadScriptFile) must not run the initializers of earlier globals
+		// again, or every global would go back to its initial value mid-game.
+		this.functionNameToInstructionPtr.remove(INIT_GLOBALS_AUTOGEN_FXN_NAME);
 	}
 
 	public void innerBeginDefiningGlobals(final int lineNo, final String sourceFile) {
@@ -606,7 +609,9 @@ public final class GlobalScope {
 			JassLog.report(jassException);
 			throw jassException;
 		}
-		this.currentThread = parentThread;
+		finally {
+			this.currentThread = parentThread;
+		}
 	}
 
 	public JassValue runThreadUntilCompletionAndReadReturnValue(final JassThread thread,

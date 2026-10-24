@@ -60,6 +60,7 @@ import com.etheller.warsmash.units.ObjectData;
 import com.etheller.warsmash.units.StandardObjectData;
 import com.etheller.warsmash.units.custom.WTS;
 import com.etheller.warsmash.units.manager.MutableObjectData.WorldEditorDataType;
+import com.etheller.warsmash.util.ArgbImage;
 import com.etheller.warsmash.util.MappedData;
 import com.etheller.warsmash.util.Quadtree;
 import com.etheller.warsmash.util.QuadtreeIntersector;
@@ -241,7 +242,7 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 
 	private final Random seededRandom = new Random(1337L);
 
-	private final Map<String, BufferedImage> filePathToPathingMap = new HashMap<>();
+	private final Map<String, ArgbImage> filePathToPathingMap = new HashMap<>();
 
 	private final List<SelectionCircleSize> selectionCircleSizes = new ArrayList<>();
 
@@ -348,6 +349,7 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 		try (InputStream terrainSlkStream = this.dataSource.getResourceAsStream("UI\\SoundInfo\\UnitAckSounds.slk")) {
 			this.unitAckSoundsTable.readSLK(terrainSlkStream);
 		}
+		resolveDialogueLabels(this.unitAckSoundsTable, worldEditStrings);
 		this.unitCombatSoundsTable = new DataTable(worldEditStrings);
 		try (InputStream terrainSlkStream = this.dataSource
 				.getResourceAsStream("UI\\SoundInfo\\UnitCombatSounds.slk")) {
@@ -430,6 +432,60 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 		}
 		try (InputStream miscDataTxtStream = this.dataSource.getResourceAsStream("UI\\SoundInfo\\AbilitySounds.slk")) {
 			this.uiSoundsTable.readSLK(miscDataTxtStream);
+		}
+		// CreateMIDISound labels (day and night ambience) live here; 3.0 ships them as audio files.
+		try (InputStream miscDataTxtStream = this.dataSource.getResourceAsStream("UI\\SoundInfo\\AmbientMusic.slk")) {
+			if (miscDataTxtStream != null) {
+				this.uiSoundsTable.readSLK(miscDataTxtStream);
+			}
+		}
+	}
+
+	/**
+	 * Since 1.32 the acknowledgement tables name dialogue labels (e.g. FootmanWhat1) instead of files; the
+	 * Dialogue*Base tables map each label to its file.
+	 */
+	private void resolveDialogueLabels(final DataTable soundTable, final WorldEditStrings worldEditStrings)
+			throws IOException {
+		final DataTable dialogue = new DataTable(worldEditStrings);
+		for (final String group : new String[] { "Creeps", "Demon", "Human", "Naga", "NightElf", "Orc", "Undead" }) {
+			try (InputStream stream = this.dataSource
+					.getResourceAsStream("UI\\SoundInfo\\Dialogue" + group + "Base.slk")) {
+				if (stream != null) {
+					dialogue.readSLK(stream);
+				}
+			}
+		}
+		if (dialogue.keySet().isEmpty()) {
+			return;
+		}
+		for (final String key : soundTable.keySet()) {
+			final Element row = soundTable.get(key);
+			final String directoryBase = row.getField("DirectoryBase");
+			if (!directoryBase.isEmpty() && !"_".equals(directoryBase)) {
+				continue;
+			}
+			final StringBuilder fileNames = new StringBuilder();
+			boolean resolved = false;
+			for (final String name : row.getField("FileNames").split(",")) {
+				final String label = name.trim();
+				final Element dialogueRow = label.indexOf('.') == -1 ? dialogue.get(label) : null;
+				String fileName = label;
+				if (dialogueRow != null) {
+					final String filePath = dialogueRow.getField("Filepath");
+					final int extension = filePath.lastIndexOf('.');
+					fileName = (extension == -1 ? filePath : filePath.substring(0, extension)).replace('/', '\\');
+					resolved = true;
+				}
+				if (fileNames.length() > 0) {
+					fileNames.append(',');
+				}
+				fileNames.append(fileName);
+			}
+			if (resolved) {
+				row.setField("DirectoryBase", "");
+				row.setField("FileNames", fileNames.toString());
+			}
 		}
 	}
 
@@ -631,11 +687,11 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 		}
 	}
 
-	protected BufferedImage getDestructablePathingPixelMap(final GameObject row) {
+	protected ArgbImage getDestructablePathingPixelMap(final GameObject row) {
 		return loadPathingTexture(row.getFieldAsString(DESTRUCTABLE_PATHING, 0));
 	}
 
-	protected BufferedImage getDestructablePathingDeathPixelMap(final GameObject row) {
+	protected ArgbImage getDestructablePathingDeathPixelMap(final GameObject row) {
 		return loadPathingTexture(row.getFieldAsString(DESTRUCTABLE_PATHING_DEATH, 0));
 	}
 
@@ -726,14 +782,14 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 			final MdxModel model = (MdxModel) load(file, this.mapPathSolver, this.solverParams);
 
 			final String pathingTexture = row.readSLKTag("pathTex");
-			BufferedImage pathingTextureImage;
+			ArgbImage pathingTextureImage;
 			if ((pathingTexture != null) && (pathingTexture.length() > 0) && !"_".equals(pathingTexture)) {
 
 				pathingTextureImage = this.filePathToPathingMap.get(pathingTexture.toLowerCase());
 				if (pathingTextureImage == null) {
 					if (this.mapMpq.has(pathingTexture)) {
 						try {
-							pathingTextureImage = TgaFile.readTGA(pathingTexture,
+							pathingTextureImage = TgaFile.readTGAPixels(pathingTexture,
 									this.mapMpq.getResourceAsStream(pathingTexture));
 							this.filePathToPathingMap.put(pathingTexture.toLowerCase(), pathingTextureImage);
 						}
@@ -803,7 +859,7 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 			destructableShadow = this.terrain.addShadow(shadowString, location[0], location[1]);
 		}
 
-		final BufferedImage destructablePathingPixelMap = getDestructablePathingPixelMap(row);
+		final ArgbImage destructablePathingPixelMap = getDestructablePathingPixelMap(row);
 		if (destructablePathingPixelMap != null) {
 			destructablePathing = this.terrain.pathingGrid.createRemovablePathingOverlayTexture(location[0],
 					location[1], (int) Math.toDegrees(facingRadians), destructablePathingPixelMap);
@@ -811,7 +867,7 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 				destructablePathing.add();
 			}
 		}
-		final BufferedImage destructablePathingDeathPixelMap = getDestructablePathingDeathPixelMap(row);
+		final ArgbImage destructablePathingDeathPixelMap = getDestructablePathingDeathPixelMap(row);
 		if (destructablePathingDeathPixelMap != null) {
 			destructablePathingDeath = this.terrain.pathingGrid.createRemovablePathingOverlayTexture(location[0],
 					location[1], (int) Math.toDegrees(facingRadians), destructablePathingDeathPixelMap);
@@ -989,7 +1045,7 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 			float unitY, final int playerIndex, int customTeamColor, final float unitAngle) {
 		Splat buildingUberSplat = null;
 		SplatMover buildingUberSplatDynamicIngame = null;
-		BufferedImage buildingPathingPixelMap = null;
+		ArgbImage buildingPathingPixelMap = null;
 		BuildingShadow buildingShadowInstance = null;
 
 		// Hardcoded?
@@ -1106,19 +1162,19 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 	}
 
 	@Override
-	public BufferedImage loadPathingTexture(final String pathingTexture) {
-		BufferedImage buildingPathingPixelMap = null;
+	public ArgbImage loadPathingTexture(final String pathingTexture) {
+		ArgbImage buildingPathingPixelMap = null;
 		if ((pathingTexture != null) && (pathingTexture.length() > 0) && !"_".equals(pathingTexture)) {
 			buildingPathingPixelMap = this.filePathToPathingMap.get(pathingTexture.toLowerCase());
 			if (buildingPathingPixelMap == null) {
 				try {
 					if (pathingTexture.toLowerCase().endsWith(".tga")) {
-						buildingPathingPixelMap = TgaFile.readTGA(pathingTexture,
+						buildingPathingPixelMap = TgaFile.readTGAPixels(pathingTexture,
 								this.mapMpq.getResourceAsStream(pathingTexture));
 					}
 					else {
 						try (InputStream stream = this.mapMpq.getResourceAsStream(pathingTexture)) {
-							buildingPathingPixelMap = ImageIO.read(stream);
+							buildingPathingPixelMap = toArgbImage(ImageIO.read(stream));
 							System.out.println("LOADING BLP PATHING: " + pathingTexture);
 						}
 					}
@@ -1130,6 +1186,12 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 			}
 		}
 		return buildingPathingPixelMap;
+	}
+
+	private static ArgbImage toArgbImage(final BufferedImage image) {
+		final int[] pixels = new int[image.getWidth() * image.getHeight()];
+		image.getRGB(0, 0, image.getWidth(), image.getHeight(), pixels, 0, image.getWidth());
+		return new ArgbImage(image.getWidth(), image.getHeight(), pixels);
 	}
 
 	public RenderUnitType getUnitTypeData(final War3ID key) {
@@ -2853,18 +2915,18 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 							}
 
 							@Override
-							public BufferedImage getBuildingPathingPixelMap(final War3ID rawcode) {
+							public ArgbImage getBuildingPathingPixelMap(final War3ID rawcode) {
 								return War3MapViewer.this.renderUnitTypeData.get(rawcode).getBuildingPathingPixelMap();
 							}
 
 							@Override
-							public BufferedImage getDestructablePathingDeathPixelMap(final War3ID rawcode) {
+							public ArgbImage getDestructablePathingDeathPixelMap(final War3ID rawcode) {
 								return War3MapViewer.this.getDestructablePathingDeathPixelMap(
 										War3MapViewer.this.allObjectData.getDestructibles().get(rawcode));
 							}
 
 							@Override
-							public BufferedImage getDestructablePathingPixelMap(final War3ID rawcode) {
+							public ArgbImage getDestructablePathingPixelMap(final War3ID rawcode) {
 								return War3MapViewer.this.getDestructablePathingPixelMap(
 										War3MapViewer.this.allObjectData.getDestructibles().get(rawcode));
 							}

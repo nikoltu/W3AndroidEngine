@@ -1,0 +1,88 @@
+apply plugin: "com.android.application"
+
+android {
+    namespace "com.etheller.warsmash.android"
+    compileSdk 34
+
+    sourceSets {
+        main {
+            manifest.srcFile "AndroidManifest.xml"
+            java.srcDirs = ["src"]
+            res.srcDirs = ["res"]
+            assets.srcDirs = ["assets", "build/generated/engineAssets"]
+            jniLibs.srcDirs = ["libs"]
+        }
+    }
+
+    defaultConfig {
+        applicationId "com.etheller.warsmash.android"
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName "0.1.000"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    packagingOptions {
+        resources {
+            excludes += ["META-INF/*.kotlin_module", "META-INF/LICENSE*", "META-INF/NOTICE*", "META-INF/DEPENDENCIES"]
+        }
+    }
+}
+
+configurations {
+    natives
+}
+
+dependencies {
+    implementation project(":core")
+    implementation "com.badlogicgames.gdx:gdx-backend-android:$gdxVersion"
+    for (abi in ["armeabi-v7a", "arm64-v8a", "x86_64"]) {
+        natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-$abi"
+        natives "com.badlogicgames.gdx:gdx-freetype-platform:$gdxVersion:natives-$abi"
+        natives "com.badlogicgames.gdx:gdx-box2d-platform:$gdxVersion:natives-$abi"
+    }
+}
+
+// The natives come as jars per ABI; unpack them into the jniLibs folder.
+tasks.register("copyAndroidNatives") {
+    doFirst {
+        configurations.natives.copy().files.each { jar ->
+            def outputDir = null
+            if (jar.name.endsWith("natives-armeabi-v7a.jar")) outputDir = file("libs/armeabi-v7a")
+            if (jar.name.endsWith("natives-arm64-v8a.jar")) outputDir = file("libs/arm64-v8a")
+            if (jar.name.endsWith("natives-x86_64.jar")) outputDir = file("libs/x86_64")
+            if (outputDir != null) {
+                copy {
+                    from zipTree(jar)
+                    into outputDir
+                    include "*.so"
+                }
+            }
+        }
+    }
+}
+
+tasks.matching { it.name.contains("merge") && it.name.contains("JniLibFolders") }.configureEach { packageTask ->
+    packageTask.dependsOn "copyAndroidNatives"
+}
+
+// Ability builder definitions are read as internal files, so they ship inside the APK.
+tasks.register("copyAbilityBehaviors", Copy) {
+    from "../core/assets/abilityBehaviors"
+    into "build/generated/engineAssets/abilityBehaviors"
+}
+
+tasks.named("preBuild") { dependsOn "copyAbilityBehaviors" }

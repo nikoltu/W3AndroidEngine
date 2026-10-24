@@ -34,6 +34,22 @@ public class MdlxLight extends MdlxGenericObject {
 	public float intensity = 0;
 	public float[] ambientColor = new float[3];
 	public float ambientIntensity = 0;
+	/**
+	 * @since 1200
+	 */
+	public float shadowIntensity = 0.4f;
+	/**
+	 * @since 1300
+	 */
+	public boolean shadowCasting = false;
+	/**
+	 * @since 1300
+	 */
+	public float[] shadowCastingRange = new float[2];
+	/**
+	 * @since 1600
+	 */
+	public float[] falloff = new float[] { 0.0005f, 0, 0.00001f };
 
 	public MdlxLight() {
 		super(0x200);
@@ -47,11 +63,23 @@ public class MdlxLight extends MdlxGenericObject {
 		super.readMdx(reader, version);
 
 		this.type = Type.fromId(reader.readInt32());
+		if (version >= 1300) {
+			this.shadowCasting = reader.readUInt32() != 0;
+		}
 		reader.readFloat32Array(this.attenuation);
 		reader.readFloat32Array(this.color);
 		this.intensity = reader.readFloat32();
 		reader.readFloat32Array(this.ambientColor);
 		this.ambientIntensity = reader.readFloat32();
+		if (version >= 1200) {
+			this.shadowIntensity = reader.readFloat32();
+		}
+		if (version >= 1300) {
+			reader.readFloat32Array(this.shadowCastingRange);
+		}
+		if (version >= 1600) {
+			reader.readFloat32Array(this.falloff);
+		}
 
 		readTimelines(reader, size - (reader.position() - position));
 	}

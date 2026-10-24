@@ -490,7 +490,7 @@ public class MdxShaders {
 				"#endif\r\n" + //
 				"void applyLight(vec4 thisLightColor, vec4 thisLightDir, vec3 normal, vec3 baseColor, vec3 tc, vec4 ormTexel, vec3 reflectionsTexel, float tcFactor, inout vec3 color, inout vec3 lambertFactorSum) {\r\n"
 				+ //
-				"  if (thisLightColor.a > 0) {;\r\n" + //
+				"  if (thisLightColor.a > 0.0) {;\r\n" + //
 				"    float lambertFactor = clamp(dot(normal, thisLightDir.xyz), 0.0, 1.0);\r\n" + //
 				"    \r\n" + //
 				"			vec3 reflectDir = reflect(-thisLightDir.xyz, normal);\r\n" + //

@@ -134,6 +134,10 @@ public class AbilityDataUI {
 		final ObjectData upgradeData = allObjectData.getUpgrades();
 		this.disabledPrefix = gameUI.getSkinField("CommandButtonDisabledArtPath");
 		for (final String alias : abilityData.keySet()) {
+			if (alias.length() != 4) {
+				// AbilitySkin.txt contains placeholder sections that are not rawcodes, e.g. [DummySec]
+				continue;
+			}
 			final GameObject abilityTypeData = abilityData.get(alias);
 			final String iconResearchPath = gameUI.trySkinField(abilityTypeData.getFieldAsString(ICON_RESEARCH, 0));
 			final String iconNormalPath = gameUI.trySkinField(abilityTypeData.getFieldAsString(ICON_NORMAL, 0));

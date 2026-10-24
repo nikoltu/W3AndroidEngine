@@ -32,6 +32,27 @@ public class BLTEContent {
 		blteBuffer.get(hash);
 	}
 
+	/**
+	 * Tests if a BLTE identifier is at the current position of the buffer. The
+	 * buffer position is not changed.
+	 *
+	 * @param buffer Buffer to test.
+	 * @return True if BLTE data starts at the buffer position.
+	 */
+	public static boolean hasIdentifier(final ByteBuffer buffer) {
+		final int position = buffer.position();
+		final int identifierLength = IDENTIFIER.remaining();
+		if ((buffer.limit() - position) < identifierLength) {
+			return false;
+		}
+		for (int index = 0; index < identifierLength; index += 1) {
+			if (buffer.get(position + index) != IDENTIFIER.get(index)) {
+				return false;
+			}
+		}
+		return true;
+	}
+
 	public static BLTEContent[] decodeContent(final ByteBuffer storageBuffer) throws IOException {
 		final ByteBuffer contentBuffer = storageBuffer.slice();
 

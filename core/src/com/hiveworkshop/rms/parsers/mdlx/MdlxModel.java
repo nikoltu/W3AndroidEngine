@@ -119,6 +119,7 @@ public class MdlxModel {
 		while (reader.remaining() > 0) {
 			final int tag = reader.readTag();
 			final int size = reader.readInt32();
+			final int chunkEnd = reader.position() + size;
 
 			switch (tag) {
 			case VERS:
@@ -196,6 +197,10 @@ public class MdlxModel {
 				this.unknownChunks.add(new MdlxUnknownChunk(reader, size, new War3ID(tag)));
 				break;
 			}
+
+			// Realign to the declared chunk size so that a reader that does not know every
+			// field of a newer version cannot shift all following chunks.
+			reader.position(chunkEnd);
 		}
 	}
 
@@ -229,13 +234,11 @@ public class MdlxModel {
 
 	private <E extends MdlxBlock & MdlxChunk> void loadDynamicObjects(final List<E> out,
 			final MdlxBlockDescriptor<E> constructor, final BinaryReader reader, final long size) {
-		long totalSize = 0;
-		while (totalSize < size) {
+		final long end = reader.position() + size;
+		while (reader.position() < end) {
 			final E object = constructor.create();
 
 			object.readMdx(reader, this.version);
-
-			totalSize += object.getByteLength(this.version);
 
 			out.add(object);
 		}
@@ -248,7 +251,8 @@ public class MdlxModel {
 	}
 
 	private void loadBindPoseChunk(final BinaryReader reader, final long size) {
-		for (int i = 0, l = reader.readInt32(); i < l; i++) {
+		final long count = Math.min(reader.readUInt32(), (size - 4) / 48);
+		for (long i = 0; i < count; i++) {
 			this.bindPose.add(reader.readFloat32Array(12));
 		}
 	}

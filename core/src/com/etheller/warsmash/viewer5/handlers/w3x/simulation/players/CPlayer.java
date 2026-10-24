@@ -12,6 +12,7 @@ import com.etheller.interpreter.ast.scope.GlobalScope;
 import com.etheller.interpreter.ast.scope.trigger.RemovableTriggerEvent;
 import com.etheller.interpreter.ast.scope.trigger.Trigger;
 import com.etheller.interpreter.ast.scope.trigger.TriggerBooleanExpression;
+import com.etheller.interpreter.ast.scope.variableevent.CLimitOp;
 import com.etheller.warsmash.parsers.jass.scope.CommonTriggerExecutionScope;
 import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CDestructable;
@@ -91,6 +92,21 @@ public class CPlayer extends CBasePlayer {
 
 	public void setAlliance(final CPlayer other, final CAllianceType alliance, final boolean flag) {
 		setAlliance(other.getId(), alliance, flag);
+	}
+
+	@Override
+	public void setAlliance(final int otherPlayerIndex, final CAllianceType allianceType, final boolean value) {
+		final boolean before = hasAlliance(otherPlayerIndex, allianceType);
+		super.setAlliance(otherPlayerIndex, allianceType, value);
+		final List<CPlayerEvent> eventList = getEventList(JassGameEventsWar3.EVENT_PLAYER_ALLIANCE_CHANGED);
+		if ((before != value) && (eventList != null)) {
+			for (final CPlayerEvent event : new ArrayList<>(eventList)) {
+				if (((CPlayerAllianceEvent) event).getAllianceType() == allianceType) {
+					event.fire(this, CommonTriggerExecutionScope.triggerPlayerScope(
+							JassGameEventsWar3.EVENT_PLAYER_ALLIANCE_CHANGED, event.getTrigger(), this));
+				}
+			}
+		}
 	}
 
 	public CRace getRace() {
@@ -471,6 +487,21 @@ public class CPlayer extends CBasePlayer {
 		return playerEvent;
 	}
 
+	public RemovableTriggerEvent addStateEvent(final GlobalScope globalScope, final Trigger whichTrigger,
+			final CPlayerState state, final CLimitOp limitOp, final double limitValue) {
+		final CPlayerEvent playerEvent = new CPlayerStateEvent(globalScope, this, whichTrigger, state, limitOp,
+				limitValue);
+		getOrCreateEventList(playerEvent.getEventType()).add(playerEvent);
+		return playerEvent;
+	}
+
+	public RemovableTriggerEvent addAllianceEvent(final GlobalScope globalScope, final Trigger whichTrigger,
+			final CAllianceType allianceType) {
+		final CPlayerEvent playerEvent = new CPlayerAllianceEvent(globalScope, this, whichTrigger, allianceType);
+		getOrCreateEventList(playerEvent.getEventType()).add(playerEvent);
+		return playerEvent;
+	}
+
 	public RemovableTriggerEvent addUnitEvent(final GlobalScope globalScope, final Trigger whichTrigger,
 			final JassGameEventsWar3 eventType, final TriggerBooleanExpression filter) {
 		final CPlayerEvent playerEvent = new CPlayerEvent(globalScope, this, whichTrigger, eventType, filter);
@@ -491,6 +522,22 @@ public class CPlayer extends CBasePlayer {
 	}
 
 	public void setPlayerState(final CSimulation simulation, final CPlayerState whichPlayerState, final int value) {
+		final int before = getPlayerState(simulation, whichPlayerState);
+		applyPlayerState(whichPlayerState, value);
+		final int after = getPlayerState(simulation, whichPlayerState);
+		final List<CPlayerEvent> eventList = getEventList(JassGameEventsWar3.EVENT_PLAYER_STATE_LIMIT);
+		if (eventList != null) {
+			for (final CPlayerEvent event : new ArrayList<>(eventList)) {
+				final CPlayerStateEvent stateEvent = (CPlayerStateEvent) event;
+				if ((stateEvent.getState() == whichPlayerState) && stateEvent.isCrossed(before, after)) {
+					event.fire(this, CommonTriggerExecutionScope.triggerPlayerScope(
+							JassGameEventsWar3.EVENT_PLAYER_STATE_LIMIT, event.getTrigger(), this));
+				}
+			}
+		}
+	}
+
+	private void applyPlayerState(final CPlayerState whichPlayerState, final int value) {
 		switch (whichPlayerState) {
 		case GAME_RESULT:
 			this.gameResult = value;
@@ -521,12 +568,16 @@ public class CPlayer extends CBasePlayer {
 			break;
 		case PLACED:
 			this.placed = value;
+			break;
 		case OBSERVER_ON_DEATH:
 			this.observerOnDeath = (value != 0);
+			break;
 		case OBSERVER:
 			this.observer = (value != 0);
+			break;
 		case UNFOLLOWABLE:
 			this.unfollowable = (value != 0);
+			break;
 		case GOLD_UPKEEP_RATE:
 			this.goldUpkeepRate = value;
 			break;

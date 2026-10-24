@@ -16,16 +16,24 @@ public class MdlxCamera extends MdlxAnimatedObject {
 
 	@Override
 	public void readMdx(final BinaryReader reader, final int version) {
-		final long size = reader.readUInt32();
+		final int position = reader.position();
+		// The top byte of the size field selects a camera variant.
+		final long sizeAndVariant = reader.readUInt32();
+		final long size = sizeAndVariant & 0x00FFFFFF;
+		final long variant = sizeAndVariant >>> 24;
 
 		this.name = reader.read(80);
 		reader.readFloat32Array(this.position);
 		this.fieldOfView = reader.readFloat32();
 		this.farClippingPlane = reader.readFloat32();
 		this.nearClippingPlane = reader.readFloat32();
+		if ((variant == 1) || (variant == 2)) {
+			// Unused by the game.
+			reader.readFloat32Array(3);
+		}
 		reader.readFloat32Array(this.targetPosition);
 
-		readTimelines(reader, size - 120);
+		readTimelines(reader, size - (reader.position() - position));
 	}
 
 	@Override

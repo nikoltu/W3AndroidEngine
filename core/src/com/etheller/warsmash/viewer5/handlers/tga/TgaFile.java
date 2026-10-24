@@ -16,6 +16,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.RandomAccessFile;
 
+import com.etheller.warsmash.util.ArgbImage;
+
 /**
  *
  * @author Riven, modified by Oger-Lord
@@ -44,6 +46,35 @@ public class TgaFile {
 	 * @throws IOException
 	 */
 	public static BufferedImage readTGA(final String name, final InputStream stream) throws IOException {
+		final int[] dimensions = new int[3];
+		final int[] pixels = decodePixels(name, stream, dimensions);
+		final BufferedImage dst = new BufferedImage(dimensions[0], dimensions[1],
+				dimensions[2] == 1 ? BufferedImage.TYPE_INT_ARGB : BufferedImage.TYPE_INT_RGB);
+		final int[] dstPixels = ((DataBufferInt) dst.getRaster().getDataBuffer()).getData();
+		System.arraycopy(pixels, 0, dstPixels, 0, pixels.length);
+		return dst;
+	}
+
+	/**
+	 * Reads a TGA image as ARGB pixels without java.awt, matching what getRGB of
+	 * readTGA's image returns.
+	 */
+	public static ArgbImage readTGAPixels(final String name, final InputStream stream) throws IOException {
+		final int[] dimensions = new int[3];
+		final int[] pixels = decodePixels(name, stream, dimensions);
+		if (dimensions[2] == 0) {
+			for (int i = 0; i < pixels.length; i++) {
+				pixels[i] |= 0xFF000000;
+			}
+		}
+		return new ArgbImage(dimensions[0], dimensions[1], pixels);
+	}
+
+	/**
+	 * @param dimensions receives width, height and 1 if the image has alpha
+	 */
+	private static int[] decodePixels(final String name, final InputStream stream, final int[] dimensions)
+			throws IOException {
 
 		// Read Header
 		final byte[] header = new byte[18];
@@ -89,12 +120,7 @@ public class TgaFile {
 			throw new IllegalStateException("Error " + name);
 		}
 
-		final BufferedImage dst = new BufferedImage(w, h,
-				alpha ? BufferedImage.TYPE_INT_ARGB : BufferedImage.TYPE_INT_RGB);
-		final int[] pixels = ((DataBufferInt) dst.getRaster().getDataBuffer()).getData();
-		if (pixels.length != (w * h)) {
-			throw new IllegalStateException("Error " + name);
-		}
+		final int[] pixels = new int[w * h];
 		if (data.length < (pixels.length * (alpha ? 4 : 3))) {
 			throw new IllegalStateException("Error " + name + " not enaugh pixel data");
 		}
@@ -151,7 +177,10 @@ public class TgaFile {
 			throw new UnsupportedOperationException("Error " + name + " (" + headerval + ")");
 		}
 
-		return dst;
+		dimensions[0] = w;
+		dimensions[1] = h;
+		dimensions[2] = alpha ? 1 : 0;
+		return pixels;
 	}
 
 	/**

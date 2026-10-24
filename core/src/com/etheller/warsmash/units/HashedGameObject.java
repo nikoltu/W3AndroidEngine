@@ -18,6 +18,41 @@ public abstract class HashedGameObject implements GameObject {
 		this.parentTable = table;
 	}
 
+	/**
+	 * Skin files of 2.0 and later can give a field per graphics package ("file:sd",
+	 * "file:de", "file:hd"). A value of the preferred package wins over the plain
+	 * field; a fallback package is used only when the plain field is missing.
+	 */
+	public void applyQualitySuffixes(final String[] preferred, final String[] fallbacks) {
+		final Set<String> baseNames = new HashSet<>();
+		for (final StringKey key : this.fields.keySet()) {
+			final String name = key.getString();
+			final int colonIndex = name.indexOf(':');
+			if (colonIndex > 0) {
+				baseNames.add(name.substring(0, colonIndex));
+			}
+		}
+		for (final String baseName : baseNames) {
+			List<String> value = findQualityValue(baseName, preferred);
+			if ((value == null) && !this.fields.containsKey(new StringKey(baseName))) {
+				value = findQualityValue(baseName, fallbacks);
+			}
+			if (value != null) {
+				this.fields.put(new StringKey(baseName), value);
+			}
+		}
+	}
+
+	private List<String> findQualityValue(final String baseName, final String[] qualities) {
+		for (final String quality : qualities) {
+			final List<String> value = this.fields.get(new StringKey(baseName + ":" + quality));
+			if (value != null) {
+				return value;
+			}
+		}
+		return null;
+	}
+
 	public int size(){
 		return this.fields.size();
 	}

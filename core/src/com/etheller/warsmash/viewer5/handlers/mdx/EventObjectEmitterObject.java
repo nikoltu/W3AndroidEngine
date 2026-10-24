@@ -8,11 +8,11 @@ import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.audio.Sound;
 import com.badlogic.gdx.files.FileHandle;
 import com.etheller.warsmash.common.FetchDataTypeName;
 import com.etheller.warsmash.common.LoadGenericCallback;
+import com.etheller.warsmash.util.DataSourceFileHandle;
 import com.etheller.warsmash.util.MappedData;
 import com.etheller.warsmash.util.MappedDataRow;
 import com.etheller.warsmash.viewer5.GenericResource;
@@ -21,6 +21,7 @@ import com.etheller.warsmash.viewer5.PathSolver;
 import com.etheller.warsmash.viewer5.Texture;
 import com.etheller.warsmash.viewer5.handlers.EmitterObject;
 import com.etheller.warsmash.viewer5.handlers.w3x.War3MapViewer;
+import com.etheller.warsmash.viewer5.gl.Extensions;
 import com.hiveworkshop.rms.parsers.mdlx.MdlxEventObject;
 import com.hiveworkshop.rms.parsers.mdlx.MdlxParticleEmitter2;
 
@@ -43,7 +44,7 @@ public class EventObjectEmitterObject extends GenericObject implements EmitterOb
 				;
 			};
 			if (data != null) {
-				return Gdx.audio.newSound(temp);
+				return Extensions.audio.newSound(temp);
 			}
 			else {
 				System.err.println("Warning: missing sound file: " + this.filename);
@@ -310,8 +311,13 @@ public class EventObjectEmitterObject extends GenericObject implements EmitterOb
 							else {
 								path = fileNames[i];
 							}
+							if (!DataSourceFileHandle.isSoundPath(path)) {
+								// 2.0 and later tables also give a few sounds as a bare name (PeasantDeath1).
+								path = path + ".wav";
+							}
 							try {
-								final String pathString = pathSolver.solve(path, model.solverParams).finalSrc;
+								final String pathString = DataSourceFileHandle.resolveSoundPath(viewer.dataSource,
+										pathSolver.solve(path, model.solverParams).finalSrc);
 								final GenericResource genericResource = viewer.loadGeneric(pathString,
 										FetchDataTypeName.ARRAY_BUFFER, new LoadGenericSoundCallback(pathString));
 								if (genericResource == null) {

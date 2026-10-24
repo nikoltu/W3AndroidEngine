@@ -6,6 +6,7 @@ import java.nio.ByteOrder;
 
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.GL30;
+import com.etheller.warsmash.util.ArgbImage;
 import com.etheller.warsmash.viewer5.handlers.ResourceHandler;
 
 /**
@@ -92,8 +93,6 @@ public abstract class RawOpenGLTextureResource extends Texture {
 	}
 
 	public void update(final BufferedImage image, final boolean sRGBFix) {
-		final GL20 gl = this.viewer.gl;
-
 		final int imageWidth = image.getWidth();
 		final int imageHeight = image.getHeight();
 		final int[] pixels = new int[imageWidth * imageHeight];
@@ -120,6 +119,33 @@ public abstract class RawOpenGLTextureResource extends Texture {
 		}
 
 		buffer.flip();
+		update(imageWidth, imageHeight, buffer, sRGBFix);
+	}
+
+	public void update(final ArgbImage image, final boolean sRGBFix) {
+		final int imageWidth = image.getWidth();
+		final int imageHeight = image.getHeight();
+		final ByteBuffer buffer = ByteBuffer.allocateDirect(imageWidth * imageHeight * BYTES_PER_PIXEL)
+				.order(ByteOrder.nativeOrder());
+		for (int y = 0; y < imageHeight; y++) {
+			for (int x = 0; x < imageWidth; x++) {
+				final int pixel = image.getRGB(x, y);
+				buffer.put((byte) ((pixel >> 16) & 0xFF));
+				buffer.put((byte) ((pixel >> 8) & 0xFF));
+				buffer.put((byte) (pixel & 0xFF));
+				buffer.put((byte) ((pixel >> 24) & 0xFF));
+			}
+		}
+		buffer.flip();
+		update(imageWidth, imageHeight, buffer, sRGBFix);
+	}
+
+	/**
+	 * @param rgba direct buffer of imageWidth * imageHeight RGBA pixels
+	 */
+	public void update(final int imageWidth, final int imageHeight, final ByteBuffer rgba, final boolean sRGBFix) {
+		final GL20 gl = this.viewer.gl;
+		final ByteBuffer buffer = rgba;
 		this.data = buffer;
 
 		gl.glBindTexture(GL20.GL_TEXTURE_2D, this.handle);

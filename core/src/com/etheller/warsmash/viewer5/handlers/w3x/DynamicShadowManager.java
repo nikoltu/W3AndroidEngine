@@ -29,8 +29,9 @@ public class DynamicShadowManager {
 
 		this.depthTexture = gl.glGenTexture();
 		gl.glBindTexture(GL30.GL_TEXTURE_2D, this.depthTexture);
+		// OpenGL ES only accepts DEPTH_COMPONENT16 with an unsigned type.
 		gl.glTexImage2D(GL30.GL_TEXTURE_2D, 0, GL30.GL_DEPTH_COMPONENT16, 1024, 1024, 0, GL30.GL_DEPTH_COMPONENT,
-				GL30.GL_FLOAT, null);
+				GL30.GL_UNSIGNED_SHORT, null);
 		gl.glTexParameteri(GL30.GL_TEXTURE_2D, GL30.GL_TEXTURE_MAG_FILTER, GL30.GL_NEAREST);
 		gl.glTexParameteri(GL30.GL_TEXTURE_2D, GL30.GL_TEXTURE_MIN_FILTER, GL30.GL_NEAREST);
 		gl.glTexParameteri(GL30.GL_TEXTURE_2D, GL30.GL_TEXTURE_WRAP_S, GL30.GL_CLAMP_TO_EDGE);

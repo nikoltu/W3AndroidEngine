@@ -182,34 +182,34 @@ public class SetupGeosets {
 					}
 
 					// Positions.
-					gl.glBufferSubData(GL20.GL_ARRAY_BUFFER, positionOffset, positions.length,
+					gl.glBufferSubData(GL20.GL_ARRAY_BUFFER, positionOffset, positions.length * 4,
 							RenderMathUtils.wrap(positions));
 					positionOffset += positions.length * 4;
 
 					// Normals.
-					gl.glBufferSubData(GL20.GL_ARRAY_BUFFER, normalOffset, normals.length,
+					gl.glBufferSubData(GL20.GL_ARRAY_BUFFER, normalOffset, normals.length * 4,
 							RenderMathUtils.wrap(normals));
 					normalOffset += normals.length * 4;
 
 					// Texture coordinates.
 					for (final float[] uvSet : uvSets) {
-						gl.glBufferSubData(GL20.GL_ARRAY_BUFFER, uvOffset, uvSet.length, RenderMathUtils.wrap(uvSet));
+						gl.glBufferSubData(GL20.GL_ARRAY_BUFFER, uvOffset, uvSet.length * 4, RenderMathUtils.wrap(uvSet));
 						uvOffset += uvSet.length * 4;
 					}
 
 					if (tangents != null) {
-						gl.glBufferSubData(GL20.GL_ARRAY_BUFFER, tangentOffset, tangents.length,
+						gl.glBufferSubData(GL20.GL_ARRAY_BUFFER, tangentOffset, tangents.length * 4,
 								RenderMathUtils.wrap(tangents));
 						tangentOffset += tangents.length * 4;
 					}
 
 					// Skin.
-					gl.glBufferSubData(GL20.GL_ARRAY_BUFFER, skinOffset, skin.length,
+					gl.glBufferSubData(GL20.GL_ARRAY_BUFFER, skinOffset, skin.length * (bigNodeSpace ? 4 : 1),
 							bigNodeSpace ? RenderMathUtils.wrap(skin) : RenderMathUtils.wrapAsBytes(skin));
 					skinOffset += skin.length * (bigNodeSpace ? 4 : 1);
 
 					// Faces.
-					gl.glBufferSubData(GL20.GL_ELEMENT_ARRAY_BUFFER, faceOffset, faces.length,
+					gl.glBufferSubData(GL20.GL_ELEMENT_ARRAY_BUFFER, faceOffset, faces.length * 2,
 							RenderMathUtils.wrapFaces(faces));
 					faceOffset += faces.length * 2;
 				}

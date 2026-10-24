@@ -3,7 +3,6 @@ package com.etheller.warsmash.viewer5.handlers.w3x;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.audio.Sound;
 import com.badlogic.gdx.utils.TimeUtils;
 import com.etheller.warsmash.datasources.DataSource;
@@ -75,17 +74,10 @@ public final class UnitSound {
 			filePath = filePath.substring(0, lastDotIndex);
 		}
 		Sound newSound = null;
-		if (dataSource.has(filePath + ".wav") || dataSource.has(filePath + ".flac")) {
+		final String resolvedPath = DataSourceFileHandle.resolveSoundPath(dataSource, filePath + ".wav");
+		if (dataSource.has(resolvedPath)) {
 			try {
-				newSound = Gdx.audio.newSound(new DataSourceFileHandle(dataSource, filePath + ".wav"));
-			}
-			catch (final Exception exc) {
-				exc.printStackTrace();
-			}
-		}
-		else if (dataSource.has(filePath + ".mp3")) {
-			try {
-				newSound = Gdx.audio.newSound(new DataSourceFileHandle(dataSource, filePath + ".mp3"));
+				newSound = Extensions.audio.newSound(new DataSourceFileHandle(dataSource, resolvedPath));
 			}
 			catch (final Exception exc) {
 				exc.printStackTrace();

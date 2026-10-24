@@ -181,9 +181,12 @@ public class MdxModel extends com.etheller.warsmash.viewer5.Model<MdxHandler> {
 				// TODO This uses dumb, stupid, terrible, no-good hardcoded replaceable IDs
 				// instead of the real system, because currently MdxSimpleInstance is not
 				// supporting it correctly.
-				final String idString = ((replaceableId == 1) || (replaceableId == 2)) ? ReplaceableIds.getIdString(0)
-						: "";
-				path = "ReplaceableTextures\\" + ReplaceableIds.getPathString(replaceableId) + idString + ".blp";
+				path = ReplaceableIds.getDefaultTexturePath(replaceableId);
+				if (path == null) {
+					// Only instances that assign this replaceable at runtime draw it with a real
+					// texture.
+					path = "Textures\\white.blp";
+				}
 			}
 
 			if ((texture.reforged || reforged) && !path.endsWith(".dds")) {

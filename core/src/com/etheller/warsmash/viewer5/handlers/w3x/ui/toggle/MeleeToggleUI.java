@@ -220,6 +220,16 @@ public class MeleeToggleUI implements WarsmashUI {
 	}
 
 	@Override
+	public void scriptSelectUnit(final CUnit unit, final boolean select) {
+		this.meleeUI.scriptSelectUnit(unit, select);
+	}
+
+	@Override
+	public void scriptClearSelection() {
+		this.meleeUI.scriptClearSelection();
+	}
+
+	@Override
 	public void removedUnit(final CUnit whichUnit) {
 		this.meleeUI.removedUnit(whichUnit);
 	}

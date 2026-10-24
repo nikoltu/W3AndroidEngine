@@ -10,6 +10,7 @@ public enum CItemTypeJass implements CHandle {
 	PURCHASABLE,
 	CAMPAIGN,
 	MISCELLANEOUS,
+	EQUIPMENT, // 3.0, shifts UNKNOWN and ANY by one
 	UNKNOWN,
 	ANY;
 

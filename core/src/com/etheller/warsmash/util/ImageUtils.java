@@ -14,12 +14,16 @@ import java.nio.ByteOrder;
 
 import javax.imageio.ImageIO;
 
+import org.apache.commons.compress.utils.IOUtils;
+
 import com.badlogic.gdx.graphics.GL30;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Pixmap.Format;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.Texture.TextureFilter;
 import com.etheller.warsmash.datasources.DataSource;
+import com.etheller.warsmash.viewer5.handlers.blp.BlpDecoder;
+import com.etheller.warsmash.viewer5.handlers.blp.DdsDecoder;
 import com.etheller.warsmash.viewer5.handlers.tga.TgaFile;
 
 /**
@@ -28,11 +32,30 @@ import com.etheller.warsmash.viewer5.handlers.tga.TgaFile;
  */
 public final class ImageUtils {
 	private static final int BYTES_PER_PIXEL = 4;
+	/**
+	 * False on platforms without javax.imageio (Android), where formats that only
+	 * the ImageIO plugins decode are skipped instead of failing.
+	 */
+	public static final boolean IMAGE_IO_AVAILABLE = isClassPresent("javax.imageio.ImageIO");
 	public static final String DEFAULT_ICON_PATH = "ReplaceableTextures\\CommandButtons\\BTNTemp.blp";
 
 	public static Texture getAnyExtensionTexture(final DataSource dataSource, final String path) {
 		BufferedImage image;
 		try {
+			final DdsDecoder ddsImage = findDdsInsteadOfBlp(dataSource, path);
+			if (ddsImage != null) {
+				return getTexture(ddsImage.getWidth(), ddsImage.getHeight(), ddsImage.getRgba());
+			}
+			final BlpDecoder blpImage = findDecodableBlp(dataSource, path);
+			if (blpImage != null) {
+				// Raw palette colors in a plain texture match the ImageIO path, which reads
+				// them as linear and then uploads with an sRGB format.
+				return getTexture(blpImage.getWidth(), blpImage.getHeight(), blpImage.getRgba());
+			}
+			if (!IMAGE_IO_AVAILABLE && path.toLowerCase().endsWith(".blp") && dataSource.has(path)) {
+				System.err.println("No decoder for " + path + " on this platform");
+				return null;
+			}
 			final AnyExtensionImage imageInfo = getAnyExtensionImageFixRGB(dataSource, path, "texture");
 			image = imageInfo.getImageData();
 			if (image != null) {
@@ -78,6 +101,124 @@ public final class ImageUtils {
 		}
 		else {
 			throw new IllegalStateException("Missing " + errorType + ": " + path);
+		}
+	}
+
+	/**
+	 * Follows the lookup order of getAnyExtensionImageFixRGB (BLP, then TGA, then
+	 * DDS) and decodes the DDS without java.awt when that is what the path resolves
+	 * to.
+	 */
+	private static DdsDecoder findDdsInsteadOfBlp(final DataSource dataSource, final String path)
+			throws IOException {
+		if (!path.toLowerCase().endsWith(".blp") || dataSource.has(path)) {
+			return null;
+		}
+		final String basePath = path.substring(0, path.length() - 4);
+		if (dataSource.has(basePath + ".tga")) {
+			return null;
+		}
+		final ByteBuffer ddsData = readFully(dataSource, basePath + ".dds");
+		return ddsData == null ? null : DdsDecoder.decode(ddsData);
+	}
+
+	/**
+	 * Reads through getResourceAsStream, which unlike read also sees the files inside
+	 * a map archive.
+	 */
+	private static ByteBuffer readFully(final DataSource dataSource, final String path) throws IOException {
+		try (InputStream stream = dataSource.getResourceAsStream(path)) {
+			return stream == null ? null : ByteBuffer.wrap(IOUtils.toByteArray(stream));
+		}
+	}
+
+	private static boolean isClassPresent(final String className) {
+		try {
+			Class.forName(className, false, ImageUtils.class.getClassLoader());
+			return true;
+		}
+		catch (final ClassNotFoundException e) {
+			return false;
+		}
+	}
+
+	private static BlpDecoder findDecodableBlp(final DataSource dataSource, final String path) throws IOException {
+		if (!path.toLowerCase().endsWith(".blp")) {
+			return null;
+		}
+		final ByteBuffer blpData = readFully(dataSource, path);
+		if (blpData == null) {
+			return null;
+		}
+		if (BlpDecoder.isPalettedBlp1(blpData)) {
+			return BlpDecoder.decode(blpData);
+		}
+		return BlpDecoder.isJpegBlp1(blpData) ? BlpDecoder.decodeJpeg(blpData) : null;
+	}
+
+	/**
+	 * @param rgba width * height RGBA pixels, rows from the top
+	 */
+	public static Texture getTexture(final int width, final int height, final ByteBuffer rgba) {
+		final Pixmap pixmap = new Pixmap(width, height, Format.RGBA8888);
+		final ByteBuffer pixels = pixmap.getPixels();
+		pixels.position(0);
+		pixels.put(rgba.duplicate());
+		pixels.position(0);
+		final Texture texture = new Texture(pixmap);
+		texture.setFilter(TextureFilter.Linear, TextureFilter.Linear);
+		return texture;
+	}
+
+	/**
+	 * Like getAnyExtensionImageFixRGB, but returns RGBA bytes and decodes DDS without
+	 * java.awt.
+	 *
+	 * @param sRGBCorrect whether to apply the sRGB correction of
+	 *                    AnyExtensionImage.getRGBCorrectImageData
+	 */
+	public static RgbaImage getAnyExtensionRgbaImage(final DataSource dataSource, final String path,
+			final String errorType, final boolean sRGBCorrect) throws IOException {
+		final DdsDecoder ddsImage = findDdsInsteadOfBlp(dataSource, path);
+		if (ddsImage != null) {
+			return new RgbaImage(ddsImage.getWidth(), ddsImage.getHeight(), ddsImage.getRgba(), false);
+		}
+		final AnyExtensionImage imageInfo = getAnyExtensionImageFixRGB(dataSource, path, errorType);
+		final BufferedImage image = sRGBCorrect ? imageInfo.getRGBCorrectImageData() : imageInfo.getImageData();
+		return new RgbaImage(image.getWidth(), image.getHeight(), (ByteBuffer) getTextureBuffer(image),
+				imageInfo.isNeedsSRGBFix());
+	}
+
+	public static final class RgbaImage {
+		private final int width;
+		private final int height;
+		private final ByteBuffer pixels;
+		private final boolean needsSRGBFix;
+
+		public RgbaImage(final int width, final int height, final ByteBuffer pixels, final boolean needsSRGBFix) {
+			this.width = width;
+			this.height = height;
+			this.pixels = pixels;
+			this.needsSRGBFix = needsSRGBFix;
+		}
+
+		public int getWidth() {
+			return this.width;
+		}
+
+		public int getHeight() {
+			return this.height;
+		}
+
+		/**
+		 * @return width * height RGBA pixels, rows from the top
+		 */
+		public ByteBuffer getPixels() {
+			return this.pixels;
+		}
+
+		public boolean isNeedsSRGBFix() {
+			return this.needsSRGBFix;
 		}
 	}
 
@@ -146,6 +287,19 @@ public final class ImageUtils {
 		for (int y = 0; y < image.getHeight(); y++) {
 			for (int x = 0; x < image.getWidth(); x++) {
 				final int pixel = pixels[(y * image.getWidth()) + x];
+				pixmap.drawPixel(x, y, (pixel << 8) | (pixel >>> 24));
+			}
+		}
+		final Texture texture = new Texture(pixmap);
+		texture.setFilter(TextureFilter.Linear, TextureFilter.Linear);
+		return texture;
+	}
+
+	public static Texture getTextureNoColorCorrection(final ArgbImage image) {
+		final Pixmap pixmap = new Pixmap(image.getWidth(), image.getHeight(), Format.RGBA8888);
+		for (int y = 0; y < image.getHeight(); y++) {
+			for (int x = 0; x < image.getWidth(); x++) {
+				final int pixel = image.getRGB(x, y);
 				pixmap.drawPixel(x, y, (pixel << 8) | (pixel >>> 24));
 			}
 		}

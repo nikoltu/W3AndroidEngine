@@ -1,6 +1,5 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.ui.menu;
 
-import java.awt.Desktop;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
@@ -8,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.zip.CRC32C;
 
+import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.utils.IntIntMap;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import com.etheller.warsmash.datasources.DataSource;
@@ -255,16 +255,7 @@ public class BattleNetUI {
 		this.tosButton.setOnClick(new Runnable() {
 			@Override
 			public void run() {
-				boolean success = false;
-				if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
-					try {
-						Desktop.getDesktop().browse(new URI("https://www.youtube.com/watch?v=dQw4w9WgXcQ"));
-						success = true;
-					}
-					catch (final Exception e) {
-						e.printStackTrace();
-					}
-				}
+				final boolean success = Gdx.net.openURI("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
 				if (!success) {
 					BattleNetUI.this.battleNetLoginPanel.setVisible(false);
 					BattleNetUI.this.battleNetCancelBackdrop.setVisible(false);
