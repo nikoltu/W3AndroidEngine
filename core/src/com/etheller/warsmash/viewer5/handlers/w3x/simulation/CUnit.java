@@ -242,6 +242,7 @@ public class CUnit extends CWidget {
 	private boolean moveDisabled = false;
 	private boolean noUnitCollision = false;
 	private boolean noBuildingCollision = false;
+	private final boolean selectable = false;
 	private CBehavior defaultBehavior;
 	private CBehavior interruptedDefaultBehavior;
 	private CBehavior interruptedBehavior;
@@ -2008,9 +2009,9 @@ public class CUnit extends CWidget {
 						if (this.unitType.getFoodMade() != 0) {
 							player.setFoodCap(player.getFoodCap() + this.unitType.getFoodMade());
 						}
-						player.removeTechtreeInProgress(this.unitType.getTypeId());
-						player.addTechtreeUnlocked(game, this.unitType.getTypeId());
+						player.removeTechtreeInProgress(game, this.unitType.getTypeId());
 						if (!upgrading) {
+							player.addTechtreeUnlocked(game, this.unitType.getTypeId());
 							game.unitConstructFinishEvent(this);
 							fireConstructFinishEvents(game);
 						}
@@ -2075,7 +2076,7 @@ public class CUnit extends CWidget {
 								trainedUnit.setFoodUsed(trainedUnitType.getFoodUsed());
 								final CPlayer player = game.getPlayer(this.playerIndex);
 								player.setUnitFoodMade(trainedUnit, trainedUnitType.getFoodMade());
-								player.removeTechtreeInProgress(queuedRawcode);
+								player.removeTechtreeInProgress(game, queuedRawcode);
 								player.addTechtreeUnlocked(game, queuedRawcode);
 								fireTrainFinishEvents(game, trainedUnit);
 								// nudge the trained unit out around us
@@ -2084,7 +2085,7 @@ public class CUnit extends CWidget {
 								if (this.rallyPoint != null) {
 									final int rallyOrderId = OrderIds.smart;
 									this.rallyPoint.visit(UseAbilityOnTargetByIdVisitor.INSTANCE.reset(game,
-											trainedUnit, rallyOrderId));
+											trainedUnit, trainedUnit.playerIndex, rallyOrderId));
 								}
 								for (int i = 0; i < (this.buildQueue.length - 1); i++) {
 									setBuildQueueItem(game, i, this.buildQueue[i + 1], this.buildQueueTypes[i + 1]);
@@ -2106,7 +2107,7 @@ public class CUnit extends CWidget {
 								trainedUnit.setFoodUsed(trainedUnitType.getFoodUsed());
 								final CPlayer player = game.getPlayer(this.playerIndex);
 								player.setUnitFoodMade(trainedUnit, trainedUnitType.getFoodMade());
-								player.removeTechtreeInProgress(queuedRawcode);
+								player.removeTechtreeInProgress(game, queuedRawcode);
 								player.addTechtreeUnlocked(game, queuedRawcode);
 								fireTrainFinishEvents(game, trainedUnit);
 								// nudge the trained unit out around us
@@ -2115,7 +2116,7 @@ public class CUnit extends CWidget {
 								if (this.rallyPoint != null) {
 									final int rallyOrderId = OrderIds.smart;
 									this.rallyPoint.visit(UseAbilityOnTargetByIdVisitor.INSTANCE.reset(game,
-											trainedUnit, rallyOrderId));
+											trainedUnit, trainedUnit.playerIndex, rallyOrderId));
 								}
 								for (int i = 0; i < (this.buildQueue.length - 1); i++) {
 									setBuildQueueItem(game, i, this.buildQueue[i + 1], this.buildQueueTypes[i + 1]);
@@ -2161,7 +2162,7 @@ public class CUnit extends CWidget {
 								if (this.rallyPoint != null) {
 									final int rallyOrderId = OrderIds.smart;
 									this.rallyPoint.visit(UseAbilityOnTargetByIdVisitor.INSTANCE.reset(game,
-											revivingHero, rallyOrderId));
+											revivingHero, revivingHero.playerIndex, rallyOrderId));
 								}
 								for (int i = 0; i < (this.buildQueue.length - 1); i++) {
 									setBuildQueueItem(game, i, this.buildQueue[i + 1], this.buildQueueTypes[i + 1]);
@@ -2183,7 +2184,7 @@ public class CUnit extends CWidget {
 									setBuildQueueItem(game, i, this.buildQueue[i + 1], this.buildQueueTypes[i + 1]);
 								}
 								setBuildQueueItem(game, this.buildQueue.length - 1, null, null);
-								player.removeTechtreeInProgress(queuedRawcode);
+								player.removeTechtreeInProgress(game, queuedRawcode);
 								player.addTechResearched(game, queuedRawcode, 1);
 								fireResearchFinishEvents(game, queuedRawcode);
 								game.researchFinishEvent(this, queuedRawcode,
@@ -2349,7 +2350,7 @@ public class CUnit extends CWidget {
 		if ((this.worker != null) && this.workerInside) {
 			this.worker.setInvulnerable(false);
 			this.worker.setHidden(false);
-			this.worker.setPaused(false);
+			this.worker.setAcceptingOrders(true);
 			this.worker.nudgeAround(game, this);
 			if (this.constructionConsumesWorker) {
 				game.getPlayer(this.worker.getPlayerIndex()).setUnitFoodUsed(this.worker,
@@ -2374,8 +2375,8 @@ public class CUnit extends CWidget {
 			if (this.autocastAbility.getAutocastType() == AutocastType.NOTARGET) {
 				final BooleanAbilityTargetCheckReceiver<Void> booleanTargetReceiver = BooleanAbilityTargetCheckReceiver
 						.<Void>getInstance().reset();
-				this.autocastAbility.checkCanAutoTargetNoTarget(game, this, this.autocastAbility.getBaseOrderId(),
-						booleanTargetReceiver);
+				this.autocastAbility.checkCanAutoTargetNoTarget(game, this, this.playerIndex,
+						this.autocastAbility.getBaseOrderId(), booleanTargetReceiver);
 				if (booleanTargetReceiver.isTargetable()) {
 					return this.order(game, this.autocastAbility.getBaseOrderId(), null);
 				}
@@ -2448,7 +2449,8 @@ public class CUnit extends CWidget {
 				}
 				// Allow the ability to response to the order without actually placing itself in
 				// the queue, nor modifying (interrupting) the queue.
-				if (!ability.checkBeforeQueue(game, this, order.getOrderId(), order.getTarget(game))) {
+				if (!ability.checkBeforeQueue(game, this, order.getPlayerIndex(), order.getOrderId(),
+						order.getTarget(game))) {
 					// TODO is this a possible bug vector that the network request doesn't
 					// checkCanUse like the UI before checkBeforeQueue is called??
 					order.fireEvents(game, this);
@@ -2470,7 +2472,7 @@ public class CUnit extends CWidget {
 				if (queuedOrder != null) {
 					final int abilityHandleId = queuedOrder.getAbilityHandleId();
 					final CAbility ability = game.getAbility(abilityHandleId);
-					ability.onCancelFromQueue(game, this, queuedOrder.getOrderId());
+					ability.onCancelFromQueue(game, this, queuedOrder.getPlayerIndex(), queuedOrder.getOrderId());
 				}
 			}
 			this.orderQueue.clear();
@@ -2500,7 +2502,7 @@ public class CUnit extends CWidget {
 				if (queuedOrder != null) {
 					final int abilityHandleId = queuedOrder.getAbilityHandleId();
 					final CAbility ability = game.getAbility(abilityHandleId);
-					ability.onCancelFromQueue(game, this, queuedOrder.getOrderId());
+					ability.onCancelFromQueue(game, this, queuedOrder.getPlayerIndex(), queuedOrder.getOrderId());
 				}
 			}
 			this.orderQueue.clear();
@@ -2511,19 +2513,20 @@ public class CUnit extends CWidget {
 
 	public boolean order(final CSimulation simulation, final int orderId, final AbilityTarget target) {
 		if (orderId == OrderIds.stop) {
-			order(simulation, new COrderNoTarget(0, orderId, false), false);
+			order(simulation, new COrderNoTarget(this.playerIndex, 0, orderId, false), false);
 			return true;
 		}
 		for (final CAbility ability : this.abilities) {
 			final BooleanAbilityActivationReceiver activationReceiver = BooleanAbilityActivationReceiver.INSTANCE;
-			ability.checkCanUse(simulation, this, orderId, activationReceiver);
+			ability.checkCanUse(simulation, this, this.playerIndex, orderId, activationReceiver);
 			if (activationReceiver.isOk()) {
 				if (target == null) {
 					final BooleanAbilityTargetCheckReceiver<Void> booleanTargetReceiver = BooleanAbilityTargetCheckReceiver
 							.<Void>getInstance().reset();
-					ability.checkCanTargetNoTarget(simulation, this, orderId, booleanTargetReceiver);
+					ability.checkCanTargetNoTarget(simulation, this, this.playerIndex, orderId, booleanTargetReceiver);
 					if (booleanTargetReceiver.isTargetable()) {
-						order(simulation, new COrderNoTarget(ability.getHandleId(), orderId, false), false);
+						order(simulation, new COrderNoTarget(this.playerIndex, ability.getHandleId(), orderId, false),
+								false);
 						return true;
 					}
 				}
@@ -2533,11 +2536,12 @@ public class CUnit extends CWidget {
 						public Boolean accept(final AbilityPointTarget target) {
 							final BooleanAbilityTargetCheckReceiver<AbilityPointTarget> booleanTargetReceiver = BooleanAbilityTargetCheckReceiver
 									.<AbilityPointTarget>getInstance().reset();
-							ability.checkCanTarget(simulation, CUnit.this, orderId, target, booleanTargetReceiver);
+							ability.checkCanTarget(simulation, CUnit.this, CUnit.this.playerIndex, orderId, target,
+									booleanTargetReceiver);
 							final boolean pointTargetable = booleanTargetReceiver.isTargetable();
 							if (pointTargetable) {
-								order(simulation, new COrderTargetPoint(ability.getHandleId(), orderId, target, false),
-										false);
+								order(simulation, new COrderTargetPoint(CUnit.this.playerIndex, ability.getHandleId(),
+										orderId, target, false), false);
 							}
 							return pointTargetable;
 						}
@@ -2545,11 +2549,12 @@ public class CUnit extends CWidget {
 						public Boolean acceptWidget(final CWidget target) {
 							final BooleanAbilityTargetCheckReceiver<CWidget> booleanTargetReceiver = BooleanAbilityTargetCheckReceiver
 									.<CWidget>getInstance().reset();
-							ability.checkCanTarget(simulation, CUnit.this, orderId, target, booleanTargetReceiver);
+							ability.checkCanTarget(simulation, CUnit.this, CUnit.this.playerIndex, orderId, target,
+									booleanTargetReceiver);
 							final boolean widgetTargetable = booleanTargetReceiver.isTargetable();
 							if (widgetTargetable) {
-								order(simulation, new COrderTargetWidget(ability.getHandleId(), orderId,
-										target.getHandleId(), false), false);
+								order(simulation, new COrderTargetWidget(CUnit.this.playerIndex, ability.getHandleId(),
+										orderId, target.getHandleId(), false), false);
 							}
 							return widgetTargetable;
 						}
@@ -3029,7 +3034,7 @@ public class CUnit extends CWidget {
 		}
 		if (getHeroData() == null) {
 			if (this.constructing) {
-				player.removeTechtreeInProgress(this.unitType.getTypeId());
+				player.removeTechtreeInProgress(simulation, this.unitType.getTypeId());
 			}
 			else {
 				player.removeTechtreeUnlocked(simulation, this.unitType.getTypeId());
@@ -3531,7 +3536,7 @@ public class CUnit extends CWidget {
 												&& !this.game.getPlayer(this.source.getPlayerIndex()).hasAlliance(
 														targetUnit.getPlayerIndex(), CAllianceType.PASSIVE))) {
 									targetCheckReceiver.reset();
-									this.ability.checkCanAutoTarget(this.game, this.source,
+									this.ability.checkCanAutoTarget(this.game, this.source, this.source.playerIndex,
 											this.ability.getBaseOrderId(), unit, targetCheckReceiver);
 									if (targetCheckReceiver.isTargetable()) {
 										if (this.currentUnitTarget == null) {
@@ -3561,8 +3566,8 @@ public class CUnit extends CWidget {
 									&& (this.source.distance(unit) >= this.source.getUnitType()
 											.getMinimumAttackRange())) {
 								targetCheckReceiver.reset();
-								this.ability.checkCanAutoTarget(this.game, this.source, this.ability.getBaseOrderId(),
-										unit, targetCheckReceiver);
+								this.ability.checkCanAutoTarget(this.game, this.source, this.source.playerIndex,
+										this.ability.getBaseOrderId(), unit, targetCheckReceiver);
 								if (targetCheckReceiver.isTargetable()) {
 									if (this.currentUnitTarget == null) {
 										this.currentUnitTarget = unit;
@@ -3583,8 +3588,8 @@ public class CUnit extends CWidget {
 					break;
 				case HIGESTHP:
 					targetCheckReceiver.reset();
-					this.ability.checkCanAutoTarget(this.game, this.source, this.ability.getBaseOrderId(), unit,
-							targetCheckReceiver);
+					this.ability.checkCanAutoTarget(this.game, this.source, this.source.playerIndex,
+							this.ability.getBaseOrderId(), unit, targetCheckReceiver);
 					if (targetCheckReceiver.isTargetable()) {
 						if (this.currentUnitTarget == null) {
 							this.currentUnitTarget = unit;
@@ -3601,8 +3606,8 @@ public class CUnit extends CWidget {
 					break;
 				case LOWESTHP:
 					targetCheckReceiver.reset();
-					this.ability.checkCanAutoTarget(this.game, this.source, this.ability.getBaseOrderId(), unit,
-							targetCheckReceiver);
+					this.ability.checkCanAutoTarget(this.game, this.source, this.source.playerIndex,
+							this.ability.getBaseOrderId(), unit, targetCheckReceiver);
 					if (targetCheckReceiver.isTargetable()) {
 						if (unit.getLife() < unit.getMaximumLife()) {
 							if (this.currentUnitTarget == null) {
@@ -3621,8 +3626,8 @@ public class CUnit extends CWidget {
 					break;
 				case NEARESTVALID:
 					targetCheckReceiver.reset();
-					this.ability.checkCanAutoTarget(this.game, this.source, this.ability.getBaseOrderId(), unit,
-							targetCheckReceiver);
+					this.ability.checkCanAutoTarget(this.game, this.source, this.source.playerIndex,
+							this.ability.getBaseOrderId(), unit, targetCheckReceiver);
 					if (targetCheckReceiver.isTargetable()) {
 						if (this.currentUnitTarget == null) {
 							this.currentUnitTarget = unit;
@@ -3639,8 +3644,8 @@ public class CUnit extends CWidget {
 					break;
 				case NEARESTENEMY:
 					targetCheckReceiver.reset();
-					this.ability.checkCanAutoTarget(this.game, this.source, this.ability.getBaseOrderId(), unit,
-							targetCheckReceiver);
+					this.ability.checkCanAutoTarget(this.game, this.source, this.source.playerIndex,
+							this.ability.getBaseOrderId(), unit, targetCheckReceiver);
 					if (targetCheckReceiver.isTargetable() && !this.game.getPlayer(this.source.getPlayerIndex())
 							.hasAlliance(unit.getPlayerIndex(), CAllianceType.PASSIVE)) {
 						if (this.currentUnitTarget == null) {
@@ -3907,7 +3912,7 @@ public class CUnit extends CWidget {
 				if ((queueItemType == QueueItemType.UNIT) || (queueItemType == QueueItemType.RESEARCH)
 						|| (queueItemType == QueueItemType.SACRIFICE)) {
 					final CPlayer player = game.getPlayer(this.playerIndex);
-					player.addTechtreeInProgress(rawcode);
+					player.addTechtreeInProgress(game, rawcode);
 				}
 				return true;
 			}
@@ -3984,21 +3989,21 @@ public class CUnit extends CWidget {
 					final CPlayer player = game.getPlayer(this.playerIndex);
 					final CUpgradeType upgradeType = game.getUpgradeData().getType(this.buildQueue[cancelIndex]);
 					player.refundFor(upgradeType);
-					player.removeTechtreeInProgress(this.buildQueue[cancelIndex]);
+					player.removeTechtreeInProgress(game, this.buildQueue[cancelIndex]);
 					break;
 				}
 				case UNIT: {
 					final CPlayer player = game.getPlayer(this.playerIndex);
 					final CUnitType unitType = game.getUnitData().getUnitType(this.buildQueue[cancelIndex]);
 					player.refundFor(unitType);
-					player.removeTechtreeInProgress(this.buildQueue[cancelIndex]);
+					player.removeTechtreeInProgress(game, this.buildQueue[cancelIndex]);
 					break;
 				}
 				case SACRIFICE: {
 					final CPlayer player = game.getPlayer(this.playerIndex);
 					final CUnitType unitType = game.getUnitData().getUnitType(this.buildQueue[cancelIndex]);
 					player.refundFor(unitType);
-					player.removeTechtreeInProgress(this.buildQueue[cancelIndex]);
+					player.removeTechtreeInProgress(game, this.buildQueue[cancelIndex]);
 
 					getWorker().setHidden(false);
 					break;
@@ -4045,7 +4050,7 @@ public class CUnit extends CWidget {
 							this.queuedUnitFoodPaid = false;
 							game.getCommandErrorListener().showInterfaceError(this.playerIndex,
 									CommandStringErrorKeys.NOT_ENOUGH_FOOD);
-							player.removeTechtreeInProgress(rawcode);
+							player.removeTechtreeInProgress(game, rawcode);
 						}
 					}
 				}
@@ -4119,7 +4124,10 @@ public class CUnit extends CWidget {
 	}
 
 	public static enum QueueItemType {
-		UNIT, RESEARCH, HERO_REVIVE, SACRIFICE;
+		UNIT,
+		RESEARCH,
+		HERO_REVIVE,
+		SACRIFICE;
 	}
 
 	public void setRallyPoint(final AbilityTarget target) {
@@ -4155,12 +4163,14 @@ public class CUnit extends CWidget {
 		private static final UseAbilityOnTargetByIdVisitor INSTANCE = new UseAbilityOnTargetByIdVisitor();
 		private CSimulation game;
 		private CUnit trainedUnit;
+		private int playerIndex;
 		private int rallyOrderId;
 
 		private UseAbilityOnTargetByIdVisitor reset(final CSimulation game, final CUnit trainedUnit,
-				final int rallyOrderId) {
+				final int playerIndex, final int rallyOrderId) {
 			this.game = game;
 			this.trainedUnit = trainedUnit;
+			this.playerIndex = playerIndex;
 			this.rallyOrderId = rallyOrderId;
 			return this;
 		}
@@ -4169,20 +4179,21 @@ public class CUnit extends CWidget {
 		public Void accept(final AbilityPointTarget target) {
 			CAbility abilityToUse = null;
 			for (final CAbility ability : this.trainedUnit.getAbilities()) {
-				ability.checkCanUse(this.game, this.trainedUnit, this.rallyOrderId,
+				ability.checkCanUse(this.game, this.trainedUnit, this.playerIndex, this.rallyOrderId,
 						BooleanAbilityActivationReceiver.INSTANCE);
 				if (BooleanAbilityActivationReceiver.INSTANCE.isOk()) {
 					final BooleanAbilityTargetCheckReceiver<AbilityPointTarget> targetCheckReceiver = BooleanAbilityTargetCheckReceiver
 							.<AbilityPointTarget>getInstance().reset();
-					ability.checkCanTarget(this.game, this.trainedUnit, this.rallyOrderId, target, targetCheckReceiver);
+					ability.checkCanTarget(this.game, this.trainedUnit, this.playerIndex, this.rallyOrderId, target,
+							targetCheckReceiver);
 					if (targetCheckReceiver.isTargetable()) {
 						abilityToUse = ability;
 					}
 				}
 			}
 			if (abilityToUse != null) {
-				this.trainedUnit.order(this.game,
-						new COrderTargetPoint(abilityToUse.getHandleId(), this.rallyOrderId, target, false), false);
+				this.trainedUnit.order(this.game, new COrderTargetPoint(this.playerIndex, abilityToUse.getHandleId(),
+						this.rallyOrderId, target, false), false);
 			}
 			return null;
 		}
@@ -4196,20 +4207,21 @@ public class CUnit extends CWidget {
 				final CWidget target) {
 			CAbility abilityToUse = null;
 			for (final CAbility ability : trainedUnit.getAbilities()) {
-				ability.checkCanUse(game, trainedUnit, rallyOrderId, BooleanAbilityActivationReceiver.INSTANCE);
+				ability.checkCanUse(game, trainedUnit, this.playerIndex, rallyOrderId,
+						BooleanAbilityActivationReceiver.INSTANCE);
 				if (BooleanAbilityActivationReceiver.INSTANCE.isOk()) {
 					final BooleanAbilityTargetCheckReceiver<CWidget> targetCheckReceiver = BooleanAbilityTargetCheckReceiver
 							.<CWidget>getInstance().reset();
-					ability.checkCanTarget(game, trainedUnit, rallyOrderId, target, targetCheckReceiver);
+					ability.checkCanTarget(game, trainedUnit, this.playerIndex, rallyOrderId, target,
+							targetCheckReceiver);
 					if (targetCheckReceiver.isTargetable()) {
 						abilityToUse = ability;
 					}
 				}
 			}
 			if (abilityToUse != null) {
-				trainedUnit.order(game,
-						new COrderTargetWidget(abilityToUse.getHandleId(), rallyOrderId, target.getHandleId(), false),
-						false);
+				trainedUnit.order(game, new COrderTargetWidget(this.playerIndex, abilityToUse.getHandleId(),
+						rallyOrderId, target.getHandleId(), false), false);
 			}
 			return null;
 		}
@@ -4440,7 +4452,7 @@ public class CUnit extends CWidget {
 		else {
 			if (!isDead()) {
 				if (this.constructing) {
-					player.removeTechtreeInProgress(this.unitType.getTypeId());
+					player.removeTechtreeInProgress(simulation, this.unitType.getTypeId());
 				}
 				else {
 					player.removeTechtreeUnlocked(simulation, this.unitType.getTypeId());
@@ -4454,7 +4466,8 @@ public class CUnit extends CWidget {
 	}
 
 	private static enum StateListenerUpdateType {
-		ADD, REMOVE;
+		ADD,
+		REMOVE;
 	}
 
 	private static final class StateListenerUpdate {
@@ -4533,7 +4546,7 @@ public class CUnit extends CWidget {
 			ability.visit(AbilityDisableWhileUpgradingVisitor.INSTANCE);
 		}
 		checkDisabledAbilities(game, true);
-		player.addTechtreeInProgress(rawcode);
+		player.addTechtreeInProgress(game, rawcode);
 
 		game.unitUpgradingEvent(this, rawcode);
 		this.unitAnimationListener.playAnimation(true, PrimaryTag.BIRTH, SequenceUtils.EMPTY, 0.0f, true);

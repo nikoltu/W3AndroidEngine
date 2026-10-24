@@ -13,6 +13,7 @@ import com.etheller.interpreter.ast.scope.trigger.RemovableTriggerEvent;
 import com.etheller.interpreter.ast.scope.trigger.Trigger;
 import com.etheller.interpreter.ast.scope.trigger.TriggerBooleanExpression;
 import com.etheller.interpreter.ast.scope.variableevent.CLimitOp;
+import com.etheller.warsmash.parsers.jass.JassAIEnvironment;
 import com.etheller.warsmash.parsers.jass.scope.CommonTriggerExecutionScope;
 import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CDestructable;
@@ -28,6 +29,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CWidget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbility;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityPointTarget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.config.CBasePlayer;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.data.CUnitData;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.orders.COrderNoTarget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.orders.COrderTargetPoint;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.orders.COrderTargetWidget;
@@ -76,6 +78,7 @@ public class CPlayer extends CBasePlayer {
 	private float handicapXP = 1.0f;
 	private float handicap = 0.9f;
 	private final CPlayerFogOfWar fogOfWar;
+	private JassAIEnvironment aiScript;
 
 	public CPlayer(final CRace race, final float[] startLocation, final CBasePlayer configPlayer,
 			final CPlayerFogOfWar fogOfWar) {
@@ -199,7 +202,20 @@ public class CPlayer extends CBasePlayer {
 		return getTechtreeUnlocked(rawcode) + getTechtreeInProgress(rawcode);
 	}
 
-	public void addTechtreeUnlocked(CSimulation simulation, final War3ID rawcode) {
+	public void addTechtreeUnlocked(final CSimulation simulation, final War3ID rawcode) {
+		addSingleTechtreeUnlocked(rawcode);
+		final CUnitData unitData = simulation.getUnitData();
+		final CUnitType unitType = unitData.getUnitType(rawcode);
+		if (unitType != null) {
+			final List<War3ID> dependencyOr = unitType.getDependencyOr();
+			for (final War3ID otherDependency : dependencyOr) {
+				addSingleTechtreeUnlocked(otherDependency);
+			}
+		}
+		fireRequirementUpdateForAbilities(simulation, false);
+	}
+
+	private void addSingleTechtreeUnlocked(final War3ID rawcode) {
 		final Integer techtreeUnlocked = this.rawcodeToTechtreeUnlocked.get(rawcode);
 		if (techtreeUnlocked == null) {
 			this.rawcodeToTechtreeUnlocked.put(rawcode, 1);
@@ -207,16 +223,28 @@ public class CPlayer extends CBasePlayer {
 		else {
 			this.rawcodeToTechtreeUnlocked.put(rawcode, techtreeUnlocked + 1);
 		}
-		fireRequirementUpdateForAbilities(simulation, false);
 	}
 
-	public void setTechtreeUnlocked(CSimulation simulation, final War3ID rawcode, final int setToLevel) {
+	public void setTechtreeUnlocked(final CSimulation simulation, final War3ID rawcode, final int setToLevel) {
 		final int prev = getTechtreeUnlocked(rawcode);
 		this.rawcodeToTechtreeUnlocked.put(rawcode, setToLevel);
 		fireRequirementUpdateForAbilities(simulation, prev > setToLevel);
 	}
 
-	public void removeTechtreeUnlocked(CSimulation simulation, final War3ID rawcode) {
+	public void removeTechtreeUnlocked(final CSimulation simulation, final War3ID rawcode) {
+		removeSingleTechtreeUnlocked(rawcode);
+		final CUnitData unitData = simulation.getUnitData();
+		final CUnitType unitType = unitData.getUnitType(rawcode);
+		if (unitType != null) {
+			final List<War3ID> dependencyOr = unitType.getDependencyOr();
+			for (final War3ID otherDependency : dependencyOr) {
+				removeSingleTechtreeUnlocked(otherDependency);
+			}
+		}
+		fireRequirementUpdateForAbilities(simulation, true);
+	}
+
+	private void removeSingleTechtreeUnlocked(final War3ID rawcode) {
 		final Integer techtreeUnlocked = this.rawcodeToTechtreeUnlocked.get(rawcode);
 		if (techtreeUnlocked == null) {
 			this.rawcodeToTechtreeUnlocked.put(rawcode, -1);
@@ -224,10 +252,21 @@ public class CPlayer extends CBasePlayer {
 		else {
 			this.rawcodeToTechtreeUnlocked.put(rawcode, techtreeUnlocked - 1);
 		}
-		fireRequirementUpdateForAbilities(simulation, true);
 	}
 
-	public void addTechtreeInProgress(final War3ID rawcode) {
+	public void addTechtreeInProgress(final CSimulation simulation, final War3ID rawcode) {
+		addSingleTechtreeInProgress(rawcode);
+		final CUnitData unitData = simulation.getUnitData();
+		final CUnitType unitType = unitData.getUnitType(rawcode);
+		if (unitType != null) {
+			final List<War3ID> dependencyOr = unitType.getDependencyOr();
+			for (final War3ID otherDependency : dependencyOr) {
+				addSingleTechtreeInProgress(otherDependency);
+			}
+		}
+	}
+
+	private void addSingleTechtreeInProgress(final War3ID rawcode) {
 		final Integer techtreeUnlocked = this.rawcodeToTechtreeInProgress.get(rawcode);
 		if (techtreeUnlocked == null) {
 			this.rawcodeToTechtreeInProgress.put(rawcode, 1);
@@ -237,7 +276,19 @@ public class CPlayer extends CBasePlayer {
 		}
 	}
 
-	public void removeTechtreeInProgress(final War3ID rawcode) {
+	public void removeTechtreeInProgress(final CSimulation simulation, final War3ID rawcode) {
+		removeSingleTechtreeInProgress(rawcode);
+		final CUnitData unitData = simulation.getUnitData();
+		final CUnitType unitType = unitData.getUnitType(rawcode);
+		if (unitType != null) {
+			final List<War3ID> dependencyOr = unitType.getDependencyOr();
+			for (final War3ID otherDependency : dependencyOr) {
+				removeSingleTechtreeInProgress(otherDependency);
+			}
+		}
+	}
+
+	private void removeSingleTechtreeInProgress(final War3ID rawcode) {
 		final Integer techtreeUnlocked = this.rawcodeToTechtreeInProgress.get(rawcode);
 		if (techtreeUnlocked == null) {
 			this.rawcodeToTechtreeInProgress.put(rawcode, -1);
@@ -697,7 +748,7 @@ public class CPlayer extends CBasePlayer {
 		}
 	}
 
-	public void fireSpellEventsNoTarget(JassGameEventsWar3 eventId, final CAbility spellAbility,
+	public void fireSpellEventsNoTarget(final JassGameEventsWar3 eventId, final CAbility spellAbility,
 			final CUnit spellAbilityUnit) {
 		final List<CPlayerEvent> eventList = getEventList(eventId);
 		if (eventList != null) {
@@ -708,7 +759,7 @@ public class CPlayer extends CBasePlayer {
 		}
 	}
 
-	public void fireSpellEventsPointTarget(JassGameEventsWar3 eventId, final CAbility spellAbility,
+	public void fireSpellEventsPointTarget(final JassGameEventsWar3 eventId, final CAbility spellAbility,
 			final CUnit spellAbilityUnit, final AbilityPointTarget abilityPointTarget) {
 		final List<CPlayerEvent> eventList = getEventList(eventId);
 		if (eventList != null) {
@@ -720,7 +771,7 @@ public class CPlayer extends CBasePlayer {
 		}
 	}
 
-	public void fireSpellEventsUnitTarget(JassGameEventsWar3 eventId, final CAbility spellAbility,
+	public void fireSpellEventsUnitTarget(final JassGameEventsWar3 eventId, final CAbility spellAbility,
 			final CUnit spellAbilityUnit, final CUnit unitTarget) {
 		final List<CPlayerEvent> eventList = getEventList(eventId);
 		if (eventList != null) {
@@ -731,7 +782,7 @@ public class CPlayer extends CBasePlayer {
 		}
 	}
 
-	public void fireSpellEventsItemTarget(JassGameEventsWar3 eventId, final CAbility spellAbility,
+	public void fireSpellEventsItemTarget(final JassGameEventsWar3 eventId, final CAbility spellAbility,
 			final CUnit spellAbilityUnit, final CItem itemTarget) {
 		final List<CPlayerEvent> eventList = getEventList(eventId);
 		if (eventList != null) {
@@ -742,7 +793,7 @@ public class CPlayer extends CBasePlayer {
 		}
 	}
 
-	public void fireSpellEventsDestructableTarget(JassGameEventsWar3 eventId, final CAbility spellAbility,
+	public void fireSpellEventsDestructableTarget(final JassGameEventsWar3 eventId, final CAbility spellAbility,
 			final CUnit spellAbilityUnit, final CDestructable destTarget) {
 		final List<CPlayerEvent> eventList = getEventList(eventId);
 		if (eventList != null) {
@@ -801,7 +852,7 @@ public class CPlayer extends CBasePlayer {
 		}
 	}
 
-	public void addFogModifer(final CSimulation game, final CFogModifier fogModifier, boolean afterUnits) {
+	public void addFogModifer(final CSimulation game, final CFogModifier fogModifier, final boolean afterUnits) {
 		if (afterUnits) {
 			this.fogModifiersAfterUnits.add(fogModifier);
 		}
@@ -829,7 +880,7 @@ public class CPlayer extends CBasePlayer {
 		}
 	}
 
-	public void setAbilityEnabled(final CSimulation simulation, War3ID ability, boolean enabled) {
+	public void setAbilityEnabled(final CSimulation simulation, final War3ID ability, final boolean enabled) {
 		if (enabled) {
 			this.disabledAbilities.remove(ability);
 		}
@@ -839,11 +890,19 @@ public class CPlayer extends CBasePlayer {
 		fireRequirementUpdateForAbilities(simulation, !enabled);
 	}
 
-	public boolean isAbilityDisabled(War3ID abilityId) {
+	public boolean isAbilityDisabled(final War3ID abilityId) {
 		return this.disabledAbilities.contains(abilityId);
 	}
 
 	public void fireRequirementUpdateForAbilities(final CSimulation simulation, final boolean disable) {
 		simulation.fireRequirementUpdateForAbilities(this, disable);
+	}
+
+	public JassAIEnvironment getAiScript() {
+		return this.aiScript;
+	}
+
+	public void setAiScript(final JassAIEnvironment aiScript) {
+		this.aiScript = aiScript;
 	}
 }

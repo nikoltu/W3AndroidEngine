@@ -491,7 +491,7 @@ public class CommandCardPopulatingAbilityVisitor implements CAbilityVisitor<Void
 				return;
 			}
 		}
-		ability.checkCanUse(this.game, this.unit, orderId, this.previewCallback.reset());
+		ability.checkCanUse(this.game, this.unit, this.localPlayerIndex, orderId, this.previewCallback.reset());
 		if (!this.previewCallback.isOmitIconEntirely()) {
 			if (requiresPatron) {
 				this.previewCallback
@@ -502,12 +502,16 @@ public class CommandCardPopulatingAbilityVisitor implements CAbilityVisitor<Void
 			final boolean disabled = ((ability != null) && ability.isDisabled()) || this.previewCallback.isDisabled();
 			final float cooldownRemaining = this.previewCallback.getCooldownRemaining();
 			final float cooldownMax = this.previewCallback.getCooldownMax();
-			if (disabled) {
+			if (disabled || this.previewCallback.isOutOfStock()) {
 				// dont show these on disabled
 				goldCost = 0;
 				lumberCost = 0;
 				foodCost = 0;
 				manaCost = 0;
+			}
+			if (this.previewCallback.isOutOfStock()) {
+				uberTip = "|cffaaaaaa|r" + this.gameUI.getTemplates().getDecoratedString("COOLDOWNSTOCKTOOLTIP")
+						+ "|r|n" + uberTip;
 			}
 			if (this.previewCallback.isShowingRequirements()) {
 				uberTip = this.previewCallback.getRequirementsText() + "|r" + uberTip;
@@ -609,7 +613,6 @@ public class CommandCardPopulatingAbilityVisitor implements CAbilityVisitor<Void
 	@Override
 	public Void accept(final CAbilitySellItems ability) {
 		if ((this.menuBaseOrderId == 0) && ability.isIconShowing()) {
-			int itemIndex = 1;
 			for (final War3ID unitType : ability.getItemsSold()) {
 				final IconUI unitUI = this.abilityDataUI.getItemUI(unitType).getIconUI();
 				if (unitUI != null) {
@@ -617,10 +620,9 @@ public class CommandCardPopulatingAbilityVisitor implements CAbilityVisitor<Void
 					int goldCost, lumberCost;
 					goldCost = simulationUnitType.getGoldCost();
 					lumberCost = simulationUnitType.getLumberCost();
-					addCommandButton(ability, unitUI, ability.getHandleId(), this.localPlayerIndex | (itemIndex << 8),
-							0, false, false, goldCost, lumberCost, 0, 0, -1);
+					addCommandButton(ability, unitUI, ability.getHandleId(), unitType.getValue(), 0, false, false,
+							goldCost, lumberCost, 0, 0, ability.getStock(unitType));
 				}
-				itemIndex++;
 			}
 		}
 		return null;
