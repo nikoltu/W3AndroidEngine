@@ -13,6 +13,7 @@ public class Player {
 	private int id;
 	private int type;
 	private int race;
+	private int raceHud;
 	private int isFixedStartPosition;
 	private String name;
 	private final float[] startLocation = new float[2];
@@ -25,6 +26,9 @@ public class Player {
 		this.id = (int) ParseUtils.readUInt32(stream);
 		this.type = stream.readInt();
 		this.race = stream.readInt();
+		if (version >= 39) {
+			this.raceHud = stream.readInt();
+		}
 		this.isFixedStartPosition = stream.readInt();
 		this.name = ParseUtils.readUntilNull(stream);
 		ParseUtils.readFloatArray(stream, this.startLocation);

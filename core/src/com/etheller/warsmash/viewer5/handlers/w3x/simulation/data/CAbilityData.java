@@ -1,11 +1,14 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.data;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import com.etheller.warsmash.units.GameObject;
 import com.etheller.warsmash.units.ObjectData;
 import com.etheller.warsmash.util.War3ID;
+import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbility;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbilityGenericDoNothing;
@@ -24,6 +27,19 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.neutral.C
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.nightelf.eattree.CAbilityEatTree;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.nightelf.moonwell.CAbilityMoonWell;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.nightelf.root.CAbilityEntangleGoldMine;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.human.bloodmage.CAbilitySiphonMana;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.nightelf.keeper.CAbilityEntanglingRoots;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.item.CAbilityWandOfIllusion;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.undead.cryptlord.CAbilityLocustSwarm;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.orc.blademaster.CAbilityMirrorImage;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.orc.farseer.CAbilityFarSight;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.orc.shadowhunter.CAbilityBigBadVoodoo;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.undead.deathknight.CAbilityAnimateDead;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.nightelf.keeper.CAbilityTranquility;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.nightelf.moonpriestess.CAbilityStarfall;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.nightelf.warden.CAbilityFanOfKnives;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.undead.lich.CAbilityDeathAndDecay;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.undead.lich.CAbilityFrostNova;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.human.bloodmage.phoenix.CAbilitySummonPhoenix;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.human.archmage.CAbilityBlizzard;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.human.archmage.CAbilityMassTeleport;
@@ -96,6 +112,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.def
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.jass.CAbilityTypeJassDefinition;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.parser.AbilityBuilderConfiguration;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.parser.AbilityBuilderDupe;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.parser.AbilityBuilderParser;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.parser.AbilityBuilderParserUtil;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.parser.AbilityBuilderType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.types.definitions.impl.CAbilityTypeDefinitionAbilityTemplateBuilder;
@@ -141,19 +158,29 @@ public class CAbilityData {
 				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityAvatar(handleId, alias)));
 
 		// Blood Mage:
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AHdr"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilitySiphonMana(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("ANdr"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilitySiphonMana(handleId, alias)));
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Apxf"), new CAbilityTypeDefinitionPhoenixFire());
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AHpx"),
 				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilitySummonPhoenix(handleId, alias)));
 
 		// ----Orc----
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AOmi"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityMirrorImage(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AOvd"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityBigBadVoodoo(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AOfs"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityFarSight(handleId, alias)));
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AOsf"),
 				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityFeralSpirit(handleId, alias)));
-		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AOcl"),
-				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityChainLightning(handleId, alias)));
+//		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AOcl"),
+//				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityChainLightning(handleId, alias)));
 
 		// Tauren Chieftain
-		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AOws"),
-				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityWarStomp(handleId, alias)));
+//		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AOws"),
+//				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityWarStomp(handleId, alias)));
 
 		// Burrow:
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Abun"), new CAbilityTypeDefinitionCargoHoldBurrow());
@@ -161,6 +188,14 @@ public class CAbilityData {
 
 		// ----Night Elf----
 		// Keeper
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AEsf"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityStarfall(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AEfk"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityFanOfKnives(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AEtq"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityTranquility(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AEer"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityEntanglingRoots(handleId, alias)));
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AEfn"),
 				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityForceOfNature(handleId, alias)));
 
@@ -178,7 +213,17 @@ public class CAbilityData {
 				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityBlink(handleId, alias)));
 
 		// ----Undead----
+		// Lich
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AUdd"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityDeathAndDecay(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AUfn"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityFrostNova(handleId, alias)));
+		// Crypt Lord
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AUls"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityLocustSwarm(handleId, alias)));
 		// Death Knight
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AUa2"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityAnimateDead(handleId, alias)));
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AUdc"),
 				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityDeathCoil(handleId, alias)));
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AUdp"),
@@ -203,6 +248,9 @@ public class CAbilityData {
 		// Moon Well
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Ambt"),
 				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityMoonWell(handleId, alias)));
+		// Items
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AIil"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityWandOfIllusion(handleId, alias)));
 		// ----Neutral----
 		// Dark Ranger:
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("ANch"),
@@ -227,7 +275,7 @@ public class CAbilityData {
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("ANsw"),
 				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilitySummonHawk(handleId, alias)));
 
-		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AHca"), new CAbilityTypeDefinitionColdArrows());
+//		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AHca"), new CAbilityTypeDefinitionColdArrows());
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Agld"), new CAbilityTypeDefinitionGoldMine());
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Agl2"), new CAbilityTypeDefinitionGoldMineOverlayed());
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Abgm"), new CAbilityTypeDefinitionBlightedGoldMine());
@@ -293,22 +341,132 @@ public class CAbilityData {
 		System.err.println("Starting to load ability builder");
 		System.err.println("========================================================================");
 
-		if (true) {
+
+		try {
+			final List<AbilityBuilderParser> inheritingAbilities = new ArrayList<>();
+			final Map<String, AbilityBuilderParser> previousAbilityParsers = new HashMap<>();
+			
 			AbilityBuilderParserUtil.loadAbilityBuilderFiles(behavior -> {
-				if (behavior.getType().equals(AbilityBuilderType.TEMPLATE)) {
-					for (final AbilityBuilderDupe dupe : behavior.getIds()) {
+				if (behavior.getType().equals(AbilityBuilderType.INHERIT)) {
+					inheritingAbilities.add(behavior);
+				} else if (behavior.getType().equals(AbilityBuilderType.TEMPLATE)) {
+					for (AbilityBuilderDupe dupe : behavior.getIds()) {
+						previousAbilityParsers.put(dupe.getId(), behavior);
 						this.codeToAbilityTypeDefinition.put(War3ID.fromString(dupe.getId()),
 								new CAbilityTypeDefinitionAbilityTemplateBuilder(behavior));
 					}
-				}
-				else {
-					for (final AbilityBuilderDupe dupe : behavior.getIds()) {
-						final AbilityBuilderConfiguration config = new AbilityBuilderConfiguration(behavior, dupe);
+				} else {
+					for (AbilityBuilderDupe dupe : behavior.getIds()) {
+						previousAbilityParsers.put(dupe.getId(), behavior);
+						AbilityBuilderConfiguration config = new AbilityBuilderConfiguration(behavior, dupe);
 						this.codeToAbilityTypeDefinition.put(War3ID.fromString(config.getId()),
 								config.createDefinition());
 					}
 				}
 			});
+			
+			
+			int prevIter = 1;
+			List<AbilityBuilderParser> loopInheritingAbilities = inheritingAbilities;
+			while (loopInheritingAbilities.size() > 0) {
+				List<AbilityBuilderParser> iter = loopInheritingAbilities;
+				loopInheritingAbilities = new ArrayList<>();
+				
+				if (prevIter == 0) {
+					for (AbilityBuilderParser parser : iter) {
+						System.err.println("Couldn't parse INHERIT ability due to no parent ability definition: " + parser.getIds().get(0).getId());
+					}
+					break;
+				}
+				prevIter = 0;
+				
+				for (AbilityBuilderParser parser : iter) {
+					if (parser.getParentId() == null) {
+						System.err.println("Couldn't parse INHERIT ability due to missing parent ID: " + parser.getIds().get(0).getId());
+						continue;
+					}
+					AbilityBuilderParser parent = previousAbilityParsers.get(parser.getParentId());
+					if (parent != null) {
+						parser.updateFromParent(parent);
+						for (AbilityBuilderDupe dupe : parser.getIds()) {
+							previousAbilityParsers.put(dupe.getId(), parser);
+							AbilityBuilderConfiguration config = new AbilityBuilderConfiguration(parser, dupe);
+							this.codeToAbilityTypeDefinition.put(War3ID.fromString(config.getId()),
+									config.createDefinition());
+							prevIter++;
+						}
+					} else {
+						loopInheritingAbilities.add(parser);
+					}
+				}
+			}
+			
+			if (WarsmashConstants.ABILITY_COMPATIBILITY != null && WarsmashConstants.ABILITY_COMPATIBILITY.size() > 0) {
+				final List<AbilityBuilderParser> inheritingCompatAbilities = new ArrayList<>();
+				boolean all = WarsmashConstants.ABILITY_COMPATIBILITY.contains("all");
+
+				AbilityBuilderParserUtil.loadAbilityBuilderFiles(behavior -> {
+					if (behavior.getType().equals(AbilityBuilderType.INHERIT)) {
+						inheritingCompatAbilities.add(behavior);
+					} else if (behavior.getType().equals(AbilityBuilderType.TEMPLATE)) {
+						for (AbilityBuilderDupe dupe : behavior.getIds()) {
+							if (all || WarsmashConstants.ABILITY_COMPATIBILITY.contains(dupe.getId())) {
+								previousAbilityParsers.put(dupe.getId(), behavior);
+								this.codeToAbilityTypeDefinition.put(War3ID.fromString(dupe.getId()),
+										new CAbilityTypeDefinitionAbilityTemplateBuilder(behavior));
+							}
+						}
+					} else {
+						for (AbilityBuilderDupe dupe : behavior.getIds()) {
+							if (all || WarsmashConstants.ABILITY_COMPATIBILITY.contains(dupe.getId())) {
+								previousAbilityParsers.put(dupe.getId(), behavior);
+								AbilityBuilderConfiguration config = new AbilityBuilderConfiguration(behavior, dupe);
+								this.codeToAbilityTypeDefinition.put(War3ID.fromString(config.getId()),
+										config.createDefinition());
+							}
+						}
+					}
+				}, "abilityBehaviors_compatibility");
+				
+				prevIter = 1;
+				List<AbilityBuilderParser> loopInheritingCompatAbilities = inheritingCompatAbilities;
+				while (loopInheritingCompatAbilities.size() > 0) {
+					List<AbilityBuilderParser> iter = loopInheritingCompatAbilities;
+					loopInheritingCompatAbilities = new ArrayList<>();
+					
+					if (prevIter == 0) {
+						for (AbilityBuilderParser parser : iter) {
+							System.err.println("Couldn't parse INHERIT ability due to no parent ability definition: " + parser.getIds().get(0).getId());
+						}
+						break;
+					}
+					prevIter = 0;
+					
+					for (AbilityBuilderParser parser : iter) {
+						if (parser.getParentId() == null) {
+							System.err.println("Couldn't parse INHERIT ability due to missing parent ID: " + parser.getIds().get(0).getId());
+							continue;
+						}
+						AbilityBuilderParser parent = previousAbilityParsers.get(parser.getParentId());
+						if (parent != null) {
+							parser.updateFromParent(parent);
+							for (AbilityBuilderDupe dupe : parser.getIds()) {
+								if (all || WarsmashConstants.ABILITY_COMPATIBILITY.contains(dupe.getId())) {
+									previousAbilityParsers.put(dupe.getId(), parser);
+									AbilityBuilderConfiguration config = new AbilityBuilderConfiguration(parser, dupe);
+									this.codeToAbilityTypeDefinition.put(War3ID.fromString(config.getId()),
+											config.createDefinition());
+									prevIter++;
+								}
+							}
+						} else {
+							loopInheritingCompatAbilities.add(parser);
+						}
+					}
+				}
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
 		}
 
 		System.err.println("========================================================================");

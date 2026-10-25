@@ -4,6 +4,9 @@ public enum CRegenType {
 	NONE, ALWAYS, BLIGHT, DAY, NIGHT;
 
 	public static CRegenType parseRegenType(final String typeString) {
+		if (typeString.isBlank()) {
+			return NONE;
+		}
 		try {
 			return valueOf(typeString.toUpperCase());
 		}

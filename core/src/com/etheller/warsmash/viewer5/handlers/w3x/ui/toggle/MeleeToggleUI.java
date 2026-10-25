@@ -230,6 +230,51 @@ public class MeleeToggleUI implements WarsmashUI {
 	}
 
 	@Override
+	public List<CUnit> getSelectedSimulationUnits(final int playerIndex) {
+		return this.meleeUI.getSelectedSimulationUnits(playerIndex);
+	}
+
+	@Override
+	public boolean isOverClickableUi(final int screenX, final int screenY) {
+		return this.meleeUI.isOverClickableUi(screenX, screenY);
+	}
+
+	@Override
+	public boolean isOverInventorySlot(final int screenX, final int screenY) {
+		return this.meleeUI.isOverInventorySlot(screenX, screenY);
+	}
+
+	@Override
+	public boolean hasActiveCommand() {
+		return this.meleeUI.hasActiveCommand();
+	}
+
+	@Override
+	public boolean isPlacingBuilding() {
+		return this.meleeUI.isPlacingBuilding();
+	}
+
+	@Override
+	public void cancelPointerDrag() {
+		this.meleeUI.cancelPointerDrag();
+	}
+
+	@Override
+	public int touchOverlaySlotAt(final int screenX, final int screenY) {
+		return this.meleeUI.touchOverlaySlotAt(screenX, screenY);
+	}
+
+	@Override
+	public void selectControlGroupSlot(final int slot) {
+		this.meleeUI.selectControlGroupSlot(slot);
+	}
+
+	@Override
+	public void assignControlGroupSlot(final int slot, final boolean add) {
+		this.meleeUI.assignControlGroupSlot(slot, add);
+	}
+
+	@Override
 	public void removedUnit(final CUnit whichUnit) {
 		this.meleeUI.removedUnit(whichUnit);
 	}

@@ -67,11 +67,12 @@ public class CBehaviorReturnResources extends CAbstractRangedBehavior implements
 				if (abilityReturnResources.accepts(this.abilityHarvest.getCarriedResourceType())) {
 					final CPlayer player = this.simulation.getPlayer(this.unit.getPlayerIndex());
 					CWidget nextTarget = null;
+					int received = this.abilityHarvest.getCarriedResourceAmount();
 					switch (this.abilityHarvest.getCarriedResourceType()) {
 					case FOOD:
 						throw new IllegalStateException("Unit used Harvest skill to carry FOOD resource!");
 					case GOLD:
-						player.setGold(player.getGold() + this.abilityHarvest.getCarriedResourceAmount());
+						received = player.addHarvestedGold(this.simulation, received);
 						if (this.unit.getUnitAnimationListener().removeSecondaryTag(SecondaryTag.GOLD)) {
 							this.unit.getUnitAnimationListener().forceResetCurrentAnimation();
 						}
@@ -84,7 +85,7 @@ public class CBehaviorReturnResources extends CAbstractRangedBehavior implements
 						}
 						break;
 					case LUMBER:
-						player.setLumber(player.getLumber() + this.abilityHarvest.getCarriedResourceAmount());
+						received = player.addHarvestedLumber(this.simulation, received);
 						if (this.unit.getUnitAnimationListener().removeSecondaryTag(SecondaryTag.LUMBER)) {
 							this.unit.getUnitAnimationListener().forceResetCurrentAnimation();
 						}
@@ -104,8 +105,7 @@ public class CBehaviorReturnResources extends CAbstractRangedBehavior implements
 						break;
 					}
 					this.simulation.unitGainResourceEvent(this.unit, player.getId(),
-							this.abilityHarvest.getCarriedResourceType(),
-							this.abilityHarvest.getCarriedResourceAmount());
+							this.abilityHarvest.getCarriedResourceType(), received);
 					this.abilityHarvest.setCarriedResources(this.abilityHarvest.getCarriedResourceType(), 0);
 					if (nextTarget != null) {
 						return this.abilityHarvest.getBehaviorHarvest().reset(this.simulation, nextTarget);

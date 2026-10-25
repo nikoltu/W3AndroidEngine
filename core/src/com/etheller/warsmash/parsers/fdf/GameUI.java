@@ -101,8 +101,10 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 	private WTS mapStrings;
 	private final BitmapFont font;
 	private final BitmapFont font20;
+	private final BitmapFont font14;
 	private final DynamicFontGeneratorHolder dynamicFontGeneratorHolder;
 	private final List<FocusableFrame> focusableFrames = new ArrayList<>();
+	private boolean wideRoot;
 
 	public GameUI(final DataSource dataSource, final GameSkin skin, final Viewport viewport, final Scene uiScene,
 			final AbstractMdxModelViewer modelViewer, final int racialCommandIndex, final WTS mapStrings) {
@@ -113,13 +115,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 		this.uiScene = uiScene;
 		this.modelViewer = modelViewer;
 		this.racialCommandIndex = racialCommandIndex;
-		if (viewport instanceof ExtendViewport) {
-			this.renderBounds.set(0, 0, ((ExtendViewport) viewport).getMinWorldWidth(),
-					((ExtendViewport) viewport).getMinWorldHeight());
-		}
-		else {
-			this.renderBounds.set(0, 0, viewport.getWorldWidth(), viewport.getWorldHeight());
-		}
+		updateRootBounds();
 		this.templates = new FrameTemplateEnvironment();
 
 		this.dynamicFontGeneratorHolder = new DynamicFontGeneratorHolder(this.modelViewer.dataSource, this.skin);
@@ -129,12 +125,40 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 		this.font = this.fontGenerator.generateFont(fontParam);
 		fontParam.size = 20;
 		this.font20 = this.fontGenerator.generateFont(fontParam);
+		fontParam.size = 14;
+		this.font14 = this.fontGenerator.generateFont(fontParam);
 		this.fontParam = new FreeTypeFontParameter();
 		this.fdfCoordinateResolutionDummyViewport = new FitViewport(0.8f, 0.6f);
 		this.skinData = skin.getSkinsTable();
 		this.errorStrings = this.skinData.get("Errors");
 		this.glyphLayout = new GlyphLayout();
 		this.mapStrings = mapStrings;
+	}
+
+	/**
+	 * A wide root spans the whole extended viewport instead of its centered 4:3 part, so frames anchored to the
+	 * screen sides follow the real screen edges.
+	 */
+	public void setWideRoot(final boolean wideRoot) {
+		this.wideRoot = wideRoot;
+		updateRootBounds();
+	}
+
+	public void updateRootBounds() {
+		if (this.viewport instanceof ExtendViewport) {
+			final float minWorldWidth = ((ExtendViewport) this.viewport).getMinWorldWidth();
+			final float minWorldHeight = ((ExtendViewport) this.viewport).getMinWorldHeight();
+			if (this.wideRoot) {
+				final float worldWidth = Math.max(minWorldWidth, this.viewport.getWorldWidth());
+				this.renderBounds.set((minWorldWidth - worldWidth) / 2, 0, worldWidth, minWorldHeight);
+			}
+			else {
+				this.renderBounds.set(0, 0, minWorldWidth, minWorldHeight);
+			}
+		}
+		else {
+			this.renderBounds.set(0, 0, this.viewport.getWorldWidth(), this.viewport.getWorldHeight());
+		}
 	}
 
 	public static GameSkin loadSkin(final DataSource dataSource, final String skin) {
@@ -366,6 +390,32 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 		}
 		final BitmapFont frameFont = this.fontGenerator.generateFont(this.fontParam);
 		return frameFont;
+	}
+
+	private UIFrame inflateButtonPart(final String templateName, final UIFrame button,
+			final FrameDefinition buttonDefinition, final boolean decorateFileNames) {
+		if (templateName == null) {
+			return null;
+		}
+		final FrameDefinition template = this.templates.getFrame(templateName);
+		if (template == null) {
+			return null;
+		}
+		final UIFrame part = inflate(template, button, buttonDefinition, decorateFileNames);
+		part.setSetAllPoints(true);
+		return part;
+	}
+
+	private UIFrame inflateButtonText(final StringPairFrameDefinitionField textDefinition, final UIFrame button,
+			final FrameDefinition buttonDefinition, final boolean decorateFileNames) {
+		if (textDefinition == null) {
+			return null;
+		}
+		final UIFrame text = inflateButtonPart(textDefinition.getFirst(), button, buttonDefinition, decorateFileNames);
+		if (text != null) {
+			setDecoratedText((StringFrame) text, textDefinition.getSecond());
+		}
+		return text;
 	}
 
 	public UIFrame inflate(final FrameDefinition frameDefinition, final UIFrame parent,
@@ -824,30 +874,20 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 
 				final boolean decorateFileNamesOnThisFrame = frameDefinition.has("DecorateFileNames")
 						|| inDecorateFileNames;
-				final UIFrame normalText = inflate(this.templates.getFrame(normalTextDefinition.getFirst()),
-						simpleButtonFrame, frameDefinition, decorateFileNamesOnThisFrame);
-				setDecoratedText((StringFrame) normalText, normalTextDefinition.getSecond());
-				normalText.setSetAllPoints(true);
-				final UIFrame disabledText = inflate(this.templates.getFrame(disabledTextDefinition.getFirst()),
-						simpleButtonFrame, frameDefinition, decorateFileNamesOnThisFrame);
-				setDecoratedText((StringFrame) disabledText, disabledTextDefinition.getSecond());
-				disabledText.setSetAllPoints(true);
-				final UIFrame highlightText = inflate(this.templates.getFrame(highlightTextDefinition.getFirst()),
-						simpleButtonFrame, frameDefinition, decorateFileNamesOnThisFrame);
-				setDecoratedText((StringFrame) highlightText, highlightTextDefinition.getSecond());
-				highlightText.setSetAllPoints(true);
-				final UIFrame normalTexture = inflate(this.templates.getFrame(normalTextureDefinition),
-						simpleButtonFrame, frameDefinition, decorateFileNamesOnThisFrame);
-				normalTexture.setSetAllPoints(true);
-				final UIFrame pushedTexture = inflate(this.templates.getFrame(pushedTextureDefinition),
-						simpleButtonFrame, frameDefinition, decorateFileNamesOnThisFrame);
-				pushedTexture.setSetAllPoints(true);
-				final UIFrame disabledTexture = inflate(this.templates.getFrame(disabledTextureDefinition),
-						simpleButtonFrame, frameDefinition, decorateFileNamesOnThisFrame);
-				disabledTexture.setSetAllPoints(true);
-				final UIFrame useHighlight = inflate(this.templates.getFrame(useHighlightDefinition), simpleButtonFrame,
+				final UIFrame normalText = inflateButtonText(normalTextDefinition, simpleButtonFrame, frameDefinition,
+						decorateFileNamesOnThisFrame);
+				final UIFrame disabledText = inflateButtonText(disabledTextDefinition, simpleButtonFrame, frameDefinition,
+						decorateFileNamesOnThisFrame);
+				final UIFrame highlightText = inflateButtonText(highlightTextDefinition, simpleButtonFrame,
 						frameDefinition, decorateFileNamesOnThisFrame);
-				useHighlight.setSetAllPoints(true);
+				final UIFrame normalTexture = inflateButtonPart(normalTextureDefinition, simpleButtonFrame,
+						frameDefinition, decorateFileNamesOnThisFrame);
+				final UIFrame pushedTexture = inflateButtonPart(pushedTextureDefinition, simpleButtonFrame,
+						frameDefinition, decorateFileNamesOnThisFrame);
+				final UIFrame disabledTexture = inflateButtonPart(disabledTextureDefinition, simpleButtonFrame,
+						frameDefinition, decorateFileNamesOnThisFrame);
+				final UIFrame useHighlight = inflateButtonPart(useHighlightDefinition, simpleButtonFrame, frameDefinition,
+						decorateFileNamesOnThisFrame);
 				simpleButtonFrame.setButtonText(normalText);
 				simpleButtonFrame.setDisabledText(disabledText);
 				simpleButtonFrame.setHighlightText(highlightText);
@@ -857,7 +897,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 				simpleButtonFrame.setControlPushedBackdrop(pushedTexture);
 
 				final Vector2Definition pushedTextOffset = frameDefinition.getVector2("ButtonPushedTextOffset");
-				if (pushedTextOffset != null) {
+				if ((pushedTextOffset != null) && (normalTextDefinition != null) && (highlightTextDefinition != null)) {
 					final UIFrame pushedNormalText = inflate(this.templates.getFrame(normalTextDefinition.getFirst()),
 							simpleButtonFrame, frameDefinition, decorateFileNamesOnThisFrame);
 					setDecoratedText((StringFrame) pushedNormalText, normalTextDefinition.getSecond());
@@ -1351,6 +1391,10 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 			}
 			else if ("HIGHLIGHT".equals(frameDefinition.getFrameType())) {
 				final String highlightType = frameDefinition.getString("HighlightType");
+				if ("SHADE".equals(highlightType)) {
+					// Only marks lobby and loading "ready" states, which single player never shows.
+					return new SimpleFrame(frameDefinition.getName(), parent);
+				}
 				if (!"FILETEXTURE".equals(highlightType)) {
 					throw new IllegalStateException(
 							"Our engine does not know how to handle a non-FILETEXTURE highlight");
@@ -1688,6 +1732,10 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 
 	public BitmapFont getFont() {
 		return this.font;
+	}
+
+	public BitmapFont getFont14() {
+		return this.font14;
 	}
 
 	public BitmapFont getFont20() {

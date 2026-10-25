@@ -54,9 +54,9 @@ public class CAbilityEntangledMine extends CAbilityOverlayedMine implements CAbi
 				if (totalGoldAvailable > 0) {
 					final CPlayer player = game.getPlayer(unit.getPlayerIndex());
 					final int goldGained = Math.min(totalGoldAvailable, this.goldPerInterval);
-					player.addGold(goldGained);
+					final int goldReceived = player.addHarvestedGold(game, goldGained);
 					parentGoldMineAbility.setGold(totalGoldAvailable - goldGained);
-					game.unitGainResourceEvent(unit, player.getId(), ResourceType.GOLD, goldGained);
+					game.unitGainResourceEvent(unit, player.getId(), ResourceType.GOLD, goldReceived);
 				}
 				if (parentGoldMineAbility.getGold() == 0) {
 					unit.kill(game);
@@ -66,40 +66,43 @@ public class CAbilityEntangledMine extends CAbilityOverlayedMine implements CAbi
 	}
 
 	@Override
-	public void onCancelFromQueue(final CSimulation game, final CUnit unit, int playerIndex, final int orderId) {
+	public void onCancelFromQueue(final CSimulation game, final CUnit unit, final int playerIndex, final int orderId) {
 	}
 
 	@Override
-	public CBehavior begin(final CSimulation game, final CUnit caster, int playerIndex, final int orderId, final CWidget target) {
+	public CBehavior begin(final CSimulation game, final CUnit caster, final int playerIndex, final int orderId,
+			final boolean autoOrder, final CWidget target) {
 		return null;
 	}
 
 	@Override
-	public CBehavior begin(final CSimulation game, final CUnit caster, int playerIndex,
-			final int orderId, final AbilityPointTarget point) {
+	public CBehavior begin(final CSimulation game, final CUnit caster, final int playerIndex, final int orderId,
+			final boolean autoOrder, final AbilityPointTarget point) {
 		return null;
 	}
 
 	@Override
-	public CBehavior beginNoTarget(final CSimulation game, final CUnit caster, int playerIndex, final int orderId) {
+	public CBehavior beginNoTarget(final CSimulation game, final CUnit caster, final int playerIndex, final int orderId,
+			final boolean autoOrder) {
 		return null;
 	}
 
 	@Override
-	public void checkCanTarget(final CSimulation game, final CUnit unit, int playerIndex, final int orderId,
-			final CWidget target, final AbilityTargetCheckReceiver<CWidget> receiver) {
+	public void checkCanTarget(final CSimulation game, final CUnit unit, final int playerIndex, final int orderId,
+			final boolean autoOrder, final CWidget target, final AbilityTargetCheckReceiver<CWidget> receiver) {
 		receiver.notAnActiveAbility();
 	}
 
 	@Override
-	public void checkCanTarget(final CSimulation game, final CUnit unit, int playerIndex,
-			final int orderId, final AbilityPointTarget target, final AbilityTargetCheckReceiver<AbilityPointTarget> receiver) {
+	public void checkCanTarget(final CSimulation game, final CUnit unit, final int playerIndex, final int orderId,
+			final boolean autoOrder, final AbilityPointTarget target,
+			final AbilityTargetCheckReceiver<AbilityPointTarget> receiver) {
 		receiver.notAnActiveAbility();
 	}
 
 	@Override
-	public void checkCanTargetNoTarget(final CSimulation game, final CUnit unit, int playerIndex,
-			final int orderId, final AbilityTargetCheckReceiver<Void> receiver) {
+	public void checkCanTargetNoTarget(final CSimulation game, final CUnit unit, final int playerIndex,
+			final int orderId, final boolean autoOrder, final AbilityTargetCheckReceiver<Void> receiver) {
 		receiver.notAnActiveAbility();
 	}
 
@@ -110,8 +113,8 @@ public class CAbilityEntangledMine extends CAbilityOverlayedMine implements CAbi
 	}
 
 	@Override
-	protected void innerCheckCanUse(final CSimulation game, final CUnit unit, int playerIndex,
-			final int orderId, final AbilityActivationReceiver receiver) {
+	protected void innerCheckCanUse(final CSimulation game, final CUnit unit, final int playerIndex, final int orderId,
+			final AbilityActivationReceiver receiver) {
 		receiver.notAnActiveAbility();
 	}
 

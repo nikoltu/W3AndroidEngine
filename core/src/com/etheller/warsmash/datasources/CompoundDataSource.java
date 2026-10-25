@@ -11,6 +11,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class CompoundDataSource implements DataSource {
 	private final List<DataSource> mpqList = new ArrayList<>();
@@ -24,6 +25,26 @@ public class CompoundDataSource implements DataSource {
 	}
 
 	Map<String, File> cache = new HashMap<>();
+	// Index of the source that has each path, or MISSING. The sources do not change while this instance lives,
+	// and the same paths are asked for many times (prefixes, extensions, aliases).
+	private static final int MISSING = -1;
+	private final Map<String, Integer> sourceIndexCache = new ConcurrentHashMap<>();
+
+	private int findSourceIndex(final String filepath) {
+		final Integer cached = this.sourceIndexCache.get(filepath);
+		if (cached != null) {
+			return cached;
+		}
+		int found = MISSING;
+		for (int i = this.mpqList.size() - 1; i >= 0; i--) {
+			if (this.mpqList.get(i).has(filepath)) {
+				found = i;
+				break;
+			}
+		}
+		this.sourceIndexCache.put(filepath, found);
+		return found;
+	}
 
 	@Override
 	public File getFile(final String filepath) {
@@ -86,6 +107,13 @@ public class CompoundDataSource implements DataSource {
 	@Override
 	public InputStream getResourceAsStream(final String filepath) {
 		try {
+			final Integer cached = this.sourceIndexCache.get(filepath);
+			if ((cached != null) && (cached != MISSING)) {
+				final InputStream resourceAsStream = this.mpqList.get(cached).getResourceAsStream(filepath);
+				if (resourceAsStream != null) {
+					return resourceAsStream;
+				}
+			}
 			for (int i = this.mpqList.size() - 1; i >= 0; i--) {
 				final DataSource mpq = this.mpqList.get(i);
 				final InputStream resourceAsStream = mpq.getResourceAsStream(filepath);
@@ -106,13 +134,7 @@ public class CompoundDataSource implements DataSource {
 		if (this.cache.containsKey(filepath)) {
 			return true;
 		}
-		for (int i = this.mpqList.size() - 1; i >= 0; i--) {
-			final DataSource mpq = this.mpqList.get(i);
-			if (mpq.has(filepath)) {
-				return true;
-			}
-		}
-		return false;
+		return findSourceIndex(filepath) != MISSING;
 	}
 
 	@Override
@@ -144,6 +166,7 @@ public class CompoundDataSource implements DataSource {
 			}
 		}
 		this.cache.clear();
+		this.sourceIndexCache.clear();
 		this.mpqList.clear();
 		if (dataSourceDescriptors != null) {
 			for (final DataSourceDescriptor descriptor : dataSourceDescriptors) {

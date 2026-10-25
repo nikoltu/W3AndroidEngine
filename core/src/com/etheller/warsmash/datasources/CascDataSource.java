@@ -31,7 +31,8 @@ public class CascDataSource implements DataSource {
 	private final Map<String, File> extractedFiles = new ConcurrentHashMap<>();
 	private final File extractFolder = new File(System.getProperty("java.io.tmpdir"), "warsmash-casc");
 
-	public CascDataSource(final String warcraft3InstallPath, final String[] prefixes) {
+	public CascDataSource(final String warcraft3InstallPath, final String[] prefixes, final String product,
+			final boolean old131Format) {
 		this.prefixes = prefixes;
 		for (int i = 0; i < (prefixes.length / 2); i++) {
 			final String temp = prefixes[i];
@@ -43,7 +44,8 @@ public class CascDataSource implements DataSource {
 		deleteContents(this.extractFolder);
 		try {
 			// Plain reads are as fast as mapping here, and a mapping per read can exhaust a 32-bit address space.
-			this.warcraftIIICASC = new WarcraftIIICASC(Paths.get(warcraft3InstallPath), false);
+			this.warcraftIIICASC = new WarcraftIIICASC(Paths.get(warcraft3InstallPath), false, product,
+					old131Format);
 			this.rootFileSystem = this.warcraftIIICASC.getRootFileSystem();
 			this.listFile = this.rootFileSystem.enumerateFiles();
 			this.fileAliases = new HashMap<>();
@@ -168,7 +170,7 @@ public class CascDataSource implements DataSource {
 	}
 
 	@Override
-	public File getDirectory(String filepath) throws IOException {
+	public File getDirectory(final String filepath) throws IOException {
 		return null;
 	}
 
@@ -279,4 +281,18 @@ public class CascDataSource implements DataSource {
 		}
 	}
 
+	public static enum Product {
+		WARCRAFT_III("w3"),
+		WARCRAFT_III_PUBLIC_TEST("w3t");
+
+		private final String key;
+
+		private Product(final String key) {
+			this.key = key;
+		}
+
+		public String getKey() {
+			return this.key;
+		}
+	}
 }

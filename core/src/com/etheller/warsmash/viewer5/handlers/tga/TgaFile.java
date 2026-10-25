@@ -95,7 +95,8 @@ public class TgaFile {
 		if ((header[0] | header[1]) != 0) {
 			throw new IllegalStateException("Error " + name);
 		}
-		if (header[2] != 2) {
+		final boolean runLengthEncoded = header[2] == 10;
+		if ((header[2] != 2) && !runLengthEncoded) {
 			throw new IllegalStateException("Error " + name);
 		}
 		int w = 0, h = 0;
@@ -121,6 +122,9 @@ public class TgaFile {
 		}
 
 		final int[] pixels = new int[w * h];
+		if (runLengthEncoded) {
+			data = decodeRunLength(name, data, pixels.length, alpha ? 4 : 3);
+		}
 		if (data.length < (pixels.length * (alpha ? 4 : 3))) {
 			throw new IllegalStateException("Error " + name + " not enaugh pixel data");
 		}
@@ -181,6 +185,46 @@ public class TgaFile {
 		dimensions[1] = h;
 		dimensions[2] = alpha ? 1 : 0;
 		return pixels;
+	}
+
+	/**
+	 * Expands TGA run-length packets into the same byte layout an uncompressed image has.
+	 */
+	private static byte[] decodeRunLength(final String name, final byte[] packed, final int pixelCount,
+			final int bytesPerPixel) {
+		final byte[] raw = new byte[pixelCount * bytesPerPixel];
+		int in = 0;
+		int out = 0;
+		while (out < raw.length) {
+			if (in >= packed.length) {
+				throw new IllegalStateException("Error " + name + " not enaugh pixel data");
+			}
+			final int packetHeader = packed[in++] & 0xFF;
+			final int count = (packetHeader & 0x7F) + 1;
+			final int length = count * bytesPerPixel;
+			if ((out + length) > raw.length) {
+				throw new IllegalStateException("Error " + name + " run past the image end");
+			}
+			if ((packetHeader & 0x80) != 0) {
+				if ((in + bytesPerPixel) > packed.length) {
+					throw new IllegalStateException("Error " + name + " not enaugh pixel data");
+				}
+				for (int i = 0; i < count; i++) {
+					System.arraycopy(packed, in, raw, out, bytesPerPixel);
+					out += bytesPerPixel;
+				}
+				in += bytesPerPixel;
+			}
+			else {
+				if ((in + length) > packed.length) {
+					throw new IllegalStateException("Error " + name + " not enaugh pixel data");
+				}
+				System.arraycopy(packed, in, raw, out, length);
+				in += length;
+				out += length;
+			}
+		}
+		return raw;
 	}
 
 	/**

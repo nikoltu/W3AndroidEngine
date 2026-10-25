@@ -15,11 +15,14 @@ import com.google.gson.JsonParseException;
 
 public class AbilityBuilderParserUtil {
 	public static void loadAbilityBuilderFiles(final AbilityBuilderFileListener listener) {
+		loadAbilityBuilderFiles(listener, "abilityBehaviors");
+	}
+	public static void loadAbilityBuilderFiles(final AbilityBuilderFileListener listener, String folder) {
 		final Gson gson = AbilityBuilderGsonBuilder.create();
 		try {
 			// Internal files resolve to the APK assets on Android and to the working directory on desktop.
-			final FileHandle abilityBehaviorsDir = Gdx.files != null ? Gdx.files.internal("abilityBehaviors")
-					: new FileHandle(new File("abilityBehaviors"));
+			final FileHandle abilityBehaviorsDir = Gdx.files != null ? Gdx.files.internal(folder)
+					: new FileHandle(new File(folder));
 			loadAbilityBuilderFiles(gson, abilityBehaviorsDir, listener);
 		}
 		catch (final Exception e) {

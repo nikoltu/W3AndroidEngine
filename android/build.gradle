@@ -79,10 +79,13 @@ tasks.matching { it.name.contains("merge") && it.name.contains("JniLibFolders") 
     packageTask.dependsOn "copyAndroidNatives"
 }
 
-// Ability builder definitions are read as internal files, so they ship inside the APK.
+// Ability builder definitions are read as internal files, so they ship inside the APK. The engine's own UI
+// resources ship too and are unpacked by the launcher, because the engine reads them from a folder.
 tasks.register("copyAbilityBehaviors", Copy) {
-    from "../core/assets/abilityBehaviors"
-    into "build/generated/engineAssets/abilityBehaviors"
+    from("../core/assets/abilityBehaviors") { into "abilityBehaviors" }
+    from("../core/assets/abilityBehaviors_compatibility") { into "abilityBehaviors_compatibility" }
+    from("../resources") { into "engineResources" }
+    into "build/generated/engineAssets"
 }
 
 tasks.named("preBuild") { dependsOn "copyAbilityBehaviors" }

@@ -1,5 +1,7 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.ui;
 
+import java.util.List;
+
 import com.badlogic.gdx.audio.Music;
 import com.etheller.interpreter.ast.scope.GlobalScope;
 import com.etheller.warsmash.viewer5.Scene;
@@ -48,6 +50,24 @@ public interface WarsmashUI extends CommandErrorListener, WarsmashBaseUI {
 	void scriptSelectUnit(CUnit unit, boolean select);
 
 	void scriptClearSelection();
+
+	List<CUnit> getSelectedSimulationUnits(int playerIndex);
+
+	boolean isOverClickableUi(int screenX, int screenY);
+
+	boolean isOverInventorySlot(int screenX, int screenY);
+
+	boolean hasActiveCommand();
+
+	boolean isPlacingBuilding();
+
+	void cancelPointerDrag();
+
+	int touchOverlaySlotAt(int screenX, int screenY);
+
+	void selectControlGroupSlot(int slot);
+
+	void assignControlGroupSlot(int slot, boolean add);
 
 	void removedUnit(CUnit whichUnit);
 

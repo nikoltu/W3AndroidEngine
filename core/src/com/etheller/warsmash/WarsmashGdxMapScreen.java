@@ -24,6 +24,7 @@ import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.Matrix4;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.utils.viewport.ExtendViewport;
+import com.etheller.warsmash.input.touch.TouchTarget;
 import com.etheller.warsmash.datasources.CascDataSourceDescriptor;
 import com.etheller.warsmash.datasources.CompoundDataSource;
 import com.etheller.warsmash.datasources.CompoundDataSourceDescriptor;
@@ -58,7 +59,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.ui.MeleeUI;
 import com.etheller.warsmash.viewer5.handlers.w3x.ui.WarsmashUI;
 import com.etheller.warsmash.viewer5.handlers.w3x.ui.toggle.MeleeToggleUI;
 
-public class WarsmashGdxMapScreen implements InputProcessor, Screen {
+public class WarsmashGdxMapScreen implements InputProcessor, Screen, TouchTarget {
 	public static final boolean ENABLE_AUDIO = true;
 	private final War3MapViewer viewer;
 	private final Rectangle tempRect = new Rectangle();
@@ -223,12 +224,27 @@ public class WarsmashGdxMapScreen implements InputProcessor, Screen {
 	}
 
 	public static DataSource parseDataSources(final DataTable warsmashIni) {
-		final Element dataSourcesConfig = warsmashIni.get("DataSources");
 		final List<DataSourceDescriptor> dataSourcesList = new ArrayList<>();
 		final List<String> allCascPrefixes = new ArrayList<>();
+		parseDataSourceDescriptors(warsmashIni, dataSourcesList, allCascPrefixes);
+		final DataSource baseCompoundDataSource = new CompoundDataSourceDescriptor(dataSourcesList).createDataSource();
+
+		final List<DataSource> subdirDataSourcesList = new ArrayList<>();
+//		Collections.reverse(allCascPrefixes);
+		for (final String prefix : allCascPrefixes) {
+			subdirDataSourcesList.add(new SubdirDataSource(baseCompoundDataSource, prefix + "\\"));
+		}
+		subdirDataSourcesList.add(baseCompoundDataSource);
+		return new CompoundDataSource(subdirDataSourcesList);
+	}
+
+	public static void parseDataSourceDescriptors(final DataTable warsmashIni,
+			final List<DataSourceDescriptor> dataSourcesList, final List<String> allCascPrefixes) {
+		final Element dataSourcesConfig = warsmashIni.get("DataSources");
 		for (int i = 0; i < dataSourcesConfig.size(); i++) {
-			final String type = dataSourcesConfig.getField("Type" + (i < 10 ? "0" : "") + i);
-			final String path = dataSourcesConfig.getField("Path" + (i < 10 ? "0" : "") + i);
+			final String numberText = (i < 10 ? "0" : "") + i;
+			final String type = dataSourcesConfig.getField("Type" + numberText);
+			final String path = dataSourcesConfig.getField("Path" + numberText);
 			switch (type) {
 			case "Folder": {
 				dataSourcesList.add(new FolderDataSourceDescriptor(path));
@@ -239,10 +255,12 @@ public class WarsmashGdxMapScreen implements InputProcessor, Screen {
 				break;
 			}
 			case "CASC": {
-				final String prefixes = dataSourcesConfig.getField("Prefixes" + (i < 10 ? "0" : "") + i);
+				final String prefixes = dataSourcesConfig.getField("Prefixes" + numberText);
+				final String product = dataSourcesConfig.getField("Product" + numberText);
+				final boolean oldFormat = dataSourcesConfig.getFieldValue("OldFormat" + numberText) == 1;
 				final List<String> parsedPrefixes = Arrays.asList(prefixes.split(","));
 				allCascPrefixes.addAll(parsedPrefixes);
-				dataSourcesList.add(new CascDataSourceDescriptor(path, parsedPrefixes));
+				dataSourcesList.add(new CascDataSourceDescriptor(path, parsedPrefixes, product, oldFormat));
 				break;
 			}
 			case "":
@@ -251,15 +269,6 @@ public class WarsmashGdxMapScreen implements InputProcessor, Screen {
 				throw new RuntimeException("Unknown data source type: " + type);
 			}
 		}
-		final DataSource baseCompoundDataSource = new CompoundDataSourceDescriptor(dataSourcesList).createDataSource();
-
-		final List<DataSource> subdirDataSourcesList = new ArrayList<>();
-//		Collections.reverse(allCascPrefixes);
-		for (final String prefix : allCascPrefixes) {
-			subdirDataSourcesList.add(new SubdirDataSource(baseCompoundDataSource, prefix + "\\"));
-		}
-		subdirDataSourcesList.add(baseCompoundDataSource);
-		return new CompoundDataSource(subdirDataSourcesList);
 	}
 
 	private void updateUIScene() {
@@ -411,6 +420,46 @@ public class WarsmashGdxMapScreen implements InputProcessor, Screen {
 	@Override
 	public boolean touchCancelled(final int screenX, final int screenY, final int pointer, final int button) {
 		return false;
+	}
+
+	@Override
+	public boolean isOverClickableUi(final int screenX, final int screenY) {
+		return this.meleeUI.isOverClickableUi(screenX, screenY);
+	}
+
+	@Override
+	public boolean isOverInventorySlot(final int screenX, final int screenY) {
+		return this.meleeUI.isOverInventorySlot(screenX, screenY);
+	}
+
+	@Override
+	public boolean hasActiveCommand() {
+		return this.meleeUI.hasActiveCommand();
+	}
+
+	@Override
+	public boolean isPlacingBuilding() {
+		return this.meleeUI.isPlacingBuilding();
+	}
+
+	@Override
+	public void cancelPointerDrag() {
+		this.meleeUI.cancelPointerDrag();
+	}
+
+	@Override
+	public int touchOverlaySlotAt(final int screenX, final int screenY) {
+		return this.meleeUI.touchOverlaySlotAt(screenX, screenY);
+	}
+
+	@Override
+	public void selectControlGroupSlot(final int slot) {
+		this.meleeUI.selectControlGroupSlot(slot);
+	}
+
+	@Override
+	public void assignControlGroupSlot(final int slot, final boolean add) {
+		this.meleeUI.assignControlGroupSlot(slot, add);
 	}
 
 	private static class Message {

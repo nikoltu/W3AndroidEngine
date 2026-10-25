@@ -4,6 +4,8 @@ import java.util.List;
 
 import com.etheller.warsmash.units.GameObject;
 import com.etheller.warsmash.util.War3ID;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnitTypeRequirement;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.data.CUnitData;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.CAbilityType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.definitions.CAbilityTypeDefinition;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.impl.CAbilityTypeInventory;
@@ -19,8 +21,13 @@ public class CAbilityTypeDefinitionInventory extends AbstractCAbilityTypeDefinit
 		final boolean canUseItems = abilityEditorData.getFieldAsBoolean(DATA_C + level, 0);
 		final boolean canGetItems = abilityEditorData.getFieldAsBoolean(DATA_D + level, 0);
 		final boolean canDropItems = abilityEditorData.getFieldAsBoolean(DATA_E + level, 0);
+		List<CUnitTypeRequirement> requirements = null;
+		if (abilityEditorData.readSLKTagInt(CHECK_DEPENDENCIES) > 0) {
+			requirements = CUnitData.parseRequirements(abilityEditorData.getFieldAsList(REQUIREMENTS),
+					abilityEditorData.getFieldAsList(REQUIREMENT_LEVELS));
+		}
 		return new CAbilityTypeInventoryLevelData(getTargetsAllowed(abilityEditorData, level), canDropItems,
-				canGetItems, canUseItems, dropItemsOnDeath, itemCapacity);
+				canGetItems, canUseItems, dropItemsOnDeath, itemCapacity, requirements);
 	}
 
 	@Override

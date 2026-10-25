@@ -14,7 +14,9 @@ import java.util.WeakHashMap;
 import android.content.Intent;
 import android.media.MediaMetadataRetriever;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.util.Log;
+import android.view.MotionEvent;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.audio.Music;
@@ -27,6 +29,9 @@ import com.badlogic.gdx.utils.BufferUtils;
 import com.badlogic.gdx.utils.GdxRuntimeException;
 import com.etheller.warsmash.WarsmashGdxMenuScreen;
 import com.etheller.warsmash.WarsmashGdxMultiScreenGame;
+import com.etheller.warsmash.input.touch.TouchInputRouter;
+import com.etheller.warsmash.input.touch.TouchSettings;
+import com.etheller.warsmash.units.Element;
 import com.etheller.warsmash.units.DataTable;
 import com.etheller.warsmash.util.StringBundle;
 import com.etheller.warsmash.util.WarsmashConstants;
@@ -46,6 +51,7 @@ public class AndroidLauncher extends AndroidApplication {
 	 * Map to start right away, like the desktop -loadfile argument.
 	 */
 	private static final String EXTRA_LOAD_FILE = "loadfile";
+	private AndroidPointerSource pointerSource;
 
 	@Override
 	protected void onCreate(final Bundle savedInstanceState) {
@@ -70,6 +76,15 @@ public class AndroidLauncher extends AndroidApplication {
 			return;
 		}
 		WarsmashConstants.loadConstants(warsmashIni.get("Emulator"), warsmashIni);
+		final Element touchSettings = warsmashIni.get("Touch");
+		if ((touchSettings == null) || !"Off".equalsIgnoreCase(touchSettings.getField("TouchControls"))) {
+			final TouchInputRouter router = new TouchInputRouter(
+					TouchSettings.fromIni(touchSettings, getResources().getDisplayMetrics().density),
+					SystemClock::uptimeMillis,
+					(touchSettings != null) && (touchSettings.getFieldValue("ShowTouchDebug") != 0));
+			TouchInputRouter.install(router);
+			this.pointerSource = new AndroidPointerSource(router);
+		}
 		loadExtensions(new File(getCacheDir(), "sounds"));
 
 		final AndroidApplicationConfiguration config = new AndroidApplicationConfiguration();
@@ -85,6 +100,22 @@ public class AndroidLauncher extends AndroidApplication {
 				menuScreen.startMap(fileToLoad);
 			}
 		});
+	}
+
+	@Override
+	public boolean dispatchTouchEvent(final MotionEvent event) {
+		if ((this.pointerSource != null) && this.pointerSource.onTouchEvent(event)) {
+			return true;
+		}
+		return super.dispatchTouchEvent(event);
+	}
+
+	@Override
+	public boolean dispatchGenericMotionEvent(final MotionEvent event) {
+		if ((this.pointerSource != null) && this.pointerSource.onGenericMotionEvent(event)) {
+			return true;
+		}
+		return super.dispatchGenericMotionEvent(event);
 	}
 
 	private static DataTable loadWarsmashIni(final File iniFile) throws IOException {

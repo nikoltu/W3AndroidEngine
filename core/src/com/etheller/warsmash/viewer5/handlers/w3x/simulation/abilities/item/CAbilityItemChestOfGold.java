@@ -34,7 +34,7 @@ public class CAbilityItemChestOfGold extends CAbilitySpellBase {
     }
 
     @Override
-    public boolean checkBeforeQueue(final CSimulation game, final CUnit caster, final int playerIndex, final int orderId, final AbilityTarget target) {
+    public boolean checkBeforeQueue(final CSimulation game, final CUnit caster, final int playerIndex, final int orderId, final boolean autoOrder, final AbilityTarget target) {
         if (orderId == OrderIds.itemgivegold) {
             final CPlayer player = game.getPlayer(caster.getPlayerIndex());
             game.createTemporarySpellEffectOnUnit(caster, getAlias(), CEffectType.CASTER);
@@ -62,18 +62,19 @@ public class CAbilityItemChestOfGold extends CAbilitySpellBase {
     }
 
     @Override
-    public CBehavior begin(final CSimulation game, final CUnit caster, final int playerIndex, final int orderId, final CWidget target) {
+    public CBehavior begin(final CSimulation game, final CUnit caster, final int playerIndex, final int orderId, final boolean autoOrder, final CWidget target) {
         return null;
     }
 
     @Override
     public CBehavior begin(final CSimulation game, final CUnit caster, final int playerIndex, final int orderId,
-                           final AbilityPointTarget point) {
+                           final boolean autoOrder, final AbilityPointTarget point) {
         return null;
     }
 
     @Override
-    public CBehavior beginNoTarget(final CSimulation game, final CUnit caster, final int playerIndex, final int orderId) {
+    public CBehavior beginNoTarget(final CSimulation game, final CUnit caster, final int playerIndex, final int orderId,
+            final boolean autoOrder) {
         return null;
     }
 

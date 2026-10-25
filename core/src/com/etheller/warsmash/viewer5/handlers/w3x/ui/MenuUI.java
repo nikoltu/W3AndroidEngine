@@ -19,12 +19,14 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.IntIntMap;
 import com.badlogic.gdx.utils.Timer;
 import com.badlogic.gdx.utils.Timer.Task;
 import com.badlogic.gdx.utils.viewport.ExtendViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
+import com.etheller.warsmash.input.touch.VirtualCursor;
 import com.etheller.warsmash.SingleModelScreen;
 import com.etheller.warsmash.WarsmashGdxMapScreen;
 import com.etheller.warsmash.WarsmashGdxMenuScreen;
@@ -39,6 +41,12 @@ import com.etheller.warsmash.parsers.fdf.GameUI;
 import com.etheller.warsmash.parsers.fdf.datamodel.AnchorDefinition;
 import com.etheller.warsmash.parsers.fdf.datamodel.FramePoint;
 import com.etheller.warsmash.parsers.fdf.datamodel.TextJustify;
+import com.badlogic.gdx.graphics.Texture;
+import com.etheller.warsmash.parsers.fdf.frames.AbstractRenderableFrame;
+import com.etheller.warsmash.parsers.fdf.frames.AbstractUIFrame;
+import com.etheller.warsmash.parsers.fdf.frames.TextureFrame;
+import com.etheller.warsmash.util.ImageUtils;
+import com.etheller.warsmash.parsers.fdf.frames.BackdropFrame;
 import com.etheller.warsmash.parsers.fdf.frames.EditBoxFrame;
 import com.etheller.warsmash.parsers.fdf.frames.GlueButtonFrame;
 import com.etheller.warsmash.parsers.fdf.frames.GlueTextButtonFrame;
@@ -218,10 +226,15 @@ public class MenuUI {
 	private UIFrame loadingFrame;
 	private UIFrame loadingCustomPanel;
 	private UIFrame loadingMeleePanel;
+	private TextureFrame loadingMinimapTexture;
+	private AbstractRenderableFrame loadingMinimapImage;
+	private Texture loadingMinimapUnmanagedTexture;
+	private final List<UIFrame> loadingPlayerSlots = new ArrayList<>();
 	private StringFrame loadingTitleText;
 	private StringFrame loadingSubtitleText;
 	private StringFrame loadingText;
 	private SpriteFrame loadingBar;
+	public static final int MAIN_PHASES = 4;
 	private BeginGameInformation beginGameInformation;
 	private LoadingMap loadingMap;
 	private SpriteFrame loadingBackground;
@@ -768,11 +781,38 @@ public class MenuUI {
 	 * override it, and I may convert it back to the JASS at some point.
 	 */
 	public void main() {
+		for (int phase = 0; phase < MAIN_PHASES; phase++) {
+			mainPhase(phase);
+		}
+	}
+
+	/**
+	 * One part of {@link #main()}, so a caller can draw progress between the parts.
+	 */
+	public void mainPhase(final int phase) {
+		switch (phase) {
+		case 0:
+			mainSkins();
+			break;
+		case 1:
+			mainMenus();
+			break;
+		case 2:
+			mainSkirmish();
+			break;
+		default:
+			mainDialogs();
+			break;
+		}
+	}
+
+	private void mainSkins() {
 		// =================================
 		// Load skins and templates
 		// =================================
 		this.rootFrame = new GameUI(this.dataSource, GameUI.loadSkin(this.dataSource, WarsmashConstants.GAME_VERSION),
 				this.uiViewport, this.uiScene, this.viewer, 0, WTS.DO_NOTHING);
+		this.rootFrame.setWideRoot(true);
 
 		this.menuScreen.setModel(this.rootFrame.getSkinField("GlueSpriteLayerBackground"), this.menuFogSettings);
 		this.rootFrameListener.onCreate(this.rootFrame);
@@ -810,6 +850,9 @@ public class MenuUI {
 			}
 		}
 
+	}
+
+	private void mainMenus() {
 		// Create main menu
 		this.mainMenuFrame = this.rootFrame.createFrame("MainMenuFrame", this.rootFrame, 0, 0);
 
@@ -827,21 +870,21 @@ public class MenuUI {
 
 		this.glueSpriteLayerTopRight = (SpriteFrame) this.rootFrame.createFrameByType("SPRITE",
 				"SmashGlueSpriteLayerTopRight", this.rootFrame, "", 0);
-		this.glueSpriteLayerTopRight.setSetAllPoints(true);
+		anchorGlueLayer(this.glueSpriteLayerTopRight, FramePoint.TOPRIGHT);
 		final String topRightModel = this.rootFrame.getSkinField("GlueSpriteLayerTopRight");
 		this.rootFrame.setSpriteFrameModel(this.glueSpriteLayerTopRight, topRightModel);
 		this.glueSpriteLayerTopRight.setSequence("MainMenu Birth");
 
 		this.glueSpriteLayerTopLeft = (SpriteFrame) this.rootFrame.createFrameByType("SPRITE",
 				"SmashGlueSpriteLayerTopLeft", this.rootFrame, "", 0);
-		this.glueSpriteLayerTopLeft.setSetAllPoints(true);
+		anchorGlueLayer(this.glueSpriteLayerTopLeft, FramePoint.TOPLEFT);
 		final String topLeftModel = this.rootFrame.getSkinField("GlueSpriteLayerTopLeft");
 		this.rootFrame.setSpriteFrameModel(this.glueSpriteLayerTopLeft, topLeftModel);
 		this.glueSpriteLayerTopLeft.setSequence("MainMenu Birth");
 
 		this.glueSpriteLayerCenter = (SpriteFrame) this.rootFrame.createFrameByType("SPRITE",
 				"SmashGlueSpriteLayerCenter", this.rootFrame, "", 0);
-		this.glueSpriteLayerCenter.setSetAllPoints(true);
+		anchorGlueLayer(this.glueSpriteLayerCenter, FramePoint.CENTER);
 		final String centerModel = this.rootFrame.getSkinField("GlueSpriteLayerCenter");
 		this.rootFrame.setSpriteFrameModel(this.glueSpriteLayerCenter, centerModel);
 		this.glueSpriteLayerCenter.setVisible(false);
@@ -880,6 +923,18 @@ public class MenuUI {
 		this.editionButton = (GlueButtonFrame) this.rootFrame.getFrameByName("EditionButton", 0);
 
 		if (this.editionButton != null) {
+			if (WarsmashConstants.GAME_VERSION == 0) {
+				// The shipped FDF only describes the expansion menu, whose button offers the switch back to RoC.
+				for (final String[] state : new String[][] { { "", "up" }, { "Pushed", "down" },
+						{ "Disabled", "disabled" } }) {
+					final UIFrame backdrop = this.rootFrame.getFrameByName("EditionButton" + state[0] + "BackdropTemplate",
+							0);
+					if (backdrop instanceof BackdropFrame) {
+						((BackdropFrame) backdrop).setBackground(this.rootFrame
+								.loadTexture("UI\\Widgets\\Glues\\GlueScreen-TFT-EditionButton-" + state[1] + ".blp"));
+					}
+				}
+			}
 			this.editionButton.setOnClick(new Runnable() {
 				@Override
 				public void run() {
@@ -1103,6 +1158,9 @@ public class MenuUI {
 			}
 		});
 
+	}
+
+	private void mainSkirmish() {
 		// Create skirmish UI
 		this.skirmish = this.rootFrame.createFrame("Skirmish", this.rootFrame, 0, 0);
 		this.skirmish.setVisible(false);
@@ -1126,7 +1184,8 @@ public class MenuUI {
 		final GlueTextButtonFrame playGameButton = (GlueTextButtonFrame) this.rootFrame.getFrameByName("PlayGameButton",
 				0);
 		final MapListContainer mapListContainer = new MapListContainer(this.rootFrame, this.uiViewport,
-				"MapListContainer", this.dataSource, profileListText.getFrameFont());
+				"MapListContainer", this.dataSource,
+				((StringFrame) this.rootFrame.getFrameByName("ProfileListText", 0)).getFrameFont());
 		mapListContainer.addSelectionListener(new ListBoxSelelectionListener() {
 			War3Map lastMapListMap;
 			String prevSelectedItem = "";
@@ -1391,10 +1450,15 @@ public class MenuUI {
 			this.campaignButton.setEnabled(false);
 		}
 
+	}
+
+	private void mainDialogs() {
 		this.confirmDialog = this.rootFrame.createFrame("DialogWar3", this.rootFrame, 0, 0);
 		this.confirmDialog.setVisible(false);
 
 		this.loadingFrame = this.rootFrame.createFrame("Loading", this.rootFrame, 0, 0);
+		((AbstractRenderableFrame) this.loadingFrame).clearFramePointAssignments();
+		anchorGlueLayer(this.loadingFrame, FramePoint.CENTER);
 		this.loadingFrame.setVisible(false);
 		this.loadingCustomPanel = this.rootFrame.getFrameByName("LoadingCustomPanel", 0);
 		this.loadingCustomPanel.setVisible(false);
@@ -1406,6 +1470,13 @@ public class MenuUI {
 
 		this.loadingMeleePanel = this.rootFrame.getFrameByName("LoadingMeleePanel", 0);
 		this.loadingMeleePanel.setVisible(false);
+		// The skirmish map info pane later registers a frame with the same name, so this one is kept here.
+		this.loadingMinimapImage = (AbstractRenderableFrame) this.rootFrame.getFrameByName("MinimapImage", 0);
+		this.loadingMinimapTexture = this.rootFrame.createTextureFrame("LoadingMinimapTexture", this.loadingMinimapImage,
+				false, TextureFrame.DEFAULT_TEX_COORDS);
+		this.rootFrame.remove(this.loadingMinimapTexture);
+		((SimpleFrame) this.loadingMeleePanel).add(this.loadingMinimapTexture);
+		this.loadingMinimapTexture.setSetAllPoints(true);
 
 		this.battleNetUI = new BattleNetUI(this.rootFrame, this.uiViewport, this.uiScene, this.dataSource,
 				new BattleNetUIActionListener() {
@@ -1649,7 +1720,6 @@ public class MenuUI {
 	private void internalStartMap(final String mapFilename, final int localPlayerIndex) {
 		this.loadingFrame.setVisible(true);
 		this.loadingBar.setVisible(true);
-		this.loadingCustomPanel.setVisible(true);
 		final DataSource codebase = WarsmashGdxMapScreen.parseDataSources(this.warsmashIni);
 		final GameTurnManager turnManager;
 		turnManager = GameTurnManager.PAUSED;
@@ -1698,6 +1768,7 @@ public class MenuUI {
 			this.menuScreen.setModel(null, null);
 			this.rootFrame.setSpriteFrameModel(this.loadingBackground, campaignScreenModel);
 			this.loadingBackground.setSequence(animationSequenceIndex);
+			fillScreenWidth(this.loadingBackground);
 			this.rootFrame.setSpriteFrameModel(this.loadingBar, this.rootFrame.getSkinField("LoadingProgressBar"));
 			this.loadingBar.setSequence(0);
 			this.loadingBar.setFrameByRatio(0.0f);
@@ -1706,6 +1777,18 @@ public class MenuUI {
 			this.rootFrame.setText(this.loadingSubtitleText, getStringWithWTS(wts, mapInfo.getLoadingScreenSubtitle()));
 			this.loadingText.setJustifyV(TextJustify.TOP);
 			this.rootFrame.setText(this.loadingText, getStringWithWTS(wts, mapInfo.getLoadingScreenText()));
+			final boolean meleeLoading = (campaignBackground == -1) && mapInfo.hasFlag(War3MapW3iFlags.MELEE_MAP);
+			this.loadingCustomPanel.setVisible(!meleeLoading);
+			this.loadingMeleePanel.setVisible(meleeLoading);
+			if (meleeLoading) {
+				this.rootFrame.setText((StringFrame) this.rootFrame.getFrameByName("LoadingMeleeMapName", 0),
+						getStringWithWTS(wts, mapInfo.getName()));
+				this.rootFrame.setDecoratedText(
+						(StringFrame) this.rootFrame.getFrameByName("LoadingMeleeGameTypeValue", 0), "MELEE");
+				setLoadingMinimap(map, mapInfo);
+				alignMinimapWithBackdrop();
+				setLoadingPlayers();
+			}
 			this.loadingMap = new LoadingMap(viewer, map, mapInfo);
 
 		}
@@ -1812,20 +1895,146 @@ public class MenuUI {
 		this.warcraftIIILogo.setVisible(visible);
 	}
 
+	/**
+	 * Glue layer models are authored for a 4:3 screen, so each keeps a 4:3 frame pinned to the screen side it
+	 * decorates; on a wide screen the side panels then meet the edges where their buttons are.
+	 */
+	private void anchorGlueLayer(final UIFrame layer, final FramePoint point) {
+		layer.setWidth(GameUI.convertX(this.uiViewport, 0.8f));
+		layer.setHeight(GameUI.convertY(this.uiViewport, 0.6f));
+		layer.addSetPoint(new SetPoint(point, this.rootFrame, point, 0, 0));
+	}
+
+	/**
+	 * Scales a 4:3 backdrop model up until it covers the full screen width, keeping its proportions; the top and
+	 * bottom are cut off instead of leaving empty bars at the sides.
+	 */
+	private float getScreenFillScale() {
+		return Math.max(1, this.uiViewport.getWorldWidth() / getMinWorldWidth());
+	}
+
+	private void fillScreenWidth(final SpriteFrame backdrop) {
+		final float scale = getScreenFillScale();
+		backdrop.clearFramePointAssignments();
+		backdrop.setWidth(GameUI.convertX(this.uiViewport, 0.8f) * scale);
+		backdrop.setHeight(GameUI.convertY(this.uiViewport, 0.6f) * scale);
+		backdrop.addSetPoint(new SetPoint(FramePoint.CENTER, this.rootFrame, FramePoint.CENTER, 0, 0));
+		backdrop.setModelScale(scale);
+		backdrop.positionBounds(this.rootFrame, this.uiViewport);
+	}
+
+	/**
+	 * The minimap border is painted into the melee loading backdrop, which is scaled up to fill the screen width, so
+	 * the minimap image is scaled the same way about the screen center to stay inside that border.
+	 */
+	private void alignMinimapWithBackdrop() {
+		final float scale = getScreenFillScale();
+		final AbstractRenderableFrame frame = this.loadingMinimapImage;
+		frame.clearFramePointAssignments();
+		frame.setWidth(GameUI.convertX(this.uiViewport, 0.16f * scale));
+		frame.setHeight(GameUI.convertY(this.uiViewport, 0.16f * scale));
+		// LoadingMeleePanel puts the image's left edge 0.056875 right of the 4:3 left edge, 0.0425 above center.
+		frame.addSetPoint(new SetPoint(FramePoint.LEFT, this.rootFrame, FramePoint.CENTER,
+				GameUI.convertX(this.uiViewport, (0.056875f - 0.4f) * scale),
+				GameUI.convertY(this.uiViewport, 0.0425f * scale)));
+		this.loadingMeleePanel.positionBounds(this.rootFrame, this.uiViewport);
+	}
+
+	private void setLoadingPlayers() {
+		for (final UIFrame slot : this.loadingPlayerSlots) {
+			slot.setVisible(false);
+		}
+		this.loadingPlayerSlots.clear();
+		final UIFrame container = this.rootFrame.getFrameByName("LoadingMeleePlayerContainer", 0);
+		UIFrame previous = null;
+		for (int i = 0; i < WarsmashConstants.MAX_PLAYERS; i++) {
+			final CBasePlayer player = this.currentMapConfig.getPlayer(i);
+			if ((player.getSlotState() != CPlayerSlotState.PLAYING) || ((player.getController() != CMapControl.USER)
+					&& (player.getController() != CMapControl.COMPUTER))) {
+				continue;
+			}
+			final UIFrame slot = this.rootFrame.createFrame("LoadingPlayerSlot", container, 0, i);
+			((AbstractUIFrame) container).add(slot);
+			if (previous == null) {
+				slot.addSetPoint(new SetPoint(FramePoint.TOPLEFT, container, FramePoint.TOPLEFT, 0, 0));
+			}
+			else {
+				slot.addSetPoint(new SetPoint(FramePoint.TOPLEFT, previous, FramePoint.BOTTOMLEFT, 0, 0));
+			}
+			// Frames created from a template register their children by name, so the latest slot's are found here.
+			final StringFrame name = (StringFrame) this.rootFrame.getFrameByName("LoadingPlayerSlotName", i);
+			final StringFrame race = (StringFrame) this.rootFrame.getFrameByName("LoadingPlayerSlotRace", i);
+			this.rootFrame.setText((StringFrame) this.rootFrame.getFrameByName("LoadingPlayerSlotLevel", i), "");
+			if (player.getController() == CMapControl.COMPUTER) {
+				this.rootFrame.setDecoratedText(name, "COMPUTER_NORMAL");
+			}
+			else {
+				this.rootFrame.setText(name, player.getName());
+			}
+			this.rootFrame.setDecoratedText(race, getRaceStringKey(player));
+			this.loadingPlayerSlots.add(slot);
+			previous = slot;
+		}
+		container.setHeight(GameUI.convertY(this.uiViewport, 0.0217f) * this.loadingPlayerSlots.size());
+		this.loadingMeleePanel.positionBounds(this.rootFrame, this.uiViewport);
+	}
+
+	private static String getRaceStringKey(final CBasePlayer player) {
+		for (int i = 0; i < WarsmashConstants.RACE_MANAGER.getEntryCount(); i++) {
+			final CRaceManagerEntry entry = WarsmashConstants.RACE_MANAGER.get(i);
+			if (player.isRacePrefSet(WarsmashConstants.RACE_MANAGER.getRacePreferenceById(entry.getRacePrefId()))) {
+				switch (entry.getKey()) {
+				case "Human":
+					return "HUMAN";
+				case "Orc":
+					return "ORC";
+				case "Undead":
+					return "UNDEAD";
+				case "NightElf":
+					return "NIGHT_ELF";
+				default:
+					return entry.getKey();
+				}
+			}
+		}
+		return "RANDOM";
+	}
+
+	private void setLoadingMinimap(final War3Map map, final War3MapW3i mapInfo) {
+		if (this.loadingMinimapUnmanagedTexture != null) {
+			this.loadingMinimapUnmanagedTexture.dispose();
+			this.loadingMinimapUnmanagedTexture = null;
+		}
+		Texture minimapTexture;
+		if (mapInfo.hasFlag(War3MapW3iFlags.HIDE_MINIMAP_IN_PREVIEW_SCREENS)) {
+			minimapTexture = this.rootFrame.loadTexture("ui\\widgets\\glues\\minimap-unknown.blp");
+		}
+		else {
+			try {
+				minimapTexture = ImageUtils.getAnyExtensionTexture(map, "war3mapPreview.blp");
+			}
+			catch (final Exception exc) {
+				minimapTexture = ImageUtils.getAnyExtensionTexture(map, "war3mapMap.blp");
+			}
+			this.loadingMinimapUnmanagedTexture = minimapTexture;
+		}
+		this.loadingMinimapTexture.setTexture(minimapTexture);
+	}
+
 	public void resize() {
+		this.rootFrame.updateRootBounds();
 		this.rootFrame.positionBounds(this.rootFrame, this.uiViewport);
 	}
 
 	public void render(final SpriteBatch batch, final GlyphLayout glyphLayout) {
 		if (!this.hideUI) {
-			final BitmapFont font = this.rootFrame.getFont();
 			final BitmapFont font20 = this.rootFrame.getFont20();
-			font.setColor(Color.YELLOW);
 			if (WarsmashConstants.SHOW_FPS) {
-				final String fpsString = "FPS: " + Gdx.graphics.getFramesPerSecond();
-				glyphLayout.setText(font, fpsString);
-				font.draw(batch, fpsString, (getMinWorldWidth() - glyphLayout.width) / 2,
-						1100 * this.heightRatioCorrection);
+				final BitmapFont font14 = this.rootFrame.getFont14();
+				font14.setColor(Color.YELLOW);
+				final Rectangle screen = this.rootFrame.getRenderBounds();
+				font14.draw(batch, "FPS: " + Gdx.graphics.getFramesPerSecond(), screen.x + 8,
+						(screen.y + screen.height) - 8);
 			}
 			this.rootFrame.render(batch, font20, glyphLayout);
 		}
@@ -1964,9 +2173,9 @@ public class MenuUI {
 			setFocusFrame(getNextFocusFrame());
 		}
 
-		final int baseMouseX = Gdx.input.getX();
+		final int baseMouseX = VirtualCursor.getX();
 		int mouseX = baseMouseX;
-		final int baseMouseY = Gdx.input.getY();
+		final int baseMouseY = VirtualCursor.getY();
 		int mouseY = baseMouseY;
 		final int minX = this.uiViewport.getScreenX();
 		final int maxX = minX + this.uiViewport.getScreenWidth();
@@ -1986,6 +2195,9 @@ public class MenuUI {
 		this.cursorFrame.setFramePointX(FramePoint.LEFT, screenCoordsVector.x);
 		this.cursorFrame.setFramePointY(FramePoint.BOTTOM, screenCoordsVector.y);
 		this.cursorFrame.setSequence("Normal");
+		if (this.cursorFrame.isVisible() == VirtualCursor.isFingerInput()) {
+			this.cursorFrame.setVisible(!VirtualCursor.isFingerInput());
+		}
 
 		if (this.glueSpriteLayerTopRight.isSequenceEnded() && this.glueSpriteLayerTopLeft.isSequenceEnded()
 				&& (!this.campaignFade.isVisible() || this.campaignFade.isSequenceEnded())

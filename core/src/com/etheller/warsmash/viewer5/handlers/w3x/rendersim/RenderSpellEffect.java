@@ -88,6 +88,7 @@ public class RenderSpellEffect implements RenderEffect {
 		this.animationQueueIndex = 0;
 		setKillWhenDone(killWhenDone);
 		applySequence();
+		this.animationQueueIndex++;
 	}
 
 	public void setKillWhenDone(final boolean killWhenDone) {
@@ -99,6 +100,14 @@ public class RenderSpellEffect implements RenderEffect {
 		else {
 			this.modelInstance.setSequenceLoopMode(sequenceLoopMode);
 		}
+	}
+
+	public void removeWithoutDeath() {
+		this.animationQueue = new PrimaryTag[0];
+		this.animationQueueIndex = 0;
+		this.killWhenDone = true;
+		this.modelInstance.sequenceEnded = true;
+		this.modelInstance.hide();
 	}
 
 	public void setHeight(final float height) {

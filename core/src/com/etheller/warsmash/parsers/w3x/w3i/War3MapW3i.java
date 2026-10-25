@@ -49,6 +49,16 @@ public class War3MapW3i {
 	private final short[] unknown2ProbablyLua = new short[4];
 	private long supportedModes;
 	private long gameDataVersion;
+	private int raceHud;
+	private final float[] fogHeightRange = new float[2];
+	private final float[] fogLinearRange = new float[2];
+	private float fogMaxOpacity;
+	private int fogDrawOverSky;
+	private final int[] cameraZoom = new int[3];
+	private final int[] hdWater = new int[7];
+	private final short[] hdWaterOverrideColor = new short[4];
+	private int hdWaterEnvmapReflectivity;
+	private final short[] alphaTileMinimapColor = new short[4];
 	private final List<Player> players = new ArrayList<>();
 	private final List<Force> forces = new ArrayList<>();
 	private final List<UpgradeAvailabilityChange> upgradeAvailabilityChanges = new ArrayList<>();
@@ -84,6 +94,9 @@ public class War3MapW3i {
 		this.flags = ParseUtils.readUInt32(stream);
 		this.tileset = (char) stream.read();
 		this.campaignBackground = stream.readInt();
+		if (this.version >= 39) {
+			this.raceHud = stream.readInt();
+		}
 
 		if (this.version > 24) {
 			this.loadingScreenModel = ParseUtils.readUntilNull(stream);
@@ -107,6 +120,12 @@ public class War3MapW3i {
 			ParseUtils.readFloatArray(stream, this.fogHeight);
 			this.fogDensity = stream.readFloat();
 			ParseUtils.readUInt8Array(stream, this.fogColor);
+			if (this.version >= 39) {
+				ParseUtils.readFloatArray(stream, this.fogHeightRange);
+				ParseUtils.readFloatArray(stream, this.fogLinearRange);
+				this.fogMaxOpacity = stream.readFloat();
+				this.fogDrawOverSky = stream.readInt();
+			}
 			this.globalWeather = stream.readInt(); // TODO probably war3id, right?
 			this.soundEnvironment = ParseUtils.readUntilNull(stream);
 			this.lightEnvironmentTileset = (char) stream.read();
@@ -122,6 +141,19 @@ public class War3MapW3i {
 		}
 		else {
 			this.gameDataVersion = -1; // indicate to the outside that this was unspecified
+		}
+		if (this.version >= 32) {
+			this.cameraZoom[0] = stream.readInt();
+			this.cameraZoom[1] = stream.readInt();
+		}
+		if (this.version >= 33) {
+			this.cameraZoom[2] = stream.readInt();
+		}
+		if (this.version >= 39) {
+			ParseUtils.readInt32Array(stream, this.hdWater);
+			ParseUtils.readUInt8Array(stream, this.hdWaterOverrideColor);
+			this.hdWaterEnvmapReflectivity = stream.readInt();
+			ParseUtils.readUInt8Array(stream, this.alphaTileMinimapColor);
 		}
 
 		for (int i = 0, l = stream.readInt(); i < l; i++) {

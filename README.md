@@ -21,14 +21,17 @@ This fork continues Retera's work on Warsmash and adapts it for Android. The aim
 
 ## Status
 
+Current version: **v0.1.020**
+
 | Area | State |
 |---|---|
 | Desktop build | Working |
-| Reading current game data (CASC) | Mostly working |
-| Current model format | In progress |
-| Android module | Planned |
-| Touch controls | Planned |
-| 60 FPS with classic graphics | Planned |
+| Reading current game data (CASC) or extracted files | Working |
+| Current model, texture and map formats | Working |
+| Android app (tested on a Galaxy Tab S8 Ultra) | Working |
+| Touch controls (tap, long press, box select, two finger pan and pinch zoom, pen button, control group bar) | Working, being tuned |
+| Melee games | In progress: all hero abilities of the four races can be cast, including illusions (Mirror Image, Wand of Illusion); every race can train its units, research its upgrades and upgrade its main hall |
+| 60 FPS with classic graphics | Reached on the test tablet, not yet measured on phones |
 
 ## Running on desktop
 
@@ -54,6 +57,19 @@ Requires JDK 17.
    ```bash
    ./gradlew desktop:runGame -Pargs="-window -ini warsmash.local.ini"
    ```
+
+## Running on Android
+
+Requires Android 8.0 or newer and your own copy of the game data on the device.
+
+1. Build and install the app:
+
+   ```bash
+   ./gradlew android:installDebug
+   ```
+
+2. Copy the game data to the device: an installed game folder (CASC) or extracted files.
+3. On first start, choose that folder in the **Game data folder** screen and tap **Start**.
 
 <details>
 <summary>Other supported game data layouts</summary>

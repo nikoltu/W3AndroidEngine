@@ -79,6 +79,25 @@ public class DataFolderActivity extends Activity {
 		check();
 	}
 
+	private void copyAssetTree(final String assetPath, final File target) throws IOException {
+		final String[] children = getAssets().list(assetPath);
+		if ((children == null) || (children.length == 0)) {
+			target.getParentFile().mkdirs();
+			try (InputStream in = getAssets().open(assetPath); OutputStream out = new FileOutputStream(target)) {
+				final byte[] buffer = new byte[8192];
+				int read;
+				while ((read = in.read(buffer)) != -1) {
+					out.write(buffer, 0, read);
+				}
+			}
+			return;
+		}
+		target.mkdirs();
+		for (final String child : children) {
+			copyAssetTree(assetPath + "/" + child, new File(target, child));
+		}
+	}
+
 	private File selectedFolder() {
 		return new File(this.folderField.getText().toString().trim());
 	}
@@ -108,6 +127,7 @@ public class DataFolderActivity extends Activity {
 		final File dataFolder = selectedFolder();
 		final File appFolder = getExternalFilesDir(null);
 		try {
+			copyAssetTree("engineResources", new File(appFolder, "resources"));
 			writeIni(new File(appFolder, AndroidLauncher.INI_FILE_NAME), DataFolderCheck.dataSourcesSection(kind,
 					dataFolder, new File(appFolder, "resources"), new File(appFolder, "engine")));
 		}

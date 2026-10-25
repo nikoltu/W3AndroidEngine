@@ -27,13 +27,19 @@ public class MapListContainer {
 		final Collection<String> listfile = dataSource.getListfile();
 		final List<String> displayItemPaths = new ArrayList<>();
 		for (final String file : listfile) {
-			if ((file.toLowerCase().endsWith(".w3x") || file.toLowerCase().endsWith(".w3m")) && !file.contains("/")
-					&& !file.contains("\\")) {
+			final String lower = file.toLowerCase().replace('/', '\\');
+			if ((lower.endsWith(".w3x") || lower.endsWith(".w3m"))
+					&& ((!lower.contains("\\")) || lower.startsWith("maps\\"))) {
 				displayItemPaths.add(file);
 			}
 		}
 		for (final String displayItemPath : displayItemPaths) {
-			this.mapListBox.addItem(displayItemPath, ListItemEnum.ITEM_MAP, rootFrame, uiViewport);
+			try {
+				this.mapListBox.addItem(displayItemPath, ListItemEnum.ITEM_MAP, rootFrame, uiViewport);
+			}
+			catch (final RuntimeException e) {
+				System.err.println("Skipping map with unreadable info: " + displayItemPath + " (" + e + ")");
+			}
 		}
 		this.mapListBox.sortItems();
 		this.mapListContainer.add(this.mapListBox);

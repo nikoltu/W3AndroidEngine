@@ -199,6 +199,14 @@ public class SimpleButtonFrame extends AbstractRenderableFrame implements Clicka
 		return super.getFrameChildUnderMouse(screenX, screenY);
 	}
 
+	public UIFrame getButtonText() {
+		return this.buttonText;
+	}
+
+	public UIFrame getHighlightText() {
+		return this.highlightText;
+	}
+
 	public void setButtonText(final UIFrame buttonText) {
 		this.buttonText = buttonText;
 	}

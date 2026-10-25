@@ -1,7 +1,9 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.impl;
 
 import java.util.EnumSet;
+import java.util.List;
 
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnitTypeRequirement;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.CAbilityTypeLevelData;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.CTargetType;
 
@@ -12,11 +14,13 @@ public class CAbilityTypeInventoryLevelData extends CAbilityTypeLevelData {
 	private final boolean canUseItems;
 	private final boolean dropItemsOnDeath;
 	private final int itemCapacity;
+	private final List<CUnitTypeRequirement> requirements;
 
 	public CAbilityTypeInventoryLevelData(final EnumSet<CTargetType> targetsAllowed, final boolean canDropItems,
 			final boolean canGetItems, final boolean canUseItems, final boolean dropItemsOnDeath,
-			final int itemCapacity) {
+			final int itemCapacity, final List<CUnitTypeRequirement> requirements) {
 		super(targetsAllowed);
+		this.requirements = requirements;
 		this.canDropItems = canDropItems;
 		this.canGetItems = canGetItems;
 		this.canUseItems = canUseItems;
@@ -42,6 +46,10 @@ public class CAbilityTypeInventoryLevelData extends CAbilityTypeLevelData {
 
 	public int getItemCapacity() {
 		return this.itemCapacity;
+	}
+
+	public List<CUnitTypeRequirement> getRequirements() {
+		return this.requirements;
 	}
 
 }

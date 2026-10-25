@@ -34,15 +34,13 @@ public class ABActionInstantReturnResources implements ABSingleAction {
 				harv.setCarriedResources(ResourceType.FOOD, 0);
 				break;
 			case GOLD:
-				pl.addGold(harv.getCarriedResourceAmount());
 				game.unitGainResourceEvent(targetUnit, pl.getId(), harv.getCarriedResourceType(),
-						harv.getCarriedResourceAmount());
+						pl.addHarvestedGold(game, harv.getCarriedResourceAmount()));
 				harv.setCarriedResources(ResourceType.GOLD, 0);
 				break;
 			case LUMBER:
-				pl.addLumber(harv.getCarriedResourceAmount());
 				game.unitGainResourceEvent(targetUnit, pl.getId(), harv.getCarriedResourceType(),
-						harv.getCarriedResourceAmount());
+						pl.addHarvestedLumber(game, harv.getCarriedResourceAmount()));
 				harv.setCarriedResources(ResourceType.LUMBER, 0);
 				break;
 			case MANA:

@@ -302,10 +302,14 @@ public class MdxComplexInstance extends ModelInstance {
 	 * determined to not be visible will not be updated, nor will any of their
 	 * children down the hierarchy.
 	 */
-	public void updateNodes(final float dt, final boolean forced) {
+	/**
+	 * @return whether any node transformation was recalculated, so the bone texture needs an upload
+	 */
+	public boolean updateNodes(final float dt, final boolean forced) {
 		if (!this.model.ok) {
-			return;
+			return false;
 		}
+		boolean updated = false;
 		final int sequence = this.sequence;
 		final int frame = this.frame;
 		final int counter = this.counter;
@@ -390,6 +394,7 @@ public class MdxComplexInstance extends ModelInstance {
 				// parent node was updated, do a full world update.
 				if (wasReallyDirty) {
 					node.recalculateTransformation(scene, this.blendTimeRemaining / this.blendTime);
+					updated = true;
 				}
 
 				// If there is an instance object associated with this node, and the node is
@@ -407,6 +412,7 @@ public class MdxComplexInstance extends ModelInstance {
 				node.updateChildren(dt, scene);
 			}
 		}
+		return updated;
 	}
 
 	/**
@@ -642,9 +648,9 @@ public class MdxComplexInstance extends ModelInstance {
 		if (sequenceId == -1) {
 			if (forced) {
 				// Update the nodes
-				updateNodes(dt, forced);
-
-				updateBoneTexture();
+				if (updateNodes(dt, forced)) {
+					updateBoneTexture();
+				}
 
 				// Update the batches
 				updateBatches(forced);
@@ -655,9 +661,9 @@ public class MdxComplexInstance extends ModelInstance {
 
 			// if (forced || variants.nodes[sequenceId]) {
 			// Update the nodes
-			updateNodes(dt, forced);
-
-			updateBoneTexture();
+			if (updateNodes(dt, forced)) {
+				updateBoneTexture();
+			}
 			// }
 
 			// if (forced || variants.batches[sequenceId]) {

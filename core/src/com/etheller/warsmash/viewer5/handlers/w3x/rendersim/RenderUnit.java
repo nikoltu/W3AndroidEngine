@@ -24,6 +24,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.environment.PathingGrid.Moveme
 import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.ability.AbilityDataUI;
 import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.commandbuttons.CommandButtonListener;
 import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.commandbuttons.CommandCardPopulatingAbilityVisitor;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CAllianceType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CWidget;
@@ -55,6 +56,9 @@ public class RenderUnit implements RenderWidget {
 	private boolean swimming;
 	private boolean working;
 	private boolean invisible;
+	private boolean illusionTint;
+	// Blue cast the original game gives illusions in the eyes of their owner and allies.
+	private static final float[] ILLUSION_TINT = { 0.35f, 0.55f, 1.0f };
 
 	private boolean dead = false;
 
@@ -77,16 +81,18 @@ public class RenderUnit implements RenderWidget {
 			final float selectionCircleScaleFactor, final float animationWalkSpeed, final float animationRunSpeed,
 			final float scalingValue) {
 		this.simulationUnit = simulationUnit;
-		resetRenderUnit(map, x, y, z, playerIndex, simulationUnit, typeData, buildingShadow, selectionCircleScaleFactor,
-				animationWalkSpeed, animationRunSpeed, scalingValue);
+		resetRenderUnit(map, x, y, z, playerIndex, simulationUnit, typeData, true, buildingShadow,
+				selectionCircleScaleFactor, animationWalkSpeed, animationRunSpeed, scalingValue);
 
 	}
 
 	public void resetRenderUnit(final War3MapViewer map, final float x, final float y, final float z,
-			final int playerIndex, final CUnit simulationUnit, final RenderUnitType typeData,
+			final int playerIndex, final CUnit simulationUnit, final RenderUnitType typeData, boolean updatePortrait,
 			final BuildingShadow buildingShadow, final float selectionCircleScaleFactor, final float animationWalkSpeed,
 			final float animationRunSpeed, final float scalingValue) {
-		this.portraitModel = typeData.getPortraitModel();
+		if (updatePortrait) {
+			this.portraitModel = typeData.getPortraitModel();
+		}
 		this.typeData = typeData;
 		this.specialArtModel = typeData.getSpecialArtModel();
 		if (this.buildingShadowInstance != null) {
@@ -184,8 +190,7 @@ public class RenderUnit implements RenderWidget {
 			}
 			this.instance.hide();
 			return;
-		}
-		else {
+		} else {
 			this.instance.show();
 			if (wasHidden) {
 				if (this.selectionCircle != null) {
@@ -215,8 +220,7 @@ public class RenderUnit implements RenderWidget {
 			// where they actually are
 			this.location[0] += (speedDelta * simDx) / distanceToSimulation;
 			this.location[1] += (speedDelta * simDy) / distanceToSimulation;
-		}
-		else {
+		} else {
 			this.location[0] = simulationX;
 			this.location[1] = simulationY;
 		}
@@ -228,7 +232,7 @@ public class RenderUnit implements RenderWidget {
 		boolean swimming = (movementType == MovementType.AMPHIBIOUS)
 				&& PathingGrid.isPathingFlag(terrainPathing, PathingGrid.PathingType.SWIMMABLE)
 				&& !PathingGrid.isPathingFlag(terrainPathing, PathingGrid.PathingType.WALKABLE);
-		final boolean invisible = this.simulationUnit.getInvisLevels() > 0;
+		final boolean invisible = (this.simulationUnit.getInvisLevels() & 1) > 0;
 		final boolean working = this.simulationUnit.getBuildQueueTypes()[0] != null;
 		final float groundHeightTerrain = map.terrain.getGroundHeight(this.location[0], this.location[1]);
 		float groundHeightTerrainAndWater;
@@ -238,8 +242,7 @@ public class RenderUnit implements RenderWidget {
 		if (standingOnWater) {
 			groundHeightTerrainAndWater = Math.max(groundHeightTerrain,
 					map.terrain.getWaterHeight(this.location[0], this.location[1]));
-		}
-		else {
+		} else {
 			// land units will have their feet pass under the surface of the water
 			groundHeightTerrainAndWater = groundHeightTerrain;
 		}
@@ -247,8 +250,7 @@ public class RenderUnit implements RenderWidget {
 			// boats cant go on bridges
 			groundHeight = groundHeightTerrainAndWater;
 			currentWalkableUnder = null;
-		}
-		else {
+		} else {
 			currentWalkableUnder = map.getHighestWalkableUnder(this.location[0], this.location[1]);
 			War3MapViewer.gdxRayHeap.set(this.location[0], this.location[1], 4096, 0, 0, -8192);
 			if ((currentWalkableUnder != null)
@@ -257,8 +259,7 @@ public class RenderUnit implements RenderWidget {
 					&& (War3MapViewer.intersectionHeap.z > groundHeightTerrainAndWater)) {
 				groundHeight = War3MapViewer.intersectionHeap.z;
 				swimming = false; // Naga Royal Guard should slither across a bridge, not swim in rock
-			}
-			else {
+			} else {
 				groundHeight = groundHeightTerrainAndWater;
 				currentWalkableUnder = null;
 			}
@@ -268,8 +269,7 @@ public class RenderUnit implements RenderWidget {
 			if (this.unitAnimationListenerImpl.addSecondaryTag(AnimationTokens.SecondaryTag.SWIM)) {
 				changedAnimationProperties = true;
 			}
-		}
-		else if (!swimming && this.swimming) {
+		} else if (!swimming && this.swimming) {
 			if (this.unitAnimationListenerImpl.removeSecondaryTag(AnimationTokens.SecondaryTag.SWIM)) {
 				changedAnimationProperties = true;
 			}
@@ -278,8 +278,7 @@ public class RenderUnit implements RenderWidget {
 			if (this.unitAnimationListenerImpl.addSecondaryTag(AnimationTokens.SecondaryTag.WORK)) {
 				changedAnimationProperties = true;
 			}
-		}
-		else if (!working && this.working) {
+		} else if (!working && this.working) {
 			if (this.unitAnimationListenerImpl.removeSecondaryTag(AnimationTokens.SecondaryTag.WORK)) {
 				changedAnimationProperties = true;
 			}
@@ -291,12 +290,16 @@ public class RenderUnit implements RenderWidget {
 		if (invisible && !this.invisible) {
 			// turn invisible instantly
 			colorNeedsUpdate = true;
-		}
-		else if (!invisible && this.invisible) {
+		} else if (!invisible && this.invisible) {
 			// show instantly
 			colorNeedsUpdate = true;
+		} else if ((this.simulationUnit.getFadeTimer() != null) && this.simulationUnit.getFadeTimer().isRunning()) {
+			colorNeedsUpdate = true;
 		}
-		else if ((this.simulationUnit.getFadeTimer() != null) && this.simulationUnit.getFadeTimer().isRunning()) {
+		final boolean illusionTint = this.simulationUnit.isIllusion() && map.simulation
+				.getPlayer(map.getLocalPlayerIndex()).hasAlliance(this.simulationUnit.getPlayerIndex(), CAllianceType.PASSIVE);
+		if (illusionTint != this.illusionTint) {
+			this.illusionTint = illusionTint;
 			colorNeedsUpdate = true;
 		}
 		this.invisible = invisible;
@@ -314,15 +317,13 @@ public class RenderUnit implements RenderWidget {
 				this.unitAnimationListenerImpl.playAnimation(true, PrimaryTag.DEATH, SequenceUtils.EMPTY, 1.0f, true);
 				removeSplats(map);
 			}
-		}
-		else if (building != this.building) {
+		} else if (building != this.building) {
 			if (building) {
 				if (this.shadow != null) {
 					this.shadow.hide();
 				}
 				createBuildingDecalSplats(map);
-			}
-			else {
+			} else {
 				if (this.shadow != null) {
 					this.shadow.show(map.terrain.centerOffset);
 				}
@@ -334,13 +335,11 @@ public class RenderUnit implements RenderWidget {
 			if (this.simulationUnit.getUnitType().isHero()) {
 				this.unitAnimationListenerImpl.playAnimationWithDuration(true, PrimaryTag.DISSIPATE,
 						SequenceUtils.EMPTY, this.simulationUnit.getEndingDecayTime(map.simulation), true);
-			}
-			else {
+			} else {
 				this.unitAnimationListenerImpl.playAnimationWithDuration(true, PrimaryTag.DECAY, SequenceUtils.BONE,
 						this.simulationUnit.getEndingDecayTime(map.simulation), true);
 			}
-		}
-		else if (corpse && !this.corpse) {
+		} else if (corpse && !this.corpse) {
 			this.unitAnimationListenerImpl.playAnimationWithDuration(true, PrimaryTag.DECAY, SequenceUtils.FLESH,
 					map.simulation.getGameplayConstants().getDecayTime(), true);
 		}
@@ -377,8 +376,7 @@ public class RenderUnit implements RenderWidget {
 					- ((this.orientationInterpolation.getEndingAccelCutoff() - absoluteFacingDeltaRadians)
 							/ this.orientationInterpolation.getEndingAccelCutoff()))
 					* (this.orientationInterpolation.getMaxVelocity()) * turningSign;
-		}
-		else {
+		} else {
 			acceleration = this.orientationInterpolation.getStartingAcceleration() * turningSign;
 			this.currentTurnVelocity = this.currentTurnVelocity + acceleration;
 		}
@@ -421,8 +419,7 @@ public class RenderUnit implements RenderWidget {
 					rollSampleBackwardY);
 			rollSampleGroundHeight2 = getGroundHeightSample(groundHeight, currentWalkableUnder, rollSampleForwardX,
 					rollSampleForwardY);
-		}
-		else {
+		} else {
 			final float pitchGroundHeight1 = map.terrain.getGroundHeight(pitchSampleBackwardX, pitchSampleBackwardY);
 			final float pitchGroundHeight2 = map.terrain.getGroundHeight(pitchSampleForwardX, pitchSampleForwardY);
 			final float rollGroundHeight1 = map.terrain.getGroundHeight(rollSampleBackwardX, rollSampleBackwardY);
@@ -436,8 +433,7 @@ public class RenderUnit implements RenderWidget {
 						map.terrain.getWaterHeight(rollSampleBackwardX, rollSampleBackwardY));
 				rollSampleGroundHeight2 = Math.max(rollGroundHeight2,
 						map.terrain.getWaterHeight(rollSampleForwardX, rollSampleForwardY));
-			}
-			else {
+			} else {
 				pitchSampleGroundHeight1 = pitchGroundHeight1;
 				pitchSampleGroundHeight2 = pitchGroundHeight2;
 				rollSampleGroundHeight1 = rollGroundHeight1;
@@ -530,8 +526,7 @@ public class RenderUnit implements RenderWidget {
 		if (currentWalkableUnder.intersectRayWithCollision(War3MapViewer.gdxRayHeap, War3MapViewer.intersectionHeap,
 				true, true)) {
 			sampleGroundHeight = War3MapViewer.intersectionHeap.z;
-		}
-		else {
+		} else {
 			sampleGroundHeight = groundHeight;
 		}
 		return sampleGroundHeight;
@@ -622,7 +617,8 @@ public class RenderUnit implements RenderWidget {
 
 	@Override
 	public boolean isSelectable(final CSimulation simulation, final int byPlayer) {
-		return this.simulationUnit.isVisible(simulation, byPlayer); // later needs locust
+		return this.simulationUnit.isVisible(simulation, byPlayer)
+				&& this.simulationUnit.isSelectable(simulation, byPlayer);
 	}
 
 	@Override
@@ -695,13 +691,17 @@ public class RenderUnit implements RenderWidget {
 		float finalAlpha = this.currentColor[3];
 		if (this.invisible) {
 			finalAlpha *= 0.5f;
-		}
-		else {
+		} else {
 			final CTimer fadeTimer = this.simulationUnit.getFadeTimer();
 			if ((fadeTimer != null) && fadeTimer.isRunning()) {
 				final float fadeAmount = map.getRemainingSecondsForRender(fadeTimer) / fadeTimer.getTimeoutTime();
 				finalAlpha *= (fadeAmount * 0.5f) + 0.5f;
 			}
+		}
+		if (this.illusionTint) {
+			this.instance.setVertexColor(this.currentColor[0] * ILLUSION_TINT[0],
+					this.currentColor[1] * ILLUSION_TINT[1], this.currentColor[2] * ILLUSION_TINT[2], finalAlpha);
+			return;
 		}
 		this.instance.setVertexColor(this.currentColor[0], this.currentColor[1], this.currentColor[2], finalAlpha);
 	}
@@ -753,8 +753,7 @@ public class RenderUnit implements RenderWidget {
 					changedAnimProps = true;
 				}
 			}
-		}
-		else {
+		} else {
 			for (final AnimationTokens.SecondaryTag tag : secondaryTags) {
 				if (this.unitAnimationListenerImpl.removeSecondaryTag(tag)) {
 					changedAnimProps = true;
@@ -772,8 +771,7 @@ public class RenderUnit implements RenderWidget {
 			if ("head".equals(boneNameString.toLowerCase())) {
 				this.unitAnimationListenerImpl.lockHeadFacing(renderPeerTarget.instance,
 						new Vector3(offsetX, offsetY, offsetZ));
-			}
-			else if ("turret".equals(boneNameString.toLowerCase())) {
+			} else if ("turret".equals(boneNameString.toLowerCase())) {
 				this.unitAnimationListenerImpl.lockTurretFacing(renderPeerTarget.instance,
 						new Vector3(offsetX, offsetY, offsetZ));
 			}

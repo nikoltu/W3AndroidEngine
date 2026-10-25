@@ -11,6 +11,7 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.viewport.ExtendViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
+import com.etheller.warsmash.input.touch.VirtualCursor;
 import com.etheller.warsmash.SingleModelScreen;
 import com.etheller.warsmash.WarsmashGdxMultiScreenGame;
 import com.etheller.warsmash.datasources.DataSource;
@@ -160,9 +161,9 @@ public class TestUI {
 			this.setFocusFrame(this.getNextFocusFrame());
 		}
 
-		final int baseMouseX = Gdx.input.getX();
+		final int baseMouseX = VirtualCursor.getX();
 		int mouseX = baseMouseX;
-		final int baseMouseY = Gdx.input.getY();
+		final int baseMouseY = VirtualCursor.getY();
 		int mouseY = baseMouseY;
 		final int minX = this.uiViewport.getScreenX();
 		final int maxX = minX + this.uiViewport.getScreenWidth();
