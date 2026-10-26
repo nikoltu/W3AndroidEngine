@@ -18,13 +18,15 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnitType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUpgradeType;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.AbstractCAbility;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbility;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbilityAttack;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbilityDisableType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbilityGenericDoNothing;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbilityMove;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbilityVisitor;
-import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.COrderButton;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.COrderButton.JassOrderButtonType;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.COrderButton;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.build.AbstractCAbilityBuild;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.build.CAbilityBuildInProgress;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.build.CAbilityHumanBuild;
@@ -40,8 +42,10 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.generic.G
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.generic.GenericSingleIconPassiveAbility;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.harvest.CAbilityReturnResources;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.hero.CAbilityHero;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.item.shop.CAbilityAwakenHero;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.item.shop.CAbilityNeutralBuilding;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.item.shop.CAbilitySellItems;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.item.shop.CAbilitySellUnits;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.jass.CAbilityJass;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.nightelf.root.CAbilityRoot;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.queue.CAbilityQueue;
@@ -55,6 +59,8 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CAllianceTy
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayer;
 
 public class CommandCardPopulatingAbilityVisitor implements CAbilityVisitor<Void> {
+	private static final int COMMAND_CARD_WIDTH = 4;
+
 	private static final boolean ENABLE_PLACEHOLDERS = false;
 	public static final CommandCardPopulatingAbilityVisitor INSTANCE = new CommandCardPopulatingAbilityVisitor();
 	private CSimulation game;
@@ -266,6 +272,11 @@ public class CommandCardPopulatingAbilityVisitor implements CAbilityVisitor<Void
 
 	@Override
 	public Void accept(final GenericSingleIconPassiveAbility ability) {
+		// Passives that wait for a research (Pillage, research indicators) stay hidden until it is done.
+		if ((ability instanceof AbstractCAbility)
+				&& ((AbstractCAbility) ability).isDisabled(CAbilityDisableType.REQUIREMENTS)) {
+			return null;
+		}
 		if ((this.menuBaseOrderId == 0) && ability.isIconShowing()) {
 			final AbilityUI abilityUI = this.abilityDataUI.getUI(ability.getAlias());
 			if (abilityUI != null) {
@@ -624,8 +635,66 @@ public class CommandCardPopulatingAbilityVisitor implements CAbilityVisitor<Void
 					int goldCost, lumberCost;
 					goldCost = simulationUnitType.getGoldCost();
 					lumberCost = simulationUnitType.getLumberCost();
-					addCommandButton(ability, unitUI, ability.getHandleId(), unitType.getValue(), 0, false, false,
-							goldCost, lumberCost, 0, 0, ability.getStock(unitType));
+					final int scriptStockSlot = ability.getScriptStockSlot(unitType);
+					if (scriptStockSlot >= 0) {
+						addCommandButton(ability, unitUI, unitUI.getToolTip(), scriptStockSlot % COMMAND_CARD_WIDTH,
+								scriptStockSlot / COMMAND_CARD_WIDTH, ability.getHandleId(), unitType.getValue(), 0,
+								false, false, goldCost, lumberCost, 0, 0, ability.getStock(unitType));
+					}
+					else {
+						addCommandButton(ability, unitUI, ability.getHandleId(), unitType.getValue(), 0, false, false,
+								goldCost, lumberCost, 0, 0, ability.getStock(unitType));
+					}
+				}
+			}
+		}
+		return null;
+	}
+
+	@Override
+	public Void accept(final CAbilitySellUnits ability) {
+		if ((this.menuBaseOrderId == 0) && ability.isIconShowing()) {
+			final CPlayer buyer = this.game.getPlayer(this.localPlayerIndex);
+			for (final War3ID unitType : ability.getUnitsSold()) {
+				final IconUI unitUI = this.abilityDataUI.getUnitUI(unitType);
+				final CUnitType simulationUnitType = this.game.getUnitData().getUnitType(unitType);
+				if ((unitUI != null) && (simulationUnitType != null)) {
+					final int goldCost = CAbilitySellUnits.getGoldCost(buyer, simulationUnitType);
+					final int lumberCost = CAbilitySellUnits.getLumberCost(buyer, simulationUnitType);
+					final int scriptStockSlot = ability.getScriptStockSlot(unitType);
+					if (scriptStockSlot >= 0) {
+						addCommandButton(ability, unitUI, unitUI.getToolTip(), scriptStockSlot % COMMAND_CARD_WIDTH,
+								scriptStockSlot / COMMAND_CARD_WIDTH, ability.getHandleId(), unitType.getValue(), 0,
+								false, false, goldCost, lumberCost, simulationUnitType.getFoodUsed(), 0,
+								ability.getStock(unitType));
+					}
+					else {
+						addCommandButton(ability, unitUI, ability.getHandleId(), unitType.getValue(), 0, false, false,
+								goldCost, lumberCost, simulationUnitType.getFoodUsed(), 0, ability.getStock(unitType));
+					}
+				}
+			}
+		}
+		return null;
+	}
+
+	@Override
+	public Void accept(final CAbilityAwakenHero ability) {
+		if ((this.menuBaseOrderId == 0) && ability.isIconShowing()) {
+			// Dead heroes take the top row of the tavern; the heroes for hire use the rows below.
+			int heroIndex = 0;
+			for (final CUnit playerHero : this.game.getPlayerHeroes(this.localPlayerIndex)) {
+				if (CAbilityAwakenHero.isAwakenable(playerHero, this.localPlayerIndex)
+						&& (heroIndex < COMMAND_CARD_WIDTH)) {
+					final UnitIconUI unitUI = this.abilityDataUI.getUnitUI(playerHero.getTypeId());
+					if (unitUI != null) {
+						final CAbilityHero heroData = playerHero.getHeroData();
+						addCommandButton(ability, unitUI, unitUI.getAwakenTip() + " - " + heroData.getProperName(),
+								heroIndex++, 0, ability.getHandleId(), playerHero.getHandleId(), 0, false, false,
+								CAbilityAwakenHero.getGoldCost(this.game, playerHero),
+								CAbilityAwakenHero.getLumberCost(this.game, playerHero),
+								playerHero.getUnitType().getFoodUsed(), 0, heroData.getHeroLevel());
+					}
 				}
 			}
 		}
@@ -680,7 +749,9 @@ public class CommandCardPopulatingAbilityVisitor implements CAbilityVisitor<Void
 				}
 			}
 		} else {
-			if (this.multiSelect) {
+			// In a group the button only shows while there are points to spend, so a touch player can level the
+			// active hero without first selecting it alone.
+			if (this.multiSelect && (ability.getSkillPoints() == 0)) {
 				return null;
 			}
 			if (this.menuBaseOrderId == 0 && ability.isIconShowing()) {

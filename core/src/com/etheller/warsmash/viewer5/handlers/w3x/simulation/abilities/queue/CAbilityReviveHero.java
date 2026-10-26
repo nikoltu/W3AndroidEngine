@@ -34,7 +34,7 @@ public final class CAbilityReviveHero extends AbstractCAbility {
 				final int heroReviveGoldCost = game.getGameplayConstants()
 						.getHeroReviveGoldCost(deadHero.getUnitType().getGoldCost(), heroData.getHeroLevel());
 				final int heroReviveLumberCost = game.getGameplayConstants()
-						.getHeroReviveLumberCost(deadHero.getUnitType().getGoldCost(), heroData.getHeroLevel());
+						.getHeroReviveLumberCost(deadHero.getUnitType().getLumberCost(), heroData.getHeroLevel());
 
 				if (player.getGold() >= heroReviveGoldCost) {
 					if (player.getLumber() >= heroReviveLumberCost) {

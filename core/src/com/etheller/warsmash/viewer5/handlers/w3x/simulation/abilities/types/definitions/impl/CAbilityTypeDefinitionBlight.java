@@ -14,8 +14,8 @@ public class CAbilityTypeDefinitionBlight extends AbstractCAbilityTypeDefinition
 
 	@Override
 	protected CAbilityTypeBlightLevelData createLevelData(final GameObject abilityEditorData, final int level) {
-		final boolean createsBlight = abilityEditorData.getFieldAsBoolean(DATA_A + level, 0);
-		final float expansionAmount = abilityEditorData.getFieldAsFloat(DATA_B + level, 0);
+		final boolean createsBlight = abilityEditorData.getFieldAsBoolean(DATA_B + level, 0);
+		final float expansionAmount = abilityEditorData.getFieldAsFloat(DATA_A + level, 0);
 		final float area = abilityEditorData.getFieldAsFloat(AREA + level, 0);
 		final float duration = abilityEditorData.getFieldAsFloat(DURATION + level, 0);
 		return new CAbilityTypeBlightLevelData(getTargetsAllowed(abilityEditorData, level), createsBlight,

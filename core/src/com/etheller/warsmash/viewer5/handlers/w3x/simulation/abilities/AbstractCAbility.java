@@ -51,6 +51,10 @@ public abstract class AbstractCAbility extends CExtensibleHandleAbstract impleme
 		return this.disabled != 0;
 	}
 
+	public final boolean isDisabled(final CAbilityDisableType type) {
+		return (this.disabled & type.getMask()) != 0;
+	}
+
 	protected void onSetDisabled(final boolean disabled, final boolean wasDisabled, final CAbilityDisableType type) {
 
 	}

@@ -178,7 +178,7 @@ public class CBehaviorAbilityBuilderBase extends CAbstractRangedBehavior impleme
 				return this.unit.pollNextOrderBehavior(game);
 			}
 
-			this.ability.checkCanUse(game, unit, issuingPlayerIndex, orderId, autoOrder, BooleanAbilityActivationReceiver.INSTANCE);
+			this.ability.checkCanUse(game, unit, issuingPlayerIndex, orderId, autoOrder, BooleanAbilityActivationReceiver.INSTANCE.reset());
 			if (!BooleanAbilityActivationReceiver.INSTANCE.isOk()) {
 				cleanupInputs();
 				return this.unit.pollNextOrderBehavior(game);
@@ -237,7 +237,7 @@ public class CBehaviorAbilityBuilderBase extends CAbstractRangedBehavior impleme
 					return this.unit.pollNextOrderBehavior(game);
 				}
 
-				this.ability.checkCanUse(game, unit, issuingPlayerIndex, orderId, autoOrder, BooleanAbilityActivationReceiver.INSTANCE);
+				this.ability.checkCanUse(game, unit, issuingPlayerIndex, orderId, autoOrder, BooleanAbilityActivationReceiver.INSTANCE.reset());
 				if (!BooleanAbilityActivationReceiver.INSTANCE.isOk()
 						|| !this.unit.chargeMana(this.ability.getChargedManaCost())) {
 					cleanupInputs();

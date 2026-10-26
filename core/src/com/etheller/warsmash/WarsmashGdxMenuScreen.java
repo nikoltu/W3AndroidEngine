@@ -82,6 +82,7 @@ public class WarsmashGdxMenuScreen implements InputProcessor, Screen, SingleMode
 	private int startupStep;
 	private boolean startupFrameShown;
 	private String pendingMap;
+	private String pendingComputerSlots;
 
 	public WarsmashGdxMenuScreen(final DataTable warsmashIni, final WarsmashGdxMultiScreenGame game) {
 		this.warsmashIni = warsmashIni;
@@ -120,7 +121,7 @@ public class WarsmashGdxMenuScreen implements InputProcessor, Screen, SingleMode
 			this.loaded = true;
 			show();
 			if (this.pendingMap != null) {
-				this.menuUI.startMap(this.pendingMap);
+				this.menuUI.startMap(this.pendingMap, this.pendingComputerSlots);
 				this.pendingMap = null;
 			}
 			return;
@@ -1003,11 +1004,20 @@ public class WarsmashGdxMenuScreen implements InputProcessor, Screen, SingleMode
 	}
 
 	public void startMap(final String finalFileToLoad) {
+		startMap(finalFileToLoad, null);
+	}
+
+	/**
+	 * @param computerSlots comma separated "slot:race" pairs (race Human, Orc, Undead or NightElf) that are
+	 *                      played by the computer, or null
+	 */
+	public void startMap(final String finalFileToLoad, final String computerSlots) {
 		if (!this.loaded) {
 			this.pendingMap = finalFileToLoad;
+			this.pendingComputerSlots = computerSlots;
 			return;
 		}
-		this.menuUI.startMap(finalFileToLoad);
+		this.menuUI.startMap(finalFileToLoad, computerSlots);
 	}
 
 	public void onReturnFromGame() {

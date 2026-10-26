@@ -125,15 +125,18 @@ public class ListBoxFrame extends ControlFrame implements ScrollBarFrame.ScrollB
 	// Default
 	public void addItem(final String item, final GameUI gameUI, final Viewport viewport) {
 		this.listItems.add(AbstractListItemProperty.createFromType(item, ListItemEnum.ITEM_STRING, gameUI, this.dataSource));
+		refreshItems(gameUI, viewport);
 	}
 
 	public void addItem(final String item, final ListItemEnum itemType, final GameUI gameUI, final Viewport viewport) {
 		this.listItems.add(AbstractListItemProperty.createFromType(item, itemType, gameUI, this.dataSource));
+		refreshItems(gameUI, viewport);
 	}
 
 	public void setItems(final List<AbstractListItemProperty> items, final GameUI gameUI, final Viewport viewport) {
 		this.listItems.clear();
 		this.listItems.addAll(items);
+		refreshItems(gameUI, viewport);
 	}
 
 	public void removeItem(final String item, final GameUI gameUI, final Viewport viewport) {
@@ -143,14 +146,24 @@ public class ListBoxFrame extends ControlFrame implements ScrollBarFrame.ScrollB
 				break;
 			}
 		}
+		refreshItems(gameUI, viewport);
 	}
 
 	public void removeItem(final int index, final GameUI gameUI, final Viewport viewport) {
 		this.listItems.remove(index);
+		refreshItems(gameUI, viewport);
 	}
 
 	public void removeAllItems() {
 		this.listItems.clear();
+		refreshItems(this.gameUI, this.viewport);
+	}
+
+	/** Item frames are built when the list is laid out, so a change shows only after laying it out again. */
+	private void refreshItems(final GameUI gameUI, final Viewport viewport) {
+		if ((gameUI != null) && (viewport != null) && (this.gameUI != null)) {
+			updateUI(gameUI, viewport);
+		}
 	}
 
 	public void sortItems() {

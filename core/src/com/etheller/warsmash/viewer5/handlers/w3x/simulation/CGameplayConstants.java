@@ -16,6 +16,11 @@ public class CGameplayConstants {
 	private final float[][] damageBonusTable;
 	private final float maxCollisionRadius;
 	private final float decayTime;
+	private final float callForHelp;
+	private final float creepCallForHelp;
+	private final float aiCallForHelp;
+	private final float maxGuardDistance;
+	private final float guardReturnTime;
 	private final float boneDecayTime;
 	private final float dissipateTime;
 	private final float bulletDeathTime;
@@ -55,6 +60,8 @@ public class CGameplayConstants {
 	private final int heroMaxReviveCostGold;
 	private final int heroMaxReviveCostLumber;
 	private final int heroMaxReviveTime;
+	private final float constructionRefundRate;
+	private final float upgradeRefundRate;
 
 	private final int heroMaxAwakenCostGold;
 	private final int heroMaxAwakenCostLumber;
@@ -121,6 +128,7 @@ public class CGameplayConstants {
 	private final float pickupItemRange;
 	private final float pawnItemRange;
 	private final float pawnItemRate;
+	private final float neutralBuildingPollPeriod;
 
 	private final float followRange;
 	private final float structureFollowRange;
@@ -145,6 +153,11 @@ public class CGameplayConstants {
 		this.attackHalfAngle = (float) Math.toDegrees(miscData.getFieldFloatValue("AttackHalfAngle"));
 		this.maxCollisionRadius = miscData.getFieldFloatValue("MaxCollisionRadius");
 		this.decayTime = miscData.getFieldFloatValue("DecayTime");
+		this.callForHelp = miscData.getFieldFloatValue("CallForHelp");
+		this.creepCallForHelp = miscData.getFieldFloatValue("CreepCallForHelp");
+		this.aiCallForHelp = miscData.getFieldFloatValue("AICallForHelp");
+		this.maxGuardDistance = miscData.getFieldFloatValue("MaxGuardDistance");
+		this.guardReturnTime = miscData.getFieldFloatValue("GuardReturnTime");
 		this.boneDecayTime = miscData.getFieldFloatValue("BoneDecayTime");
 		this.dissipateTime = miscData.getFieldFloatValue("DissipateTime");
 		this.structureDecayTime = miscData.getFieldFloatValue("StructureDecayTime");
@@ -246,6 +259,8 @@ public class CGameplayConstants {
 		this.heroMaxReviveCostGold = miscData.getFieldValue("HeroMaxReviveCostGold");
 		this.heroMaxReviveCostLumber = miscData.getFieldValue("HeroMaxReviveCostLumber");
 		this.heroMaxReviveTime = miscData.getFieldValue("HeroMaxReviveTime");
+		this.constructionRefundRate = miscData.getFieldFloatValue("ConstructionRefundRate");
+		this.upgradeRefundRate = miscData.getFieldFloatValue("UpgradeRefundRate");
 
 		this.heroMaxAwakenCostGold = miscData.getFieldValue("HeroMaxAwakenCostGold");
 		this.heroMaxAwakenCostLumber = miscData.getFieldValue("HeroMaxAwakenCostLumber");
@@ -286,20 +301,17 @@ public class CGameplayConstants {
 		this.grantNormalXPFormulaB = miscData.getFieldValue("GrantNormalXPFormulaB");
 		this.grantNormalXPFormulaC = miscData.getFieldValue("GrantNormalXPFormulaC");
 
-		this.needHeroXp = parseTable(miscData.getField("NeedHeroXP"), this.needHeroXPFormulaA, this.needHeroXPFormulaB,
-				this.needHeroXPFormulaC, this.maxHeroLevel);
-		this.needHeroXpSum = new int[this.needHeroXp.length];
-		for (int i = 0; i < this.needHeroXpSum.length; i++) {
-			if (i == 0) {
-				this.needHeroXpSum[i] = this.needHeroXp[i];
-			} else {
-				this.needHeroXpSum[i] = this.needHeroXp[i] + this.needHeroXpSum[i - 1];
-			}
+		// NeedHeroXP is the total experience for each level, starting at level 2 (200, 500, 900, 1400...).
+		this.needHeroXpSum = parseTable(miscData.getField("NeedHeroXP"), this.needHeroXPFormulaA,
+				this.needHeroXPFormulaB, this.needHeroXPFormulaC, this.maxHeroLevel, 2);
+		this.needHeroXp = new int[this.needHeroXpSum.length];
+		for (int i = 0; i < this.needHeroXp.length; i++) {
+			this.needHeroXp[i] = i == 0 ? this.needHeroXpSum[i] : this.needHeroXpSum[i] - this.needHeroXpSum[i - 1];
 		}
 		this.grantHeroXp = parseTable(miscData.getField("GrantHeroXP"), this.grantHeroXPFormulaA,
 				this.grantHeroXPFormulaB, this.grantHeroXPFormulaC, this.maxHeroLevel);
 		this.grantNormalXp = parseTable(miscData.getField("GrantNormalXP"), this.grantNormalXPFormulaA,
-				this.grantNormalXPFormulaB, this.grantNormalXPFormulaC, this.maxUnitLevel);
+				this.grantNormalXPFormulaB, this.grantNormalXPFormulaC, this.maxUnitLevel, 1);
 		this.heroFactorXp = parseIntArray(miscData.getField("HeroFactorXP"));
 		this.upkeepUsage = parseIntArray(miscData.getField("UpkeepUsage"));
 		this.upkeepGoldTax = parseFloatArray(miscData.getField("UpkeepGoldTax"));
@@ -322,6 +334,7 @@ public class CGameplayConstants {
 		this.pickupItemRange = miscData.getFieldFloatValue("PickupItemRange");
 		this.pawnItemRange = miscData.getFieldFloatValue("PawnItemRange");
 		this.pawnItemRate = miscData.getFieldFloatValue("PawnItemRate");
+		this.neutralBuildingPollPeriod = miscData.getFieldFloatValue("NeutralBuildingPollPeriod");
 
 		this.followRange = miscData.getFieldFloatValue("FollowRange");
 		this.structureFollowRange = miscData.getFieldFloatValue("StructureFollowRange");
@@ -354,6 +367,26 @@ public class CGameplayConstants {
 
 	public float getDecayTime() {
 		return this.decayTime;
+	}
+
+	public float getCallForHelp() {
+		return this.callForHelp;
+	}
+
+	public float getCreepCallForHelp() {
+		return this.creepCallForHelp;
+	}
+
+	public float getAICallForHelp() {
+		return this.aiCallForHelp;
+	}
+
+	public float getMaxGuardDistance() {
+		return this.maxGuardDistance;
+	}
+
+	public float getGuardReturnTime() {
+		return this.guardReturnTime;
 	}
 
 	public float getBoneDecayTime() {
@@ -576,6 +609,15 @@ public class CGameplayConstants {
 		return this.pawnItemRate;
 	}
 
+	public int getPawnItemValue(final int cost) {
+		// rates such as 0.7f sit just below their decimal value; the bias keeps whole products whole
+		return (int) ((cost * this.pawnItemRate) + 0.001f);
+	}
+
+	public float getNeutralBuildingPollPeriod() {
+		return this.neutralBuildingPollPeriod;
+	}
+
 	public float getFollowRange() {
 		return this.followRange;
 	}
@@ -595,18 +637,59 @@ public class CGameplayConstants {
 	public int getHeroReviveGoldCost(final int originalCost, final int level) {
 		final int goldRevivalCost = (int) (originalCost
 				* (this.reviveBaseFactor + (this.reviveLevelFactor * (level - 1))));
-		return Math.min(goldRevivalCost, (int) (originalCost * this.reviveMaxFactor));
+		return capped(Math.min(goldRevivalCost, (int) (originalCost * this.reviveMaxFactor)),
+				this.heroMaxReviveCostGold);
+	}
+
+	private static int capped(final int value, final int cap) {
+		return cap > 0 ? Math.min(value, cap) : value;
 	}
 
 	public int getHeroReviveLumberCost(final int originalCost, final int level) {
 		final int lumberRevivalCost = (int) (originalCost
 				* (this.reviveBaseLumberFactor + (this.reviveLumberLevelFactor * (level - 1))));
-		return Math.min(lumberRevivalCost, (int) (originalCost * this.reviveMaxFactor));
+		return capped(Math.min(lumberRevivalCost, (int) (originalCost * this.reviveMaxFactor)),
+				this.heroMaxReviveCostLumber);
 	}
 
 	public int getHeroReviveTime(final int originalTime, final int level) {
 		final int revivalTime = (int) (originalTime * level * this.reviveTimeFactor);
-		return Math.min(revivalTime, (int) (originalTime * this.reviveMaxTimeFactor));
+		return capped(Math.min(revivalTime, (int) (originalTime * this.reviveMaxTimeFactor)),
+				this.heroMaxReviveTime);
+	}
+
+	public float getConstructionRefundRate() {
+		return this.constructionRefundRate;
+	}
+
+	public float getUpgradeRefundRate() {
+		return this.upgradeRefundRate;
+	}
+
+	public int getHeroAwakenGoldCost(final int originalCost, final int level) {
+		final int goldAwakenCost = (int) (originalCost
+				* (this.awakenBaseFactor + (this.awakenLevelFactor * (level - 1))));
+		return capped(Math.min(goldAwakenCost, (int) (originalCost * this.awakenMaxFactor)),
+				this.heroMaxAwakenCostGold);
+	}
+
+	public int getHeroAwakenLumberCost(final int originalCost, final int level) {
+		final int lumberAwakenCost = (int) (originalCost
+				* (this.awakenBaseLumberFactor + (this.awakenLumberLevelFactor * (level - 1))));
+		return capped(Math.min(lumberAwakenCost, (int) (originalCost * this.awakenMaxFactor)),
+				this.heroMaxAwakenCostLumber);
+	}
+
+	public float getHeroAwakenLifeFactor() {
+		return this.heroAwakenLifeFactor;
+	}
+
+	public float getHeroAwakenManaFactor() {
+		return this.heroAwakenManaFactor;
+	}
+
+	public float getHeroAwakenManaStart() {
+		return this.heroAwakenManaStart;
 	}
 
 	public float getHeroReviveLifeFactor() {
@@ -665,13 +748,22 @@ public class CGameplayConstants {
 	 */
 	private static int[] parseTable(final String txt, final int formulaA, final int formulaB, final int formulaC,
 			final int tableSize) {
+		return parseTable(txt, formulaA, formulaB, formulaC, tableSize, 0);
+	}
+
+	/**
+	 * firstLevel is the x of the first entry in f(x): GrantNormalXP starts at unit level 1 (25, 40, 60, 85...),
+	 * NeedHeroXP at hero level 2.
+	 */
+	private static int[] parseTable(final String txt, final int formulaA, final int formulaB, final int formulaC,
+			final int tableSize, final int firstLevel) {
 		final String[] splitTxt = txt.split(",");
 		final int[] result = new int[tableSize];
 		for (int i = 0; i < tableSize; i++) {
 			if (i < splitTxt.length) {
 				result[i] = Integer.parseInt(splitTxt[i]);
 			} else {
-				result[i] = (formulaA * result[i - 1]) + (formulaB * i) + formulaC;
+				result[i] = (formulaA * result[i - 1]) + (formulaB * (i + firstLevel)) + formulaC;
 			}
 		}
 		return result;

@@ -10,6 +10,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 
 import com.etheller.warsmash.units.GameObject;
@@ -45,6 +46,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.hero.CAbi
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.hero.CPrimaryAttribute;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.inventory.CAbilityInventory;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.item.shop.CAbilitySellItems;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.item.shop.CAbilitySellUnits;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.queue.CAbilityQueue;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.queue.CAbilityRally;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.queue.CAbilityReviveHero;
@@ -211,6 +213,11 @@ public class CUnitData {
 	private static final String PRIMARY_ATTRIBUTE = "Primary"; // replaced from 'upra'
 
 	private static final String CAN_FLEE = "canFlee"; // replaced from 'ufle'
+	private static final String CAN_SLEEP = "canSleep";
+	private static final String STOCK_MAX = "stockMax"; // replaced from 'usma'
+	private static final String STOCK_REPLENISH_INTERVAL = "stockRegen"; // replaced from 'usrg'
+	private static final String STOCK_START_DELAY = "stockStart"; // replaced from 'usst'
+	private static final String STOCK_INITIAL = "stockInitial"; // replaced from 'usit'
 	private static final String PRIORITY = "prio"; // replaced from 'upri'
 
 	private static final String POINT_VALUE = "points"; // replaced from 'upoi'
@@ -240,6 +247,7 @@ public class CUnitData {
 	private final Map<War3ID, CUnitType> unitIdToUnitType = new HashMap<>();
 	private final Map<War3ID, CUnitType> unitIdToUnitTypeLightweight = new HashMap<>();
 	private final Map<String, War3ID> jassLegacyNameToUnitId = new HashMap<>();
+	private final Map<War3ID, List<War3ID>> unitIdToTechEquivalents = new HashMap<>();
 	private final CAbilityData abilityData;
 	private final CUpgradeData upgradeData;
 	private final SimulationRenderController simulationRenderController;
@@ -368,6 +376,10 @@ public class CUnitData {
 		if (!itemsSold.isEmpty()) {
 			unit.add(simulation, new CAbilitySellItems(handleIdAllocator.createId(), itemsSold, false));
 		}
+		final List<War3ID> unitsSold = unitTypeInstance.getUnitsSold();
+		if (!unitsSold.isEmpty()) {
+			unit.add(simulation, new CAbilitySellUnits(handleIdAllocator.createId(), unitsSold));
+		}
 		if (!itemsMade.isEmpty()) {
 			unit.add(simulation, new CAbilitySellItems(handleIdAllocator.createId(), itemsMade, true));
 		}
@@ -471,6 +483,10 @@ public class CUnitData {
 		}
 		if (!itemsSold.isEmpty()) {
 			unit.add(simulation, new CAbilitySellItems(handleIdAllocator.createId(), itemsSold, false));
+		}
+		final List<War3ID> unitsSold = unitTypeInstance.getUnitsSold();
+		if (!unitsSold.isEmpty()) {
+			unit.add(simulation, new CAbilitySellUnits(handleIdAllocator.createId(), unitsSold));
 		}
 		if (!itemsMade.isEmpty()) {
 			unit.add(simulation, new CAbilitySellItems(handleIdAllocator.createId(), itemsMade, true));
@@ -847,6 +863,11 @@ public class CUnitData {
 					sightRadiusNight, extendedLineOfSight, goldBountyAwardedBase, goldBountyAwardedDice,
 					goldBountyAwardedSides, lumberBountyAwardedBase, lumberBountyAwardedDice, lumberBountyAwardedSides,
 					neutralBuildingShowMinimapIcon, tilesets, special);
+			unitTypeInstance.setCanSleep(unitType.getFieldAsBoolean(CAN_SLEEP, 0));
+			unitTypeInstance.setStock(unitType.getFieldAsInteger(STOCK_MAX, 0),
+					unitType.getFieldAsInteger(STOCK_REPLENISH_INTERVAL, 0),
+					unitType.getFieldAsInteger(STOCK_START_DELAY, 0), unitType.getFieldAsInteger(STOCK_INITIAL, 0));
+			applyTechEquivalents(unitTypeInstance);
 			this.unitIdToUnitType.put(typeId, unitTypeInstance);
 			this.unitIdToUnitTypeLightweight.put(typeId, unitTypeInstance);
 			this.jassLegacyNameToUnitId.put(legacyName, typeId);
@@ -993,6 +1014,7 @@ public class CUnitData {
 					targetsAllowed, weaponSound, weaponType, animationTags, projectileArc, projectileArt,
 					projectileHomingEnabled, projectileSpeed, damageSpillDistance, damageSpillRadius,
 					weaponType == CWeaponType.ALINE);
+			((CUnitAttackMissileLine) attack).setSpill(damageLossFactor, areaOfEffectTargets);
 			break;
 		case INSTANT:
 			attack = new CUnitAttackInstant(animationBackswingPoint, animationDamagePoint, attackType, cooldownTime,
@@ -1093,6 +1115,35 @@ public class CUnitData {
 
 	public float getProjectileLaunchZ(final War3ID unitTypeId) {
 		return this.unitData.get(unitTypeId.asStringValue()).getFieldAsFloat(PROJECTILE_LAUNCH_Z, 0);
+	}
+
+	/**
+	 * Tech equivalents such as TALT or TWN2 are profile entries listing the units that count as them; a unit type
+	 * unlocks each equivalent that names it, as if it were one of its own DependencyOr entries.
+	 */
+	public void setTechEquivalents(final Map<War3ID, List<War3ID>> techEquivalentToUnitIds) {
+		this.unitIdToTechEquivalents.clear();
+		for (final Map.Entry<War3ID, List<War3ID>> entry : techEquivalentToUnitIds.entrySet()) {
+			for (final War3ID unitId : entry.getValue()) {
+				List<War3ID> equivalents = this.unitIdToTechEquivalents.get(unitId);
+				if (equivalents == null) {
+					equivalents = new ArrayList<>();
+					this.unitIdToTechEquivalents.put(unitId, equivalents);
+				}
+				equivalents.add(entry.getKey());
+			}
+		}
+	}
+
+	private void applyTechEquivalents(final CUnitType unitType) {
+		final List<War3ID> equivalents = this.unitIdToTechEquivalents.get(unitType.getTypeId());
+		if (equivalents != null) {
+			for (final War3ID equivalent : equivalents) {
+				if (!unitType.getDependencyOr().contains(equivalent)) {
+					unitType.getDependencyOr().add(equivalent);
+				}
+			}
+		}
 	}
 
 	public CUnitType getUnitType(final War3ID rawcode) {
@@ -1433,6 +1484,11 @@ public class CUnitData {
 					extendedLineOfSight, goldBountyAwardedBase, goldBountyAwardedDice, goldBountyAwardedSides,
 					lumberBountyAwardedBase, lumberBountyAwardedDice, lumberBountyAwardedSides,
 					neutralBuildingShowMinimapIcon, tilesets, special);
+			unitTypeInstance.setCanSleep(unitType.getFieldAsBoolean(CAN_SLEEP, 0));
+			unitTypeInstance.setStock(unitType.getFieldAsInteger(STOCK_MAX, 0),
+					unitType.getFieldAsInteger(STOCK_REPLENISH_INTERVAL, 0),
+					unitType.getFieldAsInteger(STOCK_START_DELAY, 0), unitType.getFieldAsInteger(STOCK_INITIAL, 0));
+			applyTechEquivalents(unitTypeInstance);
 			this.unitIdToUnitTypeLightweight.put(typeId, unitTypeInstance);
 		}
 		return unitTypeInstance;
@@ -1448,6 +1504,38 @@ public class CUnitData {
 			return null;
 		}
 		return getUnitTypeInstanceLightweight(rawcode, unitType);
+	}
+
+	/**
+	 * ChooseRandomCreep: a creep from the hostile palette (not special, not campaign, not a building) of the level,
+	 * or of any level for a negative level.
+	 */
+	public War3ID chooseRandomCreep(final int level, final Random random) {
+		final List<War3ID> choices = new ArrayList<>();
+		for (final String key : this.unitData.keySet()) {
+			final GameObject unitType = this.unitData.get(key);
+			if ((unitType != null) && unitType.getFieldAsBoolean("hostilePal", 0)
+					&& !unitType.getFieldAsBoolean("special", 0) && !unitType.getFieldAsBoolean("campaign", 0)
+					&& !unitType.getFieldAsBoolean(IS_BLDG, 0)
+					&& ((level < 0) || (unitType.getFieldAsInteger(UNIT_LEVEL, 0) == level))) {
+				choices.add(War3ID.fromString(key));
+			}
+		}
+		return choices.isEmpty() ? null : choices.get(random.nextInt(choices.size()));
+	}
+
+	/**
+	 * ChooseRandomNPBuilding: a neutral building marked as usable for random placement (nbrandom).
+	 */
+	public War3ID chooseRandomNPBuilding(final Random random) {
+		final List<War3ID> choices = new ArrayList<>();
+		for (final String key : this.unitData.keySet()) {
+			final GameObject unitType = this.unitData.get(key);
+			if ((unitType != null) && unitType.getFieldAsBoolean("nbrandom", 0)) {
+				choices.add(War3ID.fromString(key));
+			}
+		}
+		return choices.isEmpty() ? null : choices.get(random.nextInt(choices.size()));
 	}
 
 	public Collection<CUnitType> getAllUnitTypesLightweight() {

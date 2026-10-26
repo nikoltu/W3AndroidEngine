@@ -1,13 +1,11 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.ui;
 
-import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
+import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
-import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
-import com.badlogic.gdx.graphics.glutils.ShapeRenderer.ShapeType;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import com.etheller.warsmash.input.touch.VirtualModifiers;
@@ -15,29 +13,39 @@ import com.etheller.warsmash.input.touch.VirtualModifiers.ShiftState;
 import com.etheller.warsmash.parsers.fdf.GameUI;
 
 /**
- * Touch-only row of control group buttons with the Shift button at its right end, drawn just above the console's
- * unit info area so the 1.31 console itself stays untouched. Positions are in FDF units of the 4:3 interface.
+ * Touch-only row of control group buttons led by the Shift button, spanning the console's unit display
+ * (portrait and info panel) just above its top edge. A group shows the icon of its strongest unit and how many units
+ * it holds; Shift looks pressed while it is held. Positions are in FDF units of the 4:3 interface.
  */
 final class ControlGroupBar {
 	static final int SLOT_COUNT = 10;
 	static final int SHIFT_SLOT = SLOT_COUNT;
 	private static final int SHIFT_WIDTH_IN_SLOTS = 2;
-	private static final float LEFT = 0.305f;
-	private static final float BOTTOM = 0.141f;
-	private static final float WIDTH = 0.198f;
-	private static final float HEIGHT = 0.026f;
-	private static final float GAP = 0.002f;
-	private static final Color GROUP = new Color(0.12f, 0.28f, 0.78f, 0.85f);
-	private static final Color GROUP_EMPTY = new Color(0.12f, 0.28f, 0.78f, 0.3f);
-	private static final Color SHIFT_OFF = new Color(0.35f, 0.35f, 0.35f, 0.75f);
-	private static final Color SHIFT_ON = new Color(0.85f, 0.6f, 0.1f, 0.9f);
+	private static final float LEFT = 0.181f;
+	private static final float BOTTOM = 0.1253f;
+	private static final float WIDTH = 0.329f;
+	private static final float HEIGHT = 0.0374f;
+	private static final float GAP = 0.0015f;
+	private static final float ICON_INSET = 0.12f;
+	// Regions of the race's upper menu button texture, as upperbuttonbar.fdf cuts them: left, right, top, bottom.
+	private static final float BUTTON_RIGHT = 0.6640625f;
+	private static final float[] NORMAL = { 0.0f, 0.171875f };
+	private static final float[] PUSHED = { 0.25f, 0.421875f };
+	private static final float[] DISABLED = { 0.5f, 0.671875f };
+	private static final float[] HIGHLIGHT = { 0.75f, 0.921875f };
+	private static final Color TEXT = new Color(1.0f, 1.0f, 1.0f, 1.0f);
+	private static final Color TEXT_DISABLED = new Color(0.4f, 0.4f, 0.4f, 1.0f);
+	private static final Color TEXT_HIGHLIGHT = new Color(1.0f, 0.83f, 0.07f, 1.0f);
 
 	private final Viewport uiViewport;
 	private final Vector2 temp = new Vector2();
 	private final GlyphLayout glyphLayout = new GlyphLayout();
 
-	ControlGroupBar(final Viewport uiViewport) {
+	private final Texture buttonTexture;
+
+	ControlGroupBar(final Viewport uiViewport, final Texture buttonTexture) {
 		this.uiViewport = uiViewport;
+		this.buttonTexture = buttonTexture;
 	}
 
 	private float slotWidth() {
@@ -49,7 +57,12 @@ final class ControlGroupBar {
 	}
 
 	private float slotX(final int slot) {
-		return GameUI.convertX(this.uiViewport, LEFT) + (slot * (slotWidth() + GameUI.convertX(this.uiViewport, GAP)));
+		final float left = GameUI.convertX(this.uiViewport, LEFT);
+		if (slot == SHIFT_SLOT) {
+			return left;
+		}
+		final float gap = GameUI.convertX(this.uiViewport, GAP);
+		return left + widthOf(SHIFT_SLOT) + gap + (slot * (slotWidth() + gap));
 	}
 
 	/**
@@ -77,46 +90,61 @@ final class ControlGroupBar {
 		return (slot + 1) % SLOT_COUNT;
 	}
 
-	void render(final SpriteBatch batch, final ShapeRenderer shapeRenderer, final BitmapFont font,
-			final int[] groupSizes) {
+	void render(final SpriteBatch batch, final BitmapFont font, final int[] groupSizes, final Texture[] groupIcons) {
 		final float bottom = GameUI.convertY(this.uiViewport, BOTTOM);
 		final float height = GameUI.convertY(this.uiViewport, HEIGHT);
-		final ShiftState shift = VirtualModifiers.getShiftState();
-		batch.end();
-		Gdx.gl.glEnable(GL20.GL_BLEND);
-		Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
-		shapeRenderer.setProjectionMatrix(batch.getProjectionMatrix());
-		shapeRenderer.begin(ShapeType.Filled);
+		final boolean shiftHeld = VirtualModifiers.getShiftState() == ShiftState.HELD;
 		for (int slot = 0; slot <= SHIFT_SLOT; slot++) {
+			final float x = slotX(slot);
+			final float width = widthOf(slot);
 			if (slot == SHIFT_SLOT) {
-				shapeRenderer.setColor(shift == ShiftState.OFF ? SHIFT_OFF : SHIFT_ON);
+				drawRegion(batch, shiftHeld ? PUSHED : NORMAL, x, bottom, width, height);
+				if (shiftHeld) {
+					batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE);
+					drawRegion(batch, HIGHLIGHT, x, bottom, width, height);
+					batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+				}
+				drawCentered(batch, font, "Shift", shiftHeld ? TEXT_HIGHLIGHT : TEXT, x, bottom, width, height);
+				continue;
 			}
-			else {
-				shapeRenderer.setColor(groupSizes[groupOfSlot(slot)] > 0 ? GROUP : GROUP_EMPTY);
+			final int group = groupOfSlot(slot);
+			final int size = groupSizes[group];
+			if (size == 0) {
+				drawRegion(batch, DISABLED, x, bottom, width, height);
+				drawCentered(batch, font, Integer.toString(group), TEXT_DISABLED, x, bottom, width, height);
+				continue;
 			}
-			shapeRenderer.rect(slotX(slot), bottom, widthOf(slot), height);
+			drawRegion(batch, NORMAL, x, bottom, width, height);
+			final float inset = Math.min(width, height) * ICON_INSET;
+			final float iconSize = Math.min(width, height) - (2 * inset);
+			final float iconX = x + ((width - iconSize) / 2);
+			final float iconY = bottom + ((height - iconSize) / 2);
+			if (groupIcons[group] != null) {
+				batch.draw(groupIcons[group], iconX, iconY, iconSize, iconSize);
+			}
+			final String count = Integer.toString(size);
+			this.glyphLayout.setText(font, count);
+			final float countX = (iconX + iconSize) - this.glyphLayout.width;
+			final float countY = iconY + this.glyphLayout.height + (inset * 0.5f);
+			font.setColor(Color.BLACK);
+			font.draw(batch, count, countX + 1, countY - 1);
+			font.setColor(TEXT);
+			font.draw(batch, count, countX, countY);
 		}
-		shapeRenderer.end();
-		if (shift == ShiftState.LOCKED) {
-			shapeRenderer.begin(ShapeType.Line);
-			shapeRenderer.setColor(Color.WHITE);
-			shapeRenderer.rect(slotX(SHIFT_SLOT), bottom, widthOf(SHIFT_SLOT), height);
-			shapeRenderer.end();
-		}
-		batch.begin();
 		font.setColor(Color.WHITE);
-		for (int slot = 0; slot <= SHIFT_SLOT; slot++) {
-			final String label;
-			if (slot == SHIFT_SLOT) {
-				label = shift == ShiftState.LOCKED ? "SHIFT" : "Shift";
-			}
-			else {
-				final int size = groupSizes[groupOfSlot(slot)];
-				label = size > 0 ? groupOfSlot(slot) + ":" + size : Integer.toString(groupOfSlot(slot));
-			}
-			this.glyphLayout.setText(font, label);
-			font.draw(batch, label, slotX(slot) + ((widthOf(slot) - this.glyphLayout.width) / 2),
-					bottom + ((height + this.glyphLayout.height) / 2));
+	}
+
+	private void drawCentered(final SpriteBatch batch, final BitmapFont font, final String text, final Color color,
+			final float x, final float y, final float width, final float height) {
+		font.setColor(color);
+		this.glyphLayout.setText(font, text);
+		font.draw(batch, text, x + ((width - this.glyphLayout.width) / 2), y + ((height + this.glyphLayout.height) / 2));
+	}
+
+	private void drawRegion(final SpriteBatch batch, final float[] region, final float x, final float y,
+			final float width, final float height) {
+		if (this.buttonTexture != null) {
+			batch.draw(this.buttonTexture, x, y, width, height, 0, region[1], BUTTON_RIGHT, region[0]);
 		}
 	}
 }

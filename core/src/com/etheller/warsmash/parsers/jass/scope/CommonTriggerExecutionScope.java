@@ -63,7 +63,7 @@ public class CommonTriggerExecutionScope extends TriggerExecutionScope {
 	private CUnit sellingUnit;
 	private CUnit soldUnit;
 	private CUnit buyingUnit;
-	private CUnit soldItem;
+	private CItem soldItem;
 	private CUnit changingUnit;
 	private CPlayerJass changingUnitPrevOwner;
 	private CUnit manipulatingUnit;
@@ -342,7 +342,7 @@ public class CommonTriggerExecutionScope extends TriggerExecutionScope {
 		return this.buyingUnit;
 	}
 
-	public CUnit getSoldItem() {
+	public CItem getSoldItem() {
 		return this.soldItem;
 	}
 
@@ -584,6 +584,28 @@ public class CommonTriggerExecutionScope extends TriggerExecutionScope {
 		return scope;
 	}
 
+	public static CommonTriggerExecutionScope heroSkillScope(final JassGameEventsWar3 triggerEventId,
+			final Trigger trigger, final CUnit hero, final int skill, final int skillLevel) {
+		final CommonTriggerExecutionScope scope = new CommonTriggerExecutionScope(trigger, TriggerExecutionScope.EMPTY);
+		scope.triggerWidget = hero;
+		scope.triggeringUnit = hero;
+		scope.learnedSkill = skill;
+		scope.learnedSkillLevel = skillLevel;
+		scope.triggerEventId = triggerEventId;
+		return scope;
+	}
+
+	public static CommonTriggerExecutionScope unitLoadedScope(final JassGameEventsWar3 triggerEventId,
+			final Trigger trigger, final CUnit loadedUnit, final CUnit transport) {
+		final CommonTriggerExecutionScope scope = new CommonTriggerExecutionScope(trigger, TriggerExecutionScope.EMPTY);
+		scope.triggerWidget = loadedUnit;
+		scope.triggeringUnit = loadedUnit;
+		scope.transportUnit = transport;
+		scope.loadedUnit = loadedUnit;
+		scope.triggerEventId = triggerEventId;
+		return scope;
+	}
+
 	public static CommonTriggerExecutionScope unitDeathScope(final JassGameEventsWar3 triggerEventId,
 			final Trigger trigger, final CUnit dyingUnit, final CUnit killingUnit, final CPlayerJass player) {
 		final CommonTriggerExecutionScope scope = new CommonTriggerExecutionScope(trigger, TriggerExecutionScope.EMPTY);
@@ -689,6 +711,16 @@ public class CommonTriggerExecutionScope extends TriggerExecutionScope {
 		return scope;
 	}
 
+	public static CommonTriggerExecutionScope unitConstructStartScope(final JassGameEventsWar3 triggerEventId,
+			final Trigger trigger, final CUnit constructingStructure) {
+		final CommonTriggerExecutionScope scope = new CommonTriggerExecutionScope(trigger, TriggerExecutionScope.EMPTY);
+		scope.triggerWidget = constructingStructure;
+		scope.triggeringUnit = constructingStructure;
+		scope.constructingStructure = constructingStructure;
+		scope.triggerEventId = triggerEventId;
+		return scope;
+	}
+
 	public static CommonTriggerExecutionScope unitConstructFinishScope(final JassGameEventsWar3 triggerEventId,
 			final Trigger trigger, final CUnit constructedStructure, final CUnit constructingUnit) {
 		final CommonTriggerExecutionScope scope = new CommonTriggerExecutionScope(trigger, TriggerExecutionScope.EMPTY);
@@ -705,6 +737,33 @@ public class CommonTriggerExecutionScope extends TriggerExecutionScope {
 		scope.triggerWidget = cancelledStructure;
 		scope.triggeringUnit = cancelledStructure;
 		scope.cancelledStructure = cancelledStructure;
+		scope.triggerEventId = triggerEventId;
+		return scope;
+	}
+
+	public static CommonTriggerExecutionScope unitSellScope(final JassGameEventsWar3 triggerEventId,
+			final Trigger trigger, final CUnit sellingUnit, final CUnit soldUnit, final CUnit buyingUnit) {
+		final CommonTriggerExecutionScope scope = new CommonTriggerExecutionScope(trigger, TriggerExecutionScope.EMPTY);
+		scope.triggerWidget = sellingUnit;
+		scope.triggeringUnit = sellingUnit;
+		scope.sellingUnit = sellingUnit;
+		scope.soldUnit = soldUnit;
+		scope.buyingUnit = buyingUnit;
+		scope.triggerEventId = triggerEventId;
+		return scope;
+	}
+
+	public static CommonTriggerExecutionScope unitSellItemScope(final JassGameEventsWar3 triggerEventId,
+			final Trigger trigger, final CUnit triggeringUnit, final CUnit sellingUnit, final CItem soldItem,
+			final CUnit buyingUnit) {
+		final CommonTriggerExecutionScope scope = new CommonTriggerExecutionScope(trigger, TriggerExecutionScope.EMPTY);
+		scope.triggerWidget = triggeringUnit;
+		scope.triggeringUnit = triggeringUnit;
+		scope.sellingUnit = sellingUnit;
+		scope.soldItem = soldItem;
+		scope.buyingUnit = buyingUnit;
+		scope.manipulatedItem = soldItem;
+		scope.manipulatingUnit = triggeringUnit;
 		scope.triggerEventId = triggerEventId;
 		return scope;
 	}

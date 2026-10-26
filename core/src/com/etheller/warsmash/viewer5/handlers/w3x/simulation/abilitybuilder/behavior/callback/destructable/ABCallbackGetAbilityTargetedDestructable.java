@@ -11,7 +11,7 @@ public class ABCallbackGetAbilityTargetedDestructable extends ABDestructableCall
 
 	@Override
 	public CDestructable callback(CSimulation game, CUnit caster, Map<String, Object> localStore, final int castId) {
-		return (CDestructable) localStore.get(ABLocalStoreKeys.ABILITYTARGETEDDESTRUCTABLE);
+		return (CDestructable) localStore.get(ABLocalStoreKeys.ABILITYTARGETEDDESTRUCTABLE + castId);
 	}
 
 }

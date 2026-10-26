@@ -14,6 +14,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.beha
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.behavior.callback.unitcallbacks.ABUnitCallback;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.core.ABLocalStoreKeys;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.core.ABSingleAction;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayer;
 
 public class ABActionMergeUnits implements ABSingleAction {
 
@@ -48,7 +49,7 @@ public class ABActionMergeUnits implements ABSingleAction {
 		final CUnit u2 = this.unit2.callback(game, caster, localStore, castId);
 
 		final float newHPPcnt = ((u1.getLife() / u1.getMaximumLife()) + (u2.getLife() / u2.getMaximumLife())) / 2;
-		final float newMPPcnt = ((u1.getMana() / u1.getMaximumMana()) + (u2.getMana() / u2.getMaximumMana())) / 2;
+		final float newMPPcnt = (manaFraction(u1) + manaFraction(u2)) / 2;
 
 		final CUnit createdUnit = game.createUnit(this.newUnitId.callback(game, caster, localStore, castId),
 				thePlayerId, loc.getX(), loc.getY(), theFacing);
@@ -56,6 +57,11 @@ public class ABActionMergeUnits implements ABSingleAction {
 			createdUnit.setLife(game, newHPPcnt * createdUnit.getMaximumLife());
 			createdUnit.setMana(newMPPcnt * createdUnit.getMaximumMana());
 		}
+		// The merged unit takes the food and the tech tree count that the two removed units give up.
+		final CPlayer player = game.getPlayer(thePlayerId);
+		player.setUnitFoodUsed(createdUnit, createdUnit.getUnitType().getFoodUsed());
+		player.setUnitFoodMade(createdUnit, createdUnit.getUnitType().getFoodMade());
+		player.addTechtreeUnlocked(game, createdUnit.getTypeId());
 		game.unitPreferredSelectionReplacement(u1, createdUnit);
 		game.unitPreferredSelectionReplacement(u2, createdUnit);
 
@@ -63,6 +69,12 @@ public class ABActionMergeUnits implements ABSingleAction {
 		game.removeUnit(u2);
 
 		localStore.put(ABLocalStoreKeys.LASTCREATEDUNIT, createdUnit);
+	}
+
+	// Units without mana (the Archer and the Hippogryph) would otherwise leave the merged unit with NaN mana, which
+	// fails every later mana check.
+	private static float manaFraction(final CUnit unit) {
+		return unit.getMaximumMana() > 0 ? unit.getMana() / unit.getMaximumMana() : 1;
 	}
 
 	@Override

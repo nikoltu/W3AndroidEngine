@@ -448,6 +448,11 @@ public class WarsmashGdxMapScreen implements InputProcessor, Screen, TouchTarget
 	}
 
 	@Override
+	public void endTouchHover() {
+		this.meleeUI.endTouchHover();
+	}
+
+	@Override
 	public int touchOverlaySlotAt(final int screenX, final int screenY) {
 		return this.meleeUI.touchOverlaySlotAt(screenX, screenY);
 	}

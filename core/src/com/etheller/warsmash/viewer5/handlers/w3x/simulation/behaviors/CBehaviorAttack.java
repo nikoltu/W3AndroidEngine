@@ -29,6 +29,10 @@ public class CBehaviorAttack extends CAbstractRangedBehavior {
 	private CUnitAttackModifier forcedModifier;
 	private CUnitAttackSettings settings;
 
+	public CUnitAttack getUnitAttack() {
+		return this.unitAttack;
+	}
+
 	public CBehavior reset(final CSimulation game, final int highlightOrderId, final CUnitAttack unitAttack,
 			final AbilityTarget target, final boolean disableMove, final CBehaviorAttackListener attackListener) {
 		this.highlightOrderId = highlightOrderId;

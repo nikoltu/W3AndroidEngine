@@ -24,10 +24,17 @@ public class ABCallbackGetAbilityDuration extends ABFloatCallback {
 		if (this.target != null) {
 			final CUnit tar = this.target.callback(game, caster, localStore, castId);
 			if (tar.isHero() || tar.isUnitType(CUnitTypeJass.RESISTANT)) {
-				return levelData.get(((int) localStore.get(ABLocalStoreKeys.CURRENTLEVEL)) - 1).getDurationHero();
+				return levelData.get(((int) localStore.get(ABLocalStoreKeys.CURRENTLEVEL)) - 1).getDurationHero()
+						+ durationBonus(localStore);
 			}
 		}
-		return levelData.get(((int) localStore.get(ABLocalStoreKeys.CURRENTLEVEL)) - 1).getDurationNormal();
+		return levelData.get(((int) localStore.get(ABLocalStoreKeys.CURRENTLEVEL)) - 1).getDurationNormal()
+				+ durationBonus(localStore);
+	}
+
+	private static float durationBonus(final Map<String, Object> localStore) {
+		final Object bonus = localStore.get(ABLocalStoreKeys.DURATIONBONUS);
+		return bonus == null ? 0 : (Float) bonus;
 	}
 
 	@Override

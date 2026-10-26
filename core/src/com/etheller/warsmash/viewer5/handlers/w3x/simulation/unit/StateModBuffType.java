@@ -37,7 +37,8 @@ public enum StateModBuffType implements CHandle {
 	UNAUTOATTACKABLE,
 	BLOCK_REPAIR,
 	BLOCK_TRAINING,
-	BLOCK_CONSTRUCTION;
+	BLOCK_CONSTRUCTION,
+	DISABLE_ATTACK_INDEX;
 
 	@Override
 	public int getHandleId() {

@@ -14,8 +14,10 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.generic.G
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.generic.GenericSingleIconPassiveAbility;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.harvest.CAbilityReturnResources;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.hero.CAbilityHero;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.item.shop.CAbilityAwakenHero;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.item.shop.CAbilityNeutralBuilding;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.item.shop.CAbilitySellItems;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.item.shop.CAbilitySellUnits;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.jass.CAbilityJass;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.nightelf.root.CAbilityRoot;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.queue.CAbilityQueue;
@@ -60,6 +62,10 @@ public interface CAbilityVisitor<T> {
 	T accept(CAbilityUpgrade ability);
 
 	T accept(CAbilitySellItems ability);
+
+	T accept(CAbilitySellUnits ability);
+
+	T accept(CAbilityAwakenHero ability);
 
 	T accept(CAbilityReviveHero ability);
 

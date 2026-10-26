@@ -71,7 +71,7 @@ public class WarsmashConstants {
 	public static CRaceManager RACE_MANAGER;
 
 	public static String[] JASS_FILE_LIST = { "Scripts\\common.j", "Scripts\\Blizzard.j", "Scripts\\war3map.j" };
-	public static final float GAME_SPEED_TIME_FACTOR = 0.5f;
+	public static final float GAME_SPEED_TIME_FACTOR = 1f;
 	public static final int ONGOING_BEHAVIOR_NOTIFICATION_TICKS = (int) (0.5f / SIMULATION_STEP_TIME);
 
 	public static final boolean SHOW_FPS = true;

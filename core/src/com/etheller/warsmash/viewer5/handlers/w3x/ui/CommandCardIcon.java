@@ -6,6 +6,7 @@ import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.utils.viewport.Viewport;
+import com.etheller.warsmash.input.touch.TouchInputRouter;
 import com.etheller.warsmash.parsers.fdf.GameUI;
 import com.etheller.warsmash.parsers.fdf.frames.AbstractRenderableFrame;
 import com.etheller.warsmash.parsers.fdf.frames.SingleStringFrame;
@@ -272,7 +273,30 @@ public class CommandCardIcon extends AbstractRenderableFrame implements Clickabl
 
 	@Override
 	public String getToolTip() {
-		return this.tip;
+		return hotkeyTip(this.tip, this.hotkey, TouchInputRouter.isActive());
+	}
+
+	private static final String HOTKEY_COLOR = "|cffffcc00";
+
+	/**
+	 * Current game data keeps the hotkey apart from the tip and the game appends it as "(A)" in gold; older map data
+	 * marks the letter inside the tip instead. A touch screen has no keyboard, so neither form is shown there.
+	 */
+	static String hotkeyTip(final String tip, final char hotkey, final boolean touch) {
+		if (tip == null) {
+			return null;
+		}
+		final boolean marked = tip.toLowerCase().contains(HOTKEY_COLOR);
+		if (touch) {
+			return marked ? tip.replaceAll("\\s*\\((?i:\\|cffffcc00)[^|]*\\|r\\)", "")
+					.replaceAll("(?i:\\|cffffcc00)([^|]*)\\|r", "$1") : tip;
+		}
+		if (marked) {
+			return tip;
+		}
+		final String key = hotkey == 0x7E ? "ESC"
+				: Character.isLetterOrDigit(hotkey) ? String.valueOf(Character.toUpperCase(hotkey)) : null;
+		return key == null ? tip : tip + " (" + HOTKEY_COLOR + key + "|r)";
 	}
 
 	@Override

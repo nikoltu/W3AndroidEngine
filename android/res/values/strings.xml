@@ -2,11 +2,21 @@
 <resources>
     <string name="app_name">Warsmash</string>
     <string name="data_folder_title">Game data folder</string>
-    <string name="data_folder_hint">Choose the folder with your own copy of the game data: an installed game (CASC) or extracted files. Without extra permissions the app can read folders under %1$s.</string>
-    <string name="data_folder_check">Check</string>
-    <string name="data_folder_start">Start</string>
-    <string name="data_folder_casc">Installed game data found.</string>
-    <string name="data_folder_extracted">Extracted game data found.</string>
-    <string name="data_folder_missing">No game data found in this folder, or the app cannot read it.</string>
+    <string name="data_folder_hint">Choose the folder that holds your Warcraft III game files, version 1.31 or newer. The game reads them where they are. Nothing is copied off the device or uploaded.</string>
+    <string name="data_folder_label">Folder</string>
+    <string name="data_folder_none">No folder selected</string>
+    <string name="data_folder_choose">Choose folder</string>
+    <string name="data_folder_change">Change folder</string>
+    <string name="data_folder_waiting">Waiting for a folder. Android will ask you to allow access to it.</string>
+    <string name="data_folder_casc">Installed game data found</string>
+    <string name="data_folder_extracted">Extracted game data found</string>
+    <string name="data_folder_missing">No game data found in this folder.</string>
+    <string name="data_folder_needs_access">The game needs access to all files to read this folder.</string>
+    <string name="data_folder_allow">Allow access</string>
+    <string name="data_folder_continue">Continue</string>
+    <string name="data_folder_engine">Engine v%1$s</string>
+    <string name="data_folder_foot_waiting">Opens only until a valid folder is saved</string>
+    <string name="data_folder_foot_ready">Next launch goes straight to loading. Change it later: hold the app icon › Game data.</string>
     <string name="data_folder_write_failed">The engine configuration could not be written.</string>
+    <string name="shortcut_game_data">Game data</string>
 </resources>

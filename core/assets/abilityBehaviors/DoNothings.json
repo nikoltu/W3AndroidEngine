@@ -1,6 +1,6 @@
 {
 	"abilityList": [{
-		"ids": [{"id":"Agyb"},{"id":"Asth"},{"id":"Amgl"},{"id":"Aimp"}],
+		"ids": [{"id":"Agyb"},{"id":"Asth"},{"id":"Amgl"},{"id":"Aimp"},{"id":"APai"}],
 		"type": "PASSIVE"
 	},{
 		"ids": [{"id":"Aspi"}],

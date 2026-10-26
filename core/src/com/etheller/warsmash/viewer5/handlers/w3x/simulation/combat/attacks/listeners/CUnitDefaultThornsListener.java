@@ -30,6 +30,10 @@ public class CUnitDefaultThornsListener implements CUnitAttackDamageTakenListene
 			if (percentage) {
 				thornsAmount *= damage;
 			}
+			if (thornsAmount <= 0) {
+				// The listener stays on units whose thorns buffs ended; returning nothing must not fire damage events.
+				return;
+			}
 			attacker.damage(simulation, target, DAMAGE_FLAGS, CAttackType.SPELLS, CDamageType.DEFENSIVE,
 					CWeaponSoundTypeJass.WHOKNOWS.name(), thornsAmount);
 		}

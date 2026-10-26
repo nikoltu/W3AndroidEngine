@@ -13,6 +13,7 @@ public class ABLocalStoreKeys {
 	public static final String THISUNIT = "_thisUnit";
 	public static final String ABILITY = "_ability";
 	public static final String CURRENTLEVEL = "_currentLevel";
+	public static final String DURATIONBONUS = "_durationBonus";
 	public static final String BUFF = "_buff";
 	public static final String ITEM = "_item";
 	public static final String ITEMSLOT = "_itemSlot";

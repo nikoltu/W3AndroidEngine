@@ -116,7 +116,7 @@ public class CBehaviorHumanBuild extends CAbstractRangedBehavior {
 					if (ability instanceof CAbilityHumanRepair) {
 						final int baseOrderId = ((CAbilityHumanRepair) ability).getBaseOrderId();
 						ability.checkCanUse(simulation, this.unit, this.unit.getPlayerIndex(), baseOrderId,
-								false, BooleanAbilityActivationReceiver.INSTANCE);
+								false, BooleanAbilityActivationReceiver.INSTANCE.reset());
 						if (BooleanAbilityActivationReceiver.INSTANCE.isOk()) {
 							final BooleanAbilityTargetCheckReceiver<CWidget> targetCheckReceiver = BooleanAbilityTargetCheckReceiver
 									.getInstance();

@@ -10,6 +10,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CWidget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbilityCategory;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.generic.AbstractGenericSingleIconActiveAbility;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.mine.CAbilityEntangledMine;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityPointTarget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.CBehavior;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.harvest.CBehaviorWispHarvest;
@@ -55,7 +56,30 @@ public class CAbilityWispHarvest extends AbstractGenericSingleIconActiveAbility 
 	@Override
 	public CBehavior begin(final CSimulation game, final CUnit caster, final int playerIndex, final int orderId,
 			final boolean autoOrder, final CWidget target) {
+		if (isOwnEntangledMine(caster, target)) {
+			return caster.getBoardTransportBehavior().reset(game, OrderIds.move, target);
+		}
 		return this.behaviorWispHarvest.reset(game, target);
+	}
+
+	@Override
+	public void checkCanTarget(final CSimulation game, final CUnit unit, final int playerIndex, final int orderId,
+			final boolean autoOrder, final CWidget target, final AbilityTargetCheckReceiver<CWidget> receiver) {
+		// The melee AI sends every worker the generic harvest order.
+		if (orderId == OrderIds.harvest) {
+			innerCheckCanTarget(game, unit, orderId, target, receiver);
+		}
+		else {
+			super.checkCanTarget(game, unit, playerIndex, orderId, autoOrder, target, receiver);
+		}
+	}
+
+	/**
+	 * A harvest order on the player's Entangled Gold Mine sends the Wisp into it, as the melee AI does.
+	 */
+	private static boolean isOwnEntangledMine(final CUnit caster, final CWidget target) {
+		return (target instanceof CUnit) && (((CUnit) target).getPlayerIndex() == caster.getPlayerIndex())
+				&& (((CUnit) target).getFirstAbilityOfType(CAbilityEntangledMine.class) != null);
 	}
 
 	@Override
@@ -93,6 +117,9 @@ public class CAbilityWispHarvest extends AbstractGenericSingleIconActiveAbility 
 			if (target.canBeTargetedBy(game, unit, TREE_ALIVE_TYPE_ONLY, receiver)) {
 				receiver.targetOk(target);
 			}
+		}
+		else if (isOwnEntangledMine(unit, target)) {
+			receiver.targetOk(target);
 		}
 		else {
 			receiver.targetCheckFailed(CommandStringErrorKeys.MUST_TARGET_A_TREE);

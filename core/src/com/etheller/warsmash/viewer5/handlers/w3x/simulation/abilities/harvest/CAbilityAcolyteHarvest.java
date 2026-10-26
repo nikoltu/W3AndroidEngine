@@ -76,6 +76,18 @@ public class CAbilityAcolyteHarvest extends AbstractGenericSingleIconActiveAbili
 	}
 
 	@Override
+	public void checkCanTarget(final CSimulation game, final CUnit unit, final int playerIndex, final int orderId,
+			final boolean autoOrder, final CWidget target, final AbilityTargetCheckReceiver<CWidget> receiver) {
+		// The melee AI sends every worker the generic harvest order.
+		if (orderId == OrderIds.harvest) {
+			innerCheckCanTarget(game, unit, orderId, target, receiver);
+		}
+		else {
+			super.checkCanTarget(game, unit, playerIndex, orderId, autoOrder, target, receiver);
+		}
+	}
+
+	@Override
 	protected void innerCheckCanTarget(final CSimulation game, final CUnit unit, final int orderId,
 			final CWidget target, final AbilityTargetCheckReceiver<CWidget> receiver) {
 		if (target instanceof CUnit) {

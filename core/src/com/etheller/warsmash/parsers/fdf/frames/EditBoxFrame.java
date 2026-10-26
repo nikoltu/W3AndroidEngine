@@ -8,6 +8,7 @@ import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.utils.TimeUtils;
 import com.badlogic.gdx.utils.viewport.Viewport;
+import com.etheller.warsmash.input.touch.TouchInputRouter;
 import com.etheller.warsmash.parsers.fdf.GameUI;
 import com.etheller.warsmash.parsers.fdf.datamodel.FramePoint;
 import com.etheller.warsmash.viewer5.handlers.w3x.ui.command.FocusableFrame;
@@ -86,11 +87,18 @@ public class EditBoxFrame extends AbstractRenderableFrame implements FocusableFr
 	@Override
 	public void onFocusGained() {
 		this.focused = true;
+		// A touch device has no keyboard of its own; its on-screen one types into the box like keys would.
+		if (TouchInputRouter.isActive()) {
+			Gdx.input.setOnscreenKeyboardVisible(true);
+		}
 	}
 
 	@Override
 	public void onFocusLost() {
 		this.focused = false;
+		if (TouchInputRouter.isActive()) {
+			Gdx.input.setOnscreenKeyboardVisible(false);
+		}
 	}
 
 	@Override
@@ -121,6 +129,9 @@ public class EditBoxFrame extends AbstractRenderableFrame implements FocusableFr
 			break;
 		}
 		case Input.Keys.ENTER: {
+			if (TouchInputRouter.isActive()) {
+				Gdx.input.setOnscreenKeyboardVisible(false);
+			}
 			if (this.onEnter != null) {
 				this.onEnter.run();
 			}
@@ -146,6 +157,11 @@ public class EditBoxFrame extends AbstractRenderableFrame implements FocusableFr
 
 	@Override
 	public boolean keyTyped(final char character) {
+		// The on-screen keyboard's Enter arrives as a typed line break rather than as the Enter key.
+		if (TouchInputRouter.isActive() && ((character == '\n') || (character == '\r'))) {
+			Gdx.input.setOnscreenKeyboardVisible(false);
+			return false;
+		}
 		if (this.filter.allow(character)) {
 			final String prevText = this.editTextFrame.getText();
 			final int prevTextLength = prevText.length();

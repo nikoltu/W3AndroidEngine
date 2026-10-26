@@ -27,7 +27,7 @@ public class CUpgradeEffectSpellLevel implements CUpgradeEffect {
 				CLevelingAbility abilityByRawcode = ability
 						.visit(GetAbilityByRawcodeVisitor.getInstance().reset(rawcode));
 				if (abilityByRawcode != null) {
-					abilityType.setLevel(simulation, unit, abilityByRawcode, level + 1);
+					abilityType.setLevel(simulation, unit, abilityByRawcode, clampLevel(abilityType, level + 1));
 				}
 			}
 		}
@@ -41,9 +41,15 @@ public class CUpgradeEffectSpellLevel implements CUpgradeEffect {
 				CLevelingAbility abilityByRawcode = ability
 						.visit(GetAbilityByRawcodeVisitor.getInstance().reset(rawcode));
 				if (abilityByRawcode != null) {
-					abilityType.setLevel(simulation, unit, abilityByRawcode, level);
+					abilityType.setLevel(simulation, unit, abilityByRawcode, clampLevel(abilityType, level));
 				}
 			}
 		}
+	}
+
+	// A research with more levels than the ability (Spiked Barricades and its indicator) stops at the last one.
+	private static int clampLevel(final CAbilityType<?> abilityType, final int level) {
+		final int levelCount = abilityType.getLevelCount();
+		return levelCount > 0 ? Math.min(level, levelCount) : level;
 	}
 }

@@ -12,6 +12,7 @@ public final class VirtualCursor {
 	private static volatile int x;
 	private static volatile int y;
 	private static volatile boolean fingerInput;
+	private static volatile boolean touchDevice;
 
 	private VirtualCursor() {
 	}
@@ -26,6 +27,18 @@ public final class VirtualCursor {
 	 */
 	public static boolean isFingerInput() {
 		return fingerInput;
+	}
+
+	static void setTouchDevice(final boolean touch) {
+		touchDevice = touch;
+	}
+
+	/**
+	 * @return whether the cursor is left undrawn: a touch device is played with fingers, and a cursor would only sit
+	 *         where the last pointer was, pen included
+	 */
+	public static boolean isCursorHidden() {
+		return touchDevice || fingerInput;
 	}
 
 	static void moveTo(final int screenX, final int screenY) {

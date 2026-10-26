@@ -14,7 +14,9 @@ import com.badlogic.gdx.InputProcessor;
  */
 public final class TouchInputRouter {
 	private static final String LOG_TAG = "WarsmashTouch";
+	private static final int SHIFT_SLOT = 10;
 	private static volatile TouchInputRouter installed;
+	private int shiftPointerId = -1;
 
 	private final Queue<PointerEvent> events = new ConcurrentLinkedQueue<>();
 	private final GestureRecognizer recognizer;
@@ -34,6 +36,7 @@ public final class TouchInputRouter {
 
 	public static void install(final TouchInputRouter router) {
 		installed = router;
+		VirtualCursor.setTouchDevice(router != null);
 	}
 
 	public static boolean isActive() {
@@ -57,6 +60,34 @@ public final class TouchInputRouter {
 			dispatch(event);
 		}
 		this.recognizer.update(this.clock.getAsLong());
+	}
+
+	/**
+	 * A finger that lands on the on-screen Shift holds it until it lifts and never reaches gesture recognition, so the
+	 * other fingers keep giving ordinary taps and drags meanwhile.
+	 */
+	private boolean handleShiftPointer(final PointerEvent event, final InputProcessor processor) {
+		if (event.pointerId == this.shiftPointerId) {
+			if ((event.action == PointerEvent.Action.UP) || (event.action == PointerEvent.Action.CANCEL)) {
+				this.shiftPointerId = -1;
+				VirtualModifiers.setShiftHeld(false);
+				if (this.debugLog) {
+					Gdx.app.log(LOG_TAG, "shift released");
+				}
+			}
+			return true;
+		}
+		if ((event.action == PointerEvent.Action.DOWN) && (this.shiftPointerId == -1)
+				&& (processor instanceof TouchTarget) && (((TouchTarget) processor)
+						.touchOverlaySlotAt(Math.round(event.x), Math.round(event.y)) == SHIFT_SLOT)) {
+			this.shiftPointerId = event.pointerId;
+			VirtualModifiers.setShiftHeld(true);
+			if (this.debugLog) {
+				Gdx.app.log(LOG_TAG, "shift held");
+			}
+			return true;
+		}
+		return false;
 	}
 
 	private void dispatch(final PointerEvent event) {
@@ -89,6 +120,9 @@ public final class TouchInputRouter {
 			}
 			break;
 		default:
+			if (handleShiftPointer(event, processor)) {
+				break;
+			}
 			if (this.debugLog && (event.action != PointerEvent.Action.MOVE)) {
 				Gdx.app.log(LOG_TAG, event.toString());
 			}

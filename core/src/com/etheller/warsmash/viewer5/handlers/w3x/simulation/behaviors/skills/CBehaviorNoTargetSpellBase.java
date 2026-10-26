@@ -7,6 +7,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.CA
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.CBehavior;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.CBehaviorCategory;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.CBehaviorVisitor;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.JassGameEventsWar3;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.CommandStringErrorKeys;
 
 public class CBehaviorNoTargetSpellBase implements CBehavior {
@@ -50,6 +51,7 @@ public class CBehaviorNoTargetSpellBase implements CBehavior {
 					return this.unit.pollNextOrderBehavior(simulation);
 				}
 				this.unit.beginCooldown(simulation, this.ability.getCode(), this.ability.getCooldown());
+				this.unit.fireSpellEvents(simulation, JassGameEventsWar3.EVENT_UNIT_SPELL_EFFECT, this.ability, null);
 				this.channeling = this.ability.doEffect(simulation, this.unit, null);
 				if (this.channeling) {
 					simulation.unitLoopSoundEffectEvent(this.unit, this.ability.getAlias());
@@ -59,7 +61,7 @@ public class CBehaviorNoTargetSpellBase implements CBehavior {
 			}
 			this.channeling = this.channeling && this.ability.doChannelTick(simulation, this.unit, null);
 			if (wasEffectDone && wasChanneling && !this.channeling) {
-				simulation.unitStopSoundEffectEvent(this.unit, this.ability.getAlias());
+				endChannel(simulation, false);
 			}
 		}
 		if ((ticksSinceCast >= backswingTicks) && !this.channeling) {
@@ -74,6 +76,15 @@ public class CBehaviorNoTargetSpellBase implements CBehavior {
 
 	@Override
 	public void end(final CSimulation game, final boolean interrupted) {
+		if (this.doneEffect && this.channeling) {
+			this.channeling = false;
+			endChannel(game, interrupted);
+		}
+	}
+
+	private void endChannel(final CSimulation game, final boolean interrupted) {
+		game.unitStopSoundEffectEvent(this.unit, this.ability.getAlias());
+		this.ability.doChannelEnd(game, this.unit, null, interrupted);
 	}
 
 	@Override

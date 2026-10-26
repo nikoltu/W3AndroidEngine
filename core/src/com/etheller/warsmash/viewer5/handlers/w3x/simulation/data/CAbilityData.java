@@ -50,6 +50,11 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.hu
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.human.paladin.CAbilityHolyLight;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.human.paladin.CAbilityResurrect;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.human.mountainking.CAbilityThunderBolt;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.human.unit.CAbilityAreaDetection;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.human.unit.CAbilityCloud;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.human.unit.CAbilityControlMagic;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.human.unit.CAbilitySpellSteal;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.human.unit.CAbilitySunderingBlades;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.neutral.beastmaster.CAbilitySummonGrizzly;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.neutral.beastmaster.CAbilitySummonHawk;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.neutral.beastmaster.CAbilitySummonQuilbeast;
@@ -61,6 +66,18 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.ne
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.nightelf.demonhunter.CAbilityManaBurn;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.nightelf.keeper.CAbilityForceOfNature;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.nightelf.moonpriestess.CAbilitySummonOwlScout;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.nightelf.units.CAbilityBouncingMissileFilter;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.nightelf.units.CAbilityCyclone;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.nightelf.units.CAbilityDecouple;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.nightelf.units.CAbilityHardenedSkin;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.nightelf.units.CAbilityManaFlare;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.nightelf.units.CAbilityPhaseShift;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.nightelf.units.CAbilitySentinel;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.nightelf.units.CAbilityShadowmeld;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.nightelf.units.CAbilityTaunt;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.nightelf.units.CAbilityTreeOfLifeArt;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.nightelf.units.CAbilityUltravision;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.nightelf.units.CAbilityWarClub;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.nightelf.warden.CAbilityBlink;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.orc.blademaster.CAbilityWhirlWind;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.orc.farseer.CAbilityChainLightning;
@@ -73,10 +90,32 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.CAb
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.definitions.CAbilityTypeDefinition;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.definitions.impl.AbilityFields;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.definitions.impl.CAbilityTypeDefinitionAcolyteHarvest;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.definitions.impl.CAbilityTypeDefinitionAwakenHero;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.definitions.impl.CAbilityTypeDefinitionBlight;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.definitions.impl.CAbilityTypeDefinitionBlightedGoldMine;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.definitions.impl.CAbilityTypeDefinitionCargoHold;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.cargohold.CAbilityBattleStations;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.orc.units.CAbilityAncestralSpirit;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.orc.units.CAbilityDevour;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.orc.units.CAbilityDevourCargo;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.orc.units.CAbilityEnsnare;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.orc.units.CAbilityLightningShield;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.orc.units.CAbilityPillage;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.orc.units.CAbilitySpiritLink;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.orc.units.CAbilityUnstableConcoction;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.undead.units.CAbilityAbsorbMana;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.undead.units.CAbilityAntiMagicShell;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.undead.units.CAbilityCreateCorpse;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.undead.units.CAbilityDiseaseCloud;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.undead.units.CAbilityDropCorpses;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.undead.units.CAbilityExhumeCorpses;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.undead.units.CAbilityGetCorpse;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.undead.units.CAbilityPossession;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.undead.units.CAbilityPrioritize;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.undead.units.CAbilityUnsummon;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.undead.units.CAbilityWeb;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.definitions.impl.CAbilityTypeDefinitionCargoHoldBurrow;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.definitions.impl.CAbilityTypeDefinitionCargoHoldCorpses;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.definitions.impl.CAbilityTypeDefinitionCargoHoldEntangledMine;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.definitions.impl.CAbilityTypeDefinitionCarrionSwarmDummy;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.definitions.impl.CAbilityTypeDefinitionChannelTest;
@@ -116,6 +155,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.pars
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.parser.AbilityBuilderParserUtil;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.parser.AbilityBuilderType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.types.definitions.impl.CAbilityTypeDefinitionAbilityTemplateBuilder;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.orders.OrderIds;
 
 public class CAbilityData {
 
@@ -165,6 +205,18 @@ public class CAbilityData {
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Apxf"), new CAbilityTypeDefinitionPhoenixFire());
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AHpx"),
 				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilitySummonPhoenix(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Afla"), new CAbilityTypeDefinitionSpellBase(
+				(handleId, alias) -> new CAbilityAreaDetection(handleId, alias, OrderIds.flare, true)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Acmg"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityControlMagic(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Aaab"), new CAbilityTypeDefinitionSpellBase(
+				(handleId, alias) -> new CAbilitySunderingBlades(handleId, alias, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Asps"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilitySpellSteal(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Aclf"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityCloud(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AIta"), new CAbilityTypeDefinitionSpellBase(
+				(handleId, alias) -> new CAbilityAreaDetection(handleId, alias, OrderIds.itemareadetection, false)));
 
 		// ----Orc----
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AOmi"),
@@ -185,6 +237,26 @@ public class CAbilityData {
 		// Burrow:
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Abun"), new CAbilityTypeDefinitionCargoHoldBurrow());
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Astd"), new CAbilityTypeDefinitionStandDown());
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Abtl"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityBattleStations(handleId, alias)));
+
+		// Orc units
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Asal"), new CAbilityTypeDefinitionSpellBase(
+				(handleId, alias) -> new CAbilityPillage(handleId, alias, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Aens"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityEnsnare(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Alsh"), new CAbilityTypeDefinitionSpellBase(
+				(handleId, alias) -> new CAbilityLightningShield(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Aspl"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilitySpiritLink(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Aast"), new CAbilityTypeDefinitionSpellBase(
+				(handleId, alias) -> new CAbilityAncestralSpirit(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Auco"), new CAbilityTypeDefinitionSpellBase(
+				(handleId, alias) -> new CAbilityUnstableConcoction(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Adev"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityDevour(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Advc"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityDevourCargo(handleId, alias)));
 
 		// ----Night Elf----
 		// Keeper
@@ -212,6 +284,32 @@ public class CAbilityData {
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AEbl"),
 				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityBlink(handleId, alias)));
 
+		// Night Elf units
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Acyc"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityCyclone(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Amfl"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityManaFlare(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Apsh"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityPhaseShift(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Aesn"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilitySentinel(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Agra"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityWarClub(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Adec"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityDecouple(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Ashm"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityShadowmeld(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Atau"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityTaunt(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Assk"), new CAbilityTypeDefinitionSpellBase(
+				(handleId, alias) -> new CAbilityHardenedSkin(handleId, alias, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Ault"), new CAbilityTypeDefinitionSpellBase(
+				(handleId, alias) -> new CAbilityUltravision(handleId, alias, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Atol"), new CAbilityTypeDefinitionSpellBase(
+				(handleId, alias) -> new CAbilityTreeOfLifeArt(handleId, alias, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Amgi"), new CAbilityTypeDefinitionSpellBase(
+				(handleId, alias) -> new CAbilityBouncingMissileFilter(handleId, alias, alias)));
+
 		// ----Undead----
 		// Lich
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AUdd"),
@@ -232,6 +330,31 @@ public class CAbilityData {
 		// Light
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AUdr"),
 				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityDarkRitual(handleId, alias)));
+
+		// Undead units
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Aweb"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityWeb(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Aams"), new CAbilityTypeDefinitionSpellBase(
+				(handleId, alias) -> new CAbilityAntiMagicShell(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Aps2"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityPossession(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Auns"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityUnsummon(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Aapl"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityDiseaseCloud(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Aatp"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityPrioritize(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Aabs"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityAbsorbMana(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Amtc"), new CAbilityTypeDefinitionCargoHoldCorpses());
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Amel"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityGetCorpse(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Amed"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityDropCorpses(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Aexh"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityExhumeCorpses(handleId, alias)));
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Agyd"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityCreateCorpse(handleId, alias)));
 
 		// Entangled Mine:
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Aenc"),
@@ -293,6 +416,7 @@ public class CAbilityData {
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Arst"), new CAbilityTypeDefinitionRepair());
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Avul"), new CAbilityTypeDefinitionInvulnerable());
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Apit"), new CAbilityTypeDefinitionShopPurchaseItem());
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Aawa"), new CAbilityTypeDefinitionAwakenHero());
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Aneu"), new CAbilityTypeDefinitionNeutralBuilding());
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Aall"), new CAbilityTypeDefinitionShopSharing());
 		// this.codeToAbilityTypeDefinition.put(War3ID.fromString("Acoi"), new

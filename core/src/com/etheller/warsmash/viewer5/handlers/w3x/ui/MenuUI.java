@@ -1805,6 +1805,13 @@ public class MenuUI {
 	}
 
 	public void startMap(final String mapFilename) {
+		startMap(mapFilename, null);
+	}
+
+	/**
+	 * @param computerSlots comma separated "slot:race" pairs that are played by a normal computer, or null
+	 */
+	public void startMap(final String mapFilename, final String computerSlots) {
 		this.mainMenuFrame.setVisible(false);
 
 		try {
@@ -1837,6 +1844,35 @@ public class MenuUI {
 //					break;
 				if (localPlayerIndex == -1) {
 					localPlayerIndex = i;
+				}
+			}
+		}
+		if (computerSlots != null) {
+			for (final String slot : computerSlots.split(",")) {
+				final String[] slotAndRace = slot.split(":");
+				final CBasePlayer player = this.currentMapConfig.getPlayer(Integer.parseInt(slotAndRace[0].trim()));
+				player.setController(CMapControl.COMPUTER);
+				player.setSlotState(CPlayerSlotState.PLAYING);
+				player.setAIDifficulty(AIDifficulty.NORMAL);
+				if (slotAndRace.length > 1) {
+					for (int i = 0; i < WarsmashConstants.RACE_MANAGER.getEntryCount(); i++) {
+						final CRaceManagerEntry entry = WarsmashConstants.RACE_MANAGER.get(i);
+						if (entry.getKey().equalsIgnoreCase(slotAndRace[1].trim())) {
+							player.setRacePref(
+									WarsmashConstants.RACE_MANAGER.getRacePreferenceById(entry.getRacePrefId()));
+						}
+					}
+				}
+				if (localPlayerIndex == player.getId()) {
+					localPlayerIndex = -1;
+				}
+			}
+			if (localPlayerIndex == -1) {
+				for (int i = 0; i < WarsmashConstants.MAX_PLAYERS; i++) {
+					if (this.currentMapConfig.getPlayer(i).getController() == CMapControl.USER) {
+						localPlayerIndex = i;
+						break;
+					}
 				}
 			}
 		}
@@ -2195,8 +2231,8 @@ public class MenuUI {
 		this.cursorFrame.setFramePointX(FramePoint.LEFT, screenCoordsVector.x);
 		this.cursorFrame.setFramePointY(FramePoint.BOTTOM, screenCoordsVector.y);
 		this.cursorFrame.setSequence("Normal");
-		if (this.cursorFrame.isVisible() == VirtualCursor.isFingerInput()) {
-			this.cursorFrame.setVisible(!VirtualCursor.isFingerInput());
+		if (this.cursorFrame.isVisible() == VirtualCursor.isCursorHidden()) {
+			this.cursorFrame.setVisible(!VirtualCursor.isCursorHidden());
 		}
 
 		if (this.glueSpriteLayerTopRight.isSequenceEnded() && this.glueSpriteLayerTopLeft.isSequenceEnded()
@@ -2455,7 +2491,13 @@ public class MenuUI {
 			if (clickedUIFrame instanceof FocusableFrame) {
 				final FocusableFrame clickedFocusableFrame = (FocusableFrame) clickedUIFrame;
 				if (clickedFocusableFrame.isFocusable()) {
-					setFocusFrame(clickedFocusableFrame);
+					if (clickedFocusableFrame == this.focusUIFrame) {
+						// A tap on the box that has focus brings back an on-screen keyboard closed with Enter.
+						clickedFocusableFrame.onFocusGained();
+					}
+					else {
+						setFocusFrame(clickedFocusableFrame);
+					}
 				}
 			}
 		}
@@ -2463,6 +2505,11 @@ public class MenuUI {
 	}
 
 	private void setFocusFrame(final FocusableFrame clickedFocusableFrame) {
+		// The profile view asks for its edit box again while it stays open; refocusing would reopen the
+		// on-screen keyboard every time.
+		if (clickedFocusableFrame == this.focusUIFrame) {
+			return;
+		}
 		if (this.focusUIFrame != null) {
 			this.focusUIFrame.onFocusLost();
 		}

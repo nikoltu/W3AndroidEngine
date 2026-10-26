@@ -330,6 +330,13 @@ public class CBehaviorMove implements CBehavior {
 						this.target.x = this.followUnit.getX();
 						this.target.y = this.followUnit.getY();
 					}
+					// A point taken by other units is never reached; arriving next to it ends the move, otherwise
+					// the unit searches a path every tick and starves the pathfinding queue of other units.
+					else if (((this.rangedBehavior == null) || (this.rangedBehavior instanceof CBehaviorAttackMove))
+							&& (this.unit.distance(this.target.x, this.target.y) <= Math.max(128f, collisionSize * 4))) {
+						onMoveGiveUp(simulation);
+						return this.unit.pollNextOrderBehavior(simulation);
+					}
 					if (!this.pathfindingActive) {
 						simulation.findNaiveSlowPath(this.unit, this.followUnit, startFloatingX, startFloatingY,
 								this.target, movementType, collisionSize, this.searchCycles < 4, this);
@@ -506,6 +513,10 @@ public class CBehaviorMove implements CBehavior {
 						+ (int) (5 / WarsmashConstants.SIMULATION_STEP_TIME);
 			}
 		}
+	}
+
+	public boolean isPathfindingActive() {
+		return this.pathfindingActive;
 	}
 
 	@Override

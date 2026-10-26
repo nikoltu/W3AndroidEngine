@@ -32,6 +32,7 @@ public class CItemType {
 	private final boolean includeAsRandomChoice;
 	private final CItemTypeJass itemClass;
 	private final List<CUnitTypeRequirement> requirements;
+	private int stockInitial = 1;
 
 	public CItemType(final War3ID typeId, final List<War3ID> abilityList, final War3ID cooldownGroup, final boolean ignoreCooldown,
 			final int numberOfCharges, final boolean activelyUsed, final boolean perishable,
@@ -119,6 +120,14 @@ public class CItemType {
 
 	public int getStockStartDelay() {
 		return this.stockStartDelay;
+	}
+
+	public int getStockInitial() {
+		return this.stockInitial;
+	}
+
+	public void setStockInitial(final int stockInitial) {
+		this.stockInitial = stockInitial;
 	}
 
 	public int getMaxLife() {

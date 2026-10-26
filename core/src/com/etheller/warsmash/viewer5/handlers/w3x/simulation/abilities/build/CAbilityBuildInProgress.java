@@ -3,7 +3,6 @@ package com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.build;
 import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
-import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnitType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CWidget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.AbstractCAbility;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbilityCategory;
@@ -52,15 +51,13 @@ public class CAbilityBuildInProgress extends AbstractCAbility {
 
 	@Override
 	public void onDeath(final CSimulation game, final CUnit caster) {
+		// A structure destroyed before it is finished pays nothing back; only a cancel refunds (cancelConstruction).
 		final CPlayer player = game.getPlayer(caster.getPlayerIndex());
 		if (caster.isUpgrading()) {
 			player.removeTechtreeInProgress(game, caster.getUpgradeIdType());
-			caster.cancelUpgrade(game);
 		}
 		else {
-			final CUnitType unitType = caster.getUnitType();
-			player.refundFor(unitType);
-			player.removeTechtreeInProgress(game, unitType.getTypeId());
+			player.removeTechtreeInProgress(game, caster.getUnitType().getTypeId());
 		}
 	}
 

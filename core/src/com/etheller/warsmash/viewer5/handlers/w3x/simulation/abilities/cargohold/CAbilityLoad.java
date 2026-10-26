@@ -22,6 +22,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.ExternStringMs
 
 public class CAbilityLoad extends AbstractGenericSingleIconActiveAbility implements CAbilityRanged {
 	private float castRange;
+	private CUnit transport;
 	private Set<War3ID> allowedUnitTypes;
 	private CBehaviorLoad behaviorLoad;
 
@@ -35,6 +36,7 @@ public class CAbilityLoad extends AbstractGenericSingleIconActiveAbility impleme
 	@Override
 	public void onAdd(final CSimulation game, final CUnit unit) {
 		this.behaviorLoad = new CBehaviorLoad(unit, this);
+		this.transport = unit;
 	}
 
 	@Override
@@ -138,6 +140,11 @@ public class CAbilityLoad extends AbstractGenericSingleIconActiveAbility impleme
 
 	@Override
 	public float getCastRange() {
+		// A transport that cannot move (Entangled Gold Mine) is boarded at its cargo hold range, so units walking in
+		// must close in that far even though the load range itself is unlimited.
+		if ((this.transport != null) && this.transport.isMovementDisabled() && (this.transport.getCargoData() != null)) {
+			return Math.min(this.castRange, this.transport.getCargoData().getCastRange());
+		}
 		return this.castRange;
 	}
 
@@ -170,7 +177,7 @@ public class CAbilityLoad extends AbstractGenericSingleIconActiveAbility impleme
 		for (final CAbility potentialLoadAbility : transport.getAbilities()) {
 			if (potentialLoadAbility instanceof CAbilityLoad) {
 				final CAbilityLoad abilityLoad = (CAbilityLoad) potentialLoadAbility;
-				final BooleanAbilityActivationReceiver transportUnitReceiver = BooleanAbilityActivationReceiver.INSTANCE;
+				final BooleanAbilityActivationReceiver transportUnitReceiver = BooleanAbilityActivationReceiver.INSTANCE.reset();
 				abilityLoad.checkCanUse(game, transport, caster.getPlayerIndex(), OrderIds.smart, false,
 						transportUnitReceiver);
 				// NOTE: disabled load ability should enable later in case of under construction

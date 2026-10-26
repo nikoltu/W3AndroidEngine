@@ -214,7 +214,7 @@ public class CAbilityWayGate extends AbstractGenericAliasedAbility
 		for (final CAbility potentialLoadAbility : transport.getAbilities()) {
 			if (potentialLoadAbility instanceof CAbilityWayGate) {
 				final CAbilityWayGate abilityLoad = (CAbilityWayGate) potentialLoadAbility;
-				final BooleanAbilityActivationReceiver transportUnitReceiver = BooleanAbilityActivationReceiver.INSTANCE;
+				final BooleanAbilityActivationReceiver transportUnitReceiver = BooleanAbilityActivationReceiver.INSTANCE.reset();
 				abilityLoad.checkCanUse(game, transport, caster.getPlayerIndex(), ORDER_ID, false,
 						transportUnitReceiver);
 				// NOTE: disabled load ability should enable later in case of under construction

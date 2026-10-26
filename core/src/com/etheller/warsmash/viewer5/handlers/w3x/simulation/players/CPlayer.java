@@ -38,6 +38,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.vision.CPla
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.JassGameEventsWar3;
 
 public class CPlayer extends CBasePlayer {
+	private static final War3ID HERO_TECHTREE = War3ID.fromString("HERO");
 	private final CRace race;
 	private final float[] startLocation;
 	private int gold;
@@ -394,7 +395,7 @@ public class CPlayer extends CBasePlayer {
 				JassGameEventsWar3.EVENT_PLAYER_HERO_REVIVABLE);
 	}
 
-	private void firePlayerUnitEvents(final CUnit hero,
+	public void firePlayerUnitEvents(final CUnit hero,
 			final CommonTriggerExecutionScope.UnitEventScopeBuilder eventScopeBuilder,
 			final JassGameEventsWar3 eventType) {
 		final List<CPlayerEvent> eventList = getEventList(eventType);
@@ -714,6 +715,15 @@ public class CPlayer extends CBasePlayer {
 
 	public boolean isObserver() {
 		return this.observer;
+	}
+
+	/**
+	 * The 'HERO' techtree maximum (SetPlayerMaxHeroesAllowed) counts the heroes the player has, dead ones and
+	 * those in training included.
+	 */
+	public boolean isHeroCountAllowedByMax(final CSimulation game) {
+		final int maxHeroes = getTechtreeMaxAllowed(HERO_TECHTREE);
+		return (maxHeroes < 0) || (getHeroCount(game, true) < maxHeroes);
 	}
 
 	public boolean isTechtreeAllowedByMax(final War3ID techtree) {

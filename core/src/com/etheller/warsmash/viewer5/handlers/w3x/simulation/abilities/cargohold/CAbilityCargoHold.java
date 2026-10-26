@@ -160,6 +160,10 @@ public class CAbilityCargoHold extends AbstractGenericNoIconAbility {
 		return this.cargoUnits.remove(index);
 	}
 
+	public boolean contains(final CUnit unit) {
+		return this.cargoUnits.contains(unit);
+	}
+
 	public boolean isEmpty() {
 		return this.cargoUnits.isEmpty();
 	}

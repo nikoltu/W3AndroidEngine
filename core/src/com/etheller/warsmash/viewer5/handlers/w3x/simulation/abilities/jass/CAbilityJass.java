@@ -264,7 +264,7 @@ public class CAbilityJass extends AbstractGenericAliasedAbility implements CExte
 	protected void innerCheckCanUse(final CSimulation game, final CUnit unit, final int playerIndex, final int orderId,
 			final AbilityActivationReceiver receiver) {
 		CAbilityOrderButtonJass firstFailButton = null;
-		final BooleanAbilityActivationReceiver delegateReceiver = BooleanAbilityActivationReceiver.INSTANCE;
+		final BooleanAbilityActivationReceiver delegateReceiver = BooleanAbilityActivationReceiver.INSTANCE.reset();
 		for (final CAbilityOrderButtonJass orderButton : this.orderButtons) {
 			if (orderButton.getType() != JassOrderButtonType.PASSIVE) {
 				if (orderButton.getOrderId() == orderId) {

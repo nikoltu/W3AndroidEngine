@@ -113,17 +113,8 @@ public class CAbilityInventory extends AbstractGenericNoIconAbility {
 	public boolean checkBeforeQueue(final CSimulation game, final CUnit caster, final int playerIndex,
 			final int orderId, final boolean autoOrder, final AbilityTarget target) {
 		if ((orderId >= OrderIds.itemdrag00) && (orderId <= OrderIds.itemdrag05)) {
-			for (int i = 0; i < this.itemsHeld.length; i++) {
-				if (this.itemsHeld[i] == target) {
-					final CItem temp = this.itemsHeld[i];
-					final List<CAbility> swapList = this.itemsHeldAbilities[i];
-					final int dragDropDestinationIndex = orderId - OrderIds.itemdrag00;
-					this.itemsHeld[i] = this.itemsHeld[dragDropDestinationIndex];
-					this.itemsHeldAbilities[i] = this.itemsHeldAbilities[dragDropDestinationIndex];
-					this.itemsHeld[dragDropDestinationIndex] = temp;
-					this.itemsHeldAbilities[dragDropDestinationIndex] = swapList;
-					return false;
-				}
+			if (moveItemToSlot(target, orderId - OrderIds.itemdrag00)) {
+				return false;
 			}
 		}
 		else if ((orderId >= OrderIds.itemuse00) && (orderId <= OrderIds.itemuse05)) {
@@ -346,6 +337,24 @@ public class CAbilityInventory extends AbstractGenericNoIconAbility {
 				}
 			}
 		}
+	}
+
+	public boolean moveItemToSlot(final Object item, final int destinationSlot) {
+		if ((destinationSlot < 0) || (destinationSlot >= this.itemsHeld.length)) {
+			return false;
+		}
+		for (int i = 0; i < this.itemsHeld.length; i++) {
+			if ((item != null) && (this.itemsHeld[i] == item)) {
+				final CItem temp = this.itemsHeld[i];
+				final List<CAbility> swapList = this.itemsHeldAbilities[i];
+				this.itemsHeld[i] = this.itemsHeld[destinationSlot];
+				this.itemsHeldAbilities[i] = this.itemsHeldAbilities[destinationSlot];
+				this.itemsHeld[destinationSlot] = temp;
+				this.itemsHeldAbilities[destinationSlot] = swapList;
+				return true;
+			}
+		}
+		return false;
 	}
 
 	public int getSlot(final CItem target) {

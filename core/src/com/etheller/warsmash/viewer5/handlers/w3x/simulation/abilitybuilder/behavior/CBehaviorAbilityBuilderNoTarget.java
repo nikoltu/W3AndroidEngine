@@ -167,7 +167,7 @@ public class CBehaviorAbilityBuilderNoTarget implements ABBehavior {
 		} else {
 			final int ticksSinceCast = game.getGameTurnTick() - this.castStartTick;
 			if (!this.doneCastTime && ticksSinceCast >= this.castTimeEndTick) {
-				this.ability.checkCanUse(game, unit, issuingPlayerIndex, orderId, autoOrder, BooleanAbilityActivationReceiver.INSTANCE);
+				this.ability.checkCanUse(game, unit, issuingPlayerIndex, orderId, autoOrder, BooleanAbilityActivationReceiver.INSTANCE.reset());
 				if (!BooleanAbilityActivationReceiver.INSTANCE.isOk()
 						|| !this.unit.chargeMana(this.ability.getChargedManaCost())) {
 					cleanupInputs();

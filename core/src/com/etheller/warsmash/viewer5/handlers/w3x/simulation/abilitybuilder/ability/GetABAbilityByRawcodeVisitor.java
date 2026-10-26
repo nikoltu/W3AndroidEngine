@@ -16,8 +16,10 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.combat.CA
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.generic.*;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.harvest.CAbilityReturnResources;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.hero.CAbilityHero;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.item.shop.CAbilityAwakenHero;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.item.shop.CAbilityNeutralBuilding;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.item.shop.CAbilitySellItems;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.item.shop.CAbilitySellUnits;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.jass.CAbilityJass;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.nightelf.root.CAbilityRoot;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.queue.CAbilityQueue;
@@ -130,6 +132,16 @@ public class GetABAbilityByRawcodeVisitor implements CAbilityVisitor<AbilityBuil
 
 	@Override
 	public AbilityBuilderAbility accept(final CAbilitySellItems ability) {
+		return null;
+	}
+
+	@Override
+	public AbilityBuilderAbility accept(final CAbilitySellUnits ability) {
+		return null;
+	}
+
+	@Override
+	public AbilityBuilderAbility accept(final CAbilityAwakenHero ability) {
 		return null;
 	}
 

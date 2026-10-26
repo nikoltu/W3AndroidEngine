@@ -17,6 +17,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.generic.A
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.generic.CBuff;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.buff.ABGenericAuraBuff;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.core.ABLocalStoreKeys;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.parser.template.DataFieldLetter;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.parser.template.MeleeRangeTargetOverride;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.parser.template.StatBuffFromDataField;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.types.impl.CAbilityTypeAbilityBuilderLevelData;
@@ -56,6 +57,7 @@ public class CAbilityAbilityBuilderStatAuraTemplate extends AbilityGenericSingle
 	private final int ENTER_GROUP_TICKS = (int) (0.4 / WarsmashConstants.SIMULATION_STEP_TIME);
 	private final int RESET_GROUP_TICKS = LEAVE_GROUP_TICKS * 2;
 	private boolean leveled;
+	private float[] dataBonuses;
 
 	public CAbilityAbilityBuilderStatAuraTemplate(int handleId, War3ID code, War3ID alias,
 			List<CAbilityTypeAbilityBuilderLevelData> levelData, Map<String, Object> localStore,
@@ -90,6 +92,41 @@ public class CAbilityAbilityBuilderStatAuraTemplate extends AbilityGenericSingle
 		this.leveled = levelData.size() > 1;
 	}
 
+	private float getDataValue(final StatBuffFromDataField statBuff) {
+		final int index = statBuff.getDataField().getIndex();
+		float value;
+		try {
+			value = Float.parseFloat(levelData.get(getLevel() - 1).getData().get(index));
+		} catch (NumberFormatException exc) {
+			value = 0;
+		}
+		if (this.dataBonuses != null && index < this.dataBonuses.length) {
+			value += this.dataBonuses[index];
+		}
+		return value;
+	}
+
+	/**
+	 * Research bonus on top of a data field (raud), kept across level changes.
+	 */
+	public void addDataBonus(final CSimulation game, final CUnit unit, final int dataIndex, final float bonus) {
+		if (this.dataBonuses == null) {
+			this.dataBonuses = new float[DataFieldLetter.values().length];
+		}
+		this.dataBonuses[dataIndex] += bonus;
+		if (this.auraGroup != null) {
+			setLevel(game, unit, getLevel());
+		}
+		else {
+			for (final StatBuffFromDataField statBuff : this.statBuffDataFields) {
+				statBuff.getBuff().setValue(getDataValue(statBuff));
+				if (statBuff.getSecondAtkBuff() != null) {
+					statBuff.getSecondAtkBuff().setValue(getDataValue(statBuff));
+				}
+			}
+		}
+	}
+
 	private void removeExistingBuffs(CSimulation game, StatBuffFromDataField statBuff) {
 		for (CUnit unit : auraGroup) {
 			unit.removeNonStackingStatBuff(game, statBuff.getBuff());
@@ -114,41 +151,34 @@ public class CAbilityAbilityBuilderStatAuraTemplate extends AbilityGenericSingle
 		switch (type) {
 		case RNGDATK:
 		case RNGDATKPCT:
-			newBuff = new NonStackingStatBuff(type, this.auraStackingKey, Float
-					.parseFloat(levelData.get(getLevel() - 1).getData().get(parsedBuff.getDataField().getIndex())));
+			newBuff = new NonStackingStatBuff(type, this.auraStackingKey, getDataValue(parsedBuff));
 			parsedBuff.setBuff(newBuff);
 			targetRange = true;
 			break;
 		case MELEEATK:
 		case MELEEATKPCT:
-			newBuff = new NonStackingStatBuff(type, this.auraStackingKey, Float
-					.parseFloat(levelData.get(getLevel() - 1).getData().get(parsedBuff.getDataField().getIndex())));
+			newBuff = new NonStackingStatBuff(type, this.auraStackingKey, getDataValue(parsedBuff));
 			parsedBuff.setBuff(newBuff);
 			targetMelee = true;
 			break;
 		case ALLATK:
-			newBuff = new NonStackingStatBuff(NonStackingStatBuffType.MELEEATK, this.auraStackingKey, Float
-					.parseFloat(levelData.get(getLevel() - 1).getData().get(parsedBuff.getDataField().getIndex())));
+			newBuff = new NonStackingStatBuff(NonStackingStatBuffType.MELEEATK, this.auraStackingKey, getDataValue(parsedBuff));
 			parsedBuff.setBuff(newBuff);
-			newBuff = new NonStackingStatBuff(NonStackingStatBuffType.RNGDATK, this.auraStackingKey, Float
-					.parseFloat(levelData.get(getLevel() - 1).getData().get(parsedBuff.getDataField().getIndex())));
+			newBuff = new NonStackingStatBuff(NonStackingStatBuffType.RNGDATK, this.auraStackingKey, getDataValue(parsedBuff));
 			parsedBuff.setSecondAtkBuff(newBuff);
 			targetMelee = true;
 			targetRange = true;
 			break;
 		case ALLATKPCT:
-			newBuff = new NonStackingStatBuff(NonStackingStatBuffType.MELEEATKPCT, this.auraStackingKey, Float
-					.parseFloat(levelData.get(getLevel() - 1).getData().get(parsedBuff.getDataField().getIndex())));
+			newBuff = new NonStackingStatBuff(NonStackingStatBuffType.MELEEATKPCT, this.auraStackingKey, getDataValue(parsedBuff));
 			parsedBuff.setBuff(newBuff);
-			newBuff = new NonStackingStatBuff(NonStackingStatBuffType.RNGDATKPCT, this.auraStackingKey, Float
-					.parseFloat(levelData.get(getLevel() - 1).getData().get(parsedBuff.getDataField().getIndex())));
+			newBuff = new NonStackingStatBuff(NonStackingStatBuffType.RNGDATKPCT, this.auraStackingKey, getDataValue(parsedBuff));
 			parsedBuff.setSecondAtkBuff(newBuff);
 			targetMelee = true;
 			targetRange = true;
 			break;
 		default:
-			newBuff = new NonStackingStatBuff(type, this.auraStackingKey, Float
-					.parseFloat(levelData.get(getLevel() - 1).getData().get(parsedBuff.getDataField().getIndex())));
+			newBuff = new NonStackingStatBuff(type, this.auraStackingKey, getDataValue(parsedBuff));
 			parsedBuff.setBuff(newBuff);
 			targetMelee = true;
 			targetRange = true;
@@ -159,7 +189,9 @@ public class CAbilityAbilityBuilderStatAuraTemplate extends AbilityGenericSingle
 	public void setLevel(CSimulation game, CUnit unit, int level) {
 		super.setLevel(game, unit, level);
 		localStore.put(ABLocalStoreKeys.CURRENTLEVEL, level);
-		this.buff.setLevel(game, unit, level);
+		if (this.buff != null) {
+			this.buff.setLevel(game, unit, level);
+		}
 		targetsAllowed = levelData.get(getLevel() - 1).getTargetsAllowed();
 		range = levelData.get(getLevel() - 1).getArea();
 		this.targetMelee = false;
@@ -180,8 +212,8 @@ public class CAbilityAbilityBuilderStatAuraTemplate extends AbilityGenericSingle
 					createNewBuffs(statBuff);
 					addNewBuffs(game, statBuff);
 				} else {
-					statBuff.getBuff().setValue(Float.parseFloat(
-							levelData.get(getLevel() - 1).getData().get(statBuff.getDataField().getIndex())));
+					statBuff.getBuff().setValue(getDataValue(statBuff));
+					statBuff.getSecondAtkBuff().setValue(getDataValue(statBuff));
 					targetMelee = true;
 					targetRange = true;
 				}
@@ -196,8 +228,8 @@ public class CAbilityAbilityBuilderStatAuraTemplate extends AbilityGenericSingle
 					createNewBuffs(statBuff);
 					addNewBuffs(game, statBuff);
 				} else {
-					statBuff.getBuff().setValue(Float.parseFloat(
-							levelData.get(getLevel() - 1).getData().get(statBuff.getDataField().getIndex())));
+					statBuff.getBuff().setValue(getDataValue(statBuff));
+					statBuff.getSecondAtkBuff().setValue(getDataValue(statBuff));
 					targetMelee = true;
 					targetRange = true;
 				}
@@ -212,14 +244,7 @@ public class CAbilityAbilityBuilderStatAuraTemplate extends AbilityGenericSingle
 					createNewBuffs(statBuff);
 					addNewBuffs(game, statBuff);
 				} else {
-					float parsedFloat;
-					try {
-						parsedFloat = Float.parseFloat(
-								levelData.get(getLevel() - 1).getData().get(statBuff.getDataField().getIndex()));
-					} catch (NumberFormatException exc) {
-						parsedFloat = 0;
-					}
-					statBuff.getBuff().setValue(parsedFloat);
+					statBuff.getBuff().setValue(getDataValue(statBuff));
 					if (type == NonStackingStatBuffType.MELEEATK || type == NonStackingStatBuffType.MELEEATKPCT) {
 						targetMelee = true;
 					} else if (type == NonStackingStatBuffType.RNGDATK || type == NonStackingStatBuffType.RNGDATKPCT) {
@@ -235,6 +260,9 @@ public class CAbilityAbilityBuilderStatAuraTemplate extends AbilityGenericSingle
 					unitA.computeDerivedHeroFields(game, statBuff.getBuff().getBuffType());
 				} else {
 					unitA.computeDerivedFields(statBuff.getBuff().getBuffType());
+				}
+				if (statBuff.getSecondAtkBuff() != null) {
+					unitA.computeDerivedFields(statBuff.getSecondAtkBuff().getBuffType());
 				}
 			}
 		}

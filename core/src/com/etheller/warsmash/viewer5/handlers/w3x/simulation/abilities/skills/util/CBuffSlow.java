@@ -54,4 +54,13 @@ public class CBuffSlow extends CBuffTimed {
 		return false;
 	}
 
+	@Override
+	public boolean isDispellable() {
+		return true;
+	}
+
+	@Override
+	public boolean isMagic() {
+		return true;
+	}
 }

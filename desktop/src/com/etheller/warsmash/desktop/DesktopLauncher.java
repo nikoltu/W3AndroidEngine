@@ -64,6 +64,7 @@ public class DesktopLauncher {
 		config.fullscreen = true;
 		String fileToLoad = null;
 		String iniPath = null;
+		String computerSlots = null;
 		boolean noLogs = false;
 		for (int argIndex = 0; argIndex < arg.length; argIndex++) {
 			if ("-window".equals(arg[argIndex])) {
@@ -79,6 +80,10 @@ public class DesktopLauncher {
 			else if ((arg.length > (argIndex + 1)) && "-ini".equals(arg[argIndex])) {
 				argIndex++;
 				iniPath = arg[argIndex];
+			}
+			else if ((arg.length > (argIndex + 1)) && "-computer".equals(arg[argIndex])) {
+				argIndex++;
+				computerSlots = arg[argIndex];
 			}
 		}
 		if (!noLogs) {
@@ -109,6 +114,7 @@ public class DesktopLauncher {
 		final WarsmashGdxMultiScreenGame warsmashGdxMultiScreenGame = new WarsmashGdxMultiScreenGame();
 		new LwjglApplication(warsmashGdxMultiScreenGame, config);
 		final String finalFileToLoad = fileToLoad;
+		final String finalComputerSlots = computerSlots;
 		Gdx.app.postRunnable(new Runnable() {
 			@Override
 			public void run() {
@@ -121,7 +127,7 @@ public class DesktopLauncher {
 							warsmashGdxMultiScreenGame);
 					warsmashGdxMultiScreenGame.setScreen(menuScreen);
 					if (finalFileToLoad != null) {
-						menuScreen.startMap(finalFileToLoad);
+						menuScreen.startMap(finalFileToLoad, finalComputerSlots);
 					}
 				}
 			}

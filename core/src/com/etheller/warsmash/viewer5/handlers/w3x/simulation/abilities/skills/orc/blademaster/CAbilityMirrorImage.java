@@ -20,6 +20,8 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.def
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.projectile.CAbilityProjectileListener;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.orders.OrderIds;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.CEffectType;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.unit.StateModBuff;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.unit.StateModBuffType;
 
 /**
  * Mirror Image as in the original game: the cast strips the caster's buffs, the caster vanishes for the animation
@@ -27,6 +29,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.C
  * so the real one cannot be told apart.
  */
 public class CAbilityMirrorImage extends CAbilityNoTargetSpellBase {
+	private static final StateModBuff HIDDEN_INVULNERABLE = new StateModBuff(StateModBuffType.INVULNERABLE, 1);
 	private static final float SPREAD = 150;
 	private int numberOfImages;
 	private float damageDealtFactor;
@@ -77,7 +80,8 @@ public class CAbilityMirrorImage extends CAbilityNoTargetSpellBase {
 					false, spot, CAbilityProjectileListener.DO_NOTHING);
 		}
 		caster.setHidden(true);
-		caster.setInvulnerable(true);
+		caster.addStateModBuff(HIDDEN_INVULNERABLE);
+		caster.computeUnitState(simulation, StateModBuffType.INVULNERABLE);
 		this.appearTick = simulation.getGameTurnTick()
 				+ (int) StrictMath.ceil(this.animationDelay / WarsmashConstants.SIMULATION_STEP_TIME);
 		return true;
@@ -90,7 +94,7 @@ public class CAbilityMirrorImage extends CAbilityNoTargetSpellBase {
 		}
 		final AbilityPointTarget casterSpot = this.spots.get(0);
 		caster.setPointAndCheckUnstuck(casterSpot.getX(), casterSpot.getY(), simulation);
-		reveal(caster);
+		reveal(simulation, caster);
 		simulation.createTemporarySpellEffectOnUnit(caster, getAlias(), CEffectType.TARGET);
 		for (int i = 1; i < this.spots.size(); i++) {
 			final AbilityPointTarget spot = this.spots.get(i);
@@ -107,13 +111,14 @@ public class CAbilityMirrorImage extends CAbilityNoTargetSpellBase {
 	@Override
 	public void doChannelEnd(final CSimulation game, final CUnit unit, final AbilityTarget target,
 			final boolean interrupted) {
-		reveal(unit);
+		reveal(game, unit);
 	}
 
-	private static void reveal(final CUnit caster) {
+	private static void reveal(final CSimulation simulation, final CUnit caster) {
 		if (caster.isHidden()) {
 			caster.setHidden(false);
-			caster.setInvulnerable(false);
+			caster.removeStateModBuff(HIDDEN_INVULNERABLE);
+			caster.computeUnitState(simulation, StateModBuffType.INVULNERABLE);
 		}
 	}
 }

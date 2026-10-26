@@ -42,6 +42,7 @@ public class CBehaviorLoad extends CAbstractRangedBehavior {
 			cargoData.addUnit(this.unit, targetUnit);
 			targetUnit.setHidden(true);
 			targetUnit.setPaused(true);
+			targetUnit.fireLoadedEvents(simulation, this.unit);
 		}
 		else {
 			simulation.getCommandErrorListener().showInterfaceError(this.unit.getPlayerIndex(), CommandStringErrorKeys.UNABLE_TO_LOAD_TARGET);

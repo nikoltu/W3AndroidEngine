@@ -14,13 +14,20 @@ public class CTimedCircleFogModifier extends CFogModifier {
 	private float radius;
 	private float duration;
 	private int endTurnTick;
+	private final byte detectLevels;
 
 	public CTimedCircleFogModifier(final CFogState fogState, final float radius, final float x, final float y, final float duration) {
+		this(fogState, radius, x, y, duration, (byte) 0);
+	}
+
+	public CTimedCircleFogModifier(final CFogState fogState, final float radius, final float x, final float y,
+			final float duration, final byte detectLevels) {
 		this.state = fogState;
 		this.radius = radius;
 		this.myX = x;
 		this.myY = y;
 		this.duration = duration;
+		this.detectLevels = detectLevels;
 	}
 
 	@Override
@@ -43,22 +50,31 @@ public class CTimedCircleFogModifier extends CFogModifier {
 			return;
 		}
 		final float radSq = this.radius * this.radius;
-		fogOfWar.setVisible(pathingGrid.getFogOfWarIndexX(this.myX), pathingGrid.getFogOfWarIndexY(this.myY), state);
+		mark(fogOfWar, pathingGrid.getFogOfWarIndexX(this.myX), pathingGrid.getFogOfWarIndexY(this.myY));
 
 		for (int y = 0; y <= (int) Math.floor(this.radius); y += 128) {
 			for (int x = 0; x <= (int) Math.floor(this.radius); x += 128) {
 				float distance = x * x + y * y;
 				if (distance <= radSq) {
-					fogOfWar.setVisible(pathingGrid.getFogOfWarIndexX(myX - x),
-							pathingGrid.getFogOfWarIndexY(myY - y), state);
-					fogOfWar.setVisible(pathingGrid.getFogOfWarIndexX(myX - x),
-							pathingGrid.getFogOfWarIndexY(myY + y), state);
-					fogOfWar.setVisible(pathingGrid.getFogOfWarIndexX(myX + x),
-							pathingGrid.getFogOfWarIndexY(myY - y), state);
-					fogOfWar.setVisible(pathingGrid.getFogOfWarIndexX(myX + x),
-							pathingGrid.getFogOfWarIndexY(myY + y), state);
+					mark(fogOfWar, pathingGrid.getFogOfWarIndexX(myX - x),
+						pathingGrid.getFogOfWarIndexY(myY - y));
+					mark(fogOfWar, pathingGrid.getFogOfWarIndexX(myX - x),
+						pathingGrid.getFogOfWarIndexY(myY + y));
+					mark(fogOfWar, pathingGrid.getFogOfWarIndexX(myX + x),
+						pathingGrid.getFogOfWarIndexY(myY - y));
+					mark(fogOfWar, pathingGrid.getFogOfWarIndexX(myX + x),
+						pathingGrid.getFogOfWarIndexY(myY + y));
 				}
 			}
+		}
+	}
+
+	private void mark(final CPlayerFogOfWar fogOfWar, final int indexX, final int indexY) {
+		if (this.detectLevels != 0) {
+			fogOfWar.setDetecting(indexX, indexY, this.state, this.detectLevels);
+		}
+		else {
+			fogOfWar.setVisible(indexX, indexY, this.state);
 		}
 	}
 }

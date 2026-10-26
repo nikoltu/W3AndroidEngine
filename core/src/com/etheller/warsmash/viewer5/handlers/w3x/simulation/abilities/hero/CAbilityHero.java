@@ -32,6 +32,7 @@ public class CAbilityHero extends AbstractCAbility {
 	private Set<War3ID> skillsAvailable;
 	private final List<CAbility> learnedAbilities;
 	private int xp;
+	private boolean xpSuspended;
 	private int heroLevel = 0;
 	private int skillPoints = 1;
 
@@ -118,9 +119,11 @@ public class CAbilityHero extends AbstractCAbility {
 				newAbility.setHero(true);
 				this.learnedAbilities.add(newAbility);
 				caster.add(game, newAbility);
+				caster.fireHeroSkillEvents(game, skillId, 1);
 			}
 			else {
 				abilityType.setLevel(game, caster, existingAbility, existingAbility.getLevel() + 1);
+				caster.fireHeroSkillEvents(game, skillId, existingAbility.getLevel());
 			}
 		}
 		else {
@@ -134,7 +137,7 @@ public class CAbilityHero extends AbstractCAbility {
 	}
 
 	public void selectHeroSkill(final CSimulation game, final CUnit caster, final War3ID skillId) {
-		final BooleanAbilityActivationReceiver activationReceiver = BooleanAbilityActivationReceiver.INSTANCE;
+		final BooleanAbilityActivationReceiver activationReceiver = BooleanAbilityActivationReceiver.INSTANCE.reset();
 		checkCanUse(game, caster, caster.getPlayerIndex(), skillId.getValue(), false, activationReceiver);
 		if (activationReceiver.isOk()) {
 			learnSkill(game, caster, skillId);
@@ -231,6 +234,14 @@ public class CAbilityHero extends AbstractCAbility {
 
 	public int getXp() {
 		return this.xp;
+	}
+
+	public boolean isXpSuspended() {
+		return this.xpSuspended;
+	}
+
+	public void setXpSuspended(final boolean xpSuspended) {
+		this.xpSuspended = xpSuspended;
 	}
 
 	public void setXp(final int xp) {

@@ -25,6 +25,8 @@ public interface WarsmashUI extends CommandErrorListener, WarsmashBaseUI {
 
 	CScriptDialogButton createScriptDialogButton(CScriptDialog dialog, String buttonText, char hotkeyInt);
 
+	void quitMission();
+
 	GameCameraManager getCameraManager();
 
 	Music playMusic(String musicField, boolean random, int index);
@@ -62,6 +64,8 @@ public interface WarsmashUI extends CommandErrorListener, WarsmashBaseUI {
 	boolean isPlacingBuilding();
 
 	void cancelPointerDrag();
+
+	void endTouchHover();
 
 	int touchOverlaySlotAt(int screenX, int screenY);
 

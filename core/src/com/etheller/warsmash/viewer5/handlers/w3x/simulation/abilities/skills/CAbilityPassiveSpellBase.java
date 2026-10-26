@@ -1,16 +1,23 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills;
 
 import java.util.EnumSet;
+import java.util.List;
 
 import com.etheller.warsmash.units.GameObject;
 import com.etheller.warsmash.util.War3ID;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnitTypeRequirement;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CWidget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.generic.AbilityGenericSingleIconPassiveAbility;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityTargetVisitor;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.definitions.impl.AbilityFields;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.definitions.impl.AbstractCAbilityTypeDefinition;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.CTargetType;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.data.CUnitData;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayer;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.unit.CUnitTypeJass;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.AbilityActivationReceiver;
 
 public abstract class CAbilityPassiveSpellBase extends AbilityGenericSingleIconPassiveAbility implements CAbilitySpell {
 	private float castRange;
@@ -19,6 +26,7 @@ public abstract class CAbilityPassiveSpellBase extends AbilityGenericSingleIconP
 	private float duration;
 	private float heroDuration;
 	private War3ID code;
+	private List<CUnitTypeRequirement> requirements;
 
 	public CAbilityPassiveSpellBase(final int handleId, final War3ID code, final War3ID alias) {
 		super(code, alias, handleId);
@@ -34,7 +42,42 @@ public abstract class CAbilityPassiveSpellBase extends AbilityGenericSingleIconP
 		this.heroDuration = worldEditorAbility.getFieldAsFloat(AbilityFields.HERO_DURATION + level, 0);
 		this.code = worldEditorAbility.getFieldAsWar3ID(AbilityFields.CODE, -1);
 
+		if (worldEditorAbility.getFieldAsInteger(AbilityFields.CHECK_DEPENDENCIES, 0) > 0) {
+			this.requirements = CUnitData.parseRequirements(
+					worldEditorAbility.getFieldAsList(AbilityFields.REQUIREMENTS),
+					worldEditorAbility.getFieldAsList(AbilityFields.REQUIREMENT_LEVELS));
+		}
+		else {
+			this.requirements = null;
+		}
+
 		populateData(worldEditorAbility, level);
+	}
+
+	@Override
+	public boolean isRequirementsMet(final CSimulation game, final CUnit unit) {
+		if (this.requirements != null) {
+			final CPlayer player = game.getPlayer(unit.getPlayerIndex());
+			for (final CUnitTypeRequirement requirement : this.requirements) {
+				if (player.getTechtreeUnlocked(requirement.getRequirement()) < requirement.getRequiredLevel()) {
+					return false;
+				}
+			}
+		}
+		return true;
+	}
+
+	@Override
+	public void checkRequirementsMet(final CSimulation game, final CUnit unit,
+			final AbilityActivationReceiver receiver) {
+		if (this.requirements != null) {
+			final CPlayer player = game.getPlayer(unit.getPlayerIndex());
+			for (final CUnitTypeRequirement requirement : this.requirements) {
+				if (player.getTechtreeUnlocked(requirement.getRequirement()) < requirement.getRequiredLevel()) {
+					receiver.missingRequirement(requirement.getRequirement(), requirement.getRequiredLevel());
+				}
+			}
+		}
 	}
 
 	public float getDurationForTarget(final CWidget target) {
@@ -43,7 +86,7 @@ public abstract class CAbilityPassiveSpellBase extends AbilityGenericSingleIconP
 	}
 
 	public float getDurationForTarget(final CUnit targetUnit) {
-		if ((targetUnit != null) && targetUnit.isHero()) {
+		if ((targetUnit != null) && (targetUnit.isHero() || targetUnit.isUnitType(CUnitTypeJass.RESISTANT))) {
 			return getHeroDuration();
 		}
 		return getDuration();

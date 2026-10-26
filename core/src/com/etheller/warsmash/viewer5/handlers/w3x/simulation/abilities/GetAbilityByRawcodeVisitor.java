@@ -12,8 +12,10 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.combat.CA
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.generic.*;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.harvest.CAbilityReturnResources;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.hero.CAbilityHero;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.item.shop.CAbilityAwakenHero;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.item.shop.CAbilityNeutralBuilding;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.item.shop.CAbilitySellItems;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.item.shop.CAbilitySellUnits;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.jass.CAbilityJass;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.nightelf.root.CAbilityRoot;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.queue.CAbilityQueue;
@@ -105,6 +107,19 @@ public class GetAbilityByRawcodeVisitor implements CAbilityVisitor<CLevelingAbil
 
 	@Override
 	public CLevelingAbility accept(final CAbilitySellItems ability) {
+		return null;
+	}
+
+	@Override
+	public CLevelingAbility accept(final CAbilitySellUnits ability) {
+		return null;
+	}
+
+	@Override
+	public CLevelingAbility accept(final CAbilityAwakenHero ability) {
+		if (this.rawcode.equals(ability.getAlias())) {
+			return ability;
+		}
 		return null;
 	}
 

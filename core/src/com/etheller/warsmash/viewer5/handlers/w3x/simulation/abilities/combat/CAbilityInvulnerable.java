@@ -7,10 +7,13 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CWidget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.generic.AbstractGenericNoIconAbility;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityPointTarget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.CBehavior;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.unit.StateModBuff;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.unit.StateModBuffType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.AbilityActivationReceiver;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.AbilityTargetCheckReceiver;
 
 public class CAbilityInvulnerable extends AbstractGenericNoIconAbility {
+	private final StateModBuff invulnerableBuff = new StateModBuff(StateModBuffType.INVULNERABLE, 1);
 
 	public CAbilityInvulnerable(final int handleId, final War3ID code, final War3ID alias) {
 		super(handleId, code, alias);
@@ -18,12 +21,12 @@ public class CAbilityInvulnerable extends AbstractGenericNoIconAbility {
 
 	@Override
 	public void onAdd(final CSimulation game, final CUnit unit) {
-		unit.setInvulnerable(true);
+		setInvulnerableSource(game, unit, true);
 	}
 
 	@Override
 	public void onRemove(final CSimulation game, final CUnit unit) {
-		unit.setInvulnerable(false);
+		setInvulnerableSource(game, unit, false);
 	}
 
 	@Override
@@ -81,4 +84,14 @@ public class CAbilityInvulnerable extends AbstractGenericNoIconAbility {
 	public void onDeath(final CSimulation game, final CUnit cUnit) {
 	}
 
+
+	private void setInvulnerableSource(final CSimulation game, final CUnit unit, final boolean active) {
+		if (active) {
+			unit.addStateModBuff(this.invulnerableBuff);
+		}
+		else {
+			unit.removeStateModBuff(this.invulnerableBuff);
+		}
+		unit.computeUnitState(game, StateModBuffType.INVULNERABLE);
+	}
 }

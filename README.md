@@ -21,7 +21,7 @@ This fork continues Retera's work on Warsmash and adapts it for Android. The aim
 
 ## Status
 
-Current version: **v0.1.020**
+Current version: **v0.1.031**
 
 | Area | State |
 |---|---|
@@ -29,8 +29,8 @@ Current version: **v0.1.020**
 | Reading current game data (CASC) or extracted files | Working |
 | Current model, texture and map formats | Working |
 | Android app (tested on a Galaxy Tab S8 Ultra) | Working |
-| Touch controls (tap, long press, box select, two finger pan and pinch zoom, pen button, control group bar) | Working, being tuned |
-| Melee games | In progress: all hero abilities of the four races can be cast, including illusions (Mirror Image, Wand of Illusion); every race can train its units, research its upgrades and upgrade its main hall |
+| Touch controls (tap, long press, box select, two finger pan and pinch zoom, pen button, control group bar, hero buttons) | Working, being tuned |
+| Melee games | In progress: all hero abilities of the four races can be cast, including illusions (Mirror Image, Wand of Illusion); the unit abilities and researches of all four races are in place (for example Spell Steal, Cloud, Web, Possession, the Meat Wagon corpse hold, Cyclone, Sentinel, Ultravision); autocast spells are also used in combat; taverns, mercenary camps, the goblin laboratory and the marketplace sell heroes, units and items, and items can be sold to shops; hero experience, revival, blight, building refunds and the melee victory and defeat rules follow the game data; every race can train its units, research its upgrades and upgrade its main hall; creeps call for help, guard their camps and sleep at night; map scripts gain natives and events for timed life, buffs, hero skills and transports; computer opponents of all four races play the melee game with their own AI scripts |
 | 60 FPS with classic graphics | Reached on the test tablet, not yet measured on phones |
 
 ## Running on desktop
@@ -68,8 +68,9 @@ Requires Android 8.0 or newer and your own copy of the game data on the device.
    ./gradlew android:installDebug
    ```
 
-2. Copy the game data to the device: an installed game folder (CASC) or extracted files.
-3. On first start, choose that folder in the **Game data folder** screen and tap **Start**.
+2. Copy the game data to the device: an installed game folder (CASC) or extracted files. Files copied into the app's own folder (`Android/data/com.etheller.warsmash.android/files/data`) are found by themselves.
+3. On first start, choose that folder in the **Game data folder** screen with **Choose folder** and tap **Continue**. A folder outside the app's own folder needs the **All files access** permission, which the screen asks for.
+4. Later starts go straight to the game. To pick another folder, hold the app icon and choose **Game data**.
 
 <details>
 <summary>Other supported game data layouts</summary>

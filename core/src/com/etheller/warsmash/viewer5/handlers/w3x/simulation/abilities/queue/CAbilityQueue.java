@@ -51,14 +51,15 @@ public final class CAbilityQueue extends AbstractCAbility {
 			if (unitType != null) {
 				final CPlayer player = game.getPlayer(unit.getPlayerIndex());
 				final List<CUnitTypeRequirement> requirements = unitType.getRequirements();
-				final boolean techtreeAllowedByMax = player.isTechtreeAllowedByMax(orderIdAsRawtype);
+				final boolean isHeroType = unitType.isHero();
+				final boolean techtreeAllowedByMax = player.isTechtreeAllowedByMax(orderIdAsRawtype)
+						&& (!isHeroType || player.isHeroCountAllowedByMax(game));
 				boolean requirementsMet = techtreeAllowedByMax;
 				for (final CUnitTypeRequirement requirement : requirements) {
 					if (player.getTechtreeUnlocked(requirement.getRequirement()) < requirement.getRequiredLevel()) {
 						requirementsMet = false;
 					}
 				}
-				final boolean isHeroType = unitType.isHero();
 				if (isHeroType) {
 					final int heroCount = player.getHeroCount(game, true);
 					final List<CUnitTypeRequirement> requirementsTier = unitType.getRequirementsTier(heroCount);

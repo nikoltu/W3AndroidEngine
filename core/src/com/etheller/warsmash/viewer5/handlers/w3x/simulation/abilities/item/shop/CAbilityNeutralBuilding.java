@@ -47,8 +47,6 @@ public class CAbilityNeutralBuilding extends AbstractGenericAliasedAbility {
 		}
 	}
 
-	private static final int UNIT_CHECK_DELAY = (int) (StrictMath.ceil(3.00f / WarsmashConstants.SIMULATION_STEP_TIME));
-
 	private static final int INTERACTION_TYPE_ANY_UNIT_W_INVENTORY = 1;
 	private static final int INTERACTION_TYPE_ANY_NON_BUILDING = 2;
 	private static final int INTERACTION_TYPE_ANY = 4;
@@ -109,7 +107,8 @@ public class CAbilityNeutralBuilding extends AbstractGenericAliasedAbility {
 						perUnitCallback);
 				unit.notifyOrdersChanged();
 			}
-			this.nextUpdateTick = gameTurnTick + UNIT_CHECK_DELAY;
+			this.nextUpdateTick = gameTurnTick + Math.max(1, (int) StrictMath.ceil(
+					game.getGameplayConstants().getNeutralBuildingPollPeriod() / WarsmashConstants.SIMULATION_STEP_TIME));
 		}
 	}
 
@@ -249,6 +248,18 @@ public class CAbilityNeutralBuilding extends AbstractGenericAliasedAbility {
 
 	public CUnit getSelectedPlayerUnit(final int playerIndex) {
 		return this.selectedPlayerUnit[playerIndex];
+	}
+
+	/**
+	 * Other players can only buy from a neutral building while one of their units is near it; the owner of a
+	 * shop does not need one.
+	 */
+	public static boolean hasPatron(final CUnit shop, final int playerIndex) {
+		if (playerIndex == shop.getPlayerIndex()) {
+			return true;
+		}
+		final CAbilityNeutralBuilding neutralBuildingData = shop.getNeutralBuildingData();
+		return (neutralBuildingData == null) || (neutralBuildingData.getSelectedPlayerUnit(playerIndex) != null);
 	}
 
 	private void selectUnit(final CSimulation game, final CUnit enumUnit, final int playerIndex) {

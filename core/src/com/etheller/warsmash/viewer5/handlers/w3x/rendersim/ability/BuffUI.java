@@ -2,23 +2,28 @@ package com.etheller.warsmash.viewer5.handlers.w3x.rendersim.ability;
 
 import java.util.List;
 
+import com.etheller.warsmash.util.War3ID;
+
 public class BuffUI {
 	private final IconUI onIconUI;
 	private final List<EffectAttachmentUI> targetArt;
 	private final List<EffectAttachmentUI> specialArt;
 	private final List<EffectAttachmentUI> effectArt;
 	private final List<EffectAttachmentUIMissile> missileArt;
+	private final List<War3ID> lightningEffects;
 	private final String effectSound;
 	private final String effectSoundLooped;
 
 	public BuffUI(final IconUI onIconUI, final List<EffectAttachmentUI> targetArt,
 			final List<EffectAttachmentUI> specialArt, final List<EffectAttachmentUI> effectArt,
-			final List<EffectAttachmentUIMissile> missileArt, final String effectSound, final String effectSoundLooped) {
+			final List<EffectAttachmentUIMissile> missileArt, final List<War3ID> lightningEffects,
+			final String effectSound, final String effectSoundLooped) {
 		this.onIconUI = onIconUI;
 		this.targetArt = targetArt;
 		this.specialArt = specialArt;
 		this.effectArt = effectArt;
 		this.missileArt = missileArt;
+		this.lightningEffects = lightningEffects;
 		this.effectSound = effectSound;
 		this.effectSoundLooped = effectSoundLooped;
 	}
@@ -65,6 +70,10 @@ public class BuffUI {
 
 	public List<EffectAttachmentUIMissile> getMissileArt() {
 		return missileArt;
+	}
+
+	public List<War3ID> getLightningEffects() {
+		return this.lightningEffects;
 	}
 
 }

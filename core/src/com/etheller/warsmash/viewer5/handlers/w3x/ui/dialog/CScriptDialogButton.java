@@ -15,6 +15,7 @@ public class CScriptDialogButton {
 	private final GlueTextButtonFrame buttonFrame;
 	private final StringFrame buttonText;
 	private final List<Trigger> eventTriggers = new ArrayList<>();
+	private Runnable afterClick;
 
 	public CScriptDialogButton(final GlueTextButtonFrame buttonFrame, final StringFrame buttonText) {
 		this.buttonFrame = buttonFrame;
@@ -39,8 +40,18 @@ public class CScriptDialogButton {
 					dialog.getGlobalScope().queueTrigger(null, null, trigger, scope, scope);
 				}
 				dialog.onButtonClick(CScriptDialogButton.this);
+				if (CScriptDialogButton.this.afterClick != null) {
+					CScriptDialogButton.this.afterClick.run();
+				}
 			}
 		});
+	}
+
+	/**
+	 * Runs after the button's triggers are queued, as a quit button (DialogAddQuitButton) leaves the game then.
+	 */
+	public void setAfterClick(final Runnable afterClick) {
+		this.afterClick = afterClick;
 	}
 
 	public RemovableTriggerEvent addEvent(final Trigger trigger) {

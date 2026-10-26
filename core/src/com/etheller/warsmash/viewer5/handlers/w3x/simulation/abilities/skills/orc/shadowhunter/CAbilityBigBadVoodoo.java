@@ -13,12 +13,15 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.definitions.impl.AbilityFields;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.orders.OrderIds;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.CEffectType;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.unit.StateModBuff;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.unit.StateModBuffType;
 
 /**
  * Big Bad Voodoo: while channeled, the caster's own non-hero units around it are invulnerable; a unit that leaves
  * the area, or the end of the channel, ends it.
  */
 public class CAbilityBigBadVoodoo extends CAbilityNoTargetSpellBase {
+	private final StateModBuff invulnerableBuff = new StateModBuff(StateModBuffType.INVULNERABLE, 1);
 	private float areaOfEffect;
 	private int channelEndTick;
 	private final Set<CUnit> protectedUnits = new HashSet<>();
@@ -58,11 +61,11 @@ public class CAbilityBigBadVoodoo extends CAbilityNoTargetSpellBase {
 				});
 		for (final CUnit unit : this.protectedUnits) {
 			if (!inArea.contains(unit)) {
-				unit.setInvulnerable(false);
+				setProtected(simulation, unit, false);
 			}
 		}
 		for (final CUnit unit : inArea) {
-			unit.setInvulnerable(true);
+			setProtected(simulation, unit, true);
 		}
 		this.protectedUnits.clear();
 		this.protectedUnits.addAll(inArea);
@@ -73,8 +76,16 @@ public class CAbilityBigBadVoodoo extends CAbilityNoTargetSpellBase {
 	public void doChannelEnd(final CSimulation game, final CUnit unit, final AbilityTarget target,
 			final boolean interrupted) {
 		for (final CUnit protectedUnit : this.protectedUnits) {
-			protectedUnit.setInvulnerable(false);
+			setProtected(game, protectedUnit, false);
 		}
 		this.protectedUnits.clear();
+	}
+
+	private void setProtected(final CSimulation game, final CUnit unit, final boolean active) {
+		unit.removeStateModBuff(this.invulnerableBuff);
+		if (active) {
+			unit.addStateModBuff(this.invulnerableBuff);
+		}
+		unit.computeUnitState(game, StateModBuffType.INVULNERABLE);
 	}
 }

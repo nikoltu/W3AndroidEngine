@@ -10,6 +10,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.CAbstractRangedBehavior;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.CBehavior;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.CBehaviorCategory;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.JassGameEventsWar3;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.CommandStringErrorKeys;
 
 public class CBehaviorTargetSpellBase extends CAbstractRangedBehavior {
@@ -71,6 +72,7 @@ public class CBehaviorTargetSpellBase extends CAbstractRangedBehavior {
 					return this.unit.pollNextOrderBehavior(simulation);
 				}
 				this.unit.beginCooldown(simulation, this.ability.getCode(), this.ability.getCooldown());
+				this.unit.fireSpellEvents(simulation, JassGameEventsWar3.EVENT_UNIT_SPELL_EFFECT, this.ability, this.target);
 				this.channeling = this.ability.doEffect(simulation, this.unit, this.target);
 				if (this.channeling) {
 					simulation.unitLoopSoundEffectEvent(this.unit, this.ability.getAlias());

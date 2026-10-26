@@ -95,6 +95,11 @@ public class CUnitType {
 	private final List<String> heroProperNames;
 	private final int properNamesCount;
 	private final boolean canFlee;
+	private boolean canSleep;
+	private int stockMax;
+	private int stockReplenishInterval;
+	private int stockStartDelay;
+	private int stockInitial;
 	private final int priority;
 	private final boolean revivesHeroes;
 	private final int pointValue;
@@ -524,6 +529,38 @@ public class CUnitType {
 
 	public boolean isCanFlee() {
 		return this.canFlee;
+	}
+
+	public boolean isCanSleep() {
+		return this.canSleep;
+	}
+
+	public void setCanSleep(final boolean canSleep) {
+		this.canSleep = canSleep;
+	}
+
+	public void setStock(final int stockMax, final int stockReplenishInterval, final int stockStartDelay,
+			final int stockInitial) {
+		this.stockMax = stockMax;
+		this.stockReplenishInterval = stockReplenishInterval;
+		this.stockStartDelay = stockStartDelay;
+		this.stockInitial = stockInitial;
+	}
+
+	public int getStockMax() {
+		return this.stockMax;
+	}
+
+	public int getStockReplenishInterval() {
+		return this.stockReplenishInterval;
+	}
+
+	public int getStockStartDelay() {
+		return this.stockStartDelay;
+	}
+
+	public int getStockInitial() {
+		return this.stockInitial;
 	}
 
 	public int getPriority() {

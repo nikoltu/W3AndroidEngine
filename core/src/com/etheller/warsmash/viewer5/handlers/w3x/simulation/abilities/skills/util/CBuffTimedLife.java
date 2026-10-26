@@ -9,9 +9,21 @@ public class CBuffTimedLife extends CBuffTimed {
 
 	private final boolean explode;
 
+	private final boolean summon;
+	private boolean replaced;
+
 	public CBuffTimedLife(final int handleId, final War3ID alias, final float duration, boolean explode) {
+		this(handleId, alias, duration, explode, true);
+	}
+
+	/**
+	 * A non-summon timed life (UnitApplyTimedLife) leaves the unit's food alone.
+	 */
+	public CBuffTimedLife(final int handleId, final War3ID alias, final float duration, final boolean explode,
+			final boolean summon) {
 		super(handleId, alias, alias, duration);
 		this.explode = explode;
+		this.summon = summon;
 	}
 
 	@Override
@@ -21,14 +33,22 @@ public class CBuffTimedLife extends CBuffTimed {
 			unit.setExplodesOnDeathBuffId(getAlias());
 		}
 
-		final CPlayer player = game.getPlayer(unit.getPlayerIndex());
-		player.setUnitFoodMade(unit, 0);
-		player.setUnitFoodUsed(unit, 0);
+		if (this.summon) {
+			final CPlayer player = game.getPlayer(unit.getPlayerIndex());
+			player.setUnitFoodMade(unit, 0);
+			player.setUnitFoodUsed(unit, 0);
+		}
+	}
+
+	public void markReplaced() {
+		this.replaced = true;
 	}
 
 	@Override
 	protected void onBuffRemove(final CSimulation game, final CUnit unit) {
-		unit.kill(game);
+		if (!this.replaced) {
+			unit.kill(game);
+		}
 	}
 
 	@Override

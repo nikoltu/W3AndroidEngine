@@ -15,14 +15,21 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnitTypeRequiremen
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUpgradeType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.CUpgradeClass;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.upgrade.CUpgradeEffect;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.upgrade.CUpgradeEffectArmorType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.upgrade.CUpgradeEffectAttackDamage;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.upgrade.CUpgradeEffectAbilityDuration;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.upgrade.CUpgradeEffectAttackDice;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.upgrade.CUpgradeEffectAttackRange;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.upgrade.CUpgradeEffectAttackSpeed;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.upgrade.CUpgradeEffectAttackSpillDistance;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.upgrade.CUpgradeEffectAttackTargetCount;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.upgrade.CUpgradeEffectAuraData;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.upgrade.CUpgradeEffectDefenseUpgradeBonus;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.upgrade.CUpgradeEffectEnableWeapons;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.upgrade.CUpgradeEffectHitPointRegen;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.upgrade.CUpgradeEffectHitPoints;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.upgrade.CUpgradeEffectHitPointsPcnt;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.upgrade.CUpgradeEffectLumberCapacity;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.upgrade.CUpgradeEffectManaPoints;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.upgrade.CUpgradeEffectManaPointsPcnt;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.upgrade.CUpgradeEffectManaRegen;
@@ -30,9 +37,12 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.upgrade.CUpgradeEff
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.upgrade.CUpgradeEffectMovementSpeedPcnt;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.upgrade.CUpgradeEffectSpellLevel;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.upgrade.CUpgradeEffectTechMaxAllowed;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.upgrade.CUpgradeEffectThorns;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.upgrade.CUpgradeEffectUltravision;
 
 public class CUpgradeData {
 	private static final String APPLIES_TO_ALL_UNITS = "global"; // replaced from 'glob'
+	private static final War3ID RAISE_DEAD = War3ID.fromString("Arai");
 	private static final String CLASS = "class"; // replaced from 'gcls'
 	private static final String GOLD_BASE = "goldbase"; // replaced from 'gglb'
 	private static final String GOLD_INCREMENT = "goldmod"; // replaced from 'gglm'
@@ -170,6 +180,53 @@ public class CUpgradeData {
 						break;
 					case "rarm":
 						upgradeEffects.add(new CUpgradeEffectDefenseUpgradeBonus());
+						break;
+					case "rspi":
+						upgradeEffects.add(new CUpgradeEffectThorns(upgradeType.getFieldAsFloat(effectBaseMetaKey, 0),
+								upgradeType.getFieldAsFloat(effectModMetaKey, 0), false, typeId.asStringValue()));
+						break;
+					case "rspp":
+						upgradeEffects.add(new CUpgradeEffectThorns(upgradeType.getFieldAsFloat(effectBaseMetaKey, 0),
+								upgradeType.getFieldAsFloat(effectModMetaKey, 0), true, typeId.asStringValue()));
+						break;
+					case "rart":
+						upgradeEffects
+								.add(new CUpgradeEffectArmorType(upgradeType.getFieldAsInteger(effectBaseMetaKey, 0)));
+						break;
+					case "renw":
+						upgradeEffects.add(
+								new CUpgradeEffectEnableWeapons(upgradeType.getFieldAsInteger(effectBaseMetaKey, 0)));
+						break;
+					case "rlum":
+						upgradeEffects.add(new CUpgradeEffectLumberCapacity(upgradeType.getFieldAsInteger(effectBaseMetaKey, 0),
+								upgradeType.getFieldAsInteger(effectModMetaKey, 0)));
+						break;
+					case "rasd":
+						upgradeEffects.add(new CUpgradeEffectAttackSpillDistance(
+								upgradeType.getFieldAsInteger(effectBaseMetaKey, 0),
+								upgradeType.getFieldAsInteger(effectModMetaKey, 0)));
+						break;
+					case "ratc":
+						upgradeEffects.add(new CUpgradeEffectAttackTargetCount(
+								upgradeType.getFieldAsInteger(effectBaseMetaKey, 0),
+								upgradeType.getFieldAsInteger(effectModMetaKey, 0)));
+						break;
+					case "raud":
+						final String auraIdField = upgradeType.getFieldAsString(effectCodeMetaKey, 0);
+						if (auraIdField.length() == 4) {
+							upgradeEffects.add(
+									new CUpgradeEffectAuraData(upgradeType.getFieldAsFloat(effectBaseMetaKey, 0),
+											upgradeType.getFieldAsFloat(effectModMetaKey, 0),
+											War3ID.fromString(auraIdField)));
+						}
+						break;
+					case "rrai":
+						upgradeEffects.add(new CUpgradeEffectAbilityDuration(
+								upgradeType.getFieldAsFloat(effectBaseMetaKey, 0),
+								upgradeType.getFieldAsFloat(effectModMetaKey, 0), RAISE_DEAD));
+						break;
+					case "rauv":
+						upgradeEffects.add(new CUpgradeEffectUltravision());
 						break;
 					default:
 						System.err.println("No such UpgradeEffect: " + effectIdString);

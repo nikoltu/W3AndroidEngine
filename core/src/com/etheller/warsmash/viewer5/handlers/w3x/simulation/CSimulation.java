@@ -1,6 +1,7 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -34,6 +35,9 @@ import com.etheller.warsmash.viewer5.handlers.w3x.TextTag;
 import com.etheller.warsmash.viewer5.handlers.w3x.environment.PathingGrid;
 import com.etheller.warsmash.viewer5.handlers.w3x.environment.PathingGrid.RemovablePathingMapInstance;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbility;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.item.shop.CAbilitySellItems;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.item.shop.CAbilitySellUnits;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.listeners.CUnitSpellEffectListener;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityPointTarget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityTarget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.CBehaviorMove;
@@ -102,6 +106,7 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 	private final List<CPlayerUnitOrderExecutor> defaultPlayerUnitOrderExecutors;
 	private final List<CEffect> projectiles;
 	private final List<CEffect> newProjectiles;
+	private final List<CUnitSpellEffectListener> spellEffectListeners = new ArrayList<>();
 	private final HandleIdAllocator handleIdAllocator;
 	private transient final SimulationRenderController simulationRenderController;
 	private int gameTurnTick = 0;
@@ -128,6 +133,8 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 	private final EnumMap<JassGameEventsWar3, List<CGlobalEvent>> eventTypeToEvents = new EnumMap<>(
 			JassGameEventsWar3.class);
 	private boolean timeOfDaySuspended;
+	private int allItemTypeSlots = -1;
+	private int allUnitTypeSlots = -1;
 	private Float nextGameTime = null;
 	private FalseTimeOfDay falseTimeOfDay = null;
 	private boolean daytime;
@@ -151,11 +158,12 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 		this.pathingGrid = pathingGrid;
 		this.abilityData = new CAbilityData(parsedAbilityData);
 		this.upgradeData = new CUpgradeData(this.gameplayConstants, parsedUpgradeData, standardUpgradeEffectMeta);
+		this.itemData = new CItemData(parsedItemData);
 		this.unitData = new CUnitData(this.gameplayConstants, parsedUnitData, this.abilityData, this.upgradeData,
 				this.simulationRenderController);
+		this.unitData.setTechEquivalents(this.itemData.getTechEquivalents());
 		this.unitData.getAllUnitTypesLightweight(); // Quick hack to avoid lag on first cast of Mech Critter
 		this.destructableData = new CDestructableData(parsedDestructableData, simulationRenderController);
-		this.itemData = new CItemData(parsedItemData);
 		this.units = new ArrayList<>();
 		this.newUnits = new ArrayList<>();
 		this.removedUnits = new ArrayList<>();
@@ -342,10 +350,16 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 		if (createdUnit != null) {
 			createdUnit.setConstructing(constructing);
 			setupCreatedUnit(createdUnit);
+			if (isNeutralAggressive(playerIndex) && !createdUnit.isBuilding()) {
+				createdUnit.setGuardPosition(x, y);
+			}
 			if (createdUnit.getCollisionRectangle() == null) {
 				this.worldCollision.addUnit(createdUnit);
 			} // else the unit was probably injected into collision before default behaviors
 			createdUnit.performDefaultBehavior(this);
+			// Fog is recomputed once a second; without this a script could not order a unit it just made against
+			// anything, because the new unit would not yet see its target.
+			createdUnit.updateFogOfWar(this);
 			if (createdUnit.isHero()) {
 				heroCreateEvent(createdUnit);
 			}
@@ -735,6 +749,8 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 
 	public void unitConstructedEvent(final CUnit constructingUnit, final CUnit constructedStructure) {
 		this.simulationRenderController.spawnUnitConstructionSound(constructingUnit, constructedStructure);
+		getPlayer(constructedStructure.getPlayerIndex()).firePlayerUnitEvents(constructedStructure,
+				CommonTriggerExecutionScope::unitConstructStartScope, JassGameEventsWar3.EVENT_PLAYER_UNIT_CONSTRUCT_START);
 	}
 
 	public void unitUpgradingEvent(final CUnit cUnit, final War3ID upgradeIdType) {
@@ -743,6 +759,10 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 
 	public void unitCancelUpgradingEvent(final CUnit cUnit, final War3ID upgradeIdType) {
 		this.simulationRenderController.unitCancelUpgradingEvent(cUnit, upgradeIdType);
+	}
+
+	public boolean isNeutralAggressive(final int playerIndex) {
+		return playerIndex == (this.players.size() - 4);
 	}
 
 	@Override
@@ -824,7 +844,7 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 	}
 
 	public void unitGainLevelEvent(final CUnit unit, final boolean showEffect) {
-		this.players.get(unit.getPlayerIndex()).fireHeroLevelEvents(unit);
+		unit.fireHeroLevelEvents(this);
 		if (showEffect) {
 			this.simulationRenderController.spawnGainLevelEffect(unit);
 		}
@@ -1042,6 +1062,20 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 		}
 	}
 
+	public void addSpellEffectListener(final CUnitSpellEffectListener listener) {
+		this.spellEffectListeners.add(listener);
+	}
+
+	public void removeSpellEffectListener(final CUnitSpellEffectListener listener) {
+		this.spellEffectListeners.remove(listener);
+	}
+
+	public void spellEffectEvent(final CUnit caster, final CAbility ability) {
+		for (int i = this.spellEffectListeners.size() - 1; i >= 0; i--) {
+			this.spellEffectListeners.get(i).onSpellEffect(this, caster, ability);
+		}
+	}
+
 	public void heroDeathEvent(final CUnit cUnit) {
 		this.simulationRenderController.heroDeathEvent(cUnit);
 	}
@@ -1121,13 +1155,69 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 	}
 
 	public void setAllItemTypeSlots(final int slots) {
-		System.err.println(
-				"Ignoring call to set all item type slots to: " + slots + " (marketplace is not yet implemented)");
+		this.allItemTypeSlots = slots;
+		for (final CUnit unit : this.units) {
+			final CAbilitySellItems sellItems = getItemStock(unit, false);
+			if (sellItems != null) {
+				sellItems.setItemTypeSlots(slots);
+			}
+		}
 	}
 
 	public void setAllUnitTypeSlots(final int slots) {
-		System.err.println(
-				"Ignoring call to set all unit type slots to: " + slots + " (marketplace is not yet implemented)");
+		this.allUnitTypeSlots = slots;
+		for (final CUnit unit : this.units) {
+			final CAbilitySellUnits sellUnits = getUnitStock(unit, false);
+			if (sellUnits != null) {
+				sellUnits.setUnitTypeSlots(slots);
+			}
+		}
+	}
+
+	/**
+	 * The item stock of a shop (not the items it makes); with create, a shop without one gets an empty stock for
+	 * scripts to fill, as the marketplace does.
+	 */
+	public CAbilitySellItems getItemStock(final CUnit unit, final boolean create) {
+		for (final CAbility ability : unit.getAbilities()) {
+			if ((ability instanceof CAbilitySellItems) && !((CAbilitySellItems) ability).isMakeItems()) {
+				return (CAbilitySellItems) ability;
+			}
+		}
+		if (!create) {
+			return null;
+		}
+		final CAbilitySellItems sellItems = new CAbilitySellItems(this.handleIdAllocator.createId(),
+				Collections.emptyList(), false);
+		sellItems.setItemTypeSlots(this.allItemTypeSlots);
+		unit.add(this, sellItems);
+		return sellItems;
+	}
+
+	public CAbilitySellUnits getUnitStock(final CUnit unit, final boolean create) {
+		final CAbilitySellUnits existing = unit.getFirstAbilityOfType(CAbilitySellUnits.class);
+		if ((existing != null) || !create) {
+			return existing;
+		}
+		final CAbilitySellUnits sellUnits = new CAbilitySellUnits(this.handleIdAllocator.createId(),
+				Collections.emptyList());
+		sellUnits.setUnitTypeSlots(this.allUnitTypeSlots);
+		unit.add(this, sellUnits);
+		return sellUnits;
+	}
+
+	/**
+	 * The shops that scripts stock for all (AddItemToAllStock, AddUnitToAllStock) are those with the Sell Items or
+	 * Sell Units ability in their data, such as the marketplace.
+	 */
+	public List<CUnit> getScriptStockedShops(final War3ID sellAbilityId) {
+		final List<CUnit> shops = new ArrayList<>();
+		for (final CUnit unit : this.units) {
+			if (!unit.isDead() && unit.getUnitType().getAbilityList().contains(sellAbilityId)) {
+				shops.add(unit);
+			}
+		}
+		return shops;
 	}
 
 	public void setTimeOfDaySuspended(final boolean flag) {
@@ -1314,6 +1404,13 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 			@Override
 			public void run() {
 				for (final CUnit unit : getUnits()) {
+					if (unit.getPlayerIndex() == player.getId()) {
+						unit.checkDisabledAbilities(CSimulation.this, disable);
+					}
+				}
+				// A unit made this tick (a trained unit that unlocks its own requirement, such as the first
+				// Hippogryph for Pick up Archer) only joins the unit list on the next update.
+				for (final CUnit unit : CSimulation.this.newUnits) {
 					if (unit.getPlayerIndex() == player.getId()) {
 						unit.checkDisabledAbilities(CSimulation.this, disable);
 					}

@@ -73,13 +73,10 @@ public final class RtsTouchAdapter implements GestureListener {
 		final TouchTarget target = target();
 		final int slot = (target == null) ? -1 : target.touchOverlaySlotAt(Math.round(x), Math.round(y));
 		if (slot == SHIFT_SLOT) {
-			VirtualModifiers.tapShift(System.currentTimeMillis());
-			log("shift " + VirtualModifiers.getShiftState());
 			return;
 		}
 		if (slot >= 0) {
 			target.selectControlGroupSlot(slot);
-			VirtualModifiers.consumeOnce();
 			log("select group slot " + slot);
 			return;
 		}
@@ -105,8 +102,10 @@ public final class RtsTouchAdapter implements GestureListener {
 		if (processor != null) {
 			moveTo(processor, x, y);
 			click(processor, x, y, Input.Buttons.LEFT);
-			VirtualModifiers.consumeOnce();
 			log("tap " + (int) x + "," + (int) y);
+			if ((target != null) && !pen) {
+				target.endTouchHover();
+			}
 		}
 	}
 
@@ -116,7 +115,6 @@ public final class RtsTouchAdapter implements GestureListener {
 		if (processor != null) {
 			moveTo(processor, x, y);
 			click(processor, x, y, Input.Buttons.RIGHT);
-			VirtualModifiers.consumeOnce();
 			log("pen button tap " + (int) x + "," + (int) y + " -> right click");
 		}
 	}
@@ -132,7 +130,6 @@ public final class RtsTouchAdapter implements GestureListener {
 		final int slot = (target == null) ? -1 : target.touchOverlaySlotAt(Math.round(x), Math.round(y));
 		if ((slot >= 0) && (slot != SHIFT_SLOT)) {
 			target.assignControlGroupSlot(slot, VirtualModifiers.isShiftDown());
-			VirtualModifiers.consumeOnce();
 			log("assign group slot " + slot);
 			return;
 		}
@@ -144,12 +141,15 @@ public final class RtsTouchAdapter implements GestureListener {
 			return;
 		}
 		click(processor, x, y, Input.Buttons.RIGHT);
-		VirtualModifiers.consumeOnce();
 		log("long press " + (int) x + "," + (int) y + " -> right click");
 	}
 
 	@Override
 	public void longPressEnd(final float x, final float y) {
+		final TouchTarget target = target();
+		if (target != null) {
+			target.endTouchHover();
+		}
 	}
 
 	@Override
@@ -243,7 +243,6 @@ public final class RtsTouchAdapter implements GestureListener {
 			}
 			else {
 				click(processor, this.aimX, this.aimY, Input.Buttons.LEFT);
-				VirtualModifiers.consumeOnce();
 				log("aim release -> cast at " + (int) this.aimX + "," + (int) this.aimY);
 			}
 			return;
@@ -251,7 +250,6 @@ public final class RtsTouchAdapter implements GestureListener {
 		if (processor != null) {
 			moveTo(processor, x, y);
 			processor.touchUp(Math.round(x), Math.round(y), 0, Input.Buttons.LEFT);
-			VirtualModifiers.consumeOnce();
 			log("drag end " + (int) x + "," + (int) y);
 		}
 	}

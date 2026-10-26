@@ -103,6 +103,7 @@ public class AbilityDataUI {
 
 	private final Map<War3ID, AbilityUI> rawcodeToUI = new HashMap<>();
 	private final Map<War3ID, BuffUI> rawcodeToBuffUI = new HashMap<>();
+	private final Map<String, BuffUI> lowerCaseRawcodeToBuffUI = new HashMap<>();
 	private final Map<War3ID, UnitIconUI> rawcodeToUnitUI = new HashMap<>();
 	private final Map<War3ID, ItemUI> rawcodeToItemUI = new HashMap<>();
 	private final Map<War3ID, List<IconUI>> rawcodeToUpgradeUI = new HashMap<>();
@@ -319,12 +320,21 @@ public class AbilityDataUI {
 				missileArt.add(new EffectAttachmentUIMissile(missileArtPath, Collections.emptyList(), missileArc, missileSpeed, missileHoming));
 			}
 
+			final List<War3ID> lightningEffects = new ArrayList<>();
+			for (final String lightning : abilityTypeData.getFieldAsString(LIGHTNING_EFFECTS, 0).split(",")) {
+				if (!lightning.isBlank()) {
+					lightningEffects.add(War3ID.fromString(lightning.trim()));
+				}
+			}
+
 			final String effectSound = abilityTypeData.getFieldAsString(BUFF_ABILITY_EFFECT_SOUND, 0);
 			final String effectSoundLooped = abilityTypeData.getFieldAsString(BUFF_ABILITY_EFFECT_SOUND_LOOPED, 0);
 
-			this.rawcodeToBuffUI.put(War3ID.fromString(alias),
-					new BuffUI(new IconUI(iconNormal, iconNormalDisabled, 0, 0, iconTip, iconUberTip, '\0'), targetArt,
-							specialArt, effectArt, missileArt, effectSound, effectSoundLooped));
+			final BuffUI buffUI = new BuffUI(
+					new IconUI(iconNormal, iconNormalDisabled, 0, 0, iconTip, iconUberTip, '\0'), targetArt,
+					specialArt, effectArt, missileArt, lightningEffects, effectSound, effectSoundLooped);
+			this.rawcodeToBuffUI.put(War3ID.fromString(alias), buffUI);
+			this.lowerCaseRawcodeToBuffUI.put(alias.toLowerCase(), buffUI);
 		}
 		for (final String alias : unitData.keySet()) {
 			final GameObject abilityTypeData = unitData.get(alias);
@@ -525,7 +535,12 @@ public class AbilityDataUI {
 	}
 
 	public BuffUI getBuffUI(final War3ID rawcode) {
-		return this.rawcodeToBuffUI.get(rawcode);
+		final BuffUI buffUI = this.rawcodeToBuffUI.get(rawcode);
+		if (buffUI == null) {
+			// Effects are named with differing case in the ability data (XEsn) and the buff table (Xesn).
+			return this.lowerCaseRawcodeToBuffUI.get(rawcode.asStringValue().toLowerCase());
+		}
+		return buffUI;
 	}
 
 	public UnitIconUI getUnitUI(final War3ID rawcode) {

@@ -1,6 +1,7 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.inventory;
 
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CItem;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CShopEvents;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.inventory.CAbilityInventory;
@@ -11,6 +12,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.CBehavior
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.CBehaviorCategory;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.orders.OrderIds;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayer;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.CommandStringErrorKeys;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.ResourceType;
 
 public class CBehaviorGiveItemToHero extends CAbstractRangedBehavior {
@@ -31,7 +33,10 @@ public class CBehaviorGiveItemToHero extends CAbstractRangedBehavior {
 
 	@Override
 	public boolean isWithinRange(final CSimulation simulation) {
-		return this.unit.canReach(this.target, simulation.getGameplayConstants().getGiveItemRange());
+		final float range = this.targetHero.getInventoryData() != null
+				? simulation.getGameplayConstants().getGiveItemRange()
+				: simulation.getGameplayConstants().getPawnItemRange();
+		return this.unit.canReach(this.target, range);
 	}
 
 	@Override
@@ -53,8 +58,9 @@ public class CBehaviorGiveItemToHero extends CAbstractRangedBehavior {
 
 	@Override
 	protected CBehavior update(final CSimulation simulation, final boolean withinFacingWindow) {
-		this.inventory.dropItem(simulation, this.unit, this.targetItem, this.target.getX(), this.target.getY(), true);
 		if (this.targetHero.getInventoryData() != null) {
+			this.inventory.dropItem(simulation, this.unit, this.targetItem, this.target.getX(), this.target.getY(),
+					true);
 			this.targetHero.getInventoryData().giveItem(simulation, this.targetHero, this.targetItem, false);
 		}
 		else {
@@ -64,24 +70,29 @@ public class CBehaviorGiveItemToHero extends CAbstractRangedBehavior {
 			 * note: below: pawnable check is not enforced by ability targeting because of
 			 * the dual targets "drop item @ unit" concept, which is a bit of a hack
 			 */
-			if ((shopPurchaseItemAbility != null) && this.targetItem.isPawnable()) {
+			if ((shopPurchaseItemAbility != null) && !this.targetItem.isPawnable()) {
+				simulation.getCommandErrorListener().showInterfaceError(this.unit.getPlayerIndex(),
+						CommandStringErrorKeys.ITEM_CANNOT_BE_PAWNED);
+			}
+			else if (shopPurchaseItemAbility != null) {
+				this.inventory.dropItem(simulation, this.unit, this.targetItem, this.target.getX(),
+						this.target.getY(), true);
 				final CPlayer player = simulation.getPlayer(this.unit.getPlayerIndex());
 
 				final int goldCost = this.targetItem.getItemType().getGoldCost();
 				if (goldCost != 0) {
-					final int goldGained = (int) StrictMath
-							.ceil(goldCost * simulation.getGameplayConstants().getPawnItemRate());
+					final int goldGained = simulation.getGameplayConstants().getPawnItemValue(goldCost);
 					player.addGold(goldGained);
 					simulation.unitGainResourceEvent(this.targetHero, player.getId(), ResourceType.GOLD, goldGained);
 				}
 				final int lumberCost = this.targetItem.getItemType().getLumberCost();
 				if (lumberCost != 0) {
-					final int lumberGained = (int) StrictMath
-							.ceil(lumberCost * simulation.getGameplayConstants().getPawnItemRate());
+					final int lumberGained = simulation.getGameplayConstants().getPawnItemValue(lumberCost);
 					player.addLumber(lumberGained);
 					simulation.unitGainResourceEvent(this.targetHero, player.getId(), ResourceType.LUMBER,
 							lumberGained);
 				}
+				CShopEvents.firePawnItemEvents(simulation, this.unit, this.targetItem, this.targetHero);
 				simulation.removeItem(this.targetItem);
 				simulation.unitSoundEffectEvent(this.targetHero, shopPurchaseItemAbility.getAlias());
 			}

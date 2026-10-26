@@ -6,6 +6,14 @@ public class BooleanAbilityActivationReceiver implements AbilityActivationReceiv
 	public static final BooleanAbilityActivationReceiver INSTANCE = new BooleanAbilityActivationReceiver();
 	private boolean ok;
 
+	/**
+	 * The shared instance keeps the last answer; a check that reports nothing must not inherit it.
+	 */
+	public BooleanAbilityActivationReceiver reset() {
+		this.ok = false;
+		return this;
+	}
+
 	@Override
 	public void useOk() {
 		this.ok = true;

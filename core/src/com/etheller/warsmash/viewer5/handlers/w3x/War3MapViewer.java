@@ -10,6 +10,7 @@ import java.io.UnsupportedEncodingException;
 import java.nio.channels.SeekableByteChannel;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -162,6 +163,7 @@ import mpq.MPQArchive;
 import mpq.MPQException;
 
 public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoader {
+	private final EnumSet<PauseSource> pauseSources = EnumSet.noneOf(PauseSource.class);
 	private static final List<String> ORIGIN_STRING_LIST = Arrays.asList("origin");
 
 	public static int DEBUG_DEPTH = 9999;
@@ -1183,16 +1185,45 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 		return this.renderUnitTypeData.get(key);
 	}
 
+	/**
+	 * The game stops while paused (a script, the Pause button, or the game menu in a single player game); the camera,
+	 * the interface and rendering go on.
+	 */
+	public void setGamePaused(final PauseSource source, final boolean paused) {
+		if (paused) {
+			this.pauseSources.add(source);
+		}
+		else {
+			this.pauseSources.remove(source);
+		}
+	}
+
+	public boolean isGamePaused() {
+		return !this.pauseSources.isEmpty();
+	}
+
+	public boolean isGamePaused(final PauseSource source) {
+		return this.pauseSources.contains(source);
+	}
+
+	public static enum PauseSource {
+		SCRIPT,
+		PLAYER,
+		MENU;
+	}
+
 	@Override
 	public void update() {
 		if (this.anyReady) {
 			this.successfulFrames++;
-			final float deltaTime = Gdx.graphics.getDeltaTime();
+			// while paused everything is still placed and drawn, but no game or animation time passes
+			final boolean paused = isGamePaused();
+			final float deltaTime = paused ? 0 : Gdx.graphics.getDeltaTime();
 			this.terrain.update(deltaTime);
 
-			super.update();
+			final float rawDeltaTime = paused ? 0 : Gdx.graphics.getRawDeltaTime();
+			super.update(rawDeltaTime);
 
-			final float rawDeltaTime = Gdx.graphics.getRawDeltaTime();
 			this.updateTime += rawDeltaTime;
 
 			final Iterator<TextTag> textTagIterator = this.textTags.iterator();
@@ -1207,7 +1238,7 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 			final Iterator<RenderEffect> projectileIterator = this.projectiles.iterator();
 			while (projectileIterator.hasNext()) {
 				final RenderEffect projectile = projectileIterator.next();
-				if (projectile.updateAnimations(this, Gdx.graphics.getDeltaTime())) {
+				if (projectile.updateAnimations(this, deltaTime)) {
 					projectileIterator.remove();
 				}
 			}
@@ -2134,6 +2165,11 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 
 	public List<War3ID> getLightningEffectList(final War3ID alias) {
 		final AbilityUI abilityUI = War3MapViewer.this.abilityDataUI.getUI(alias);
+		if (abilityUI == null) {
+			// Mana Flare names its lightning on the buff.
+			final BuffUI buffUI = War3MapViewer.this.abilityDataUI.getBuffUI(alias);
+			return buffUI == null ? Collections.emptyList() : buffUI.getLightningEffects();
+		}
 		return abilityUI.getLightningEffects();
 	}
 
@@ -2895,6 +2931,9 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 								final RenderUnit renderPeerSource = War3MapViewer.this.getRenderPeer(source);
 								final RenderWidget renderPeerTarget = War3MapViewer.this.getRenderPeer(target);
 								final List<War3ID> lightnings = getLightningEffectList(lightningId);
+								if (index >= lightnings.size()) {
+									return SimulationRenderComponentLightning.DO_NOTHING;
+								}
 								return War3MapViewer.this.createLightning(lightnings.get(index), renderPeerSource,
 										renderPeerTarget, duration);
 							}
@@ -3547,23 +3586,29 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 									final War3ID alias) {
 								final RenderUnit renderPeer = War3MapViewer.this.unitToRenderPeer.get(caster);
 								final AbilityUI abilityUi = War3MapViewer.this.abilityDataUI.getUI(alias);
-								if ((renderPeer == null) || (abilityUi == null)
-										|| (abilityUi.getEffectSound() == null)) {
+								final String loopedSound;
+								if (abilityUi != null) {
+									loopedSound = abilityUi.getEffectSound() == null ? null
+											: abilityUi.getEffectSoundLooped();
+								}
+								else {
+									// Buffs such as Cyclone and Mana Flare carry their own looped sound.
+									final BuffUI buffUi = War3MapViewer.this.abilityDataUI.getBuffUI(alias);
+									loopedSound = buffUi == null ? null : buffUi.getEffectSoundLooped();
+								}
+								if ((renderPeer == null) || (loopedSound == null) || loopedSound.isEmpty()) {
 									return SimulationRenderComponent.DO_NOTHING;
 								}
-								final long soundId = War3MapViewer.this.uiSounds
-										.getSound(abilityUi.getEffectSoundLooped())
-										.play(War3MapViewer.this.worldScene.audioContext, renderPeer.getX(),
-												renderPeer.getY(), renderPeer.getZ(), true);
+								final long soundId = War3MapViewer.this.uiSounds.getSound(loopedSound).play(
+										War3MapViewer.this.worldScene.audioContext, renderPeer.getX(),
+										renderPeer.getY(), renderPeer.getZ(), true);
 								if (soundId == -1) {
 									return SimulationRenderComponent.DO_NOTHING;
 								}
 								return new SimulationRenderComponent() {
 									@Override
 									public void remove() {
-										War3MapViewer.this.uiSounds.getSound(abilityUi.getEffectSoundLooped())
-												.stop(soundId);
-										;
+										War3MapViewer.this.uiSounds.getSound(loopedSound).stop(soundId);
 									}
 								};
 							}

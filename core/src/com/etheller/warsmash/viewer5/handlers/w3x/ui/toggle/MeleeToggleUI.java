@@ -82,6 +82,11 @@ public class MeleeToggleUI implements WarsmashUI {
 	}
 
 	@Override
+	public void quitMission() {
+		this.meleeUI.quitMission();
+	}
+
+	@Override
 	public GameCameraManager getCameraManager() {
 		return this.meleeUI.getCameraManager();
 	}
@@ -257,6 +262,11 @@ public class MeleeToggleUI implements WarsmashUI {
 	@Override
 	public void cancelPointerDrag() {
 		this.meleeUI.cancelPointerDrag();
+	}
+
+	@Override
+	public void endTouchHover() {
+		this.meleeUI.endTouchHover();
 	}
 
 	@Override

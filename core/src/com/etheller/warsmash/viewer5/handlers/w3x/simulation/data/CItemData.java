@@ -7,8 +7,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 
+import com.etheller.warsmash.units.DataTable;
+import com.etheller.warsmash.units.Element;
 import com.etheller.warsmash.units.GameObject;
 import com.etheller.warsmash.units.ObjectData;
+import com.etheller.warsmash.units.StandardObjectData.WarcraftData;
 import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CItem;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CItemType;
@@ -30,6 +33,8 @@ public class CItemData {
 	private static final String STOCK_MAX = "stockMax"; // replaced from 'isto'
 	private static final String STOCK_REPLENISH_INTERVAL = "stockRegen"; // replaced from 'istr'
 	private static final String STOCK_START_DELAY = "stockStart"; // replaced from 'isst'
+	private static final String STOCK_INITIAL = "stockInitial"; // replaced from 'isit'
+	private static final String DEPENDENCY_EQUIVALENTS = "DependencyOr";
 
 	private static final String HIT_POINTS = "HP"; // replaced from 'ihtp'
 	private static final String ARMOR_TYPE = "armor"; // replaced from 'iarm'
@@ -144,6 +149,7 @@ public class CItemData {
 					stockStartDelay, hitPoints, armorType, level, levelUnclassified, priority, sellable, pawnable,
 					droppedWhenCarrierDies, canBeDropped, validTargetForTransformation, includeAsRandomChoice,
 					itemClass, requirements);
+			itemTypeInstance.setStockInitial(itemType.getFieldAsInteger(STOCK_INITIAL, 0));
 			this.itemIdToItemType.put(typeId, itemTypeInstance);
 
 			if (includeAsRandomChoice) {
@@ -158,10 +164,11 @@ public class CItemData {
 					levelRandomChoices.classificationToItems.put(itemClass, itemsOfClass);
 				}
 				itemsOfClass.add(typeId);
-				RandomItemSet levelUnclassifiedRandomChoices = this.levelToRandomChoices.get(level);
+				// ChooseRandomItem without a class picks by the old unclassified level (oldLevel).
+				RandomItemSet levelUnclassifiedRandomChoices = this.levelToRandomChoices.get(levelUnclassified);
 				if (levelUnclassifiedRandomChoices == null) {
 					levelUnclassifiedRandomChoices = new RandomItemSet();
-					this.levelToRandomChoices.put(level, levelUnclassifiedRandomChoices);
+					this.levelToRandomChoices.put(levelUnclassified, levelUnclassifiedRandomChoices);
 				}
 				levelUnclassifiedRandomChoices.unclassifiedItems.add(typeId);
 			}
@@ -195,6 +202,30 @@ public class CItemData {
 	private static final class RandomItemSet {
 		private final List<War3ID> unclassifiedItems = new ArrayList<>();
 		private final Map<CItemTypeJass, List<War3ID>> classificationToItems = new HashMap<>();
+	}
+
+	/**
+	 * The item profile also holds the tech equivalents (TWN1, TWN2, TWN3, TALT) that neutral heroes require.
+	 */
+	public Map<War3ID, List<War3ID>> getTechEquivalents() {
+		final Map<War3ID, List<War3ID>> techEquivalents = new HashMap<>();
+		if (this.itemData instanceof WarcraftData) {
+			final DataTable profile = ((WarcraftData) this.itemData).getTable("Profile");
+			if (profile != null) {
+				for (final String key : profile.keySet()) {
+					final Element element = profile.get(key);
+					if ((key.length() == 4) && (this.itemData.get(key) == null) && (element != null)
+							&& element.hasField(DEPENDENCY_EQUIVALENTS)) {
+						final List<War3ID> unitIds = CUnitData
+								.parseIDList(element.getFieldAsList(DEPENDENCY_EQUIVALENTS));
+						if (!unitIds.isEmpty()) {
+							techEquivalents.put(War3ID.fromString(key), unitIds);
+						}
+					}
+				}
+			}
+		}
+		return techEquivalents;
 	}
 
 	public Collection<CItemType> getAllItemTypes() {

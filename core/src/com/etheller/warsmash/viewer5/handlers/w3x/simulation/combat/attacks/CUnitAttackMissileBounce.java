@@ -8,6 +8,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnitEnumFunction;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CWidget;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.nightelf.units.CAbilityBouncingMissileFilter;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityTarget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityTargetWidgetVisitor;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.CAttackType;
@@ -71,7 +72,7 @@ public class CUnitAttackMissileBounce extends CUnitAttackMissile {
 			final CUnitAttackListener attackListener, final CUnitAttackSettings settings) {
 		super.doDamage(cSimulation, source, target, damage, x, y, bounceIndex, attackListener, settings);
 		final CWidget widget = target.visit(AbilityTargetWidgetVisitor.INSTANCE);
-		if (widget != null) {
+		if ((widget != null) && !CAbilityBouncingMissileFilter.isBounceFiltered(cSimulation, source, widget)) {
 			final int nextBounceIndex = bounceIndex + 1;
 			if (nextBounceIndex != this.maximumNumberOfTargets) {
 				BounceMissileConsumer.INSTANCE.nextBounce(cSimulation, source, widget, this, x, y, damage,
@@ -122,7 +123,8 @@ public class CUnitAttackMissileBounce extends CUnitAttackMissile {
 			if (enumUnit == this.target) {
 				return false;
 			}
-			if (enumUnit.canBeTargetedBy(this.simulation, this.source, this.attack.areaOfEffectTargets)) {
+			if (enumUnit.canBeTargetedBy(this.simulation, this.source, this.attack.areaOfEffectTargets)
+					&& !CAbilityBouncingMissileFilter.isBounceFiltered(this.simulation, this.source, enumUnit)) {
 				if (this.launched) {
 					throw new IllegalStateException("already launched");
 				}

@@ -41,7 +41,7 @@ public class ABActionAbilityAttemptToApplyEffect implements ABSingleAction {
 		if (theAbility instanceof AbilityBuilderActiveAbility) {
 			AbilityBuilderActiveAbility active = ((AbilityBuilderActiveAbility) theAbility);
 			int orderId = active.getBaseOrderId();
-			final BooleanAbilityActivationReceiver activationReceiver = BooleanAbilityActivationReceiver.INSTANCE;
+			final BooleanAbilityActivationReceiver activationReceiver = BooleanAbilityActivationReceiver.INSTANCE.reset();
 			active.checkCanUse(game, theCaster, theOrderingPlayerIndex, orderId, false, activationReceiver);
 			if (activationReceiver.isOk()) {
 				final BooleanAbilityTargetCheckReceiver<CWidget> booleanTargetReceiver = BooleanAbilityTargetCheckReceiver

@@ -26,4 +26,10 @@ public interface TouchTarget {
 
 	/** Abandon a press in progress without performing it, for example a selection box. */
 	void cancelPointerDrag();
+
+	/**
+	 * The finger has left the screen: a pointer no longer rests over the interface, so hover state and its tooltip
+	 * end. A tooltip is shown only while a finger is held on a button.
+	 */
+	void endTouchHover();
 }
