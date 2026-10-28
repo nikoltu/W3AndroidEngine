@@ -14,7 +14,8 @@ public class MusicPlayerLibGDX implements MusicPlayer {
 	private Music[] currentMusics;
 	private int currentMusicIndex;
 	private boolean currentMusicRandomizeIndex;
-	private boolean currentMusicActive;
+	// The map music starts with the game, as soon as the map script has named it.
+	private boolean currentMusicActive = true;
 	private final DataSource dataSource;
 	private final DataTable musicSLK;
 	private float volume = 1.0f;
@@ -33,7 +34,7 @@ public class MusicPlayerLibGDX implements MusicPlayer {
 			if (this.currentMusics == null) {
 				playDefaultMusic();
 			}
-			if (this.currentMusics != null) {
+			if ((this.currentMusics != null) && (this.currentMusics.length > 0)) {
 				if ((this.currentMusics[this.currentMusicIndex] != null)
 						&& !this.currentMusics[this.currentMusicIndex].isPlaying()) {
 					if (this.currentMusicRandomizeIndex) {
@@ -52,7 +53,7 @@ public class MusicPlayerLibGDX implements MusicPlayer {
 
 	@Override
 	public void setMusicPosition(int positionMSecs) {
-		if (this.currentMusics != null) {
+		if ((this.currentMusics != null) && (this.currentMusics.length > 0)) {
 			if (this.currentMusics[this.currentMusicIndex] != null) {
 				this.currentMusics[this.currentMusicIndex].setPosition(positionMSecs / GAME_MSECS_DIVISOR);
 			}
@@ -128,8 +129,9 @@ public class MusicPlayerLibGDX implements MusicPlayer {
 		this.currentMusics = new Music[musics.length];
 		int validMusicCount = 0;
 		for (int i = 0; i < musics.length; i++) {
-			if (this.dataSource.has(musics[i])) {
-				final Music newMusic = Extensions.audio.newMusic(new DataSourceFileHandle(this.dataSource, musics[i]));
+			final String path = findMusicFile(this.dataSource, musics[i]);
+			if (path != null) {
+				final Music newMusic = Extensions.audio.newMusic(new DataSourceFileHandle(this.dataSource, path));
 				newMusic.setVolume(this.volume);
 				this.currentMusics[i] = newMusic;
 				validMusicCount++;
@@ -145,9 +147,13 @@ public class MusicPlayerLibGDX implements MusicPlayer {
 			}
 			this.currentMusics = fixedList;
 		}
+		if (this.currentMusics.length == 0) {
+			return null;
+		}
 		if (random) {
 			index = (int) (Math.random() * this.currentMusics.length);
 		}
+		index = Math.min(index, this.currentMusics.length - 1);
 		this.currentMusicIndex = index;
 		this.currentMusicRandomizeIndex = random;
 		if (this.currentMusics[index] != null) {
@@ -156,6 +162,28 @@ public class MusicPlayerLibGDX implements MusicPlayer {
 				this.currentMusics[index].setPosition(fromMSecs / GAME_MSECS_DIVISOR);
 			}
 			return this.currentMusics[index];
+		}
+		return null;
+	}
+
+	/**
+	 * The music tables name the music of the newest graphics pack (FLAC); the classic data holds the same tracks as
+	 * MP3 and the HD pack as OGG.
+	 *
+	 * @return the path of the track as it exists in the data, or null
+	 */
+	public static String findMusicFile(final DataSource dataSource, final String path) {
+		if (dataSource.has(path)) {
+			return path;
+		}
+		final int dot = path.lastIndexOf('.');
+		if (dot >= 0) {
+			for (final String extension : new String[] { ".mp3", ".ogg", ".flac" }) {
+				final String candidate = path.substring(0, dot) + extension;
+				if (dataSource.has(candidate)) {
+					return candidate;
+				}
+			}
 		}
 		return null;
 	}

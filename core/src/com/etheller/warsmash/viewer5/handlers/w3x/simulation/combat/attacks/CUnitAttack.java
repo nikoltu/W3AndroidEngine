@@ -44,7 +44,7 @@ public abstract class CUnitAttack {
 	private float animationDamagePoint;
 	private float animationDamagePointBase;
 	private CAttackType attackType;
-	private final float cooldownTimeBase;
+	private float cooldownTimeBase;
 	private float cooldownTime;
 	private int damageBase;
 	private int damageDice;
@@ -271,7 +271,7 @@ public abstract class CUnitAttack {
 	}
 
 	public void setCooldownTime(final float cooldownTime) {
-		this.cooldownTime = cooldownTime;
+		this.cooldownTimeBase = cooldownTime;
 		computeDerivedFields();
 	}
 

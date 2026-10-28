@@ -81,7 +81,8 @@ public class SingleStringFrame extends AbstractRenderableFrame {
 		final float y;
 		switch (this.justifyV) {
 		case MIDDLE:
-			y = this.renderBounds.y + ((this.renderBounds.height + this.frameFont.getLineHeight()) / 2);
+			// Centred on the letters themselves; the line height adds spacing below them and lifted the text.
+			y = this.renderBounds.y + ((this.renderBounds.height + this.frameFont.getCapHeight()) / 2);
 			break;
 		case TOP:
 			y = (this.renderBounds.y + this.renderBounds.height);

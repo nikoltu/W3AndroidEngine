@@ -24,17 +24,17 @@ import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.viewer5.handlers.w3x.AnimationTokens.PrimaryTag;
 import com.etheller.warsmash.viewer5.handlers.w3x.SequenceUtils;
-import com.etheller.warsmash.viewer5.handlers.w3x.environment.PathingGrid;
 import com.etheller.warsmash.viewer5.handlers.w3x.environment.PathingGrid.MovementType;
 import com.etheller.warsmash.viewer5.handlers.w3x.environment.PathingGrid.PathingFlags;
 import com.etheller.warsmash.viewer5.handlers.w3x.environment.PathingGrid.RemovablePathingMapInstance;
+import com.etheller.warsmash.viewer5.handlers.w3x.environment.PathingGrid;
 import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.RenderUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnitStateListener.CUnitStateNotifier;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbility;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbilityAttack;
-import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbilityMove;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbilityCategory;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbilityDisableType;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbilityMove;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbilityVisitor;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.GetAbilityByRawcodeVisitor;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.autocast.AutocastType;
@@ -53,9 +53,13 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.mine.CAbi
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.mine.CAbilityOverlayedMine;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.nightelf.root.CAbilityRoot;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.undead.units.CBuffDisease;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.util.CAbilityAuraBase;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityPointTarget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityTarget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityTargetVisitor;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.ability.template.CAbilityAbilityBuilderAuraTemplate;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.ability.template.CAbilityAbilityBuilderSimpleAuraTemplate;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.ability.template.CAbilityAbilityBuilderStatAuraTemplate;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.buff.ABGenericTimedBuff;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.buff.CPausedTickingBuff;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.BehaviorAbilityVisitor;
@@ -100,8 +104,8 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.attacks.list
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.attacks.listeners.CUnitDefaultSleepListener;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.attacks.listeners.CUnitDefaultThornsListener;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.attacks.replacement.CUnitAttackModifier;
-import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.attacks.replacement.CUnitPriorityLoopData;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.attacks.replacement.CUnitAttackSettings;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.attacks.replacement.CUnitPriorityLoopData;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.projectile.CAttackProjectile;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.projectile.CProjectile;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.projectile.listeners.CUnitAbilityProjReactionListener;
@@ -157,6 +161,7 @@ public class CUnit extends CWidget {
 	private float facing; // degrees
 	private float mana;
 	private int baseMaximumLife;
+	private float handicap = 1f;
 	private int maximumLife;
 	private float lifeRegen;
 	private float lifeRegenStrengthBonus;
@@ -1604,7 +1609,7 @@ public class CUnit extends CWidget {
 				}
 				totalNSMaxHPBuff += buffForKey * this.baseMaximumLife;
 			}
-			final int newMaxLife = this.baseMaximumLife + Math.round(totalNSMaxHPBuff);
+			final int newMaxLife = Math.round((this.baseMaximumLife + totalNSMaxHPBuff) * this.handicap);
 			if (newMaxLife > this.maximumLife) {
 				this.life += newMaxLife - this.maximumLife;
 				this.maximumLife = newMaxLife;
@@ -2307,10 +2312,19 @@ public class CUnit extends CWidget {
 	public void addMaxLifeRelative(final CSimulation game, final int hitPointBonus) {
 		final int oldMaximumLife = getMaximumLife();
 		final float oldLife = getLife();
-		final int newMaximumLife = oldMaximumLife + hitPointBonus;
-		final float newLife = (oldLife * newMaximumLife) / oldMaximumLife;
-		setMaximumLife(newMaximumLife);
-		setLife(game, newLife);
+		setMaximumLife(this.baseMaximumLife + hitPointBonus);
+		setLife(game, (oldLife * getMaximumLife()) / oldMaximumLife);
+	}
+
+	/**
+	 * The owner's handicap scales maximum life at once, as in the original game; life keeps its share of the maximum.
+	 */
+	public void setHandicap(final float handicap) {
+		final float lifeShare = this.maximumLife > 0 ? this.life / this.maximumLife : 1;
+		this.handicap = handicap;
+		computeDerivedFields(NonStackingStatBuffType.MAXHP);
+		this.life = lifeShare * this.maximumLife;
+		this.stateNotifier.lifeChanged();
 	}
 
 	public void setMaximumMana(final int maximumMana) {
@@ -2464,6 +2478,7 @@ public class CUnit extends CWidget {
 						player.removeTechtreeInProgress(game, this.unitType.getTypeId());
 						if (!upgrading) {
 							player.addTechtreeUnlocked(game, this.unitType.getTypeId());
+							player.scoreUnitGained(this.unitType);
 							game.unitConstructFinishEvent(this);
 							fireConstructFinishEvents(game);
 						} else {
@@ -2536,6 +2551,7 @@ public class CUnit extends CWidget {
 								player.setUnitFoodMade(trainedUnit, trainedUnitType.getFoodMade());
 								player.removeTechtreeInProgress(game, queuedRawcode);
 								player.addTechtreeUnlocked(game, queuedRawcode);
+								player.scoreUnitGained(trainedUnitType);
 								fireTrainFinishEvents(game, trainedUnit);
 								// nudge the trained unit out around us
 								trainedUnit.nudgeAround(game, this);
@@ -2566,6 +2582,7 @@ public class CUnit extends CWidget {
 								player.setUnitFoodMade(trainedUnit, trainedUnitType.getFoodMade());
 								player.removeTechtreeInProgress(game, queuedRawcode);
 								player.addTechtreeUnlocked(game, queuedRawcode);
+								player.scoreUnitGained(trainedUnitType);
 								fireTrainFinishEvents(game, trainedUnit);
 								// nudge the trained unit out around us
 								trainedUnit.nudgeAround(game, this);
@@ -2857,13 +2874,13 @@ public class CUnit extends CWidget {
 			if (this.priorityAttackTargets != null) {
 				game.getWorldCollision().enumUnitsInRect(tempRect,
 						autoAttackTargetFinderEnum.reset(game, this, disableMove, this.priorityAttackTargets));
-				if (autoAttackTargetFinderEnum.foundAnyTarget) {
+				if (autoAttackTargetFinderEnum.attackNearest()) {
 					return true;
 				}
 			}
 			game.getWorldCollision().enumUnitsInRect(tempRect,
 					autoAttackTargetFinderEnum.reset(game, this, disableMove, null));
-			return autoAttackTargetFinderEnum.foundAnyTarget;
+			return autoAttackTargetFinderEnum.attackNearest();
 		}
 		return false;
 	}
@@ -2887,7 +2904,7 @@ public class CUnit extends CWidget {
 		tempRect.height += halfSize * 2;
 		game.getWorldCollision().enumUnitsInRect(tempRect,
 				autoAttackTargetFinderEnum.reset(game, this, disableMove, this.priorityAttackTargets));
-		return autoAttackTargetFinderEnum.foundAnyTarget;
+		return autoAttackTargetFinderEnum.attackNearest();
 	}
 
 	/**
@@ -3206,6 +3223,12 @@ public class CUnit extends CWidget {
 			tempRect.setSize(16, 16);
 			collisionSize = this.unitType.getCollisionSize();
 		}
+		if (!isBuilding()) {
+			final float[] free = findNearestFreeCell(newX, newY, collision, pathingGrid, collisionSize);
+			setPoint(free[0], free[1], collision, game.getRegionManager());
+			game.unitRepositioned(this);
+			return;
+		}
 		for (int i = 0; i < 300; i++) {
 			final float centerX = newX + (checkX * 64);
 			final float centerY = newY + (checkY * 64);
@@ -3222,6 +3245,50 @@ public class CUnit extends CWidget {
 		}
 		setPoint(outputX, outputY, collision, game.getRegionManager());
 		game.unitRepositioned(this);
+	}
+
+	private boolean fitsAt(final float x, final float y, final CWorldCollision collision,
+			final PathingGrid pathingGrid, final float collisionSize) {
+		tempRect.setCenter(x, y);
+		return !collision.intersectsAnythingOtherThan(tempRect, this, getMovementType(), false)
+				&& pathingGrid.isPathable(x, y, getMovementType(), collisionSize);
+	}
+
+	/**
+	 * A unit that cannot stand where it is put keeps that point when it is free; otherwise it goes to the centre of the
+	 * first free 32 pathing cell along the square spiral the original game uses (from the point's own cell: down 1,
+	 * right 1, up 2, left 2, down 3, ...), which is not always the nearest one. Measured: the original tests the
+	 * pathing map at the cell's lower left corner but other units at the cell centre.
+	 */
+	private float[] findNearestFreeCell(final float x, final float y, final CWorldCollision collision,
+			final PathingGrid pathingGrid, final float collisionSize) {
+		if (fitsAt(x, y, collision, pathingGrid, collisionSize)) {
+			return new float[] { x, y };
+		}
+		final float baseX = (float) Math.floor(x / 32f) * 32f;
+		final float baseY = (float) Math.floor(y / 32f) * 32f;
+		final int[] stepX = { 0, 1, 0, -1 };
+		final int[] stepY = { -1, 0, 1, 0 };
+		int cellX = 0;
+		int cellY = 0;
+		int direction = 0;
+		for (int legLength = 1; legLength <= 128; legLength++) {
+			for (int leg = 0; leg < 2; leg++) {
+				for (int step = 0; step < legLength; step++) {
+					final float cx = baseX + (cellX * 32f);
+					final float cy = baseY + (cellY * 32f);
+					tempRect.setCenter(cx + 16f, cy + 16f);
+					if (!collision.intersectsAnythingOtherThan(tempRect, this, getMovementType(), false)
+							&& pathingGrid.isPathable(cx, cy, getMovementType(), collisionSize)) {
+						return new float[] { cx + 16f, cy + 16f };
+					}
+					cellX += stepX[direction];
+					cellY += stepY[direction];
+				}
+				direction = (direction + 1) % 4;
+			}
+		}
+		return new float[] { x, y };
 	}
 
 	public void setPoint(final float newX, final float newY, final CWorldCollision collision,
@@ -3328,7 +3395,8 @@ public class CUnit extends CWidget {
 			final boolean isRanged, final CAttackType attackType, final CDamageType damageType, final float damage,
 			final float bonusDamage) {
 		boolean miss = false;
-		if (isAttack) {
+		// Evasion stays on an illusion but never makes it dodge in the original game.
+		if (isAttack && !this.illusion) {
 			for (final CUnitAttackEvasionListener listener : new ArrayList<>(this.evasionListeners)) {
 				miss = miss || listener.onAttack(simulation, source, this, isAttack, isRanged, damageType);
 			}
@@ -3450,6 +3518,17 @@ public class CUnit extends CWidget {
 		return false;
 	}
 
+	public void fireAttackedEvents(final CSimulation simulation, final CUnit attacker) {
+		final List<CWidgetEvent> eventList = getEventList(JassGameEventsWar3.EVENT_UNIT_ATTACKED);
+		if (eventList != null) {
+			for (final CWidgetEvent event : eventList) {
+				event.fire(this, CommonTriggerExecutionScope.unitAttackedScope(JassGameEventsWar3.EVENT_UNIT_ATTACKED,
+						event.getTrigger(), this, attacker, simulation.getPlayer(this.playerIndex)));
+			}
+		}
+		simulation.getPlayer(this.playerIndex).fireUnitAttackedEvents(this, attacker);
+	}
+
 	@Override
 	public float damage(final CSimulation simulation, final CUnit source, final CDamageFlags flags,
 			final CAttackType attackType, final CDamageType damageType, final String weaponSoundType,
@@ -3523,6 +3602,8 @@ public class CUnit extends CWidget {
 			}
 			if (flags.isNonlethal() && this.life < 1) {
 				this.life = 1;
+			} else if (this.life < 0) {
+				this.life = 0;
 			}
 			this.stateNotifier.lifeChanged();
 		}
@@ -3776,6 +3857,7 @@ public class CUnit extends CWidget {
 		if ((source != null) && !this.illusion) {
 			final CPlayer sourcePlayer = simulation.getPlayer(source.getPlayerIndex());
 			if (!sourcePlayer.hasAlliance(this.playerIndex, CAllianceType.PASSIVE)) {
+				sourcePlayer.scoreKill(this.unitType);
 				if (player.getPlayerState(simulation, CPlayerState.GIVES_BOUNTY) > 0) {
 					int goldBountyAwarded = this.unitType.getGoldBountyAwardedBase();
 					final int goldBountyAwardedDice = this.unitType.getGoldBountyAwardedDice();
@@ -3844,10 +3926,9 @@ public class CUnit extends CWidget {
 					final boolean creepKill = simulation.isNeutralAggressive(this.playerIndex);
 					for (final CUnit receivingHero : xpReceivingHeroes) {
 						final CAbilityHero heroData = receivingHero.getHeroData();
-						final float factor = creepKill ? gameplayConstants.getHeroFactorXp(heroData.getHeroLevel())
-								: 1f;
-						heroData.addXp(simulation, receivingHero,
-								(int) (availableAwardXp * (1f / xpReceivingHeroes.size()) * factor), true);
+						final float share = availableAwardXp * (1f / xpReceivingHeroes.size());
+						final int xp = creepKill ? creepXp(gameplayConstants, heroData, share) : (int) share;
+						heroData.addXp(simulation, receivingHero, xp, true);
 					}
 				}
 			}
@@ -4027,10 +4108,21 @@ public class CUnit extends CWidget {
 				ability.setIconShowing(false);
 			}
 			else if (!(ability instanceof CAbilityMove) && !(ability instanceof CAbilityAttack)
-					&& !(ability instanceof CAbilityInventory) && (ability.getItem() == null)) {
+					&& !(ability instanceof CAbilityInventory) && (ability.getItem() == null)
+					&& !isPassiveKeptByIllusion(ability)) {
 				remove(simulation, ability);
 			}
 		}
+	}
+
+	/**
+	 * The original game keeps passives on an illusion (Bash still stuns), but not auras, which illusions do not give.
+	 */
+	private static boolean isPassiveKeptByIllusion(final CAbility ability) {
+		return (ability instanceof AbilityGenericSingleIconPassiveAbility) && !(ability instanceof CAbilityAuraBase)
+				&& !(ability instanceof CAbilityAbilityBuilderAuraTemplate)
+				&& !(ability instanceof CAbilityAbilityBuilderSimpleAuraTemplate)
+				&& !(ability instanceof CAbilityAbilityBuilderStatAuraTemplate);
 	}
 
 	public boolean isBoneCorpse() {
@@ -4063,7 +4155,9 @@ public class CUnit extends CWidget {
 			receiver.targetCheckFailed(CommandStringErrorKeys.THAT_UNIT_IS_IMMUNE_TO_MAGIC);
 			return false;
 		}
-		if (targeted && (!isVisible(simulation, source.getPlayerIndex())
+		// Measured: script attack orders may target a unit hidden only by the fog of war.
+		final boolean fogOnly = simulation.isScriptOrder() && (this.invisLevels == 0);
+		if (targeted && ((!fogOnly && !isVisible(simulation, source.getPlayerIndex()))
 				|| (this.untargetablePlayers & (1 << source.getPlayerIndex())) != 0)) {
 			receiver.targetCheckFailed(CommandStringErrorKeys.MUST_TARGET_A_UNIT_WITH_THIS_ACTION);
 			return false;
@@ -4528,6 +4622,9 @@ public class CUnit extends CWidget {
 		private boolean disableMove;
 		private EnumSet<CTargetType> priorityTargets;
 		private boolean foundAnyTarget;
+		private CUnit nearestTarget;
+		private CUnitAttack nearestTargetAttack;
+		private double nearestTargetDistance;
 
 		private AutoAttackTargetFinderEnum reset(final CSimulation game, final CUnit source,
 				final boolean disableMove, final EnumSet<CTargetType> priorityTargets) {
@@ -4536,7 +4633,24 @@ public class CUnit extends CWidget {
 			this.disableMove = disableMove;
 			this.priorityTargets = priorityTargets;
 			this.foundAnyTarget = false;
+			this.nearestTarget = null;
+			this.nearestTargetAttack = null;
+			this.nearestTargetDistance = Double.MAX_VALUE;
 			return this;
+		}
+
+		/**
+		 * Attacks the nearest of the targets the enumeration found, as the original game picks it.
+		 */
+		private boolean attackNearest() {
+			if (this.nearestTarget != null) {
+				this.source.beginBehavior(this.game,
+						this.source.getAttackBehavior().reset(this.game, OrderIds.attack, this.nearestTargetAttack,
+								this.nearestTarget, this.disableMove, CBehaviorAttackListener.DO_NOTHING),
+						true);
+				this.foundAnyTarget = true;
+			}
+			return this.foundAnyTarget;
 		}
 
 		@Override
@@ -4562,12 +4676,13 @@ public class CUnit extends CWidget {
 									&& !(this.game.getGameplayConstants().isMagicImmuneResistsDamage()
 											&& unit.isUnitType(CUnitTypeJass.MAGIC_IMMUNE)
 											&& (attack.getAttackType() == CAttackType.MAGIC))) {
-								this.source.beginBehavior(
-										this.game, this.source.getAttackBehavior().reset(this.game, OrderIds.attack,
-												attack, unit, this.disableMove, CBehaviorAttackListener.DO_NOTHING),
-										true);
-								this.foundAnyTarget = true;
-								return true;
+								final double distance = this.source.distance(unit);
+								if (distance < this.nearestTargetDistance) {
+									this.nearestTarget = unit;
+									this.nearestTargetAttack = attack;
+									this.nearestTargetDistance = distance;
+								}
+								return false;
 							}
 						}
 					}
@@ -6080,6 +6195,36 @@ public class CUnit extends CWidget {
 			}
 		}
 		game.getPlayer(this.playerIndex).fireConstructFinishEvents(this, game, constructingUnit);
+	}
+
+	/**
+	 * Creep experience is reduced by the hero level it is gained at: a kill that takes the hero past a level is
+	 * counted at each level's rate in turn, as the original game does.
+	 */
+	private static int creepXp(final CGameplayConstants gameplayConstants, final CAbilityHero heroData,
+			final float rawXp) {
+		float remaining = rawXp;
+		float gained = 0;
+		int level = heroData.getHeroLevel();
+		int xp = heroData.getXp();
+		while (remaining > 0) {
+			final float factor = gameplayConstants.getHeroFactorXp(level);
+			if (factor <= 0) {
+				break;
+			}
+			final float toNextLevel = level < gameplayConstants.getMaxHeroLevel()
+					? gameplayConstants.getNeedHeroXPSum(level) - xp
+					: Float.MAX_VALUE;
+			if ((remaining * factor) <= toNextLevel) {
+				gained += remaining * factor;
+				break;
+			}
+			gained += toNextLevel;
+			xp += (int) toNextLevel;
+			remaining -= toNextLevel / factor;
+			level++;
+		}
+		return Math.round(gained);
 	}
 
 	public void fireHeroLevelEvents(final CSimulation game) {

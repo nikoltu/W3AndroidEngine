@@ -9,7 +9,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.inventory
 
 /**
  * Creates illusions the way every illusion ability does (Mirror Image, Wand of Illusion and the like): a copy of
- * the original's type, hero level and attributes, carrying copies of its items in the same slots so their stat
+ * the original's type, hero level, attributes and learned skills (only passives stay), carrying copies of its items in the same slots so their stat
  * bonuses apply, with the same share of life and mana, living for the given duration.
  */
 public final class CIllusions {
@@ -30,6 +30,7 @@ public final class CIllusions {
 			imageHero.setStrengthBase(simulation, image, originalHero.getStrength().getBase());
 			imageHero.setAgilityBase(simulation, image, originalHero.getAgility().getBase());
 			imageHero.setIntelligenceBase(simulation, image, originalHero.getIntelligence().getBase());
+			imageHero.copyLearnedSkills(simulation, image, originalHero);
 		}
 		image.makeIllusion(simulation, damageDealtFactor, damageTakenFactor, buffId);
 		final CAbilityInventory originalInventory = original.getInventoryData();

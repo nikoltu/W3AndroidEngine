@@ -26,6 +26,7 @@ public class CPathfindingProcessor {
 	private final Node[] goalSet = new Node[4];
 	private int goals = 0;
 	private int pathfindJobId = 0;
+	private static final int NEAREST_PATHABLE_RINGS = 32;
 	private int totalIterations = 0;
 	private int totalJobLoops = 0;
 	private final int pathingGridCellCount;
@@ -229,6 +230,9 @@ public class CPathfindingProcessor {
 				job.goalX = job.goal.x;
 				job.goalY = job.goal.y;
 				job.weightForHittingWalls = 1E9f;
+				if (!this.pathingGrid.isPathable(job.goalX, job.goalY, job.movementType, job.collisionSize)) {
+					moveGoalToNearestPathable(job);
+				}
 				if (!this.pathingGrid.isPathable(job.goalX, job.goalY, job.movementType, job.collisionSize)
 						|| !isPathableDynamically(job.goalX, job.goalY, job.ignoreIntersectionsWithThisUnit,
 								job.ignoreIntersectionsWithThisSecondUnit, job.movementType)) {
@@ -440,7 +444,9 @@ public class CPathfindingProcessor {
 				}
 				workIterations++;
 				this.totalIterations++;
-				if (this.totalIterations > 20000) {
+				// Measured: the original walks across a whole melee map; a fixed cap stopped such paths after a few
+				// steps. The search is already spread over ticks, so only the time to find a path grows.
+				if (this.totalIterations > this.pathingGridCellCount) {
 					break;
 				}
 				if (workIterations >= 1500) {
@@ -450,6 +456,39 @@ public class CPathfindingProcessor {
 			}
 			job.queueItem.pathFound(Collections.emptyList(), simulation);
 			this.moveQueue.poll();
+		}
+	}
+
+	// Measured: ordered onto ground it cannot stand on, the original walks to the nearest ground it can. Searching
+	// toward the blocked point itself explored nearly the whole map before the unit moved.
+	private void moveGoalToNearestPathable(final PathfindingJob job) {
+		for (int ring = 1; ring <= NEAREST_PATHABLE_RINGS; ring++) {
+			float bestX = 0;
+			float bestY = 0;
+			double bestDistance = Double.MAX_VALUE;
+			for (int i = -ring; i <= ring; i++) {
+				for (int j = -ring; j <= ring; j++) {
+					if ((Math.abs(i) != ring) && (Math.abs(j) != ring)) {
+						continue;
+					}
+					final float x = job.goalX + (i * 32);
+					final float y = job.goalY + (j * 32);
+					if (this.pathingGrid.contains(x, y)
+							&& this.pathingGrid.isPathable(x, y, job.movementType, job.collisionSize)) {
+						final double distance = StrictMath.hypot(x - job.startX, y - job.startY);
+						if (distance < bestDistance) {
+							bestDistance = distance;
+							bestX = x;
+							bestY = y;
+						}
+					}
+				}
+			}
+			if (bestDistance != Double.MAX_VALUE) {
+				job.goalX = bestX;
+				job.goalY = bestY;
+				return;
+			}
 		}
 	}
 

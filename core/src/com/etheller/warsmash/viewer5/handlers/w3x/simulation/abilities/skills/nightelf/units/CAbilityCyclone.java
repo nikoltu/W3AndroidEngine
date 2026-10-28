@@ -28,7 +28,10 @@ public class CAbilityCyclone extends CAbilityTargetSpellBase {
 	@Override
 	public void populateData(final GameObject worldEditorAbility, final int level) {
 		this.dispellable = worldEditorAbility.getFieldAsBoolean(AbilityFields.DATA_A + level, 0);
-		this.buffId = AbstractCAbilityTypeDefinition.getBuffId(worldEditorAbility, level);
+		// Measured: an enemy unit gets the second buff of the list (Bcy2), not the first.
+		final War3ID secondBuffId = AbstractCAbilityTypeDefinition.getBuffId(worldEditorAbility, level, 1);
+		this.buffId = !War3ID.NONE.equals(secondBuffId) ? secondBuffId
+				: AbstractCAbilityTypeDefinition.getBuffId(worldEditorAbility, level);
 	}
 
 	@Override

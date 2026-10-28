@@ -293,9 +293,15 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 	private static final float HERO_BAR_TOP = 0.034f;
 	private static final float HERO_BUTTON_SIZE = 0.038f;
 	private static final float HERO_BUTTON_STEP = 0.056f;
+	private static final float IDLE_WORKER_BOTTOM = 0.17f;
+	private static final long IDLE_WORKER_HOLD_MILLIS = 500;
 	private final MultiSelectionIcon[] heroBarIcons = new MultiSelectionIcon[HERO_BAR_SIZE];
 	private final List<CUnit> heroBarUnits = new ArrayList<>();
 	private int lastHeroBarPressed = -1;
+	private MultiSelectionIcon idleWorkerIcon;
+	private final List<CUnit> idleWorkers = new ArrayList<>();
+	private int idleWorkerCycle;
+	private long idleWorkerPressMillis;
 	private long lastHeroBarPressMillis;
 	private final UIFrame[] cargoBackdrop = new UIFrame[WarsmashConstants.MAX_SELECTION_SIZE];
 	private final MultiSelectionIcon[] cargoUnitFrames = new MultiSelectionIcon[WarsmashConstants.MAX_SELECTION_SIZE];
@@ -335,6 +341,8 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 	private SpriteFrame cursorFrame;
 	private boolean cursorHiddenForFinger;
 	private MeleeUIMinimap meleeUIMinimap;
+	private MeleeAllianceDialog allianceDialog;
+	private MeleeScoreScreen scoreScreen;
 	private final CPlayerUnitOrderListener unitOrderListener;
 	private StringFrame errorMessageFrame;
 	private final ArrayDeque<GameMessage> gameMessages = new ArrayDeque<>();
@@ -615,7 +623,12 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 		this.questsButton.setEnabled(false);
 		this.menuButton = (SimpleButtonFrame) this.rootFrame.getFrameByName("UpperButtonBarMenuButton", 0);
 		this.alliesButton = (SimpleButtonFrame) this.rootFrame.getFrameByName("UpperButtonBarAlliesButton", 0);
-		this.alliesButton.setEnabled(false);
+		this.allianceDialog = new MeleeAllianceDialog(this.rootFrame, this.uiViewport, this.war3MapViewer.simulation,
+				this.localPlayer);
+		this.scoreScreen = new MeleeScoreScreen(this.rootFrame, this.uiViewport, this.war3MapViewer.simulation,
+				this.war3MapViewer.getLocalPlayerIndex(), this::quitMission);
+		this.alliesButton.setOnClick(() -> MeleeUI.this.allianceDialog
+				.setVisible(!MeleeUI.this.allianceDialog.isVisible()));
 		this.chatButton = (SimpleButtonFrame) this.rootFrame.getFrameByName("UpperButtonBarChatButton", 0);
 		this.chatButton.setEnabled(false);
 		if (TouchInputRouter.isActive()) {
@@ -1914,6 +1927,7 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 			timerDialog.update(this.rootFrame, this.war3MapViewer.simulation);
 		}
 		updateHeroBar();
+		updateIdleWorkers();
 		if (VirtualCursor.isCursorHidden()) {
 			if (this.cursorFrame.isVisible()) {
 				this.cursorFrame.setVisible(false);
@@ -2204,6 +2218,24 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 		return texture;
 	}
 
+	private final Vector3 minimapCornerTemp = new Vector3();
+
+	/** The minimap outlines the ground the camera sees, as in the original game: the screen corners cast onto the
+	 * ground at the camera target's height. */
+	private void updateMinimapCameraFootprint() {
+		final float[] footprint = this.meleeUIMinimap.getCameraFootprint();
+		final int width = Gdx.graphics.getWidth();
+		final int height = Gdx.graphics.getHeight();
+		final int[] cornersX = { 0, width, width, 0 };
+		final int[] cornersY = { 0, 0, height, height };
+		for (int i = 0; i < 4; i++) {
+			this.war3MapViewer.getClickLocationOnZPlane(this.minimapCornerTemp, cornersX[i], cornersY[i],
+					this.cameraManager.target.z);
+			footprint[i * 2] = this.minimapCornerTemp.x;
+			footprint[(i * 2) + 1] = this.minimapCornerTemp.y;
+		}
+	}
+
 	@Override
 	public void render(final SpriteBatch batch, final GlyphLayout glyphLayout) {
 		this.rootFrame.render(batch, this.rootFrame.getFont20(), glyphLayout);
@@ -2212,6 +2244,10 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 
 		}
 
+		if (this.scoreScreen.isVisible()) {
+			return;
+		}
+		updateMinimapCameraFootprint();
 		this.meleeUIMinimap.render(this.war3MapViewer.simulation, batch, this.war3MapViewer.units,
 				this.war3MapViewer.simulation.getPathingGrid(), this.war3MapViewer.getFogOfWar(),
 				this.war3MapViewer.simulation.getPlayer(this.war3MapViewer.getLocalPlayerIndex()));
@@ -2263,6 +2299,25 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 				}
 			}
 			bar.render(batch, this.rootFrame.getFont20(), groupSizes, groupIcons);
+		}
+		if ((this.idleWorkerIcon != null) && this.idleWorkerIcon.isVisible()) {
+			final BitmapFont font20 = this.rootFrame.getFont20();
+			final Rectangle bounds = this.idleWorkerIcon.getRenderBounds();
+			final String count = Integer.toString(this.idleWorkers.size());
+			final float x = bounds.x + (bounds.width * 0.56f);
+			final float y = bounds.y + (bounds.height * 0.46f);
+			final float scaleX = font20.getData().scaleX;
+			final float scaleY = font20.getData().scaleY;
+			// The font has a fixed size, so the count is sized from the button to read the same on every screen.
+			final float sizing = (bounds.height * 0.34f) / font20.getCapHeight();
+			font20.getData().setScale(scaleX * sizing, scaleY * sizing);
+			// A dark shadow keeps the count readable over the bright worker icon.
+			final float shadow = bounds.width * 0.03f;
+			font20.setColor(Color.BLACK);
+			font20.draw(batch, count, x + shadow, y - shadow);
+			font20.setColor(Color.WHITE);
+			font20.draw(batch, count, x, y);
+			font20.getData().setScale(scaleX, scaleY);
 		}
 		if (WarsmashConstants.SHOW_FPS) {
 			final BitmapFont font14 = this.rootFrame.getFont14();
@@ -3709,10 +3764,10 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 					final float temporaryDefenseBonus = simulationUnit.getTotalTemporaryDefenseBonus();
 					if (temporaryDefenseBonus != 0) {
 						if (temporaryDefenseBonus > 0) {
-							defenseDisplayString += "|cFF00FF00 +" + String.format("%.1f", temporaryDefenseBonus) + "";
+							defenseDisplayString += "|cFF00FF00 +" + formatBonus(temporaryDefenseBonus);
 						}
 						else {
-							defenseDisplayString += "|cFFFF0000 " + String.format("%.1f", temporaryDefenseBonus) + "";
+							defenseDisplayString += "|cFFFF0000 " + formatBonus(temporaryDefenseBonus);
 						}
 					}
 				}
@@ -3896,6 +3951,7 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 	public void resize(final int width, final int height) {
 		this.cameraManager.resize(setupWorldFrameViewport(width, height));
 		positionPortrait();
+		anchorHeroBar();
 		if (this.rootFrame.isAutoPosition()) {
 			this.rootFrame.positionBounds(this.rootFrame, this.uiViewport);
 		}
@@ -4212,6 +4268,14 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 		if ((keycode == Input.Keys.SPACE) && getCameraManager().panToQuickPosition()) {
 			return true;
 		}
+		if (keycode == Input.Keys.F11) {
+			this.allianceDialog.setVisible(!this.allianceDialog.isVisible());
+			return true;
+		}
+		if ((keycode == Input.Keys.F8) && !this.idleWorkers.isEmpty()) {
+			idleWorkerClicked(false);
+			return true;
+		}
 		if ((keycode >= Input.Keys.NUM_0) && (keycode <= Input.Keys.NUM_9)) {
 			final int group = keycode - Input.Keys.NUM_0;
 			if (isControlDown()) {
@@ -4295,6 +4359,10 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 		}
 		screenCoordsVector.set(screenX, screenY);
 		this.uiViewport.unproject(screenCoordsVector);
+		if (this.allianceDialog.tradeClick(screenCoordsVector.x, screenCoordsVector.y, button == Input.Buttons.RIGHT,
+				isShiftDown())) {
+			return true;
+		}
 		if (this.meleeUIMinimap.containsMouse(screenCoordsVector.x, screenCoordsVector.y)) {
 			final Vector2 worldPoint = this.meleeUIMinimap.getWorldPointFromScreen(screenCoordsVector.x,
 					screenCoordsVector.y);
@@ -4303,8 +4371,7 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 				rightClickMoveTo(worldPoint.x, worldPoint.y);
 				return true;
 			}
-			this.cameraManager.target.x = worldPoint.x;
-			this.cameraManager.target.y = worldPoint.y;
+			this.cameraManager.jumpTo(worldPoint.x, worldPoint.y);
 			return true;
 		}
 		final UIFrame clickedUIFrame = this.rootFrame.touchDown(screenCoordsVector.x, screenCoordsVector.y, button);
@@ -5028,9 +5095,6 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 			manaBar.getBarFrame().setColor(0f, 0f, 1f, 1f);
 			icon.set(iconTexture, hpBar, manaBar);
 			iconTexture.addSetPoint(new SetPoint(FramePoint.CENTER, icon, FramePoint.CENTER, 0, 0));
-			icon.addSetPoint(new SetPoint(FramePoint.TOPLEFT, this.consoleUI, FramePoint.TOPLEFT,
-					GameUI.convertX(this.uiViewport, HERO_BAR_LEFT),
-					-GameUI.convertY(this.uiViewport, HERO_BAR_TOP + (i * HERO_BUTTON_STEP))));
 			icon.setWidth(size);
 			icon.setHeight(size);
 			iconTexture.setWidth(size);
@@ -5038,6 +5102,72 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 			heroBar.add(icon);
 			icon.setVisible(false);
 			this.heroBarIcons[i] = icon;
+		}
+		this.idleWorkerIcon = createIdleWorkerButton(heroBar, size);
+		anchorHeroBar();
+	}
+
+	private MultiSelectionIcon createIdleWorkerButton(final SimpleFrame parent, final float size) {
+		final MultiSelectionIconListener listener = new MultiSelectionIconListener() {
+			@Override
+			public void multiSelectIconClicked(final int index) {
+				final long heldMillis = TimeUtils.millis() - MeleeUI.this.idleWorkerPressMillis;
+				idleWorkerClicked(heldMillis >= IDLE_WORKER_HOLD_MILLIS);
+			}
+
+			@Override
+			public void multiSelectIconPress(final int index) {
+				MeleeUI.this.idleWorkerPressMillis = TimeUtils.millis();
+			}
+
+			@Override
+			public void multiSelectIconRelease(final int index) {
+			}
+		};
+		final MultiSelectionIcon icon = new MultiSelectionIcon("SmashIdleWorkerButton", parent, listener, 0);
+		final TextureFrame iconTexture = new TextureFrame("SmashIdleWorkerBackdrop", icon, false,
+				new Vector4Definition(0, 1, 0, 1));
+		final SimpleStatusBarFrame hpBar = new SimpleStatusBarFrame("SmashIdleWorkerHpBar", parent, true, true, 3.0f);
+		final SimpleStatusBarFrame manaBar = new SimpleStatusBarFrame("SmashIdleWorkerManaBar", parent, true, true,
+				3.0f);
+		hpBar.setVisible(false);
+		manaBar.setVisible(false);
+		icon.set(iconTexture, hpBar, manaBar);
+		iconTexture.addSetPoint(new SetPoint(FramePoint.CENTER, icon, FramePoint.CENTER, 0, 0));
+		icon.setWidth(size);
+		icon.setHeight(size);
+		iconTexture.setWidth(size);
+		iconTexture.setHeight(size);
+		iconTexture.setTexture(this.rootFrame.loadTexture(this.rootFrame.getSkinField("IdlePeon")));
+		if (!TouchInputRouter.isActive()) {
+			icon.setToolTip("Idle Workers (F8)");
+		}
+		parent.add(icon);
+		icon.setVisible(false);
+		return icon;
+	}
+
+	/**
+	 * Hero buttons and the idle worker button sit at the real left screen edge, as in the original game, not at the
+	 * left edge of the centered 4:3 area the console is laid out in; called again when the window is resized.
+	 */
+	private void anchorHeroBar() {
+		final float screenLeft = (this.uiViewport.getMinWorldWidth() - this.uiViewport.getWorldWidth()) / 2;
+		for (int i = 0; i < HERO_BAR_SIZE; i++) {
+			final MultiSelectionIcon icon = this.heroBarIcons[i];
+			if (icon == null) {
+				continue;
+			}
+			icon.clearFramePointAssignments();
+			icon.addSetPoint(new SetPoint(FramePoint.TOPLEFT, this.consoleUI, FramePoint.TOPLEFT,
+					Math.min(0, screenLeft) + GameUI.convertX(this.uiViewport, HERO_BAR_LEFT),
+					-GameUI.convertY(this.uiViewport, HERO_BAR_TOP + (i * HERO_BUTTON_STEP))));
+		}
+		if (this.idleWorkerIcon != null) {
+			this.idleWorkerIcon.clearFramePointAssignments();
+			this.idleWorkerIcon.addSetPoint(new SetPoint(FramePoint.BOTTOMLEFT, this.consoleUI, FramePoint.BOTTOMLEFT,
+					Math.min(0, screenLeft) + GameUI.convertX(this.uiViewport, HERO_BAR_LEFT),
+					GameUI.convertY(this.uiViewport, IDLE_WORKER_BOTTOM)));
 		}
 	}
 
@@ -5069,6 +5199,57 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 		}
 	}
 
+	/**
+	 * Idle workers: the local player's workers standing without an order, not inside a mine or burrow.
+	 */
+	private void updateIdleWorkers() {
+		this.idleWorkers.clear();
+		final int localPlayerIndex = this.war3MapViewer.getLocalPlayerIndex();
+		for (final CUnit unit : this.war3MapViewer.simulation.getUnits()) {
+			if ((unit.getPlayerIndex() == localPlayerIndex) && !unit.isDead() && !unit.isHidden()
+					&& !unit.isBuilding() && unit.getClassifications().contains(CUnitClassification.PEON)
+					&& ((unit.getCurrentBehavior() == null) || (unit.getCurrentBehavior() == unit.getStopBehavior()))) {
+				this.idleWorkers.add(unit);
+			}
+		}
+		final boolean show = !this.idleWorkers.isEmpty();
+		if (this.idleWorkerIcon.isVisible() != show) {
+			this.idleWorkerIcon.setVisible(show);
+		}
+	}
+
+	/**
+	 * Selects the next idle worker in turn and centers the camera on it (button or F8); with Ctrl, or a held press on a
+	 * touch screen, it selects all idle workers instead, as in the original game.
+	 */
+	private void idleWorkerClicked(final boolean held) {
+		if (this.idleWorkers.isEmpty()) {
+			return;
+		}
+		if (held || isControlDown()) {
+			final List<RenderWidget> all = new ArrayList<>();
+			for (final CUnit worker : this.idleWorkers) {
+				final RenderUnit renderUnit = this.war3MapViewer.getRenderPeer(worker);
+				if (renderUnit != null) {
+					all.add(renderUnit);
+				}
+			}
+			selectWidgets(all);
+			this.war3MapViewer.doSelectUnit(all);
+			return;
+		}
+		this.idleWorkerCycle = (this.idleWorkerCycle + 1) % this.idleWorkers.size();
+		final CUnit worker = this.idleWorkers.get(this.idleWorkerCycle);
+		final RenderUnit renderUnit = this.war3MapViewer.getRenderPeer(worker);
+		if (renderUnit == null) {
+			return;
+		}
+		final List<RenderWidget> selection = Arrays.asList(renderUnit);
+		selectWidgets(selection);
+		this.war3MapViewer.doSelectUnit(selection);
+		this.cameraManager.jumpTo(worker.getX(), worker.getY());
+	}
+
 	/** A hero button selects its hero, a second press soon after also centers the camera on it. */
 	private void heroBarClicked(final int index) {
 		if (index >= this.heroBarUnits.size()) {
@@ -5092,7 +5273,7 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 		selectWidgets(selection);
 		this.war3MapViewer.doSelectUnit(selection);
 		if (doublePress) {
-			this.cameraManager.panTo(hero.getX(), hero.getY());
+			this.cameraManager.jumpTo(hero.getX(), hero.getY());
 		}
 	}
 
@@ -5129,7 +5310,7 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 			x += unit.getSimulationUnit().getX();
 			y += unit.getSimulationUnit().getY();
 		}
-		this.cameraManager.panTo(x / members.size(), y / members.size());
+		this.cameraManager.jumpTo(x / members.size(), y / members.size());
 	}
 
 	/** The unit a group is shown by: a hero before other units, then the higher level, then the dearer one. */
@@ -5189,8 +5370,7 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 		if (this.meleeUIMinimap.containsMouse(screenCoordsVector.x, screenCoordsVector.y)) {
 			final Vector2 worldPoint = this.meleeUIMinimap.getWorldPointFromScreen(screenCoordsVector.x,
 					screenCoordsVector.y);
-			this.cameraManager.target.x = worldPoint.x;
-			this.cameraManager.target.y = worldPoint.y;
+			this.cameraManager.jumpTo(worldPoint.x, worldPoint.y);
 		}
 		else {
 			if (this.allowDrag) {
@@ -5204,6 +5384,7 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 						this.lastMouseDragStart.z);
 				this.currentlyDraggingPointer = pointer;
 				if (this.draggingMouseButton == Input.Buttons.MIDDLE) {
+					this.cameraManager.stopPan();
 					this.cameraManager.target.set(clickLocationTemp.sub(this.lastMouseDragStart).scl(-1)
 							.add(this.lastMouseDragCameraTargetStart));
 				}
@@ -5657,6 +5838,17 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 
 	}
 
+	/**
+	 * Whole bonuses show without a fraction and fractions use a dot whatever the system language is, as in the
+	 * original game.
+	 */
+	private static String formatBonus(final float bonus) {
+		if (bonus == Math.round(bonus)) {
+			return Integer.toString(Math.round(bonus));
+		}
+		return String.format(Locale.ROOT, "%.1f", bonus);
+	}
+
 	@Override
 	public GameCameraManager getCameraManager() {
 		return this.cameraManager;
@@ -5808,6 +6000,19 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 
 	public void quitMission() {
 		this.exitGameRunnable.run();
+	}
+
+	@Override
+	public void endGame(final boolean showScoreScreen) {
+		if (showScoreScreen) {
+			updateInterfaceVisibility(false);
+			this.cinematicPanel.setVisible(false);
+			this.war3MapViewer.setWorldHidden(true);
+			this.scoreScreen.show();
+		}
+		else {
+			quitMission();
+		}
 	}
 
 	@Override

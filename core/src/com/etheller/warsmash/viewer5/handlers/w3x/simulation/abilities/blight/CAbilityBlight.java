@@ -16,10 +16,11 @@ public class CAbilityBlight extends AbstractGenericNoIconAbility {
 	private boolean createsBlight;
 	private float expansionAmount;
 	private float areaOfEffect;
-	private int ticksPerBlightExpansion;
-
-	private float currentArea;
-	private int lastExpansionTick;
+	private static final float INITIAL_RADIUS = 64;
+	private static final float EXPANSION_MARGIN = 128;
+	private float secondsPerBlightExpansion;
+	private int startTick;
+	private float currentRadius;
 
 	public CAbilityBlight(final int handleId, final War3ID code, final War3ID alias, final boolean createsBlight,
 			final float expansionAmount, final float areaOfEffect, final float gameSecondsPerBlightExpansion) {
@@ -31,29 +32,50 @@ public class CAbilityBlight extends AbstractGenericNoIconAbility {
 	}
 
 	public void setGameSecondsPerBlightExpansion(final float gameSecondsPerBlightExpansion) {
-		this.ticksPerBlightExpansion = (int) StrictMath
-				.ceil(gameSecondsPerBlightExpansion / WarsmashConstants.SIMULATION_STEP_TIME);
+		this.secondsPerBlightExpansion = gameSecondsPerBlightExpansion;
 	}
 
 	@Override
 	public void onAdd(final CSimulation game, final CUnit unit) {
+		this.startTick = game.getGameTurnTick();
+		this.currentRadius = 0;
+		if (!isDisabled()) {
+			// Measured: buildings that exist when the map starts (melee start, preplaced) have their whole blight at
+			// once; only ones created later grow it.
+			if (this.startTick == 0) {
+				this.currentRadius = this.areaOfEffect + EXPANSION_MARGIN;
+				game.setBlight(unit.getX(), unit.getY(), this.currentRadius, this.createsBlight);
+			}
+			else {
+				// Measured on a Necropolis: the first blight is the square under the building, not a circle.
+				this.currentRadius = INITIAL_RADIUS;
+				game.setBlightSquare(unit.getX(), unit.getY(), INITIAL_RADIUS, this.createsBlight);
+			}
+		}
 	}
 
 	@Override
 	public void onRemove(final CSimulation game, final CUnit unit) {
 	}
 
+	/**
+	 * Measured on the original game (Necropolis): the blight starts at once 64 around the building, then grows by the
+	 * expansion amount every expansion interval, reaching 128 beyond the ability's area.
+	 */
 	@Override
 	public void onTick(final CSimulation game, final CUnit unit) {
-		if (!isDisabled()) {
-			final int currentTick = game.getGameTurnTick();
-			if ((currentTick - this.lastExpansionTick) >= this.ticksPerBlightExpansion) {
-				if (this.currentArea < this.areaOfEffect) {
-					this.currentArea = Math.min(this.areaOfEffect, this.currentArea + this.expansionAmount);
-					game.setBlight(unit.getX(), unit.getY(), this.currentArea, this.createsBlight);
-				}
-				this.lastExpansionTick = currentTick;
-			}
+		if (isDisabled()) {
+			return;
+		}
+		final float elapsed = (game.getGameTurnTick() - this.startTick) * WarsmashConstants.SIMULATION_STEP_TIME;
+		final int expansions = this.secondsPerBlightExpansion > 0
+				? (int) Math.floor(elapsed / this.secondsPerBlightExpansion) + 1
+				: Integer.MAX_VALUE;
+		final float area = Math.min(this.areaOfEffect, expansions * this.expansionAmount);
+		final float radius = area > 0 ? area + EXPANSION_MARGIN : INITIAL_RADIUS;
+		if (radius > this.currentRadius) {
+			this.currentRadius = radius;
+			game.setBlight(unit.getX(), unit.getY(), radius, this.createsBlight);
 		}
 	}
 

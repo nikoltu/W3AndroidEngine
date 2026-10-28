@@ -154,6 +154,8 @@ public interface SimulationRenderController {
 
 	void setBlight(float x, float y, float radius, boolean blighted);
 
+	void setBlightSquare(float x, float y, float halfSize, boolean blighted);
+
 	void unitUpdatedType(CUnit unit, War3ID typeId, boolean updatePortrait);
 
 	void changeUnitColor(CUnit unit, int playerIndex);

@@ -87,6 +87,11 @@ public class MeleeToggleUI implements WarsmashUI {
 	}
 
 	@Override
+	public void endGame(final boolean showScoreScreen) {
+		this.meleeUI.endGame(showScoreScreen);
+	}
+
+	@Override
 	public GameCameraManager getCameraManager() {
 		return this.meleeUI.getCameraManager();
 	}

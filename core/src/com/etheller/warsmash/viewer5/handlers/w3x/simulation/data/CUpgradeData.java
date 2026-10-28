@@ -70,12 +70,32 @@ public class CUpgradeData {
 	private final ObjectData upgradeData;
 	private final DataTable standardUpgradeEffectMeta;
 	private final Map<War3ID, CUpgradeType> idToType = new HashMap<>();
+	private final Map<CUnitRace, Integer> raceToTotalLevels = new HashMap<>();
 
 	public CUpgradeData(final CGameplayConstants gameplayConstants, final ObjectData upgradeData,
 			final DataTable standardUpgradeEffectMeta) {
 		this.gameplayConstants = gameplayConstants;
 		this.upgradeData = upgradeData;
 		this.standardUpgradeEffectMeta = standardUpgradeEffectMeta;
+	}
+
+	/**
+	 * The levels of all upgrades of a race together; the original game's tech percentage is the researched part of it.
+	 */
+	public int getTotalLevels(final CUnitRace race) {
+		Integer total = this.raceToTotalLevels.get(race);
+		if (total == null) {
+			int sum = 0;
+			for (final String id : this.upgradeData.keySet()) {
+				final CUpgradeType type = getType(War3ID.fromString(id));
+				if ((type != null) && (type.getUnitRace() == race)) {
+					sum += type.getLevelCount();
+				}
+			}
+			total = sum;
+			this.raceToTotalLevels.put(race, total);
+		}
+		return total;
 	}
 
 	public CUpgradeType getType(final War3ID typeId) {

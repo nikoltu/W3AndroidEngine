@@ -39,8 +39,8 @@ public class CBehaviorReturnResources extends CAbstractRangedBehavior implements
 
 	@Override
 	public boolean isWithinRange(final CSimulation simulation) {
-		// TODO this is probably not what the CloseEnoughRange constant is for
-		return this.unit.canReach(this.target, this.unit.getUnitType().getCollisionSize());
+		// Measured on a Peon at a Great Hall: it hands the gold over two pathing cells from the building, not one.
+		return this.unit.canReach(this.target, this.unit.getUnitType().getCollisionSize() * 2);
 	}
 
 	@Override

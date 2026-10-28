@@ -90,6 +90,22 @@ public class LightningEffectModel extends Model<LightningEffectModelHandler> {
 
 	}
 
+	/**
+	 * Lightning types come from LightningData.slk, not from a file, so they load without a source stream (the base
+	 * resource skips its load when there is none).
+	 */
+	@Override
+	public void loadData(final InputStream src, final Object options) {
+		this.loaded = true;
+		try {
+			load(src, options);
+			this.ok = true;
+		}
+		catch (final Exception e) {
+			error(e);
+		}
+	}
+
 	@Override
 	protected void load(InputStream src, Object options) {
 		String path = textureFilePath;

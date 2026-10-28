@@ -24,6 +24,8 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.iter
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.parser.AbilityBuilderConfiguration;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.types.impl.CAbilityTypeAbilityBuilderLevelData;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.CBehavior;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.orders.COrder;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.orders.OrderIds;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.AbilityActivationReceiver;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.AbilityTargetCheckReceiver;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.CommandStringErrorKeys;
@@ -199,6 +201,9 @@ public class CAbilityAbilityBuilderActivePairing extends CAbilityAbilityBuilderG
 
 //			System.err.println(caster.getUnitType().getName() + " Beginning NoTarget: " + orderId);
 			final boolean isOffId = orderId == this.getOffOrderId();
+			if (isOffId) {
+				stopPartnersOnTheirWay(game, caster);
+			}
 			final Set<CUnit> partners = this.findPairUnits(game, caster);
 			CUnit finalPartner = null;
 			if (partners != null) {
@@ -254,6 +259,40 @@ public class CAbilityAbilityBuilderActivePairing extends CAbilityAbilityBuilderG
 			}
 		}
 		return null;
+	}
+
+	@Override
+	public void runEndCastingActions(final CSimulation game, final CUnit caster, final int orderId) {
+		super.runEndCastingActions(game, caster, orderId);
+		// A partner's order (a Town Hall's bell for a Peasant) toggles the ability like its own button does.
+		if (this.toggleable) {
+			if (orderId == this.getPairOrderId(game, caster)) {
+				this.activate(game, caster);
+			}
+			else if (orderId == this.getPairOffOrderId(game, caster)) {
+				this.deactivate(game, caster);
+			}
+		}
+	}
+
+	/**
+	 * Turning the pairing off also stops the partners still on their way to pair, as the original game sends the
+	 * Peasants walking to a Town Hall back when its bell stops.
+	 */
+	private void stopPartnersOnTheirWay(final CSimulation game, final CUnit caster) {
+		final int onOrderId = this.orderPairedUnitOrderId(game, caster);
+		if (onOrderId < 0) {
+			return;
+		}
+		game.getWorldCollision().enumUnitsInRange(caster.getX(), caster.getY(), this.getPairSearchRadius(game, caster),
+				(enumUnit) -> {
+					final COrder order = enumUnit.getCurrentOrder();
+					if ((enumUnit.getPlayerIndex() == caster.getPlayerIndex()) && (order != null)
+							&& (order.getOrderId() == onOrderId)) {
+						enumUnit.order(game, OrderIds.stop, null);
+					}
+					return false;
+				});
 	}
 
 	@Override

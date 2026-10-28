@@ -246,7 +246,12 @@ public class CBehaviorMove implements CBehavior {
 //									currentTargetY));
 					done = false;
 				}
-				tempRect.set(this.unit.getCollisionRectangle());
+				if (this.unit.getCollisionRectangle() != null) {
+					tempRect.set(this.unit.getCollisionRectangle());
+				}
+				else {
+					tempRect.set(nextX, nextY, 0, 0);
+				}
 				tempRect.setCenter(nextX, nextY);
 				if ((movementType == null) || (pathingGrid.isPathable(nextX, nextY, movementType, collisionSize)// ((int)
 						// collisionSize

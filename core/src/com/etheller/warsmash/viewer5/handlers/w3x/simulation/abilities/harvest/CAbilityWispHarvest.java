@@ -37,7 +37,7 @@ public class CAbilityWispHarvest extends AbstractGenericSingleIconActiveAbility 
 		this.artAttachmentHeight = artAttachmentHeight;
 		this.castRange = castRange;
 		this.periodicIntervalLength = periodicIntervalLength;
-		this.periodicIntervalLengthTicks = (int) (periodicIntervalLength / WarsmashConstants.SIMULATION_STEP_TIME);
+		this.periodicIntervalLengthTicks = intervalTicks(periodicIntervalLength);
 	}
 
 	@Override
@@ -159,6 +159,11 @@ public class CAbilityWispHarvest extends AbstractGenericSingleIconActiveAbility 
 		return this.artAttachmentHeight;
 	}
 
+	// Measured: with a duration of 7.5 the original game pays lumber every 8 seconds.
+	private static int intervalTicks(final float duration) {
+		return (int) ((duration + 0.5f) / WarsmashConstants.SIMULATION_STEP_TIME);
+	}
+
 	public float getPeriodicIntervalLength() {
 		return this.periodicIntervalLength;
 	}
@@ -193,7 +198,7 @@ public class CAbilityWispHarvest extends AbstractGenericSingleIconActiveAbility 
 
 	public void setPeriodicIntervalLength(final float periodicIntervalLength) {
 		this.periodicIntervalLength = periodicIntervalLength;
-		this.periodicIntervalLengthTicks = (int) (periodicIntervalLength / WarsmashConstants.SIMULATION_STEP_TIME);
+		this.periodicIntervalLengthTicks = intervalTicks(periodicIntervalLength);
 	}
 
 	@Override

@@ -521,7 +521,8 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 				}
 				inflatedFrame = scrollBarFrame;
 			}
-			else if ("SPRITE".equals(frameDefinition.getFrameType())) {
+			else if ("SPRITE".equals(frameDefinition.getFrameType())
+					|| "MODEL".equals(frameDefinition.getFrameType())) {
 				if (frameDefinition.getName().endsWith("Portrait")) {
 					final SpriteFrame2 spriteFrame = new SpriteFrame2(frameDefinition.getName(), parent, viewport2,
 							this.modelViewer);
@@ -771,7 +772,8 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 				}
 				inflatedFrame = glueButtonFrame;
 			}
-			else if ("POPUPMENU".equals(frameDefinition.getFrameType())) {
+			else if ("POPUPMENU".equals(frameDefinition.getFrameType())
+					|| "GLUEPOPUPMENU".equals(frameDefinition.getFrameType())) {
 				// ButtonText & ControlBackdrop
 				final PopupMenuFrame glueButtonFrame = new PopupMenuFrame(frameDefinition.getName(), parent);
 				// TODO: we should not need to put ourselves in this map 2x, but we do
@@ -1446,7 +1448,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 				if (decorateFileNames && (edgeFileString != null)) {
 					edgeFileString = trySkinField(edgeFileString);
 				}
-				if (decorateFileNames && (edgeFileString != null)) {
+				if (decorateFileNames && (backgroundString != null)) {
 					backgroundString = trySkinField(backgroundString);
 				}
 				final Texture background = backgroundString == null ? null : loadTexture(backgroundString);

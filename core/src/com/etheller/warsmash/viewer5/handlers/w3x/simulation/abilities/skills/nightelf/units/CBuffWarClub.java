@@ -55,7 +55,8 @@ public class CBuffWarClub extends CBuffTimed implements CUnitAttackPostDamageLis
 		unit.computeUnitState(game, StateModBuffType.ENABLE_ATTACK);
 		unit.removePostDamageListener(this);
 		unit.getUnitAnimationListener().removeSecondaryTag(SecondaryTag.UPGRADE);
-		final CBehavior behavior = unit.getCurrentBehavior();		if (!unit.isDead() && (behavior instanceof CBehaviorAttack)) {
+		final CBehavior behavior = unit.getCurrentBehavior();
+		if (!unit.isDead() && (behavior instanceof CBehaviorAttack)) {
 			// The running attack still holds the club attack; ordering it again picks the normal one.
 			unit.order(game, OrderIds.attack, ((CBehaviorAttack) behavior).getTarget());
 		}

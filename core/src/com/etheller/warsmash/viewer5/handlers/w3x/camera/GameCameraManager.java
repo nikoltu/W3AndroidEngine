@@ -66,6 +66,10 @@ public final class GameCameraManager extends CameraManager {
 		if (this.panDestination != null) {
 			this.target.x = applyAtRate(this.target.x, this.panDestination.x, this.panRate.x);
 			this.target.y = applyAtRate(this.target.y, this.panDestination.y, this.panRate.y);
+			// A pan left running would keep pulling the camera back after the player moves it some other way.
+			if ((this.target.x == this.panDestination.x) && (this.target.y == this.panDestination.y)) {
+				clearPan();
+			}
 		}
 	}
 
@@ -393,7 +397,7 @@ public final class GameCameraManager extends CameraManager {
 			setTarget(x, y);
 		}
 		else {
-			this.panDestination = new Vector2(x, y);
+			this.panDestination = clampToBounds(new Vector2(x, y));
 			final float yRate = (y - this.target.y) / duration;
 			final float xRate = (x - this.target.x) / duration;
 			this.panRate = new Vector2(Math.abs(xRate), Math.abs(yRate));
@@ -407,8 +411,26 @@ public final class GameCameraManager extends CameraManager {
 
 	public void panTo(float x, float y) {
 		clearPan();
-		this.panDestination = new Vector2(x, y);
+		this.panDestination = clampToBounds(new Vector2(x, y));
 		this.panRate = new Vector2(this.cameraRates.strafe, this.cameraRates.forward);
+	}
+
+	public void stopPan() {
+		clearPan();
+	}
+
+	public void jumpTo(final float x, final float y) {
+		clearPan();
+		final Vector2 destination = clampToBounds(new Vector2(x, y));
+		setTarget(destination.x, destination.y);
+	}
+
+	private Vector2 clampToBounds(final Vector2 point) {
+		if (this.cameraBounds != null) {
+			point.x = Math.max(this.cameraBounds.x, Math.min(point.x, this.cameraBounds.x + this.cameraBounds.width));
+			point.y = Math.max(this.cameraBounds.y, Math.min(point.y, this.cameraBounds.y + this.cameraBounds.height));
+		}
+		return point;
 	}
 
 	public void setQuickPosition(final float x, final float y) {

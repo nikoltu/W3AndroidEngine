@@ -59,6 +59,18 @@ public class CAbilityShadowmeld extends CAbilityNoTargetSpellBase {
 	}
 
 	@Override
+	public boolean checkBeforeQueue(final CSimulation game, final CUnit caster, final int playerIndex,
+			final int orderId, final boolean autoOrder, final AbilityTarget target) {
+		// Measured: the fade starts when the order is given, not at the cast point, and takes the fade time alone,
+		// also right after moving or at the start.
+		if ((orderId == OrderIds.ambush) && (this.permanent || game.isNight()) && !this.melded) {
+			this.eligible = true;
+			this.meldTick = game.getGameTurnTick() + (int) (this.fadeDuration / WarsmashConstants.SIMULATION_STEP_TIME);
+		}
+		return super.checkBeforeQueue(game, caster, playerIndex, orderId, autoOrder, target);
+	}
+
+	@Override
 	public boolean doEffect(final CSimulation simulation, final CUnit caster, final AbilityTarget target) {
 		return true;
 	}

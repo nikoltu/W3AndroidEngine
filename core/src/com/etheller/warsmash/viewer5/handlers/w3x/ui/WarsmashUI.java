@@ -27,6 +27,8 @@ public interface WarsmashUI extends CommandErrorListener, WarsmashBaseUI {
 
 	void quitMission();
 
+	void endGame(boolean showScoreScreen);
+
 	GameCameraManager getCameraManager();
 
 	Music playMusic(String musicField, boolean random, int index);

@@ -21,7 +21,7 @@ This fork continues Retera's work on Warsmash and adapts it for Android. The aim
 
 ## Status
 
-Current version: **v0.1.031**
+Current version: **v0.1.042**
 
 | Area | State |
 |---|---|

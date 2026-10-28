@@ -244,15 +244,7 @@ public class AbilityDataUI {
 				missileArt.add(new EffectAttachmentUIMissile(missileArtPath, Collections.emptyList(), missileArc, missileSpeed, missileHoming));
 			}
 
-			final List<String> LightningEffectList = Arrays
-					.asList(abilityTypeData.getFieldAsString(LIGHTNING_EFFECTS, 0).split(","));
-			final List<War3ID> LightningEffects = new ArrayList<>();
-
-			for (final String lightning : LightningEffectList) {
-				if ((lightning != null) && !lightning.isBlank()) {
-					LightningEffects.add(War3ID.fromString(lightning));
-				}
-			}
+			final List<War3ID> LightningEffects = lightningEffects(abilityTypeData);
 
 			final String effectSound = abilityTypeData.getFieldAsString(ABILITY_EFFECT_SOUND, 0);
 			final String effectSoundLooped = abilityTypeData.getFieldAsString(ABILITY_EFFECT_SOUND_LOOPED, 0);
@@ -320,12 +312,7 @@ public class AbilityDataUI {
 				missileArt.add(new EffectAttachmentUIMissile(missileArtPath, Collections.emptyList(), missileArc, missileSpeed, missileHoming));
 			}
 
-			final List<War3ID> lightningEffects = new ArrayList<>();
-			for (final String lightning : abilityTypeData.getFieldAsString(LIGHTNING_EFFECTS, 0).split(",")) {
-				if (!lightning.isBlank()) {
-					lightningEffects.add(War3ID.fromString(lightning.trim()));
-				}
-			}
+			final List<War3ID> lightningEffects = lightningEffects(abilityTypeData);
 
 			final String effectSound = abilityTypeData.getFieldAsString(BUFF_ABILITY_EFFECT_SOUND, 0);
 			final String effectSoundLooped = abilityTypeData.getFieldAsString(BUFF_ABILITY_EFFECT_SOUND_LOOPED, 0);
@@ -666,5 +653,20 @@ public class AbilityDataUI {
 
 	public void removeRenderPeer(final COrderButton orderButton) {
 		this.buttonToRenderPeer.remove(orderButton);
+	}
+
+	/**
+	 * LightningEffect is a list (Drain: DRAB,DRAL,DRAM); an indexed read returns only one of its values.
+	 */
+	private static List<War3ID> lightningEffects(final GameObject data) {
+		final List<War3ID> lightningEffects = new ArrayList<>();
+		for (final String entry : data.getFieldAsList(LIGHTNING_EFFECTS)) {
+			for (final String lightning : entry.split(",")) {
+				if (!lightning.isBlank()) {
+					lightningEffects.add(War3ID.fromString(lightning.trim()));
+				}
+			}
+		}
+		return lightningEffects;
 	}
 }

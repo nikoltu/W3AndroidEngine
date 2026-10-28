@@ -115,6 +115,7 @@ public class TeamSetupPane {
 					playerSlotPane.getPlayerSlotFrame().addSetPoint(new SetPoint(FramePoint.TOPLEFT,
 							this.playerSlots.get(usedSlots - 1).getPlayerSlotFrame(), FramePoint.BOTTOMLEFT, 0, 0));
 				}
+				playerSlotPane.setTeamCount(playerCount);
 				playerSlotPane.setForPlayer(rootFrame, uiViewport, player, false);
 				usedSlots++;
 			}

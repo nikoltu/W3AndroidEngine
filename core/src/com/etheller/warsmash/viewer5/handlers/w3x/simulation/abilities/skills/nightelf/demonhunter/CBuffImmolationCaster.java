@@ -25,6 +25,7 @@ public class CBuffImmolationCaster extends AbstractCBuff {
 	private final CAbilityImmolation abilityImmolation;
 	private SimulationRenderComponent fx;
 	private int nextDamageTick;
+	private boolean pulsed;
 	private final Rectangle recycleRect = new Rectangle();
 
 	public CBuffImmolationCaster(final int handleId, final War3ID alias, final CAbilityImmolation abilityImmolation) {
@@ -50,12 +51,16 @@ public class CBuffImmolationCaster extends AbstractCBuff {
 					/ WarsmashConstants.SIMULATION_STEP_TIME);
 			final float areaOfEffect = CBuffImmolationCaster.this.abilityImmolation.getAreaOfEffect();
 			this.nextDamageTick = currentTick + delayTicks;
+			// Measured: a paused unit takes only the first pulse; its buffs do not tick while paused.
+			final boolean firstPulse = !this.pulsed;
+			this.pulsed = true;
 			this.recycleRect.set(caster.getX() - areaOfEffect, caster.getY() - areaOfEffect, areaOfEffect * 2,
 					areaOfEffect * 2);
 			game.getWorldCollision().enumUnitsInRect(this.recycleRect, new CUnitEnumFunction() {
 				@Override
 				public boolean call(final CUnit enumUnit) {
-					if (caster.canReach(enumUnit, areaOfEffect) && enumUnit.canBeTargetedBy(game, caster,
+					if (caster.canReach(enumUnit, areaOfEffect) && (firstPulse || !enumUnit.isPaused())
+							&& enumUnit.canBeTargetedBy(game, caster,
 							CBuffImmolationCaster.this.abilityImmolation.getTargetsAllowed())) {
 						enumUnit.damage(game, caster, DAMAGE_FLAGS, CAttackType.SPELLS, CDamageType.FIRE,
 								CWeaponSoundTypeJass.WHOKNOWS.name(),

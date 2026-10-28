@@ -13,6 +13,10 @@ import com.etheller.warsmash.parsers.fdf.GameUI;
 public abstract class AbstractUIFrame extends AbstractRenderableFrame implements UIFrame {
 	private final List<UIFrame> childFrames = new ArrayList<>();
 
+	public List<UIFrame> getChildFrames() {
+		return this.childFrames;
+	}
+
 	public void add(final UIFrame childFrame) {
 		if (childFrame == null) {
 			return;

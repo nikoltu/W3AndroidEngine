@@ -17,6 +17,9 @@ public class RenderLightningEffect implements SimulationRenderComponentLightning
 
 	@Override
 	public void remove() {
+		// The scene also draws the children of every visible unit, so a removed lightning leaves its units too.
+		source.setParent(null);
+		target.setParent(null);
 		source.detach();
 		target.detach();
 	}

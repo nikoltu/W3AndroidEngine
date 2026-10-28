@@ -44,7 +44,7 @@ public class CAbilityAreaDetection extends CAbilityPointTargetSpellBase {
 				: 0;
 	}
 
-	private static byte detectLevels(final int detectionType) {
+	public static byte detectLevels(final int detectionType) {
 		switch (detectionType) {
 		case 1:
 			return 1;

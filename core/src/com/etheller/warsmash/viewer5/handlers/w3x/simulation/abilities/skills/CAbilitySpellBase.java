@@ -263,6 +263,10 @@ public abstract class CAbilitySpellBase extends AbstractGenericSingleIconNoSmart
 		return this.code;
 	}
 
+	public boolean isInstantCast() {
+		return false;
+	}
+
 	@Override
 	public boolean isUniversal() {
 		return false;

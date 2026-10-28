@@ -47,7 +47,14 @@ public class CAbilityWhirlWind extends CAbilityNoTargetSpellBase {
 		return this.areaOfEffect;
 	}
 
+	@Override
+	public boolean isInstantCast() {
+		// Measured: the hero's order is cleared at once, with no cast point.
+		return true;
+	}
+
 	public float getDamageInterval() {
-		return 1.0f;
+		// Measured on a Farm: 1/5 of the damage per second every 0.2 s.
+		return 0.2f;
 	}
 }

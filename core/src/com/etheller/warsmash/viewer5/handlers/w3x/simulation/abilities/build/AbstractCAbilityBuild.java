@@ -160,6 +160,14 @@ public abstract class AbstractCAbilityBuild extends AbstractCAbility implements 
 	public static boolean isBuildLocationObstructed(final CSimulation simulation, final CUnitType unitTypeToCreate,
 			final ArgbImage buildingPathingPixelMap, final boolean canBeBuiltOnThem, final float targetX,
 			final float targetY, final CUnit worker, final BuildOnBuildingIntersector buildOnBuildingIntersector) {
+		return isBuildLocationObstructed(simulation, unitTypeToCreate, buildingPathingPixelMap, canBeBuiltOnThem,
+				targetX, targetY, worker, buildOnBuildingIntersector, false);
+	}
+
+	public static boolean isBuildLocationObstructed(final CSimulation simulation, final CUnitType unitTypeToCreate,
+			final ArgbImage buildingPathingPixelMap, final boolean canBeBuiltOnThem, final float targetX,
+			final float targetY, final CUnit worker, final BuildOnBuildingIntersector buildOnBuildingIntersector,
+			final boolean ignoreBlight) {
 		boolean buildLocationObstructed = false;
 		if (canBeBuiltOnThem) {
 			simulation.getWorldCollision().enumBuildingsAtPoint(targetX, targetY,
@@ -168,7 +176,11 @@ public abstract class AbstractCAbilityBuild extends AbstractCAbility implements 
 		}
 		else if (buildingPathingPixelMap != null) {
 			final EnumSet<CBuildingPathingType> preventedPathingTypes = unitTypeToCreate.getPreventedPathingTypes();
-			final EnumSet<CBuildingPathingType> requiredPathingTypes = unitTypeToCreate.getRequiredPathingTypes();
+			EnumSet<CBuildingPathingType> requiredPathingTypes = unitTypeToCreate.getRequiredPathingTypes();
+			if (ignoreBlight && requiredPathingTypes.contains(CBuildingPathingType.BLIGHTED)) {
+				requiredPathingTypes = EnumSet.copyOf(requiredPathingTypes);
+				requiredPathingTypes.remove(CBuildingPathingType.BLIGHTED);
+			}
 
 			if (!simulation.getPathingGrid().checkPathingTexture(targetX, targetY,
 					(int) simulation.getGameplayConstants().getBuildingAngle(), buildingPathingPixelMap,

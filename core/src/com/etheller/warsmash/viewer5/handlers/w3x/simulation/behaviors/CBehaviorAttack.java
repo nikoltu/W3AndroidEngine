@@ -7,6 +7,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityTarget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityTargetStillAliveAndTargetableVisitor;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityTargetVisitor;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.attacks.CUnitAttack;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.attacks.replacement.CUnitAttackModifier;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.attacks.replacement.CUnitAttackSettings;
@@ -134,6 +135,11 @@ public class CBehaviorAttack extends CAbstractRangedBehavior {
 				}
 				this.unit.getUnitAnimationListener().playAnimationWithDuration(true, PrimaryTag.ATTACK,
 						this.settings.getAnimationNames(), animationBackswingPoint + animationDamagePoint, true);
+				// Measured: the attacked unit's owner gets the event when each swing starts.
+				final CUnit attackedUnit = this.target.visit(AbilityTargetVisitor.UNIT);
+				if (attackedUnit != null) {
+					attackedUnit.fireAttackedEvents(simulation, this.unit);
+				}
 				this.unit.getUnitAnimationListener().queueAnimation(PrimaryTag.STAND, SequenceUtils.READY, false);
 			}
 			else if (currentTurnTick >= this.thisOrderCooldownEndTime) {

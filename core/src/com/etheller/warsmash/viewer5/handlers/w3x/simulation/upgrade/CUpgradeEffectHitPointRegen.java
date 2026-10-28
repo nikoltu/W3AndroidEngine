@@ -12,15 +12,16 @@ public class CUpgradeEffectHitPointRegen implements CUpgradeEffect {
 		this.mod = mod;
 	}
 
+	// Measured (Troll Regeneration, 1.29): the bonus is flat hit points per second, not a share of the base rate.
 	@Override
 	public void apply(CSimulation simulation, CUnit unit, int level) {
 		unit.setLifeRegenBonus(
-				unit.getLifeRegenBonus() + (Util.levelValue(base, mod, level - 1) * unit.getUnitType().getLifeRegen()));
+				unit.getLifeRegenBonus() + Util.levelValue(base, mod, level - 1));
 	}
 
 	@Override
 	public void unapply(CSimulation simulation, CUnit unit, int level) {
 		unit.setLifeRegenBonus(
-				unit.getLifeRegenBonus() - (Util.levelValue(base, mod, level - 1) * unit.getUnitType().getLifeRegen()));
+				unit.getLifeRegenBonus() - Util.levelValue(base, mod, level - 1));
 	}
 }

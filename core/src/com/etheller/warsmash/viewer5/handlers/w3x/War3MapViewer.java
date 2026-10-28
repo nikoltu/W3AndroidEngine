@@ -189,6 +189,7 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 	public static final StreamDataCallbackImplementation streamDataCallback = new StreamDataCallbackImplementation();
 
 	public WorldScene worldScene;
+	private boolean worldHidden;
 	public boolean anyReady;
 	public MappedData terrainData = new MappedData();
 	public MappedData cliffTypesData = new MappedData();
@@ -1289,6 +1290,10 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 		}
 	}
 
+	public void setWorldHidden(final boolean worldHidden) {
+		this.worldHidden = worldHidden;
+	}
+
 	@Override
 	public void render() {
 		if (this.anyReady) {
@@ -1296,28 +1301,29 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 
 			startFrame();
 			worldScene.startFrame();
-			if (DEBUG_DEPTH > 0) {
+			// The score screen covers the game: only the interface scenes are drawn.
+			if (!this.worldHidden && (DEBUG_DEPTH > 0)) {
 				worldScene.renderOpaque(this.dynamicShadowManager, this.webGL);
 			}
-			if (DEBUG_DEPTH > 1) {
+			if (!this.worldHidden && (DEBUG_DEPTH > 1)) {
 				this.terrain.renderGround(this.dynamicShadowManager);
 			}
-			if (DEBUG_DEPTH > 2) {
+			if (!this.worldHidden && (DEBUG_DEPTH > 2)) {
 				this.terrain.renderCliffs();
 			}
-			if (DEBUG_DEPTH > 3) {
+			if (!this.worldHidden && (DEBUG_DEPTH > 3)) {
 				worldScene.renderOpaque();
 			}
-			if (DEBUG_DEPTH > 4) {
+			if (!this.worldHidden && (DEBUG_DEPTH > 4)) {
 				this.terrain.renderUberSplats(false);
 			}
-			if (DEBUG_DEPTH > 5) {
+			if (!this.worldHidden && (DEBUG_DEPTH > 5)) {
 				this.terrain.renderWater();
 			}
-			if (DEBUG_DEPTH > 6) {
+			if (!this.worldHidden && (DEBUG_DEPTH > 6)) {
 				worldScene.renderTranslucent();
 			}
-			if (DEBUG_DEPTH > 7) {
+			if (!this.worldHidden && (DEBUG_DEPTH > 7)) {
 				this.terrain.renderUberSplats(true);
 			}
 
@@ -2346,23 +2352,29 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 		return (MdxModel) modelViewer.load(mdxPath, pathSolver, solverParams);
 	}
 
-	public void setBlight(float whichLocationX, float whichLocationY, final float radius, final boolean blighted) {
-		final int cellX = this.terrain.get128CellX(whichLocationX);
-		final int cellY = this.terrain.get128CellY(whichLocationY);
-		whichLocationX = this.terrain.get128WorldCoordinateFromCellX(cellX);
-		whichLocationY = this.terrain.get128WorldCoordinateFromCellY(cellY);
+	public void setBlight(final float whichLocationX, final float whichLocationY, final float radius,
+			final boolean blighted) {
+		setBlight(whichLocationX, whichLocationY, radius, false, blighted);
+	}
+
+	public void setBlight(final float whichLocationX, final float whichLocationY, final float radius,
+			final boolean square, final boolean blighted) {
+		final float rSquared = square ? Float.MAX_VALUE : radius * radius;
 		final Rectangle blightRectangle = new Rectangle(whichLocationX - radius, whichLocationY - radius, radius * 2,
 				radius * 2);
 		final float blightRectangleMaxX = blightRectangle.x + blightRectangle.width;
 		final float blightRectangleMaxY = blightRectangle.y + blightRectangle.height;
-		final float rSquared = radius * radius;
 		boolean changedData = false;
-		for (float x = blightRectangle.x; x < blightRectangleMaxX; x += 128.0f) {
-			for (float y = blightRectangle.y; y < blightRectangleMaxY; y += 128.0f) {
+		// The ground texture changes on the terrain corners (every 128) inside the radius.
+		final float cornerStartX = this.terrain.get128WorldCoordinateFromCellX(
+				this.terrain.get128CellX(whichLocationX - radius));
+		final float cornerStartY = this.terrain.get128WorldCoordinateFromCellY(
+				this.terrain.get128CellY(whichLocationY - radius));
+		for (float x = cornerStartX; x <= (whichLocationX + radius + 128); x += 128.0f) {
+			for (float y = cornerStartY; y <= (whichLocationY + radius + 128); y += 128.0f) {
 				final float dx = x - whichLocationX;
 				final float dy = y - whichLocationY;
-				final float distSquared = (dx * dx) + (dy * dy);
-				if (distSquared <= rSquared) {
+				if ((((dx * dx) + (dy * dy)) <= rSquared) && (Math.abs(dx) <= radius) && (Math.abs(dy) <= radius)) {
 					final RenderCorner corner = this.terrain.getCorner(x, y);
 					if (corner == null) {
 						continue;
@@ -2370,18 +2382,24 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 					final GroundTexture currentTex = this.terrain.groundTextures.get(corner.getGroundTexture());
 					if (currentTex.isBuildable()) {
 						changedData |= corner.setBlight(blighted);
-					} else {
-						continue;
 					}
-
-					for (float pathX = -64; pathX < 64; pathX += 32f) {
-						for (float pathY = -64; pathY < 64; pathY += 32f) {
-							final float blightX = x + pathX + 16;
-							final float blightY = y + pathY + 16;
-							if (this.simulation.getPathingGrid().contains(blightX, blightY)) {
-								this.simulation.getPathingGrid().setBlighted(blightX, blightY, blighted);
-							}
-						}
+				}
+			}
+		}
+		// The blight that rules building and blight checks is per 32 pathing cell, as in the original game.
+		final PathingGrid pathingGrid = this.simulation.getPathingGrid();
+		final float cellStartX = ((float) Math.floor((whichLocationX - radius) / 32f) * 32f) + 16f;
+		final float cellStartY = ((float) Math.floor((whichLocationY - radius) / 32f) * 32f) + 16f;
+		for (float x = cellStartX; x <= (whichLocationX + radius); x += 32f) {
+			for (float y = cellStartY; y <= (whichLocationY + radius); y += 32f) {
+				final float dx = x - whichLocationX;
+				final float dy = y - whichLocationY;
+				if ((((dx * dx) + (dy * dy)) <= rSquared) && (Math.abs(dx) <= radius) && (Math.abs(dy) <= radius)
+						&& pathingGrid.contains(x, y)) {
+					final RenderCorner corner = this.terrain.getCorner(x, y);
+					if ((corner != null)
+							&& this.terrain.groundTextures.get(corner.getGroundTexture()).isBuildable()) {
+						pathingGrid.setBlighted(x, y, blighted);
 					}
 				}
 			}
@@ -3429,8 +3447,10 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 							@Override
 							public void changeUnitColor(final CUnit unit, final int playerIndex) {
 								final RenderUnit renderPeer = War3MapViewer.this.unitToRenderPeer.get(unit);
-								renderPeer.setPlayerColor(
-										War3MapViewer.this.simulation.getPlayer(playerIndex).getColor());
+								if (renderPeer != null) {
+									renderPeer.setPlayerColor(
+											War3MapViewer.this.simulation.getPlayer(playerIndex).getColor());
+								}
 							}
 
 							@Override
@@ -3659,6 +3679,12 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 							public void setBlight(final float x, final float y, final float radius,
 									final boolean blighted) {
 								War3MapViewer.this.setBlight(x, y, radius, blighted);
+							}
+
+							@Override
+							public void setBlightSquare(final float x, final float y, final float halfSize,
+									final boolean blighted) {
+								War3MapViewer.this.setBlight(x, y, halfSize, true, blighted);
 							}
 
 							@Override

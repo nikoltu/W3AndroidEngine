@@ -33,6 +33,7 @@ public class CAbilityDevourCargo extends AbstractGenericNoIconAbility implements
 	private CBuffDigesting digestingBuff;
 	private CUnitVisionFogModifier devouredOwnerVision;
 	private int nextDigestTick;
+	private boolean devouredWhilePaused;
 
 	public CAbilityDevourCargo(final int handleId, final War3ID alias) {
 		super(handleId, alias, alias);
@@ -58,6 +59,7 @@ public class CAbilityDevourCargo extends AbstractGenericNoIconAbility implements
 
 	public void devour(final CSimulation game, final CUnit holder, final CUnit target, final War3ID digestingBuffId) {
 		this.devouredUnit = target;
+		this.devouredWhilePaused = target.isPaused();
 		target.setHidden(true);
 		target.setPaused(true);
 		this.nextDigestTick = game.getGameTurnTick() + TICKS_PER_SECOND;
@@ -73,7 +75,9 @@ public class CAbilityDevourCargo extends AbstractGenericNoIconAbility implements
 
 	@Override
 	public void onTick(final CSimulation game, final CUnit unit) {
-		if ((this.devouredUnit != null) && (game.getGameTurnTick() >= this.nextDigestTick)) {
+		// A unit that was already paused when devoured is held but not digested, as in the original game.
+		if ((this.devouredUnit != null) && !this.devouredWhilePaused
+				&& (game.getGameTurnTick() >= this.nextDigestTick)) {
 			this.nextDigestTick += TICKS_PER_SECOND;
 			final CUnit victim = this.devouredUnit;
 			victim.setPointAndCheckUnstuck(unit.getX(), unit.getY(), game);
@@ -104,7 +108,7 @@ public class CAbilityDevourCargo extends AbstractGenericNoIconAbility implements
 			finishDigesting(game, unit);
 			freed.setPointAndCheckUnstuck(unit.getX(), unit.getY(), game);
 			freed.setHidden(false);
-			freed.setPaused(false);
+			freed.setPaused(this.devouredWhilePaused);
 		}
 	}
 

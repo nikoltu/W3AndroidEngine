@@ -23,6 +23,11 @@ public class Doodad {
 	private final List<RandomItemSet> itemSets = new ArrayList<>();
 	private int editorId;
 	private final short[] u1 = new short[8]; // short to store unsigned byte, java problem
+	// Version 12 (Reforged saves of the classic campaign maps) adds fields of unknown meaning, kept as they are.
+	private int v12BeforeFlags = -1;
+	private int v13AfterItemSets = -1;
+	private final int[] v12AfterEditorId = new int[2];
+	private final List<short[]> v12Entries = new ArrayList<>();
 
 	public void load(final LittleEndianDataInputStream stream, final int version, final War3MapW3i mapInformation)
 			throws IOException {
@@ -37,6 +42,9 @@ public class Doodad {
 		}
 		else {
 			this.skinId = this.id;
+		}
+		if (version >= 12) {
+			this.v12BeforeFlags = stream.readInt();
 		}
 
 		this.flags = ParseUtils.readUInt8(stream);
@@ -54,7 +62,19 @@ public class Doodad {
 			}
 		}
 
+		if (version >= 13) {
+			this.v13AfterItemSets = stream.readInt();
+		}
 		this.editorId = stream.readInt();
+		if (version >= 12) {
+			this.v12AfterEditorId[0] = stream.readInt();
+			this.v12AfterEditorId[1] = stream.readInt();
+			for (int i = 0, l = stream.readInt(); i < l; i++) {
+				final short[] entry = new short[36];
+				ParseUtils.readUInt8Array(stream, entry);
+				this.v12Entries.add(entry);
+			}
+		}
 	}
 
 	public void save(final LittleEndianDataOutputStream stream, final int version, final War3MapW3i mapInformation)
@@ -72,6 +92,9 @@ public class Doodad {
 			}
 			ParseUtils.writeWar3ID(stream, skinToWrite);
 		}
+		if (version >= 12) {
+			stream.writeInt(this.v12BeforeFlags);
+		}
 		ParseUtils.writeUInt8(stream, this.flags);
 		ParseUtils.writeUInt8(stream, this.life);
 
@@ -84,11 +107,25 @@ public class Doodad {
 			}
 		}
 
+		if (version >= 13) {
+			stream.writeInt(this.v13AfterItemSets);
+		}
 		stream.writeInt(this.editorId);
+		if (version >= 12) {
+			stream.writeInt(this.v12AfterEditorId[0]);
+			stream.writeInt(this.v12AfterEditorId[1]);
+			stream.writeInt(this.v12Entries.size());
+			for (final short[] entry : this.v12Entries) {
+				ParseUtils.writeUInt8Array(stream, entry);
+			}
+		}
 	}
 
 	public int getByteLength(final int version) {
 		int size = 42;
+		if (version >= 12) {
+			size += 16 + (36 * this.v12Entries.size()) + ((version >= 13) ? 4 : 0);
+		}
 
 		if (version > 7) {
 			size += 8;

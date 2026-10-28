@@ -843,6 +843,17 @@ public class CommonTriggerExecutionScope extends TriggerExecutionScope {
 		return scope;
 	}
 
+	public static CommonTriggerExecutionScope unitAttackedScope(final JassGameEventsWar3 triggerEventId,
+			final Trigger trigger, final CUnit attackedUnit, final CUnit attacker, final CPlayerJass player) {
+		final CommonTriggerExecutionScope scope = new CommonTriggerExecutionScope(trigger, TriggerExecutionScope.EMPTY);
+		scope.triggeringUnit = attackedUnit;
+		scope.triggerWidget = attackedUnit;
+		scope.attacker = attacker;
+		scope.triggerEventId = triggerEventId;
+		scope.triggeringPlayer = player;
+		return scope;
+	}
+
 	public static CommonTriggerExecutionScope unitDamageTakenScope(final JassGameEventsWar3 triggerEventId,
 			final Trigger trigger, final CUnit damagedUnit, final CUnit source, final float damage) {
 		final CommonTriggerExecutionScope scope = new CommonTriggerExecutionScope(trigger, TriggerExecutionScope.EMPTY);

@@ -5,6 +5,7 @@ import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.CAbilityPointTargetSpellBase;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.human.unit.CAbilityAreaDetection;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityTarget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.definitions.impl.AbilityFields;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.orders.OrderIds;
@@ -13,10 +14,12 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.C
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.CFogState;
 
 /**
- * Far Sight: reveals the area around the target point to the caster's player for the duration.
+ * Far Sight: reveals the area around the target point to the caster's player for the duration, and detects the
+ * invisible units in it as the detection type in DataA says.
  */
 public class CAbilityFarSight extends CAbilityPointTargetSpellBase {
 	private float areaOfEffect;
+	private byte detectLevels;
 
 	public CAbilityFarSight(final int handleId, final War3ID alias) {
 		super(handleId, alias);
@@ -30,12 +33,15 @@ public class CAbilityFarSight extends CAbilityPointTargetSpellBase {
 	@Override
 	public void populateData(final GameObject worldEditorAbility, final int level) {
 		this.areaOfEffect = worldEditorAbility.getFieldAsFloat(AbilityFields.AREA_OF_EFFECT + level, 0);
+		this.detectLevels = CAbilityAreaDetection
+				.detectLevels(worldEditorAbility.getFieldAsInteger(AbilityFields.DATA_A + level, 0));
 	}
 
 	@Override
 	public boolean doEffect(final CSimulation simulation, final CUnit caster, final AbilityTarget target) {
 		simulation.getPlayer(caster.getPlayerIndex()).addFogModifer(simulation, new CTimedCircleFogModifier(
-				CFogState.VISIBLE, this.areaOfEffect, target.getX(), target.getY(), getDuration()), false);
+				CFogState.VISIBLE, this.areaOfEffect, target.getX(), target.getY(), getDuration(), this.detectLevels),
+				false);
 		simulation.spawnSpellEffectOnPoint(target.getX(), target.getY(), 0, getAlias(), CEffectType.TARGET, 0)
 				.remove();
 		simulation.createTemporarySpellEffectOnUnit(caster, getAlias(), CEffectType.CASTER);

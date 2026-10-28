@@ -12,6 +12,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.def
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.orders.OrderIds;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CAllianceType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.CEffectType;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.SimulationRenderComponentLightning;
 
 /**
  * Channeled drain shared by the drain abilities: every interval it takes life and mana from an enemy target and
@@ -27,6 +28,7 @@ public class CAbilitySiphonMana extends CAbilityTargetSpellBase {
 	private float breakDistance;
 
 	private int channelEndTick;
+	private SimulationRenderComponentLightning beam;
 	private int nextDrainTick;
 
 	public CAbilitySiphonMana(final int handleId, final War3ID alias) {
@@ -59,7 +61,24 @@ public class CAbilitySiphonMana extends CAbilityTargetSpellBase {
 		this.nextDrainTick = tick + ticks(this.interval);
 		simulation.createTemporarySpellEffectOnUnit(caster, getAlias(), CEffectType.CASTER);
 		simulation.createTemporarySpellEffectOnUnit(targetUnit, getAlias(), CEffectType.TARGET);
+		removeBeam();
+		// A negative duration keeps the beam until the channel ends instead of the lightning type's own duration.
+		this.beam = simulation.createAbilityLightning(caster, getAlias(), beamIndex(simulation, caster, targetUnit),
+				targetUnit, -1f);
 		return true;
+	}
+
+	@Override
+	public void doChannelEnd(final CSimulation game, final CUnit unit, final AbilityTarget target,
+			final boolean interrupted) {
+		removeBeam();
+	}
+
+	private void removeBeam() {
+		if (this.beam != null) {
+			this.beam.remove();
+			this.beam = null;
+		}
 	}
 
 	@Override
@@ -90,6 +109,21 @@ public class CAbilitySiphonMana extends CAbilityTargetSpellBase {
 			}
 		}
 		return tick < this.channelEndTick;
+	}
+
+	/**
+	 * The drain abilities list three lightning types: drain (life and mana), life drain and mana drain.
+	 */
+	private int beamIndex(final CSimulation simulation, final CUnit caster, final CUnit target) {
+		if (isFriendly(simulation, caster, target)) {
+			return 2;
+		}
+		final boolean life = this.lifeDrainedPerSecond > 0;
+		final boolean mana = this.manaDrainedPerSecond > 0;
+		if (life && mana) {
+			return 0;
+		}
+		return life ? 1 : 2;
 	}
 
 	private static boolean isFriendly(final CSimulation simulation, final CUnit caster, final CUnit target) {

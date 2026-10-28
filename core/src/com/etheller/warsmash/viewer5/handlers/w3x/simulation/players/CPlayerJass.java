@@ -40,6 +40,8 @@ public interface CPlayerJass {
 
 	int getTeam();
 
+	float getHandicap();
+
 	int getStartLocationIndex();
 
 	int getColor();

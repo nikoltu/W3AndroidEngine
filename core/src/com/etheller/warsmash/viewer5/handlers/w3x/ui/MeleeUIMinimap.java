@@ -1,6 +1,7 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.ui;
 
 import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.Rectangle;
@@ -27,6 +28,8 @@ public class MeleeUIMinimap {
 	private float heroAlpha = 0.90f;
 	private byte polarity = -1;
 	private boolean visible = true;
+	private final float[] cameraFootprint = new float[8];
+	private Texture lineTexture;
 
 	public MeleeUIMinimap(final Rectangle displayArea, final Rectangle playableMapArea, final Texture minimapTexture,
 			final Texture[] teamColors, final Texture[] specialIcons) {
@@ -75,6 +78,9 @@ public class MeleeUIMinimap {
 				}
 			}
 		}
+
+		drawCameraFootprint(batch);
+		batch.setColor(1, 1, 1, 1);
 
 		this.heroAlpha += HERO_STEP * this.polarity;
 		if ((this.heroAlpha <= 0.5) || (this.heroAlpha >= 0.95)) {
@@ -132,6 +138,47 @@ public class MeleeUIMinimap {
 				batch.setColor(1, 1, 1, 1);
 			}
 		}
+	}
+
+	public float[] getCameraFootprint() {
+		return this.cameraFootprint;
+	}
+
+	private void drawCameraFootprint(final SpriteBatch batch) {
+		if (this.lineTexture == null) {
+			final Pixmap pixmap = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
+			pixmap.setColor(Color.WHITE);
+			pixmap.fill();
+			this.lineTexture = new Texture(pixmap);
+			pixmap.dispose();
+		}
+		batch.setColor(1, 1, 1, 1);
+		for (int i = 0; i < 4; i++) {
+			final int next = (i + 1) % 4;
+			drawLine(batch, toMinimapX(this.cameraFootprint[i * 2]), toMinimapY(this.cameraFootprint[(i * 2) + 1]),
+					toMinimapX(this.cameraFootprint[next * 2]), toMinimapY(this.cameraFootprint[(next * 2) + 1]));
+		}
+	}
+
+	private float toMinimapX(final float worldX) {
+		final float x = this.minimapFilledArea.x + (((worldX - this.playableMapArea.getX())
+				/ this.playableMapArea.getWidth()) * this.minimapFilledArea.width);
+		return Math.max(this.minimapFilledArea.x, Math.min(this.minimapFilledArea.x + this.minimapFilledArea.width, x));
+	}
+
+	private float toMinimapY(final float worldY) {
+		final float y = this.minimapFilledArea.y + (((worldY - this.playableMapArea.getY())
+				/ this.playableMapArea.getHeight()) * this.minimapFilledArea.height);
+		return Math.max(this.minimapFilledArea.y,
+				Math.min(this.minimapFilledArea.y + this.minimapFilledArea.height, y));
+	}
+
+	private void drawLine(final SpriteBatch batch, final float x1, final float y1, final float x2, final float y2) {
+		final float dx = x2 - x1;
+		final float dy = y2 - y1;
+		final float length = (float) Math.sqrt((dx * dx) + (dy * dy));
+		final float angle = (float) Math.toDegrees(Math.atan2(dy, dx));
+		batch.draw(this.lineTexture, x1, y1, 0, 0.5f, length, 1f, 1, 1, angle, 0, 0, 1, 1, false, false);
 	}
 
 	public Vector2 getWorldPointFromScreen(final float screenX, final float screenY) {

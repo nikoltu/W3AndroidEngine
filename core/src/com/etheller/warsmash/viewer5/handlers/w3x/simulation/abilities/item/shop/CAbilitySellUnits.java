@@ -22,6 +22,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityTarget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.CBehavior;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayer;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayerScore;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.AbilityActivationReceiver;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.AbilityTargetCheckReceiver;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.CommandStringErrorKeys;
@@ -231,6 +232,10 @@ public final class CAbilitySellUnits extends AbstractCAbility {
 		buyer.setUnitFoodUsed(soldUnit, unitType.getFoodUsed());
 		buyer.setUnitFoodMade(soldUnit, unitType.getFoodMade());
 		buyer.addTechtreeUnlocked(game, unitTypeId);
+		buyer.scoreUnitGained(unitType);
+		if (!unitType.isHero()) {
+			buyer.addScore(CPlayerScore.MERCS_HIRED, 1);
+		}
 		soldUnit.nudgeAround(game, caster);
 		game.unitTrainedEvent(caster, soldUnit);
 		final CAbilityNeutralBuilding neutralBuildingData = caster.getNeutralBuildingData();

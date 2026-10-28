@@ -146,7 +146,7 @@ public class CAbilityCargoHoldBurrow extends CAbilityCargoHold implements CAbili
 		final List<CUnitAttack> unitSpecificAttacks = cargoHoldUnit.getUnitSpecificAttacks();
 		for (int i = 0, l = unitSpecificAttacks.size(); i < l; i++) {
 			unitSpecificAttacks.get(i)
-					.setCooldownTime(originalBaseAttackRates[i] / (float) Math.pow(2, getCargoCount()));
+					.setCooldownTime(originalBaseAttackRates[i] / getCargoCount());
 		}
 
 	}

@@ -53,6 +53,11 @@ public class Unit {
 	private int customTeamColor;
 	private int waygate;
 	private int creationNumber;
+	// Version 12 and later (the 3.0 data) add fields of unknown meaning, kept as they are; version 12 alone drops the
+	// item table and hero attributes.
+	private int v12AfterSkin = -1;
+	private final int[] v12AfterCreationNumber = new int[2];
+	private final List<short[]> v12Entries = new ArrayList<>();
 
 	public void load(final LittleEndianDataInputStream stream, final int version, final War3MapW3i mapInformation)
 			throws IOException {
@@ -68,6 +73,9 @@ public class Unit {
 		else {
 			this.skinId = this.id;
 		}
+		if (version >= 12) {
+			this.v12AfterSkin = stream.readInt();
+		}
 
 		this.flags = ParseUtils.readUInt8(stream);
 		this.player = stream.readInt();
@@ -75,7 +83,7 @@ public class Unit {
 		this.hitpoints = stream.readInt();
 		this.mana = stream.readInt();
 
-		if (version > 7) {
+		if ((version > 7) && (version != 12)) {
 			this.droppedItemTable = stream.readInt();
 		}
 
@@ -91,7 +99,7 @@ public class Unit {
 		this.targetAcquisition = stream.readFloat();
 		this.heroLevel = stream.readInt();
 
-		if (version > 7) {
+		if ((version > 7) && (version != 12)) {
 			this.heroStrength = stream.readInt();
 			this.heroAgility = stream.readInt();
 			this.heroIntelligence = stream.readInt();
@@ -136,6 +144,15 @@ public class Unit {
 		this.customTeamColor = stream.readInt();
 		this.waygate = stream.readInt();
 		this.creationNumber = stream.readInt();
+		if (version >= 12) {
+			this.v12AfterCreationNumber[0] = stream.readInt();
+			this.v12AfterCreationNumber[1] = stream.readInt();
+			for (int i = 0, l = stream.readInt(); i < l; i++) {
+				final short[] entry = new short[36];
+				ParseUtils.readUInt8Array(stream, entry);
+				this.v12Entries.add(entry);
+			}
+		}
 	}
 
 	public void save(final LittleEndianDataOutputStream stream, final int version, final War3MapW3i mapInformation)
@@ -153,6 +170,9 @@ public class Unit {
 			}
 			ParseUtils.writeWar3ID(stream, skinToWrite);
 		}
+		if (version >= 12) {
+			stream.writeInt(this.v12AfterSkin);
+		}
 
 		ParseUtils.writeUInt8(stream, this.flags);
 		stream.writeInt(this.player);
@@ -160,7 +180,7 @@ public class Unit {
 		stream.writeInt(this.hitpoints);
 		stream.writeInt(this.mana);
 
-		if (version > 7) {
+		if ((version > 7) && (version != 12)) {
 			stream.writeInt(this.droppedItemTable);
 		}
 
@@ -174,7 +194,7 @@ public class Unit {
 		stream.writeFloat(this.targetAcquisition);
 		stream.writeInt(this.heroLevel);
 
-		if (version > 7) {
+		if ((version > 7) && (version != 12)) {
 			stream.writeInt(this.heroStrength);
 			stream.writeInt(this.heroAgility);
 			stream.writeInt(this.heroIntelligence);
@@ -213,13 +233,24 @@ public class Unit {
 		stream.writeInt(this.customTeamColor);
 		stream.writeInt(this.waygate);
 		stream.writeInt(this.creationNumber);
+		if (version >= 12) {
+			stream.writeInt(this.v12AfterCreationNumber[0]);
+			stream.writeInt(this.v12AfterCreationNumber[1]);
+			stream.writeInt(this.v12Entries.size());
+			for (final short[] entry : this.v12Entries) {
+				ParseUtils.writeUInt8Array(stream, entry);
+			}
+		}
 	}
 
 	public int getByteLength(final int version) {
 		int size = 91;
 
-		if (version > 7) {
+		if ((version > 7) && (version != 12)) {
 			size += 16;
+		}
+		if (version >= 12) {
+			size += 16 + (36 * this.v12Entries.size());
 		}
 
 		for (final DroppedItemSet droppedItemSet : this.droppedItemSets) {

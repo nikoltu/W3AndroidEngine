@@ -7,6 +7,7 @@ import java.util.Set;
 
 import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.util.WarsmashConstants;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.Aliased;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CGameplayConstants;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
@@ -129,6 +130,29 @@ public class CAbilityHero extends AbstractCAbility {
 		else {
 			game.getCommandErrorListener().showInterfaceError(caster.getPlayerIndex(),
 					"NOTEXTERN: Ability is not yet programmed, unable to learn!");
+		}
+	}
+
+	/**
+	 * Gives an illusion the skills its original learned, at their levels, without spending skill points.
+	 */
+	public void copyLearnedSkills(final CSimulation game, final CUnit unit, final CAbilityHero source) {
+		for (final CAbility learned : source.learnedAbilities) {
+			if (!(learned instanceof CLevelingAbility) || !(learned instanceof Aliased)) {
+				continue;
+			}
+			final CAbilityType<?> abilityType = game.getAbilityData().getAbilityType(((Aliased) learned).getAlias());
+			if (abilityType == null) {
+				continue;
+			}
+			final CAbility copy = abilityType.createAbility(game.getHandleIdAllocator().createId());
+			copy.setHero(true);
+			this.learnedAbilities.add(copy);
+			unit.add(game, copy);
+			final int level = ((CLevelingAbility) learned).getLevel();
+			if ((level > 1) && (copy instanceof CLevelingAbility)) {
+				abilityType.setLevel(game, unit, (CLevelingAbility) copy, level);
+			}
 		}
 	}
 
@@ -296,7 +320,9 @@ public class CAbilityHero extends AbstractCAbility {
 	}
 
 	public void addXp(final CSimulation simulation, final CUnit unit, final int xp, final boolean showEffect) {
+		final int before = this.xp;
 		this.xp += xp * simulation.getPlayer(unit.getPlayerIndex()).getHandicapXP();
+		simulation.getPlayer(unit.getPlayerIndex()).addExperienceGained(this.xp - before);
 		levelUpHero(simulation, unit, showEffect);
 		unit.internalPublishHeroStatsChanged();
 	}

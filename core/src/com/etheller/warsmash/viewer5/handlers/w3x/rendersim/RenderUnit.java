@@ -72,6 +72,7 @@ public class RenderUnit implements RenderWidget {
 	private RenderUnitType typeData;
 	public MdxModel specialArtModel;
 	public SplatMover uberSplat;
+	private boolean decalsRemovedWhileHidden;
 	private float selectionHeight;
 	private RenderUnit preferredSelectionReplacement;
 	private float[] currentColor = { 1, 1, 1, 1 };
@@ -175,6 +176,18 @@ public class RenderUnit implements RenderWidget {
 	@Override
 	public void updateAnimations(final War3MapViewer map) {
 		final boolean wasHidden = this.instance.hidden();
+		final boolean removed = this.simulationUnit.isHidden();
+		if (removed != this.decalsRemovedWhileHidden) {
+			// A hidden building (a gold mine under a Haunted Gold Mine or Entangled Gold Mine) takes its ground
+			// texture and building shadow with it; fog alone keeps them, as for any remembered building.
+			this.decalsRemovedWhileHidden = removed;
+			if (removed) {
+				removeBuildingDecalSplats(map);
+			}
+			else if (this.building && !this.simulationUnit.isDead()) {
+				createBuildingDecalSplats(map);
+			}
+		}
 		if (this.simulationUnit.isHidden()
 				|| !this.simulationUnit.isVisible(map.simulation, map.getLocalPlayerIndex())) {
 			if (!wasHidden) {

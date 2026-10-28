@@ -24,6 +24,8 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit.QueueItemType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnitType;
+import com.etheller.warsmash.util.WarsmashConstants;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.data.CUnitRace;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUpgradeType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CWidget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbility;
@@ -60,6 +62,7 @@ public class CPlayer extends CBasePlayer {
 	private boolean givesBounty = false;
 	private boolean alliedVictory = false;
 	private int gameResult;
+	private CPlayerGameResult removedResult;
 	private int placed;
 	private boolean observerOnDeath;
 	private boolean observer;
@@ -68,6 +71,10 @@ public class CPlayer extends CBasePlayer {
 	private int lumberUpkeepRate;
 	private int goldGathered;
 	private int lumberGathered;
+	private final int[] scores = new int[CPlayerScore.VALUES.length];
+	private int heroesUsed;
+	private int researchedLevels;
+	private int experienceGained;
 	private boolean noCreepSleep;
 
 	private final Set<War3ID> disabledAbilities = new HashSet<>();
@@ -77,7 +84,6 @@ public class CPlayer extends CBasePlayer {
 	// which fields shouldn't be persisted if we do game state save later
 	private transient CPlayerStateNotifier stateNotifier = new CPlayerStateNotifier();
 	private float handicapXP = 1.0f;
-	private float handicap = 0.9f;
 	private final CPlayerFogOfWar fogOfWar;
 	private JassAIEnvironment aiScript;
 
@@ -111,6 +117,14 @@ public class CPlayer extends CBasePlayer {
 				}
 			}
 		}
+	}
+
+	public CPlayerGameResult getRemovedResult() {
+		return this.removedResult;
+	}
+
+	public void setRemovedResult(final CPlayerGameResult removedResult) {
+		this.removedResult = removedResult;
 	}
 
 	public CRace getRace() {
@@ -166,12 +180,17 @@ public class CPlayer extends CBasePlayer {
 	public int addHarvestedGold(final CSimulation game, final int gold) {
 		final int received = game.getGameplayConstants().applyUpkeepGoldTax(gold, this.foodUsed);
 		addGold(received);
+		addScore(CPlayerScore.GOLD_MINED_TOTAL, gold);
+		addScore(CPlayerScore.GOLD_MINED_UPKEEP, received);
+		addScore(CPlayerScore.GOLD_LOST_UPKEEP, gold - received);
 		return received;
 	}
 
 	public int addHarvestedLumber(final CSimulation game, final int lumber) {
 		final int received = game.getGameplayConstants().applyUpkeepLumberTax(lumber, this.foodUsed);
 		addLumber(received);
+		addScore(CPlayerScore.LUMBER_TOTAL, lumber);
+		addScore(CPlayerScore.LUMBER_LOST_UPKEEP, lumber - received);
 		return received;
 	}
 
@@ -186,6 +205,8 @@ public class CPlayer extends CBasePlayer {
 
 	public void setFoodCap(final int foodCap) {
 		this.foodCap = foodCap;
+		this.scores[CPlayerScore.FOOD_MAXPROD.ordinal()] = Math.max(this.scores[CPlayerScore.FOOD_MAXPROD.ordinal()],
+				Math.min(foodCap, this.foodCapCeiling));
 		this.stateNotifier.foodChanged();
 	}
 
@@ -196,7 +217,82 @@ public class CPlayer extends CBasePlayer {
 
 	public void setFoodUsed(final int foodUsed) {
 		this.foodUsed = foodUsed;
+		this.scores[CPlayerScore.FOOD_MAXUSED.ordinal()] = Math.max(this.scores[CPlayerScore.FOOD_MAXUSED.ordinal()],
+				foodUsed);
 		this.stateNotifier.foodChanged();
+	}
+
+	public void addScore(final CPlayerScore score, final int amount) {
+		this.scores[score.ordinal()] += amount;
+	}
+
+	/**
+	 * Counts a unit or building that joins the player by training, construction, purchase or a script; measured in the
+	 * original game, the starting units, heroes and units created by scripts count as well, and the unit total is the
+	 * gold and lumber cost of all of them.
+	 */
+	public void scoreUnitGained(final CUnitType unitType) {
+		final int cost = unitType.getGoldCost() + unitType.getLumberCost();
+		addScore(unitType.isBuilding() ? CPlayerScore.STRUCT_BUILT : CPlayerScore.UNITS_TRAINED, 1);
+		addScore(CPlayerScore.UNIT_TOTAL, cost);
+		if (unitType.isHero()) {
+			this.heroesUsed++;
+		}
+	}
+
+	/**
+	 * Measured in the original game: a killed hero counts as a killed unit as well, a destroyed building only as razed,
+	 * and the unit total grows by the cost of whatever was destroyed.
+	 */
+	public void scoreKill(final CUnitType killedType) {
+		addScore(CPlayerScore.UNIT_TOTAL, killedType.getGoldCost() + killedType.getLumberCost());
+		if (killedType.isBuilding()) {
+			addScore(CPlayerScore.STRUCT_RAZED, 1);
+			return;
+		}
+		addScore(CPlayerScore.UNITS_KILLED, 1);
+		if (killedType.isHero()) {
+			addScore(CPlayerScore.HEROES_KILLED, 1);
+		}
+	}
+
+	// Measured: the tech percentage is the researched upgrade levels of the player's race over all of them, rounded down.
+	private void scoreResearch(final CSimulation simulation, final CUpgradeType upgradeType, final int levels) {
+		final CRaceManagerEntry raceEntry = WarsmashConstants.RACE_MANAGER.tryGet(this.race);
+		if ((levels == 0) || (raceEntry == null)
+				|| (upgradeType.getUnitRace() != CUnitRace.parseRace(raceEntry.getKey()))) {
+			return;
+		}
+		this.researchedLevels += levels;
+		final int total = simulation.getUpgradeData().getTotalLevels(upgradeType.getUnitRace());
+		this.scores[CPlayerScore.TECH_PERCENT.ordinal()] = total == 0 ? 0 : (this.researchedLevels * 100) / total;
+	}
+
+	public int getHeroesUsed() {
+		return this.heroesUsed;
+	}
+
+	public void addExperienceGained(final int experience) {
+		this.experienceGained += experience;
+	}
+
+	public int getExperienceGained() {
+		return this.experienceGained;
+	}
+
+	public int getScore(final CPlayerScore score) {
+		switch (score) {
+		case RESOURCE_TOTAL:
+			return this.scores[CPlayerScore.GOLD_MINED_TOTAL.ordinal()] + this.scores[CPlayerScore.LUMBER_TOTAL.ordinal()];
+		case HERO_TOTAL:
+			// Measured: ten points for each experience point the player's heroes gained.
+			return this.experienceGained * 10;
+		case TOTAL:
+			return this.scores[CPlayerScore.UNIT_TOTAL.ordinal()] + getScore(CPlayerScore.HERO_TOTAL)
+					+ getScore(CPlayerScore.RESOURCE_TOTAL);
+		default:
+			return this.scores[score.ordinal()];
+		}
 	}
 
 	public int getTechtreeUnlocked(final War3ID rawcode) {
@@ -380,13 +476,11 @@ public class CPlayer extends CBasePlayer {
 	}
 
 	public void setUnitFoodUsed(final CUnit unit, final int foodUsed) {
-		this.foodUsed += unit.setFoodUsed(foodUsed);
-		this.stateNotifier.foodChanged();
+		setFoodUsed(this.foodUsed + unit.setFoodUsed(foodUsed));
 	}
 
 	public void setUnitFoodMade(final CUnit unit, final int foodMade) {
-		this.foodCap += unit.setFoodMade(foodMade);
-		this.stateNotifier.foodChanged();
+		setFoodCap(this.foodCap + unit.setFoodMade(foodMade));
 	}
 
 	public void onHeroDeath(final CUnit hero) {
@@ -446,6 +540,16 @@ public class CPlayer extends CBasePlayer {
 			for (final CPlayerEvent event : eventList) {
 				event.fire(dyingUnit, CommonTriggerExecutionScope.unitDeathScope(
 						JassGameEventsWar3.EVENT_PLAYER_UNIT_DEATH, event.getTrigger(), dyingUnit, killingUnit, this));
+			}
+		}
+	}
+
+	public void fireUnitAttackedEvents(final CUnit attackedUnit, final CUnit attacker) {
+		final List<CPlayerEvent> eventList = getEventList(JassGameEventsWar3.EVENT_PLAYER_UNIT_ATTACKED);
+		if (eventList != null) {
+			for (final CPlayerEvent event : eventList) {
+				event.fire(attackedUnit, CommonTriggerExecutionScope.unitAttackedScope(
+						JassGameEventsWar3.EVENT_PLAYER_UNIT_ATTACKED, event.getTrigger(), attackedUnit, attacker, this));
 			}
 		}
 	}
@@ -744,14 +848,6 @@ public class CPlayer extends CBasePlayer {
 		return this.handicapXP;
 	}
 
-	public void setHandicap(final float handicap) {
-		this.handicap = handicap;
-	}
-
-	public float getHandicap() {
-		return this.handicap;
-	}
-
 	public void fireAbilityEffectEventsTarget(final CAbility spellAbility, final CUnit spellAbilityUnit,
 			final CUnit spellTargetUnit, final War3ID alias) {
 		final List<CPlayerEvent> eventList = getEventList(JassGameEventsWar3.EVENT_PLAYER_UNIT_SPELL_EFFECT);
@@ -857,7 +953,8 @@ public class CPlayer extends CBasePlayer {
 		// terminate in progress upgrades of this kind for player
 		final CUpgradeType upgradeType = simulation.getUpgradeData().getType(techIdRawcodeId);
 		if (upgradeType != null) {
-			for (final CUnit unit : simulation.getUnits()) {
+			scoreResearch(simulation, upgradeType, Math.max(0, setToLevel) - Math.max(0, previousLevel));
+			for (final CUnit unit : simulation.getUnitsIncludingNew()) {
 				if (unit.getPlayerIndex() == getId()) {
 					if (unit.isBuildQueueActive() && (unit.getBuildQueueTypes()[0] == QueueItemType.RESEARCH)
 							&& (unit.getBuildQueue()[0].getValue() == techIdRawcodeId.getValue())) {

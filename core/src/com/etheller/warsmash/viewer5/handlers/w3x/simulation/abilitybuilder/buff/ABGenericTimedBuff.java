@@ -73,7 +73,7 @@ public abstract class ABGenericTimedBuff extends ABBuff {
 	@Override
 	public void onTick(final CSimulation game, final CUnit caster) {
 		this.currentTick++;
-		if (this.currentTick > this.expireTick) {
+		if (this.currentTick >= this.expireTick) {
 			this.onBuffExpire(game, caster);
 			caster.remove(game, this);
 		}

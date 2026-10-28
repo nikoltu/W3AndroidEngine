@@ -8,7 +8,10 @@ import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SeekableByteChannel;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 import java.util.zip.CRC32C;
 
@@ -81,7 +84,9 @@ import com.etheller.warsmash.viewer5.handlers.w3x.War3MapViewer.MapLoader;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.ai.AIDifficulty;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.config.CBasePlayer;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.config.War3MapConfig;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.config.War3MapConfigStartLoc;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CMapControl;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CMapPlacement;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayerUnitOrderExecutor;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayerUnitOrderListener;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayerUnitOrderListenerDelaying;
@@ -92,6 +97,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.C
 import com.etheller.warsmash.viewer5.handlers.w3x.ui.command.ClickableFrame;
 import com.etheller.warsmash.viewer5.handlers.w3x.ui.command.FocusableFrame;
 import com.etheller.warsmash.viewer5.handlers.w3x.ui.dialog.DialogWar3;
+import com.etheller.warsmash.viewer5.handlers.w3x.ui.mapsetup.AdvancedOptionsPane;
 import com.etheller.warsmash.viewer5.handlers.w3x.ui.mapsetup.CurrentNetGameMapLookup;
 import com.etheller.warsmash.viewer5.handlers.w3x.ui.mapsetup.CurrentNetGameMapLookupFile;
 import com.etheller.warsmash.viewer5.handlers.w3x.ui.mapsetup.CurrentNetGameMapLookupPath;
@@ -174,7 +180,8 @@ public class MenuUI {
 	private UIFrame advancedOptionsPanel;
 	private GlueTextButtonFrame mapInfoButton;
 	private GlueTextButtonFrame advancedOptionsButton;
-	private UIFrame skirmishAdvancedOptionsPane;
+	private AdvancedOptionsPane skirmishAdvancedOptionsPane;
+	private int randomStartLocationCount;
 
 	private UIFrame profilePanel;
 	private EditBoxFrame newProfileEditBox;
@@ -1160,6 +1167,11 @@ public class MenuUI {
 
 	}
 
+	private void showSkirmishAdvancedOptions(final boolean advanced) {
+		this.mapInfoPanel.setVisible(!advanced);
+		this.advancedOptionsPanel.setVisible(advanced);
+	}
+
 	private void mainSkirmish() {
 		// Create skirmish UI
 		this.skirmish = this.rootFrame.createFrame("Skirmish", this.rootFrame, 0, 0);
@@ -1172,10 +1184,10 @@ public class MenuUI {
 		final SimpleFrame mapInfoPaneContainer = (SimpleFrame) this.rootFrame.getFrameByName("MapInfoPaneContainer", 0);
 		final SimpleFrame advancedOptionsPaneContainer = (SimpleFrame) this.rootFrame
 				.getFrameByName("AdvancedOptionsPaneContainer", 0);
-		this.skirmishAdvancedOptionsPane = this.rootFrame.createFrame("AdvancedOptionsPane",
-				advancedOptionsPaneContainer, 0, 0);
-		this.skirmishAdvancedOptionsPane.setSetAllPoints(true);
-		advancedOptionsPaneContainer.add(this.skirmishAdvancedOptionsPane);
+		this.skirmishAdvancedOptionsPane = new AdvancedOptionsPane(this.rootFrame, advancedOptionsPaneContainer);
+		// Each panel's button opens the other panel: the map info one reads "Advanced Options" and the other "Map Info".
+		this.mapInfoButton.setOnClick(() -> showSkirmishAdvancedOptions(true));
+		this.advancedOptionsButton.setOnClick(() -> showSkirmishAdvancedOptions(false));
 		this.skirmishMapInfoPane = new MapInfoPane(this.rootFrame, this.uiViewport, mapInfoPaneContainer);
 
 		final SimpleFrame teamSetupContainer = (SimpleFrame) this.rootFrame.getFrameByName("TeamSetupContainer", 0);
@@ -1240,6 +1252,7 @@ public class MenuUI {
 								}
 							}
 						}
+						MenuUI.this.randomStartLocationCount = prepareMeleeLobby(war3MapConfig, mapInfo);
 						MenuUI.this.skirmishMapInfoPane.setMap(MenuUI.this.rootFrame, MenuUI.this.uiViewport, map,
 								mapInfo, war3MapConfig);
 						teamSetupPane.setMap(MenuUI.this.rootFrame, MenuUI.this.uiViewport, war3MapConfig,
@@ -1269,6 +1282,17 @@ public class MenuUI {
 					MenuUI.this.skirmish.setVisible(false);
 					MenuUI.this.glueSpriteLayerTopLeft.setSequence("Death");
 					MenuUI.this.glueSpriteLayerTopRight.setSequence("Death");
+					MenuUI.this.skirmishAdvancedOptionsPane.applyTo(MenuUI.this.currentMapConfig);
+					// The lobby marks a closed slot as playing without a controller; in the game it is empty, as in
+					// the original, so the melee scripts give it no starting base.
+					for (int i = 0; i < WarsmashConstants.MAX_PLAYERS; i++) {
+						final CBasePlayer configPlayer = MenuUI.this.currentMapConfig.getPlayer(i);
+						if ((configPlayer.getSlotState() == CPlayerSlotState.PLAYING)
+								&& (configPlayer.getController() == CMapControl.NONE)) {
+							configPlayer.setSlotState(CPlayerSlotState.EMPTY);
+						}
+					}
+					shuffleStartLocations(MenuUI.this.currentMapConfig, MenuUI.this.randomStartLocationCount);
 					MenuUI.this.beginGameInformation = new BeginGameInformation();
 					MenuUI.this.beginGameInformation.gameMapLookup = new CurrentNetGameMapLookupPath(selectedItem);
 					int localPlayerIndex = -1;
@@ -1304,6 +1328,8 @@ public class MenuUI {
 		this.campaignMenu = this.rootFrame.createFrame("CampaignMenu", this.rootFrame, 0, 0);
 		this.campaignMenu.setVisible(false);
 		this.campaignFade = (SpriteFrame) this.rootFrame.getFrameByName("SlidingDoors", 0);
+		// The doors darken the screen behind the campaign menus; left at 4:3 they leave the sides of a wide screen bright.
+		fillScreenWidth(this.campaignFade);
 		this.campaignFade.setVisible(false);
 		this.campaignBackButton = (GlueTextButtonFrame) this.rootFrame.getFrameByName("BackButton", 0);
 		this.campaignBackButton.setVisible(false);
@@ -1893,7 +1919,71 @@ public class MenuUI {
 		}
 		Jass2.loadConfig(map, MenuUI.this.uiViewport, MenuUI.this.uiScene, MenuUI.this.rootFrame, war3MapConfig,
 				WarsmashConstants.JASS_FILE_LIST).config();
+		shuffleStartLocations(war3MapConfig, prepareMeleeLobby(war3MapConfig, mapInfo));
 		MenuUI.this.currentMapConfig = war3MapConfig;
+	}
+
+	/**
+	 * Melee games start as free for all: each player on a team of their own until the lobby joins them.
+	 *
+	 * @return how many players take random start locations, 0 when the map fixes them
+	 */
+	private static int prepareMeleeLobby(final War3MapConfig config, final War3MapW3i mapInfo) {
+		if (!mapInfo.hasFlag(War3MapW3iFlags.MELEE_MAP)
+				|| mapInfo.hasFlag(War3MapW3iFlags.FIXED_PLAYER_SETTINGS_FOR_CUSTOM_FORCES)) {
+			return 0;
+		}
+		final int playerCount = Math.min(WarsmashConstants.MAX_PLAYERS, mapInfo.getPlayers().size());
+		for (int i = 0; i < playerCount; i++) {
+			config.getPlayer(i).setTeam(i);
+		}
+		return playerCount;
+	}
+
+	/**
+	 * A melee map without fixed player settings gives its players random start locations, as the original game's
+	 * game setup does; the map script itself gives each player its own. With teams together, the players of a team
+	 * take the free locations nearest to their first member's.
+	 */
+	private static void shuffleStartLocations(final War3MapConfig config, final int playerCount) {
+		final List<Integer> locations = new ArrayList<>();
+		for (int i = 0; i < playerCount; i++) {
+			locations.add(config.getPlayer(i).getStartLocationIndex());
+		}
+		Collections.shuffle(locations);
+		if (config.getPlacement() != CMapPlacement.TEAMS_TOGETHER) {
+			for (int i = 0; i < playerCount; i++) {
+				config.getPlayer(i).setStartLocationIndex(locations.get(i));
+			}
+			return;
+		}
+		final Map<Integer, List<Integer>> teams = new LinkedHashMap<>();
+		final List<Integer> order = new ArrayList<>();
+		for (int i = 0; i < playerCount; i++) {
+			order.add(i);
+		}
+		Collections.shuffle(order);
+		for (final int i : order) {
+			teams.computeIfAbsent(config.getPlayer(i).getTeam(), (team) -> new ArrayList<>()).add(i);
+		}
+		for (final List<Integer> members : teams.values()) {
+			final War3MapConfigStartLoc first = config.getStartLoc(locations.get(0));
+			for (final int member : members) {
+				int nearest = 0;
+				float nearestDistance = Float.MAX_VALUE;
+				for (int k = 0; k < locations.size(); k++) {
+					final War3MapConfigStartLoc candidate = config.getStartLoc(locations.get(k));
+					final float dx = candidate.getX() - first.getX();
+					final float dy = candidate.getY() - first.getY();
+					final float distance = (dx * dx) + (dy * dy);
+					if (distance < nearestDistance) {
+						nearestDistance = distance;
+						nearest = k;
+					}
+				}
+				config.getPlayer(member).setStartLocationIndex(locations.remove(nearest));
+			}
+		}
 	}
 
 	private void setCurrentProfile(final String selectedProfileName) {
@@ -2193,7 +2283,7 @@ public class MenuUI {
 				}
 			}
 		}
-		if (this.currentMusics != null) {
+		if ((this.currentMusics != null) && (this.currentMusics.length > 0)) {
 			if ((this.currentMusics[this.currentMusicIndex] != null)
 					&& !this.currentMusics[this.currentMusicIndex].isPlaying()) {
 				if (this.currentMusicRandomizeIndex) {
@@ -2382,12 +2472,11 @@ public class MenuUI {
 			case GOING_TO_SINGLE_PLAYER_SKIRMISH:
 				this.glueSpriteLayerTopLeft.setSequence("SinglePlayerSkirmish Birth");
 				this.glueSpriteLayerTopRight.setSequence("SinglePlayerSkirmish Birth");
+				showSkirmishAdvancedOptions(false);
 				this.menuState = MenuState.SINGLE_PLAYER_SKIRMISH;
 				break;
 			case SINGLE_PLAYER_SKIRMISH:
 				this.skirmish.setVisible(true);
-				this.mapInfoPanel.setVisible(true);
-				this.advancedOptionsPanel.setVisible(false);
 				this.glueSpriteLayerTopLeft.setSequence("SinglePlayerSkirmish Stand");
 				this.glueSpriteLayerTopRight.setSequence("SinglePlayerSkirmish Stand");
 				break;
@@ -2659,6 +2748,20 @@ public class MenuUI {
 			this.teamSetupPane.notifyPlayerDataUpdated(index, this.rootFrame, this.uiViewport, this.war3MapConfig,
 					this.mapInfo);
 		}
+
+		@Override
+		public void setPlayerTeam(final int index, final int team) {
+			this.war3MapConfig.getPlayer(index).setTeam(team);
+			this.teamSetupPane.notifyPlayerDataUpdated(index, this.rootFrame, this.uiViewport, this.war3MapConfig,
+					this.mapInfo);
+		}
+
+		@Override
+		public void setPlayerHandicap(final int index, final float handicap) {
+			this.war3MapConfig.getPlayer(index).setHandicap(handicap);
+			this.teamSetupPane.notifyPlayerDataUpdated(index, this.rootFrame, this.uiViewport, this.war3MapConfig,
+					this.mapInfo);
+		}
 	}
 
 	private static enum MenuState {
@@ -2866,8 +2969,9 @@ public class MenuUI {
 			this.currentMusics = new Music[musics.length];
 			int validMusicCount = 0;
 			for (int i = 0; i < musics.length; i++) {
-				if (this.viewer.dataSource.has(musics[i])) {
-					final Music newMusic = Extensions.audio.newMusic(new DataSourceFileHandle(this.viewer.dataSource, musics[i]));
+				final String path = MusicPlayerLibGDX.findMusicFile(this.viewer.dataSource, musics[i]);
+				if (path != null) {
+					final Music newMusic = Extensions.audio.newMusic(new DataSourceFileHandle(this.viewer.dataSource, path));
 					newMusic.setVolume(1.0f);
 					this.currentMusics[i] = newMusic;
 					validMusicCount++;
@@ -2883,9 +2987,13 @@ public class MenuUI {
 				}
 				this.currentMusics = fixedList;
 			}
+			if (this.currentMusics.length == 0) {
+				return null;
+			}
 			if (random) {
 				index = (int) (Math.random() * this.currentMusics.length);
 			}
+			index = Math.min(index, this.currentMusics.length - 1);
 			this.currentMusicIndex = index;
 			this.currentMusicRandomizeIndex = random;
 			if (this.currentMusics[index] != null) {

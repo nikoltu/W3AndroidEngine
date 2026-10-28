@@ -81,7 +81,7 @@ public class CAbilityBlightedGoldMine extends CAbilityOverlayedMine {
 	public void onTick(final CSimulation game, final CUnit unit) {
 		if (this.currentActiveMinerCount > 0) {
 			final float currentInterval = this.intervalDuration
-					* (this.maxNumberOfMiners / this.currentActiveMinerCount);
+					* ((float) this.maxNumberOfMiners / this.currentActiveMinerCount);
 			final int nextIncomeTick = this.lastIncomeTick
 					+ (int) (currentInterval / WarsmashConstants.SIMULATION_STEP_TIME);
 			final int currentTurnTick = game.getGameTurnTick();

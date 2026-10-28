@@ -26,6 +26,7 @@ public class CBuffWhirlWindCaster extends CBuffTimed {
 	private final static CDamageFlags DAMAGE_FLAGS = new CSpellDamageFlags();
 	private final CAbilityWhirlWind abilityImmolation;
 	private int nextDamageTick;
+	private boolean pulsed;
 	private final Rectangle recycleRect = new Rectangle();
 	private StateModBuff disableAttack;
 
@@ -42,6 +43,9 @@ public class CBuffWhirlWindCaster extends CBuffTimed {
 		unit.addUnitType(game, CUnitTypeJass.MAGIC_IMMUNE);
 		this.disableAttack = new StateModBuff(StateModBuffType.DISABLE_ATTACK, 1);
 		unit.addStateModBuff(this.disableAttack);
+		// Measured: the first pulse lands one interval after the order; the effect itself runs a tick after it.
+		this.nextDamageTick = (game.getGameTurnTick()
+				+ (int) (this.abilityImmolation.getDamageInterval() / WarsmashConstants.SIMULATION_STEP_TIME)) - 1;
 	}
 
 	@Override
@@ -61,16 +65,21 @@ public class CBuffWhirlWindCaster extends CBuffTimed {
 					/ WarsmashConstants.SIMULATION_STEP_TIME);
 			final float areaOfEffect = CBuffWhirlWindCaster.this.abilityImmolation.getAreaOfEffect();
 			this.nextDamageTick = currentTick + delayTicks;
+			// Measured: a paused unit takes only the first pulse; its buffs do not tick while paused.
+			final boolean firstPulse = !this.pulsed;
+			this.pulsed = true;
 			this.recycleRect.set(caster.getX() - areaOfEffect, caster.getY() - areaOfEffect, areaOfEffect * 2,
 					areaOfEffect * 2);
 			game.getWorldCollision().enumUnitsInRect(this.recycleRect, new CUnitEnumFunction() {
 				@Override
 				public boolean call(final CUnit enumUnit) {
-					if (caster.canReach(enumUnit, areaOfEffect) && enumUnit.canBeTargetedBy(game, caster,
+					if (caster.canReach(enumUnit, areaOfEffect) && (firstPulse || !enumUnit.isPaused())
+							&& enumUnit.canBeTargetedBy(game, caster,
 							CBuffWhirlWindCaster.this.abilityImmolation.getTargetsAllowed())) {
-						enumUnit.damage(game, caster, DAMAGE_FLAGS, CAttackType.SPELLS, CDamageType.NORMAL,
+						enumUnit.damage(game, caster, DAMAGE_FLAGS, CAttackType.SPELLS, CDamageType.UNIVERSAL,
 								CWeaponSoundTypeJass.WHOKNOWS.name(),
-								CBuffWhirlWindCaster.this.abilityImmolation.getDamagePerSecond());
+								CBuffWhirlWindCaster.this.abilityImmolation.getDamagePerSecond()
+										* CBuffWhirlWindCaster.this.abilityImmolation.getDamageInterval());
 					}
 					return false;
 				}

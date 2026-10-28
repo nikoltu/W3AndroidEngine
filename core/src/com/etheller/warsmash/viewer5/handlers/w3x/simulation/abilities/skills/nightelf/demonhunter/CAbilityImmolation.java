@@ -30,7 +30,6 @@ public class CAbilityImmolation extends AbstractGenericSingleIconNoSmartActiveAb
 
 	private boolean active;
 	private CBuffImmolationCaster buffImmolationCaster;
-	private int nextChargeManaTick;
 
 	public CAbilityImmolation(final int handleId, final War3ID code, final War3ID alias, final float bufferManaRequired,
 			final float damagePerInterval, final float manaDrainedPerSecond, final float areaOfEffect,
@@ -76,16 +75,13 @@ public class CAbilityImmolation extends AbstractGenericSingleIconNoSmartActiveAb
 	@Override
 	public void onTick(final CSimulation game, final CUnit unit) {
 		if (this.active) {
-			final int currentTick = game.getGameTurnTick();
-			if (currentTick >= this.nextChargeManaTick) {
-				final int delayTicks = (int) (this.duration / WarsmashConstants.SIMULATION_STEP_TIME);
-				this.nextChargeManaTick = currentTick + delayTicks;
-				if (unit.getMana() >= this.manaDrainedPerSecond) {
-					unit.setMana(unit.getMana() - this.manaDrainedPerSecond);
-				}
-				else {
-					deactivate(game, unit);
-				}
+			// Measured: the drain is spread over every tick of the interval, not charged at its start.
+			final float drain = (this.manaDrainedPerSecond * WarsmashConstants.SIMULATION_STEP_TIME) / this.duration;
+			if (unit.getMana() >= drain) {
+				unit.setMana(unit.getMana() - drain);
+			}
+			else {
+				deactivate(game, unit);
 			}
 		}
 	}

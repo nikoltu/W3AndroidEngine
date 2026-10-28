@@ -15,6 +15,7 @@ import java.util.Set;
 
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.math.Rectangle;
+import com.badlogic.gdx.math.Vector2;
 import com.etheller.interpreter.ast.scope.GlobalScope;
 import com.etheller.interpreter.ast.scope.TriggerExecutionScope;
 import com.etheller.interpreter.ast.scope.trigger.RemovableTriggerEvent;
@@ -32,9 +33,10 @@ import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.viewer5.handlers.w3x.AnimationTokens.PrimaryTag;
 import com.etheller.warsmash.viewer5.handlers.w3x.SequenceUtils;
 import com.etheller.warsmash.viewer5.handlers.w3x.TextTag;
-import com.etheller.warsmash.viewer5.handlers.w3x.environment.PathingGrid;
 import com.etheller.warsmash.viewer5.handlers.w3x.environment.PathingGrid.RemovablePathingMapInstance;
+import com.etheller.warsmash.viewer5.handlers.w3x.environment.PathingGrid;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbility;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.build.AbstractCAbilityBuild;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.item.shop.CAbilitySellItems;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.item.shop.CAbilitySellUnits;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.listeners.CUnitSpellEffectListener;
@@ -66,6 +68,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.pathing.CPathPoint;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.pathing.CPathfindingProcessor;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CAllianceType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CMapControl;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CMapFlag;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayer;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayerColor;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayerJass;
@@ -82,6 +85,8 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.timers.CTimer;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.JassGameEventsWar3;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.CEffectType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.CFogState;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.CPlayerSlotState;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.unit.BuildOnBuildingIntersector;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.ResourceType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.SimulationRenderComponent;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.SimulationRenderComponentLightning;
@@ -91,6 +96,9 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.TextTagConfigT
 import com.etheller.warsmash.viewer5.handlers.w3x.ui.command.CommandErrorListener;
 
 public class CSimulation implements CPlayerAPI, CFogMaskSettings {
+	private boolean scriptOrder;
+	private boolean allianceChangesLocked;
+	private boolean sharedAdvancedControl;
 	private final CAbilityData abilityData;
 	private final CUnitData unitData;
 	private final CDestructableData destructableData;
@@ -140,6 +148,7 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 	private boolean daytime;
 	private final Set<CDestructable> ownedTreeSet = new HashSet<>();
 	private GlobalScope globalScope;
+	private static final int BUILDING_PLACE_SEARCH_RINGS = 32;
 	private boolean fogMaskEnabled = true;
 	private boolean fogEnabled = true;
 	private final List<Runnable> postUpdateCallbacks = new ArrayList<>();
@@ -186,7 +195,9 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 			final CBasePlayer configPlayer = config.getPlayer(i);
 			final War3MapConfigStartLoc startLoc = config.getStartLoc(configPlayer.getStartLocationIndex());
 			CRace defaultRace = null;
-			if (configPlayer.isRacePrefSet(WarsmashConstants.RACE_MANAGER.getRandomRacePreference())) {
+			final boolean randomRace = configPlayer.isRacePrefSet(WarsmashConstants.RACE_MANAGER.getRandomRacePreference())
+					|| (config.isMapFlagSet(CMapFlag.MAP_RANDOM_RACES) && configPlayer.isRaceSelectable());
+			if (randomRace) {
 				final CRaceManagerEntry raceEntry = WarsmashConstants.RACE_MANAGER
 						.get(seededRandom.nextInt(WarsmashConstants.RACE_MANAGER.getEntryCount()));
 				defaultRace = WarsmashConstants.RACE_MANAGER.getRace(raceEntry.getRaceId());
@@ -201,6 +212,12 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 						break;
 					}
 				}
+			}
+			if ((defaultRace == null) && (i < (WarsmashConstants.MAX_PLAYERS - 4))) {
+				// Measured: the original gives a slot without a race a random one.
+				final CRaceManagerEntry raceEntry = WarsmashConstants.RACE_MANAGER
+						.get(seededRandom.nextInt(WarsmashConstants.RACE_MANAGER.getEntryCount()));
+				defaultRace = WarsmashConstants.RACE_MANAGER.getRace(raceEntry.getRaceId());
 			}
 			final CPlayer newPlayer = new CPlayer(defaultRace, new float[] { startLoc.getX(), startLoc.getY() },
 					configPlayer, new CPlayerFogOfWar(pathingGrid));
@@ -227,6 +244,33 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 				cPlayer.setAlliance(otherNeutral, CAllianceType.PASSIVE, true);
 				otherNeutral.setAlliance(cPlayer, CAllianceType.PASSIVE, true);
 			}
+		}
+
+		this.allianceChangesLocked = config.isMapFlagSet(CMapFlag.MAP_LOCK_ALLIANCE_CHANGES);
+		this.sharedAdvancedControl = config.isMapFlagSet(CMapFlag.MAP_SHARED_ADVANCED_CONTROL);
+		if (config.isMapFlagSet(CMapFlag.MAP_SHARED_ADVANCED_CONTROL)) {
+			for (int i = 0; i < WarsmashConstants.MAX_PLAYERS; i++) {
+				final CBasePlayer configPlayer = config.getPlayer(i);
+				if (configPlayer.getSlotState() != CPlayerSlotState.PLAYING) {
+					continue;
+				}
+				for (int j = 0; j < WarsmashConstants.MAX_PLAYERS; j++) {
+					final CBasePlayer otherPlayer = config.getPlayer(j);
+					if ((i != j) && (otherPlayer.getSlotState() == CPlayerSlotState.PLAYING)
+							&& (otherPlayer.getTeam() == configPlayer.getTeam())) {
+						this.players.get(i).setAlliance(this.players.get(j), CAllianceType.SHARED_CONTROL, true);
+						this.players.get(i).setAlliance(this.players.get(j), CAllianceType.SHARED_ADVANCED_CONTROL,
+								true);
+					}
+				}
+			}
+		}
+		if (config.isMapFlagSet(CMapFlag.MAP_FOG_ALWAYS_VISIBLE)) {
+			this.fogEnabled = false;
+			this.fogMaskEnabled = false;
+		}
+		else if (config.isMapFlagSet(CMapFlag.MAP_FOG_MAP_EXPLORED)) {
+			this.fogMaskEnabled = false;
 		}
 
 		this.commandErrorListener = commandErrorListener;
@@ -264,6 +308,15 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 
 	public CItemData getItemData() {
 		return this.itemData;
+	}
+
+	/**
+	 * Also the units created during the current step, which join the unit list only at the next step.
+	 */
+	public List<CUnit> getUnitsIncludingNew() {
+		final List<CUnit> all = new ArrayList<>(this.units);
+		all.addAll(this.newUnits);
+		return all;
 	}
 
 	public List<CUnit> getUnits() {
@@ -350,6 +403,10 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 		if (createdUnit != null) {
 			createdUnit.setConstructing(constructing);
 			setupCreatedUnit(createdUnit);
+			final float handicap = getPlayer(playerIndex).getHandicap();
+			if (handicap != 1f) {
+				createdUnit.setHandicap(handicap);
+			}
 			if (isNeutralAggressive(playerIndex) && !createdUnit.isBuilding()) {
 				createdUnit.setGuardPosition(x, y);
 			}
@@ -367,8 +424,58 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 		return createdUnit;
 	}
 
-	public CUnit createUnitSimple(final War3ID typeId, final int playerIndex, final float x, final float y,
+	/**
+	 * As in the original game, a building a script creates is moved off cliffs, slopes and other buildings instead of
+	 * overlapping them. Measured: the original takes the first free grid point along a square spiral that starts
+	 * downwards and turns counter-clockwise (down 1, right 1, up 2, left 2, down 3, ...), not the nearest one.
+	 */
+	private Vector2 findBuildingPlace(final CUnitType unitType, final float x, final float y) {
+		final ArgbImage pathingMap = unitType.getBuildingPathingPixelMap();
+		final float offsetX = ((pathingMap.getWidth() / 2) % 2) == 1 ? 32f : 0f;
+		final float offsetY = ((pathingMap.getHeight() / 2) % 2) == 1 ? 32f : 0f;
+		final float baseX = (roundHalfAwayFromZero((x - offsetX) / 64f) * 64f) + offsetX;
+		final float baseY = (roundHalfAwayFromZero((y - offsetY) / 64f) * 64f) + offsetY;
+		final int[] stepX = { 0, 1, 0, -1 };
+		final int[] stepY = { -1, 0, 1, 0 };
+		int cellX = 0;
+		int cellY = 0;
+		int direction = 0;
+		final int maxSteps = ((2 * BUILDING_PLACE_SEARCH_RINGS) + 1) * ((2 * BUILDING_PLACE_SEARCH_RINGS) + 1);
+		int visited = 0;
+		for (int legLength = 1; visited < maxSteps; legLength++) {
+			for (int leg = 0; leg < 2; leg++) {
+				for (int step = 0; step < legLength; step++) {
+					final float candidateX = baseX + (cellX * 64f);
+					final float candidateY = baseY + (cellY * 64f);
+					// Measured: a script-created Undead building is not moved to blight.
+					if (!AbstractCAbilityBuild.isBuildLocationObstructed(this, unitType, pathingMap, false,
+							candidateX, candidateY, null, BuildOnBuildingIntersector.INSTANCE, true)) {
+						return new Vector2(candidateX, candidateY);
+					}
+					visited++;
+					cellX += stepX[direction];
+					cellY += stepY[direction];
+				}
+				direction = (direction + 1) % 4;
+			}
+		}
+		return new Vector2(baseX, baseY);
+	}
+
+	// Measured: halves round away from zero (-54.5 to -55, 34.5 to 35), unlike Math.round.
+	private static float roundHalfAwayFromZero(final float value) {
+		return Math.signum(value) * (float) Math.floor(Math.abs(value) + 0.5f);
+	}
+
+	public CUnit createUnitSimple(final War3ID typeId, final int playerIndex, float x, float y,
 			final float facing) {
+		final CUnitType unitType = this.unitData.getUnitType(typeId);
+		if ((unitType != null) && (unitType.getBuildingPathingPixelMap() != null)
+				&& !unitType.isCanBeBuiltOnThem()) {
+			final Vector2 place = findBuildingPlace(unitType, x, y);
+			x = place.x;
+			y = place.y;
+		}
 		final CUnit newUnit = createUnit(typeId, playerIndex, x, y, facing);
 		if (newUnit != null) {
 			final CPlayer player = getPlayer(playerIndex);
@@ -376,6 +483,7 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 			player.setUnitFoodUsed(newUnit, newUnitType.getFoodUsed());
 			player.setUnitFoodMade(newUnit, newUnitType.getFoodMade());
 			player.addTechtreeUnlocked(this, typeId);
+			player.scoreUnitGained(newUnitType);
 			// nudge unit
 			newUnit.setPointAndCheckUnstuck(x, y, this);
 			if (!newUnit.isBuilding()) {
@@ -664,6 +772,9 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 		if (unit.getFoodUsed() != 0) {
 			player.setUnitFoodUsed(unit, 0);
 		}
+		// The ground it stood on is free at once, so a script can build there in the same step.
+		unit.killPathingInstance();
+		this.worldCollision.removeUnit(unit);
 		this.removedUnits.add(unit);
 	}
 
@@ -763,6 +874,22 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 
 	public boolean isNeutralAggressive(final int playerIndex) {
 		return playerIndex == (this.players.size() - 4);
+	}
+
+	public void setScriptOrder(final boolean scriptOrder) {
+		this.scriptOrder = scriptOrder;
+	}
+
+	public boolean isScriptOrder() {
+		return this.scriptOrder;
+	}
+
+	public boolean isAllianceChangesLocked() {
+		return this.allianceChangesLocked;
+	}
+
+	public boolean isSharedAdvancedControl() {
+		return this.sharedAdvancedControl;
 	}
 
 	@Override
@@ -875,6 +1002,7 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 			player.setUnitFoodUsed(unit, unit.getUnitType().getFoodUsed());
 			player.setUnitFoodMade(unit, unit.getUnitType().getFoodMade());
 			player.addTechtreeUnlocked(this, unit.getTypeId());
+			player.scoreUnitGained(unit.getUnitType());
 		}
 	}
 
@@ -1237,6 +1365,10 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 		this.simulationRenderController.setBlight(x, y, radius, blighted);
 	}
 
+	public void setBlightSquare(final float x, final float y, final float halfSize, final boolean blighted) {
+		this.simulationRenderController.setBlightSquare(x, y, halfSize, blighted);
+	}
+
 	public void unitUpdatedType(final CUnit unit, final War3ID typeId, final boolean updatePortrait) {
 		this.simulationRenderController.unitUpdatedType(unit, typeId, updatePortrait);
 	}
@@ -1248,6 +1380,11 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 		this.unitData.addDefaultAbilitiesToUnit(this, this.handleIdAllocator, unitTypeInstance, true, manaInitial,
 				speed, unit);
 		this.unitData.applyPlayerUpgradesToUnit(this, unit.getPlayerIndex(), unitTypeInstance, unit);
+		if (unitTypeInstance.isHero()) {
+			// A new hero also starts with the mana its intelligence gives, as in the original game.
+			unit.setMana(Math.min(unit.getMaximumMana(),
+					manaInitial + (unit.getMaximumMana() - unitTypeInstance.getManaMaximum())));
+		}
 		final ArgbImage buildingPathingPixelMap = unitTypeInstance.getBuildingPathingPixelMap();
 		if (buildingPathingPixelMap != null) {
 			unit.regeneratePathingInstance(this, buildingPathingPixelMap);

@@ -47,7 +47,8 @@ public class CAbilityStarfall extends CAbilityNoTargetSpellBase {
 	public boolean doEffect(final CSimulation simulation, final CUnit caster, final AbilityTarget target) {
 		final int tick = simulation.getGameTurnTick();
 		this.channelEndTick = tick + ticks(getDuration());
-		this.nextWaveTick = tick;
+		// The first wave falls one interval after the channel starts, as in the original game.
+		this.nextWaveTick = tick + ticks(this.interval);
 		simulation.createTemporarySpellEffectOnUnit(caster, getAlias(), CEffectType.CASTER);
 		return true;
 	}

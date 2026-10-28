@@ -7,7 +7,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.IntBuffer;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
 
@@ -53,6 +57,38 @@ public class AndroidLauncher extends AndroidApplication {
 	private static final String EXTRA_LOAD_FILE = "loadfile";
 	private AndroidPointerSource pointerSource;
 
+	/**
+	 * Settings files written before version 2 were made with music off by default, when music could not play yet; they
+	 * get the new default once.
+	 */
+	private static void migrateIni(final File iniFile) throws IOException {
+		final List<String> lines = new ArrayList<>(Files.readAllLines(iniFile.toPath(), StandardCharsets.UTF_8));
+		boolean inEmulator = false;
+		int emulatorHeader = -1;
+		for (int i = 0; i < lines.size(); i++) {
+			final String line = lines.get(i).trim();
+			if (line.startsWith("[")) {
+				inEmulator = "[Emulator]".equalsIgnoreCase(line);
+				if (inEmulator) {
+					emulatorHeader = i;
+				}
+			}
+			else if (inEmulator && line.startsWith("SettingsVersion=")) {
+				return;
+			}
+		}
+		if (emulatorHeader < 0) {
+			return;
+		}
+		for (int i = emulatorHeader + 1; (i < lines.size()) && !lines.get(i).trim().startsWith("["); i++) {
+			if (lines.get(i).trim().equals("EnableMusic=0")) {
+				lines.set(i, "EnableMusic=1");
+			}
+		}
+		lines.add(emulatorHeader + 1, "SettingsVersion=2");
+		Files.write(iniFile.toPath(), lines, StandardCharsets.UTF_8);
+	}
+
 	@Override
 	protected void onCreate(final Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
@@ -68,6 +104,7 @@ public class AndroidLauncher extends AndroidApplication {
 		}
 		final DataTable warsmashIni;
 		try {
+			migrateIni(iniFile);
 			warsmashIni = loadWarsmashIni(iniFile);
 		}
 		catch (final IOException e) {

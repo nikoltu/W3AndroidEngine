@@ -2,6 +2,7 @@ package com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.inventor
 
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CItem;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayerScore;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.inventory.CAbilityInventory;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityTargetItemVisitor;
@@ -48,7 +49,10 @@ public class CBehaviorGetItem extends CAbstractRangedBehavior {
 	@Override
 	protected CBehavior update(final CSimulation simulation, final boolean withinFacingWindow) {
 		final CItem targetItem = this.target.visit(AbilityTargetItemVisitor.INSTANCE);
-		this.inventory.giveItem(simulation, this.unit, targetItem, true);
+		if (this.inventory.giveItem(simulation, this.unit, targetItem, true) != -1) {
+			// Measured: items picked up count for the score, items a script gives do not.
+			simulation.getPlayer(this.unit.getPlayerIndex()).addScore(CPlayerScore.ITEMS_GAINED, 1);
+		}
 		return this.unit.pollNextOrderBehavior(simulation);
 	}
 

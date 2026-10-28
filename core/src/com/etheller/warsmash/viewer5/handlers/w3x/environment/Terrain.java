@@ -1456,6 +1456,34 @@ public class Terrain {
 		return 0;
 	}
 
+	/**
+	 * The height scripts read: the original game interpolates a tile bilinearly from its four corners (the rendered
+	 * mesh splits it into two triangles), and over water it reads the water surface.
+	 */
+	public float getLocationZ(final float x, final float y) {
+		final float userCellSpaceX = (x - this.centerOffset[0]) / 128.0f;
+		final float userCellSpaceY = (y - this.centerOffset[1]) / 128.0f;
+		final int cellX = (int) userCellSpaceX;
+		final int cellY = (int) userCellSpaceY;
+		if ((cellX < 0) || (cellX >= (this.mapSize[0] - 1)) || (cellY < 0) || (cellY >= (this.mapSize[1] - 1))) {
+			return 0;
+		}
+		final float bottomLeft = this.groundCornerHeights[(cellY * this.columns) + cellX];
+		final float bottomRight = this.groundCornerHeights[(cellY * this.columns) + cellX + 1];
+		final float topLeft = this.groundCornerHeights[((cellY + 1) * this.columns) + cellX];
+		final float topRight = this.groundCornerHeights[((cellY + 1) * this.columns) + cellX + 1];
+		final float sqX = userCellSpaceX - cellX;
+		final float sqY = userCellSpaceY - cellY;
+		final float bottom = bottomLeft + ((bottomRight - bottomLeft) * sqX);
+		final float top = topLeft + ((topRight - topLeft) * sqX);
+		final float ground = (bottom + ((top - bottom) * sqY)) * 128.0f;
+		final RenderCorner corner = getCorner(x, y);
+		if ((corner != null) && (corner.getWater() != 0)) {
+			return Math.max(ground, getWaterHeight(x, y));
+		}
+		return ground;
+	}
+
 	public float getTerrainSpaceX(float x) {
 		return (x - this.centerOffset[0]) / 128.0f;
 	}

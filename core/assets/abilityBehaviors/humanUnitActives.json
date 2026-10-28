@@ -422,7 +422,7 @@
 				"type": "cleanUpCastInstance"
 		}]
 	},{
-		"ids": [{"id":"Amic", "castId": "militiaconvert", "uncastId": "militiaunconvert"}],
+		"ids": [{"id":"Amic", "castId": "townbellon", "uncastId": "townbelloff"}],
 		"type": "NORMAL_PAIRING",
 		"displayFields": {
 			"separateOnAndOff": {
@@ -456,7 +456,7 @@
 				"type": "idString",
 				"idString": {
 					"type": "rawString",
-					"value": "militia"
+					"value": "militiaconvert"
 				}
 			},
 			"orderPairedUnitOffOrderId": {
@@ -507,7 +507,7 @@
 				"type": "idString",
 				"idString": {
 					"type": "rawString",
-					"value": "militia"
+					"value": "militiaconvert"
 				}
 			},
 			"pairingOffOrderId": {

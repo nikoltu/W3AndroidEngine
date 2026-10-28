@@ -34,6 +34,9 @@ public class PlayerSlotPane {
 	private final GlueButtonFrame teamButtonFrame;
 	private final GlueButtonFrame colorButtonFrame;
 	private final BackdropFrame colorButtonValueFrame;
+	private final StringFrame teamButtonTitle;
+	private final PopupMenuFrame handicapMenu;
+	private int teamCount = 1;
 	private final int index;
 	private final PlayerSlotPaneListener playerSlotPaneListener;
 
@@ -56,6 +59,17 @@ public class PlayerSlotPane {
 		this.colorButtonValueFrame = (BackdropFrame) rootFrame.createFrame("ColorButtonValue", this.colorButtonFrame, 0,
 				index);
 		this.playerSlotFrame.add(this.colorButtonValueFrame);
+		this.teamButtonTitle = (StringFrame) rootFrame.createFrame("TeamButtonTitle", this.teamButtonFrame, 0, index);
+		this.playerSlotFrame.add(this.teamButtonTitle);
+		final UIFrame teamButtonArrow = rootFrame.createFrame("TeamButtonArrow", this.teamButtonFrame, 0, index);
+		this.playerSlotFrame.add(teamButtonArrow);
+		this.handicapMenu = (PopupMenuFrame) rootFrame.getFrameByName("HandicapMenu", index);
+		// Ping is measured only in network games.
+		rootFrame.getFrameByName("PingValue", index).setVisible(false);
+	}
+
+	public void setTeamCount(final int teamCount) {
+		this.teamCount = Math.max(1, teamCount);
 	}
 
 	public void setForPlayer(final GameUI rootFrame, final Viewport uiViewport, final CPlayerJass player,
@@ -111,7 +125,24 @@ public class PlayerSlotPane {
 			}
 		});
 		this.raceMenu.setEnabled(player.isRaceSelectable());
-		this.teamButtonFrame.setEnabled(player.isRaceSelectable());
+
+		final int team = player.getTeam();
+		rootFrame.setText(this.teamButtonTitle,
+				String.format(rootFrame.getTemplates().getDecoratedString("TEAM_FORMAT"), team + 1));
+		this.teamButtonFrame.setOnClick(() -> PlayerSlotPane.this.playerSlotPaneListener
+				.setPlayerTeam(PlayerSlotPane.this.index, (team + 1) % PlayerSlotPane.this.teamCount));
+
+		final MenuFrame handicapItems = (MenuFrame) this.handicapMenu.getPopupMenuFrame();
+		final int handicapItem = Math.round((1.0f - player.getHandicap()) * 10);
+		if ((handicapItem >= 0) && (handicapItem < handicapItems.getMenuItemCount())) {
+			rootFrame.setText(
+					((StringFrame) ((GlueTextButtonFrame) this.handicapMenu.getPopupTitleFrame()).getButtonText()),
+					handicapItems.getMenuItem(handicapItem).getText());
+		}
+		this.handicapMenu.setMenuClickListener((button, menuItemIndex) -> PlayerSlotPane.this.playerSlotPaneListener
+				.setPlayerHandicap(PlayerSlotPane.this.index, 1.0f - (menuItemIndex / 10f)));
+		this.handicapMenu.setEnabled(player.getSlotState() == CPlayerSlotState.PLAYING);
+		this.teamButtonFrame.setEnabled(player.isRaceSelectable() && (this.teamCount > 1));
 		this.colorButtonFrame.setEnabled(player.isRaceSelectable());
 	}
 

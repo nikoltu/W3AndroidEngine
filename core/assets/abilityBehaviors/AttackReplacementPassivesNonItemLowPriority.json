@@ -809,7 +809,7 @@
 						"type": "negativeFloat",
 						"value": {
 							"type": "getAbilityDataAsFloat",
-							"dataField": "C"
+							"dataField": "B"
 						}
 					}
 				},{
@@ -877,7 +877,7 @@
 						"type": "negativeFloat",
 						"value": {
 							"type": "getAbilityDataAsFloat",
-							"dataField": "B"
+							"dataField": "C"
 						}
 					}
 				},{
@@ -915,7 +915,7 @@
 								},
 								"value2": {
 									"type": "rawInteger",
-									"value": 7
+									"value": 6
 								}
 							}
 						},

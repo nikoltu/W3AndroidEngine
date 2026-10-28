@@ -37,10 +37,11 @@ public class CBehaviorNoTargetSpellBase implements CBehavior {
 			this.castStartTick = simulation.getGameTurnTick();
 		}
 		final int ticksSinceCast = simulation.getGameTurnTick() - this.castStartTick;
-		final int castPointTicks = (int) (this.unit.getUnitType().getCastPoint()
-				/ WarsmashConstants.SIMULATION_STEP_TIME);
-		final int backswingTicks = (int) (this.unit.getUnitType().getCastBackswingPoint()
-				/ WarsmashConstants.SIMULATION_STEP_TIME);
+		final boolean instant = this.ability.isInstantCast();
+		final int castPointTicks = instant ? 0
+				: (int) (this.unit.getUnitType().getCastPoint() / WarsmashConstants.SIMULATION_STEP_TIME);
+		final int backswingTicks = instant ? 0
+				: (int) (this.unit.getUnitType().getCastBackswingPoint() / WarsmashConstants.SIMULATION_STEP_TIME);
 		if ((ticksSinceCast >= castPointTicks) || (ticksSinceCast >= backswingTicks)) {
 			boolean wasEffectDone = this.doneEffect;
 			boolean wasChanneling = this.channeling;
