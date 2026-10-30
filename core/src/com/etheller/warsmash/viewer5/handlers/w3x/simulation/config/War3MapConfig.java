@@ -23,10 +23,11 @@ public class War3MapConfig implements CPlayerAPI {
 	private final EnumMap<CMapFlag, Boolean> mapFlagToEnabled = new EnumMap<>(CMapFlag.class);
 	private CMapPlacement placement;
 	private CGameSpeed gameSpeed;
-	private CMapDifficulty gameDifficulty;
+	private CMapDifficulty gameDifficulty = CMapDifficulty.NORMAL;
 	private CMapDensity resourceDensity;
 	private CMapDensity creatureDensity;
 	private CGameType gameTypeSelected;
+	private boolean lobbyTeams;
 
 	public War3MapConfig(final int maxPlayers) {
 		// TODO should this be WarsmashConstants.MAX_PLAYERS instead of local
@@ -162,5 +163,16 @@ public class War3MapConfig implements CPlayerAPI {
 	@Override
 	public void setColor(CPlayerJass player, CPlayerColor color) {
 		player.setColor(color.ordinal());
+	}
+	/**
+	 * True when the players' teams come from game setup (a melee map without fixed player settings), so team mates
+	 * start allied.
+	 */
+	public boolean isLobbyTeams() {
+		return this.lobbyTeams;
+	}
+
+	public void setLobbyTeams(final boolean lobbyTeams) {
+		this.lobbyTeams = lobbyTeams;
 	}
 }

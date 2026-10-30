@@ -449,9 +449,10 @@ public class CBehaviorAbilityBuilderBase extends CAbstractRangedBehavior impleme
 		this.castId = castId;
 	}
 
+	// A new order cancels a spell at any point, before its effect too (no mana is spent then).
 	@Override
 	public boolean interruptable() {
-		return this.doneEffect;
+		return true;
 	}
 
 	@Override

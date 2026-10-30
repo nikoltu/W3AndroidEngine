@@ -22,7 +22,7 @@ public class HashTable {
 			pos = ( pos + 1 ) & mask;
 			if(pos == index) break;
 		}
-		throw new MPQException("lookup not found");
+		throw MPQException.LOOKUP_NOT_FOUND;
 	}
 	
 	/*public static int lookupBlock(Entry[] hashtable, byte[] file) throws FileNotFoundException{

@@ -82,6 +82,7 @@ public class CAbilityForceOfNature extends CAbilityPointTargetSpellBase {
 				final CUnit summonedUnit = simulation.createUnitSimple(this.summonedUnitId, caster.getPlayerIndex(),
 						tree.getX(), tree.getY(), simulation.getGameplayConstants().getBuildingAngle());
 				summonedUnit.addClassification(CUnitClassification.SUMMONED);
+				simulation.unitSummoned(caster, summonedUnit);
 				summonedUnit.add(simulation, new CBuffTimedLife(simulation.getHandleIdAllocator().createId(),
 						this.buffId, getDuration(), false));
 				summonedUnitCount++;

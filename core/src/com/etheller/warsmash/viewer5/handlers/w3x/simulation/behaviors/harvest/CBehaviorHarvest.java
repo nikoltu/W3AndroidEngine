@@ -30,6 +30,7 @@ public class CBehaviorHarvest extends CAbstractRangedBehavior
 	private final CAbilityHarvest abilityHarvest;
 	private CSimulation simulation;
 	private int popoutFromMineTurnTick = 0;
+	private boolean poppedOut;
 
 	public CBehaviorHarvest(final CUnit unit, final CAbilityHarvest abilityHarvest) {
 		super(unit);
@@ -38,6 +39,10 @@ public class CBehaviorHarvest extends CAbstractRangedBehavior
 
 	public CBehavior reset(final CSimulation game, final CWidget target) {
 		this.abilityHarvest.setLastHarvestTarget(target);
+		this.poppedOut = false;
+		if (!(target instanceof CUnit)) {
+			this.abilityHarvest.resetMineSpeed(game, this.unit);
+		}
 		if (this.popoutFromMineTurnTick != 0) {
 			// TODO this check is probably only for debug and should be removed after
 			// extensive testing
@@ -48,6 +53,11 @@ public class CBehaviorHarvest extends CAbstractRangedBehavior
 
 	@Override
 	public boolean isWithinRange(final CSimulation simulation) {
+		if (this.target instanceof CUnit) {
+			// Measured: a worker enters the gold mine right next to its pathing, not at the tree attack range. One
+			// extra cell keeps five workers at the measured ten gold per second; at zero they crowd the entrance.
+			return this.unit.canReach(this.target, 32);
+		}
 		return this.unit.canReach(this.target, this.abilityHarvest.getTreeAttack().getRange());
 	}
 
@@ -72,6 +82,13 @@ public class CBehaviorHarvest extends CAbstractRangedBehavior
 		if (this.popoutFromMineTurnTick != 0) {
 			return this; // stay in mine
 		}
+		if (this.poppedOut) {
+			this.poppedOut = false;
+			// An order given while inside the mine waits in the queue; the worker takes it on leaving.
+			if (!this.unit.getOrderQueue().isEmpty()) {
+				return this.unit.pollNextOrderBehavior(this.simulation);
+			}
+		}
 		if ((this.abilityHarvest.getCarriedResourceAmount() == 0)
 				|| (this.abilityHarvest.getCarriedResourceType() != ResourceType.GOLD)) {
 			for (final CAbility ability : target.getAbilities()) {
@@ -81,6 +98,8 @@ public class CBehaviorHarvest extends CAbstractRangedBehavior
 					if (activeMiners < abilityGoldMine.getMiningCapacity()) {
 						this.unit.fireBehaviorChangeEvent(this.simulation, this, true);
 						abilityGoldMine.addMiner(this);
+						this.abilityHarvest.onMineEntry(this.simulation, this.unit,
+								abilityGoldMine.getMiningDuration());
 						this.unit.setHidden(true);
 						this.unit.setInvulnerable(true);
 						this.popoutFromMineTurnTick = this.simulation.getGameTurnTick()
@@ -111,6 +130,7 @@ public class CBehaviorHarvest extends CAbstractRangedBehavior
 
 	public void popoutFromMine(final int goldMined) {
 		this.popoutFromMineTurnTick = 0;
+		this.poppedOut = true;
 		this.unit.setHidden(false);
 		this.unit.setInvulnerable(false);
 		dropResources();
@@ -119,6 +139,7 @@ public class CBehaviorHarvest extends CAbstractRangedBehavior
 			this.unit.getUnitAnimationListener().forceResetCurrentAnimation();
 		}
 		this.simulation.unitRepositioned(this.unit);
+		this.abilityHarvest.onMineExit(this.simulation);
 	}
 
 	@Override
@@ -211,6 +232,10 @@ public class CBehaviorHarvest extends CAbstractRangedBehavior
 
 	public int getPopoutFromMineTurnTick() {
 		return this.popoutFromMineTurnTick;
+	}
+
+	public boolean isRemovedFrom(final CSimulation game) {
+		return game.getUnit(this.unit.getHandleId()) != this.unit;
 	}
 
 	public int getGoldCapacity() {

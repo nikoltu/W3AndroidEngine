@@ -21,6 +21,8 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.AbilityTargetC
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.CommandStringErrorKeys;
 
 public class CAbilityRepair extends AbstractGenericSingleIconActiveAbility implements CAutocastAbility {
+	private static final War3ID RENEW = War3ID.fromString("Aren");
+	private static final War3ID RESTORE = War3ID.fromString("Arst");
 	private EnumSet<CTargetType> targetsAllowed;
 	private float navalRangeBonus;
 	private float repairCostRatio;
@@ -28,6 +30,9 @@ public class CAbilityRepair extends AbstractGenericSingleIconActiveAbility imple
 	private float castRange;
 	private CBehaviorRepair behaviorRepair;
 	private boolean autocasting = false;
+	private final int orderId;
+	private final int orderOnId;
+	private final int orderOffId;
 
 	public CAbilityRepair(final int handleId, final War3ID code, final War3ID alias,
 			final EnumSet<CTargetType> targetsAllowed, final float navalRangeBonus, final float repairCostRatio,
@@ -39,6 +44,21 @@ public class CAbilityRepair extends AbstractGenericSingleIconActiveAbility imple
 		this.repairCostRatio = repairCostRatio;
 		this.repairTimeRatio = repairTimeRatio;
 		this.castRange = castRange;
+		if (code.equals(RENEW)) {
+			this.orderId = OrderIds.renew;
+			this.orderOnId = OrderIds.renewon;
+			this.orderOffId = OrderIds.renewoff;
+		}
+		else if (code.equals(RESTORE)) {
+			this.orderId = OrderIds.restoration;
+			this.orderOnId = OrderIds.restorationon;
+			this.orderOffId = OrderIds.restorationoff;
+		}
+		else {
+			this.orderId = OrderIds.repair;
+			this.orderOnId = OrderIds.repairon;
+			this.orderOffId = OrderIds.repairoff;
+		}
 	}
 
 	@Override
@@ -142,7 +162,7 @@ public class CAbilityRepair extends AbstractGenericSingleIconActiveAbility imple
 
 	@Override
 	public int getBaseOrderId() {
-		return OrderIds.repair;
+		return this.orderId;
 	}
 
 	@Override
@@ -211,12 +231,12 @@ public class CAbilityRepair extends AbstractGenericSingleIconActiveAbility imple
 
 	@Override
 	public int getAutoCastOnOrderId() {
-		return OrderIds.repairon;
+		return this.orderOnId;
 	}
 
 	@Override
 	public int getAutoCastOffOrderId() {
-		return OrderIds.repairoff;
+		return this.orderOffId;
 	}
 
 	@Override

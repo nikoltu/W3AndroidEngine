@@ -5,8 +5,13 @@ public class Shaders {
 			+ "    uniform sampler2D u_boneMap;\r\n" + //
 			"    uniform float u_vectorSize;\r\n" + //
 			"    uniform float u_rowSize;\r\n" + //
+			"    uniform float u_boneBase;\r\n" + //
 			"    mat4 fetchMatrix(float column, float row) {\r\n" + //
-			"      column *= u_vectorSize * 4.0;\r\n" + //
+			"      // The matrices start at texel u_boneBase of a texture that may hold many instances; its width is a\r\n" + //
+			"      // power of two or the matrices fit its first row, so the divisions are exact.\r\n" + //
+			"      float texel = u_boneBase + column * 4.0;\r\n" + //
+			"      row = floor(texel * u_vectorSize);\r\n" + //
+			"      column = (texel - row / u_vectorSize) * u_vectorSize;\r\n" + //
 			"      row *= u_rowSize;\r\n" + //
 			"      // Add in half texel to sample in the middle of the texel.\r\n" + //
 			"      // Otherwise, since the sample is directly on the boundry, small floating point errors can cause the sample to get the wrong pixel.\r\n"

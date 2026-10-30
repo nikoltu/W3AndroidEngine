@@ -13,7 +13,6 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.CAbstractRangedBehavior;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.CBehavior;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.CBehaviorCategory;
-import com.etheller.warsmash.viewer5.handlers.w3x.simulation.orders.OrderIds;
 
 public class CBehaviorRepair extends CAbstractRangedBehavior {
 	private final CAbilityRepair ability;
@@ -142,7 +141,7 @@ public class CBehaviorRepair extends CAbstractRangedBehavior {
 
 	@Override
 	public int getHighlightOrderId() {
-		return OrderIds.repair;
+		return this.ability.getBaseOrderId();
 	}
 
 	@Override

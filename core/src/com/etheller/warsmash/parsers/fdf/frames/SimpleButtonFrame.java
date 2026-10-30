@@ -18,6 +18,7 @@ public class SimpleButtonFrame extends AbstractRenderableFrame implements Clicka
 	private boolean highlightOnMouseOver;
 	private boolean mouseOver = false;
 	private boolean pushed = false;
+	private boolean lit;
 
 	private UIFrame activeChild;
 	private UIFrame activeTextChild;
@@ -119,12 +120,22 @@ public class SimpleButtonFrame extends AbstractRenderableFrame implements Clicka
 		if (this.activeChild != null) {
 			this.activeChild.render(batch, baseFont, glyphLayout);
 		}
-		if (this.activeTextChild != null) {
-			this.activeTextChild.render(batch, baseFont, glyphLayout);
+		final UIFrame textChild = this.lit && this.enabled && !this.pushed && (this.highlightText != null)
+				? this.highlightText
+				: this.activeTextChild;
+		if (textChild != null) {
+			textChild.render(batch, baseFont, glyphLayout);
 		}
-		if (this.mouseOver) {
+		if ((this.mouseOver || this.lit) && (this.controlMouseOverHighlight != null)) {
 			this.controlMouseOverHighlight.render(batch, baseFont, glyphLayout);
 		}
+	}
+
+	/**
+	 * Shows the button as if the mouse were over it, as a button flashing to draw attention does.
+	 */
+	public void setLit(final boolean lit) {
+		this.lit = lit;
 	}
 
 	@Override

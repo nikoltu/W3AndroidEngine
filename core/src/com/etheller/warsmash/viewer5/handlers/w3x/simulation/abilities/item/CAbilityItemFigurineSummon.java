@@ -52,6 +52,7 @@ public class CAbilityItemFigurineSummon extends CAbilityNoTargetSpellBase {
 			final CUnit summonedUnit = simulation.createUnitSimple(this.summonUnitId, unit.getPlayerIndex(), x, y,
 					facing);
 			summonedUnit.addClassification(CUnitClassification.SUMMONED);
+			simulation.unitSummoned(unit, summonedUnit);
 			summonedUnit.add(simulation,
 					new CBuffTimedLife(simulation.getHandleIdAllocator().createId(), this.buffId, getDuration(), true));
 			simulation.createTemporarySpellEffectOnUnit(summonedUnit, getAlias(), CEffectType.TARGET);
@@ -60,6 +61,7 @@ public class CAbilityItemFigurineSummon extends CAbilityNoTargetSpellBase {
 			final CUnit summonedUnit = simulation.createUnitSimple(this.summonUnit2Id, unit.getPlayerIndex(), x, y,
 					facing);
 			summonedUnit.addClassification(CUnitClassification.SUMMONED);
+			simulation.unitSummoned(unit, summonedUnit);
 			summonedUnit.add(simulation,
 					new CBuffTimedLife(simulation.getHandleIdAllocator().createId(), this.buffId, getDuration(), true));
 			simulation.createTemporarySpellEffectOnUnit(summonedUnit, getAlias(), CEffectType.TARGET);

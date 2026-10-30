@@ -16,6 +16,7 @@ import com.etheller.warsmash.viewer5.handlers.mdx.SequenceLoopMode;
 import com.etheller.warsmash.viewer5.handlers.w3x.AnimationTokens.PrimaryTag;
 import com.etheller.warsmash.viewer5.handlers.w3x.AnimationTokens.SecondaryTag;
 import com.etheller.warsmash.viewer5.handlers.w3x.SequenceUtils;
+import com.hiveworkshop.rms.parsers.mdlx.MdlxExtent;
 
 public class SpriteFrame extends AbstractUIFrame {
 
@@ -23,6 +24,9 @@ public class SpriteFrame extends AbstractUIFrame {
 	protected final Viewport uiViewport;
 	private MdxComplexInstance instance;
 	private float zDepth;
+	private boolean sizedByModel;
+	private float modelMinX;
+	private float modelMinY;
 
 	public SpriteFrame(final String name, final UIFrame parent, final Scene scene, final Viewport uiViewport) {
 		super(name, parent);
@@ -43,6 +47,33 @@ public class SpriteFrame extends AbstractUIFrame {
 		else {
 			this.instance = null;
 		}
+		applyModelBounds();
+	}
+
+	/**
+	 * A MODEL frame without a size of its own takes the size of its model's bounds, and its points place those
+	 * bounds: the score screen's player rows hang down from their TOPLEFT point.
+	 */
+	public void setSizedByModel(final boolean sizedByModel) {
+		this.sizedByModel = sizedByModel;
+		applyModelBounds();
+	}
+
+	private void applyModelBounds() {
+		if (!this.sizedByModel || (this.instance == null)) {
+			this.modelMinX = 0;
+			this.modelMinY = 0;
+			return;
+		}
+		final MdxModel model = (MdxModel) this.instance.model;
+		final MdlxExtent extent = model.getSequences().isEmpty() ? null : model.getSequences().get(0).getExtent();
+		if ((extent == null) || (extent.getMax()[0] < extent.getMin()[0])) {
+			return;
+		}
+		this.modelMinX = extent.getMin()[0];
+		this.modelMinY = extent.getMin()[1];
+		setWidth(GameUI.convertX(this.uiViewport, extent.getMax()[0] - this.modelMinX));
+		setHeight(GameUI.convertY(this.uiViewport, extent.getMax()[1] - this.modelMinY));
 	}
 
 	@Override
@@ -123,8 +154,8 @@ public class SpriteFrame extends AbstractUIFrame {
 
 	private void updateInstanceLocation(final Viewport viewport) {
 		if (this.instance != null) {
-			this.instance.setLocation(GameUI.unconvertX(viewport, this.renderBounds.x),
-					GameUI.unconvertY(viewport, this.renderBounds.y), this.zDepth);
+			this.instance.setLocation(GameUI.unconvertX(viewport, this.renderBounds.x) - this.modelMinX,
+					GameUI.unconvertY(viewport, this.renderBounds.y) - this.modelMinY, this.zDepth);
 			if (isVisible()) {
 				this.instance.show();
 			}

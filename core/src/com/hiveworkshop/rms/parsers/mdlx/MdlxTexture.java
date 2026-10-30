@@ -13,8 +13,10 @@ public class MdlxTexture implements MdlxBlock {
 		private final boolean wrapWidth;
 		private final boolean wrapHeight;
 
+		private static final WrapMode[] VALUES = values();
+
 		public static WrapMode fromId(final int id) {
-			return values()[id];
+			return VALUES[id];
 		}
 
 		private WrapMode(final boolean wrapWidth, final boolean wrapHeight) {

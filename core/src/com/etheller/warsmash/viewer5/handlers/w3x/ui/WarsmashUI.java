@@ -8,6 +8,7 @@ import com.etheller.warsmash.viewer5.Scene;
 import com.etheller.warsmash.viewer5.handlers.w3x.camera.GameCameraManager;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CItem;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.campaign.CLeaderboard;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayerColor;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.timers.CTimer;
 import com.etheller.warsmash.viewer5.handlers.w3x.ui.command.CommandErrorListener;
@@ -69,6 +70,8 @@ public interface WarsmashUI extends CommandErrorListener, WarsmashBaseUI {
 
 	void endTouchHover();
 
+	boolean skipCinematic();
+
 	int touchOverlaySlotAt(int screenX, int screenY);
 
 	void selectControlGroupSlot(int slot);
@@ -90,8 +93,22 @@ public interface WarsmashUI extends CommandErrorListener, WarsmashBaseUI {
 
 	void enableUserControl(boolean value);
 
+	void enableUserUI(boolean enable);
+
+	CineFilter getCineFilter();
+
 	void endCinematicScene();
 
 	void forceCinematicSubtitles(boolean value);
+
+	void flashQuestDialogButton();
+
+	void forceQuestDialogUpdate();
+
+	void pingMinimap(float x, float y, float duration, int red, int green, int blue, boolean extraEffects);
+
+	void setLeaderboard(CLeaderboard leaderboard);
+
+	void removeTimerDialog(CTimerDialog dialog);
 
 }

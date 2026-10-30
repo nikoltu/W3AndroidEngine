@@ -7,6 +7,8 @@ import com.etheller.warsmash.viewer5.ModelInstance;
 import com.etheller.warsmash.viewer5.handlers.mdx.MdxComplexInstance;
 import com.etheller.warsmash.viewer5.handlers.mdx.MdxModel;
 import com.etheller.warsmash.viewer5.handlers.mdx.SequenceLoopMode;
+import com.etheller.warsmash.viewer5.handlers.mdx.Sequence;
+
 import com.etheller.warsmash.viewer5.handlers.w3x.AnimationTokens.PrimaryTag;
 import com.etheller.warsmash.viewer5.handlers.w3x.War3MapViewer;
 import com.etheller.warsmash.viewer5.handlers.w3x.environment.PathingGrid;
@@ -34,6 +36,31 @@ public class RenderDoodad {
 	private byte lastFogStateColor;
 	private final float[] vertexColorBase;
 	private final float[] vertexColorFogged;
+
+	public boolean isOfType(final String doodadId) {
+		return doodadId.equals(this.row.getId());
+	}
+
+	public float getX() {
+		return this.x;
+	}
+
+	public float getY() {
+		return this.y;
+	}
+
+	public void playAnimation(final String animation) {
+		if (this.instance instanceof MdxComplexInstance) {
+			final MdxComplexInstance mdxInstance = (MdxComplexInstance) this.instance;
+			final Sequence[] sequences = ((MdxModel) mdxInstance.model).getSequences().toArray(new Sequence[0]);
+			for (int i = 0; i < sequences.length; i++) {
+				if (sequences[i].getName().toLowerCase().startsWith(animation.toLowerCase())) {
+					mdxInstance.setSequence(i);
+					return;
+				}
+			}
+		}
+	}
 
 	public RenderDoodad(final War3MapViewer map, final MdxModel model, final GameObject row, final float[] location3D,
 			final float[] scale3D, final float facingRadians, final float maxPitch, final float maxRoll,
@@ -120,10 +147,23 @@ public class RenderDoodad {
 		if (variationString.length() < 2) {
 			variationString = "0" + variationString;
 		}
-		final int vertR = row.getFieldValue(DOODAD_COLOR_RED + variationString);
-		final int vertG = row.getFieldValue(DOODAD_COLOR_GREEN + variationString);
-		final int vertB = row.getFieldValue(DOODAD_COLOR_BLUE + variationString);
+		final int vertR = colorChannel(row, DOODAD_COLOR_RED, variationString, doodadVariation);
+		final int vertG = colorChannel(row, DOODAD_COLOR_GREEN, variationString, doodadVariation);
+		final int vertB = colorChannel(row, DOODAD_COLOR_BLUE, variationString, doodadVariation);
 		((MdxComplexInstance) instance).setVertexColor(new float[] { vertR / 255f, vertG / 255f, vertB / 255f });
+	}
+
+	/**
+	 * The 3.0 data lists one value per variation (vertR=255,255,...); older data and map edits have a field for each
+	 * (vertR01). A missing one would read as 0, which paints the doodad solid black.
+	 */
+	private static int colorChannel(final GameObject row, final String field, final String variationString,
+			final int doodadVariation) {
+		final String perVariationField = field + variationString;
+		if (!row.getField(perVariationField).isEmpty()) {
+			return row.getFieldValue(perVariationField);
+		}
+		return row.getFieldValue(field, doodadVariation - 1);
 	}
 
 	public PrimaryTag getAnimation() {

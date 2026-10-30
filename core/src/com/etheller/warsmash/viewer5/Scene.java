@@ -1,5 +1,7 @@
 package com.etheller.warsmash.viewer5;
 
+import com.etheller.warsmash.viewer5.gl.BoneAtlas;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -46,6 +48,7 @@ public abstract class Scene {
 	public final List<ModelInstance> instances;
 	public int currentInstance;
 	public final List<ModelInstance> batchedInstances;
+	private BoneAtlas boneAtlas;
 	public int currentBatchedInstance;
 	public final EmittedObjectUpdater emitterObjectUpdater;
 	public final Map<TextureMapper, RenderBatch> batches;
@@ -225,6 +228,15 @@ public abstract class Scene {
 		}
 		Collections.sort(this.instances, this.instanceDepthComparator);
 
+		if (this.boneAtlas == null) {
+			this.boneAtlas = new BoneAtlas(this.viewer.gl);
+		}
+		this.boneAtlas.begin();
+		for (int i = 0, n = this.instances.size(); i < n; i++) {
+			this.instances.get(i).packBones(this.boneAtlas);
+		}
+		this.boneAtlas.upload();
+
 		this.emitterObjectUpdater.update(dt);
 		this.updatedParticles = this.emitterObjectUpdater.objects.size();
 
@@ -268,7 +280,8 @@ public abstract class Scene {
 		}
 
 		// Add all of the batched instances to batches.
-		for (final ModelInstance instance : this.batchedInstances) {
+		for (int i = 0, n = this.batchedInstances.size(); i < n; i++) {
+			final ModelInstance instance = this.batchedInstances.get(i);
 			addToBatch(instance);
 		}
 
@@ -278,7 +291,8 @@ public abstract class Scene {
 		}
 
 		// Render all of the opaque things of non-batched instances.
-		for (final ModelInstance instance : this.instances) {
+		for (int i = 0, n = this.instances.size(); i < n; i++) {
+			final ModelInstance instance = this.instances.get(i);
 			instance.renderOpaque(this.camera.viewProjectionMatrix);
 		}
 	}
@@ -321,7 +335,8 @@ public abstract class Scene {
 			batch.renderTranslucent();
 		}
 
-		for (final ModelInstance instance : this.instances) {
+		for (int i = 0, n = this.instances.size(); i < n; i++) {
+			final ModelInstance instance = this.instances.get(i);
 			instance.renderTranslucent();
 		}
 

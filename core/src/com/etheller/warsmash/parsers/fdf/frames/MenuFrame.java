@@ -19,6 +19,7 @@ public class MenuFrame extends AbstractUIFrame {
 	private UIFrame controlBackdrop;
 	private MenuClickListener onClick;
 	private final List<MenuItem> menuItems;
+	private final List<UIFrame> itemFrames = new ArrayList<>();
 	private float itemHeight;
 	private float border;
 	private BitmapFont frameFont;
@@ -96,6 +97,11 @@ public class MenuFrame extends AbstractUIFrame {
 	}
 
 	public void setItems(final Viewport viewport2, final List<MenuItem> items) {
+		for (final UIFrame itemFrame : this.itemFrames) {
+			remove(itemFrame);
+		}
+		this.itemFrames.clear();
+		this.menuItems.clear();
 		UIFrame lastChildFrame = null;
 		int index = 0;
 		for (final MenuItem menuItem : items) {
@@ -118,6 +124,7 @@ public class MenuFrame extends AbstractUIFrame {
 				childFrame.addSetPoint(new SetPoint(FramePoint.TOPRIGHT, lastChildFrame, FramePoint.BOTTOMRIGHT, 0, 0));
 			}
 			add(childFrame);
+			this.itemFrames.add(childFrame);
 			add(menuItem);
 			lastChildFrame = childFrame;
 			final int childIndex = index;

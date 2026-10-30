@@ -77,8 +77,9 @@ public class TeamSetupPane {
 					final int playerMaskBit = 1 << i;
 					final boolean forceContainsPlayer = (force.getPlayerMasks() & playerMaskBit) != 0;
 					if (forceContainsPlayer) {
+						final int slot = i;
 						final PlayerSlotPane playerSlotPane = new PlayerSlotPane(rootFrame, uiViewport, this.container,
-								i, listener);
+								i, listener, color -> isColorTaken(config, color, slot));
 						this.mapSlotToPlayerSlot.put(i, playerSlotPane);
 						this.playerSlots.add(playerSlotPane);
 						if (lastFrame == null) {
@@ -103,8 +104,9 @@ public class TeamSetupPane {
 				if (player.getController() == CMapControl.NONE) {
 					continue;
 				}
+				final int slot = i;
 				final PlayerSlotPane playerSlotPane = new PlayerSlotPane(rootFrame, uiViewport, this.container, i,
-						listener);
+						listener, color -> isColorTaken(config, color, slot));
 				this.mapSlotToPlayerSlot.put(i, playerSlotPane);
 				this.playerSlots.add(playerSlotPane);
 				if (usedSlots == 0) {
@@ -115,7 +117,7 @@ public class TeamSetupPane {
 					playerSlotPane.getPlayerSlotFrame().addSetPoint(new SetPoint(FramePoint.TOPLEFT,
 							this.playerSlots.get(usedSlots - 1).getPlayerSlotFrame(), FramePoint.BOTTOMLEFT, 0, 0));
 				}
-				playerSlotPane.setTeamCount(playerCount);
+				playerSlotPane.setTeamCount(rootFrame, uiViewport, playerCount);
 				playerSlotPane.setForPlayer(rootFrame, uiViewport, player, false);
 				usedSlots++;
 			}
@@ -136,6 +138,15 @@ public class TeamSetupPane {
 		}
 	}
 
+	private boolean isColorTaken(final War3MapConfig config, final int color, final int exceptSlot) {
+		for (final IntMap.Entry<PlayerSlotPane> entry : this.mapSlotToPlayerSlot) {
+			if ((entry.key != exceptSlot) && (config.getPlayer(entry.key).getColor() == color)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	private void clear() {
 		for (final PlayerSlotPane playerSlotPane : this.playerSlots) {
 			this.container.remove(playerSlotPane.getPlayerSlotFrame());
@@ -144,6 +155,7 @@ public class TeamSetupPane {
 			this.container.remove(forceLabel);
 		}
 		this.playerSlots.clear();
+		this.mapSlotToPlayerSlot.clear();
 		this.forceLabels.clear();
 	}
 

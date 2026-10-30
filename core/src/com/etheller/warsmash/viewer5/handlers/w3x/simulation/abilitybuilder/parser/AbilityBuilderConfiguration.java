@@ -15,6 +15,7 @@ public class AbilityBuilderConfiguration {
 	
 	private String castId;
 	private String uncastId;
+	private String instantCastId;
 	private String autoCastOnId;
 	private String autoCastOffId;
 	private AutocastType autoCastType;
@@ -57,6 +58,7 @@ public class AbilityBuilderConfiguration {
 		this.id = dupe.getId();
 		this.castId = dupe.getCastId();
 		this.uncastId = dupe.getUncastId();
+		this.instantCastId = dupe.getInstantCastId();
 		this.autoCastOnId = dupe.getAutoCastOnId();
 		this.autoCastOffId = dupe.getAutoCastOffId();
 		this.autoCastType = dupe.getAutoCastType();
@@ -112,6 +114,10 @@ public class AbilityBuilderConfiguration {
 
 	public void setCastId(String castId) {
 		this.castId = castId;
+	}
+
+	public String getInstantCastId() {
+		return instantCastId;
 	}
 
 	public String getUncastId() {

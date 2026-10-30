@@ -1,6 +1,8 @@
 package com.etheller.warsmash.viewer5.handlers.mdx;
 
 import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.Map;
 
 import com.etheller.warsmash.viewer5.Bounds;
 import com.etheller.warsmash.viewer5.handlers.w3x.AnimationTokens;
@@ -10,6 +12,17 @@ import com.hiveworkshop.rms.parsers.mdlx.MdlxExtent;
 import com.hiveworkshop.rms.parsers.mdlx.MdlxSequence;
 
 public class Sequence {
+	private static final Map<String, PrimaryTag> PRIMARY_TAGS = new HashMap<>();
+	private static final Map<String, SecondaryTag> SECONDARY_TAGS = new HashMap<>();
+	static {
+		for (final PrimaryTag tag : PrimaryTag.VALUES) {
+			PRIMARY_TAGS.put(tag.name(), tag);
+		}
+		for (final SecondaryTag tag : SecondaryTag.VALUES) {
+			SECONDARY_TAGS.put(tag.name(), tag);
+		}
+	}
+
 	private final MdlxSequence sequence;
 	private final Bounds bounds;
 	private final EnumSet<AnimationTokens.PrimaryTag> primaryTags = EnumSet.noneOf(AnimationTokens.PrimaryTag.class);
@@ -32,20 +45,17 @@ public class Sequence {
 			final EnumSet<AnimationTokens.SecondaryTag> secondaryTags, final String name) {
 		primaryTags.clear();
 		secondaryTags.clear();
-		TokenLoop:
 		for (final String token : name.split("\\s+|,")) {
 			final String upperCaseToken = token.toUpperCase();
-			for (final PrimaryTag primaryTag : PrimaryTag.values()) {
-				if (upperCaseToken.equals(primaryTag.name())) {
-					primaryTags.add(primaryTag);
-					continue TokenLoop;
-				}
+			final PrimaryTag primaryTag = PRIMARY_TAGS.get(upperCaseToken);
+			if (primaryTag != null) {
+				primaryTags.add(primaryTag);
+				continue;
 			}
-			for (final SecondaryTag secondaryTag : SecondaryTag.values()) {
-				if (upperCaseToken.equals(secondaryTag.name())) {
-					secondaryTags.add(secondaryTag);
-					continue TokenLoop;
-				}
+			final SecondaryTag secondaryTag = SECONDARY_TAGS.get(upperCaseToken);
+			if (secondaryTag != null) {
+				secondaryTags.add(secondaryTag);
+				continue;
 			}
 			break;
 		}

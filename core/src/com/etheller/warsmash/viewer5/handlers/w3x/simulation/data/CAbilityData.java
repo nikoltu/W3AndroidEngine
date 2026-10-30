@@ -322,6 +322,9 @@ public class CAbilityData {
 		// Death Knight
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AUa2"),
 				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityAnimateDead(handleId, alias)));
+		// The same spell under its pre-Reforged code (1.29 data and older maps).
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AUan"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityAnimateDead(handleId, alias)));
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AUdc"),
 				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityDeathCoil(handleId, alias)));
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AUdp"),

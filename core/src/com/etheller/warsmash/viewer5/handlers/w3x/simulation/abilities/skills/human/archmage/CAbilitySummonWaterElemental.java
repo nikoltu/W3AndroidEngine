@@ -45,6 +45,7 @@ public class CAbilitySummonWaterElemental extends CAbilityNoTargetSpellBase {
 		for (int i = 0; i < summonUnitCount; i++) {
 			final CUnit summonedUnit = simulation.createUnitSimple(summonUnitId, unit.getPlayerIndex(), x, y, facing);
 			summonedUnit.addClassification(CUnitClassification.SUMMONED);
+			simulation.unitSummoned(unit, summonedUnit);
 			summonedUnit.add(simulation,
 					new CBuffTimedLife(simulation.getHandleIdAllocator().createId(), buffId, getDuration(), false));
 			simulation.createTemporarySpellEffectOnUnit(summonedUnit, getAlias(), CEffectType.TARGET);

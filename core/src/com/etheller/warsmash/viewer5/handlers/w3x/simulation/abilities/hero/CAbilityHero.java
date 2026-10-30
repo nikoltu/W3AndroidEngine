@@ -14,6 +14,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnitType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CWidget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.AbstractCAbility;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.campaign.CStoredUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbility;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbilityCategory;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbilityVisitor;
@@ -154,6 +155,43 @@ public class CAbilityHero extends AbstractCAbility {
 				abilityType.setLevel(game, unit, (CLevelingAbility) copy, level);
 			}
 		}
+	}
+
+	/**
+	 * A hero restored from a game cache: back at the stored experience, without level up effects.
+	 */
+	public void setXpQuiet(final CSimulation game, final CUnit unit, final int xp) {
+		this.xp = xp;
+		levelUpHero(game, unit, false);
+		calculateDerivatedFields(game, unit);
+		unit.internalPublishHeroStatsChanged();
+	}
+
+	public void restoreLearnedSkills(final CSimulation game, final CUnit unit,
+			final List<CStoredUnit.StoredSkill> skills) {
+		for (final CStoredUnit.StoredSkill skill : skills) {
+			for (int level = 0; level < skill.level; level++) {
+				learnSkill(game, unit, skill.abilityId);
+			}
+		}
+	}
+
+	/**
+	 * UnitStripHeroLevel, measured: the hero drops to the experience the lower level starts at and loses the skill
+	 * points of those levels; asking for too many stops at level 1.
+	 */
+	public boolean stripLevels(final CSimulation game, final CUnit unit, final int levels) {
+		final int newLevel = Math.max(1, this.heroLevel - levels);
+		final int lost = this.heroLevel - newLevel;
+		if (lost <= 0) {
+			return false;
+		}
+		this.heroLevel = newLevel;
+		this.xp = newLevel > 1 ? game.getGameplayConstants().getNeedHeroXPSum(newLevel - 1) : 0;
+		this.skillPoints = Math.max(0, this.skillPoints - lost);
+		calculateDerivatedFields(game, unit);
+		unit.internalPublishHeroStatsChanged();
+		return true;
 	}
 
 	public List<CAbility> getLearnedHeroAbilities() {

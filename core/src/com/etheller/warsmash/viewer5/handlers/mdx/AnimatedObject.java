@@ -14,6 +14,10 @@ public class AnimatedObject {
 	public MdxModel model;
 	public Map<War3ID, Sd<?>> timelines;
 	public Map<String, byte[]> variants;
+	// An object has a handful of timelines and they are read for every node every frame, so they are also kept in
+	// arrays searched by id: cheaper than a hash map lookup, which showed up in phone frame times.
+	private int[] timelineIds = new int[0];
+	private Sd<?>[] timelineArray = new Sd<?>[0];
 
 	public AnimatedObject(final MdxModel model, final MdlxAnimatedObject object) {
 		this.model = model;
@@ -23,12 +27,31 @@ public class AnimatedObject {
 		for (final MdlxTimeline<?> timeline : object.getTimelines()) {
 			this.timelines.put(timeline.getName(), createTypedSd(model, timeline));
 		}
+		this.timelineIds = new int[this.timelines.size()];
+		this.timelineArray = new Sd<?>[this.timelines.size()];
+		int index = 0;
+		for (final Map.Entry<War3ID, Sd<?>> entry : this.timelines.entrySet()) {
+			this.timelineIds[index] = entry.getKey().getValue();
+			this.timelineArray[index] = entry.getValue();
+			index++;
+		}
+	}
+
+	private Sd<?> findTimeline(final War3ID name) {
+		final int id = name.getValue();
+		final int[] ids = this.timelineIds;
+		for (int i = 0; i < ids.length; i++) {
+			if (ids[i] == id) {
+				return this.timelineArray[i];
+			}
+		}
+		return null;
 	}
 
 	public int getScalarValue(final float[] out, final War3ID name, final int sequence, final int frame,
 			final int counter, final float defaultValue) {
 		if (sequence != -1) {
-			final Sd<?> animation = this.timelines.get(name);
+			final Sd<?> animation = findTimeline(name);
 
 			if (animation instanceof ScalarSd) {
 				return ((ScalarSd) animation).getValue(out, sequence, frame, counter);
@@ -43,7 +66,7 @@ public class AnimatedObject {
 	public int getScalarValue(final long[] out, final War3ID name, final int sequence, final int frame,
 			final int counter, final long defaultValue) {
 		if (sequence != -1) {
-			final Sd<?> animation = this.timelines.get(name);
+			final Sd<?> animation = findTimeline(name);
 
 			if (animation instanceof UInt32Sd) {
 				return ((UInt32Sd) animation).getValue(out, sequence, frame, counter);
@@ -58,7 +81,7 @@ public class AnimatedObject {
 	public int getVectorValue(final float[] out, final War3ID name, final int sequence, final int frame,
 			final int counter, final float[] defaultValue) {
 		if (sequence != -1) {
-			final Sd<?> animation = this.timelines.get(name);
+			final Sd<?> animation = findTimeline(name);
 
 			if (animation instanceof VectorSd) {
 				return ((VectorSd) animation).getValue(out, sequence, frame, counter);
@@ -73,7 +96,7 @@ public class AnimatedObject {
 	public int getQuatValue(final float[] out, final War3ID name, final int sequence, final int frame,
 			final int counter, final float[] defaultValue) {
 		if (sequence != -1) {
-			final Sd<?> animation = this.timelines.get(name);
+			final Sd<?> animation = findTimeline(name);
 
 			if (animation instanceof QuaternionSd) {
 				return ((QuaternionSd) animation).getValue(out, sequence, frame, counter);
@@ -118,7 +141,7 @@ public class AnimatedObject {
 	}
 
 	public boolean isVariant(final War3ID name, final int sequence) {
-		final Sd<?> timeline = this.timelines.get(name);
+		final Sd<?> timeline = findTimeline(name);
 
 		if (timeline != null) {
 			return timeline.isVariant(sequence);

@@ -79,7 +79,7 @@ public abstract class CAbstractRangedBehavior implements CRangedBehavior {
 			float facing = this.unit.getFacing();
 			float delta = goalAngle - facing;
 			final float propulsionWindow = simulation.getGameplayConstants().getAttackHalfAngle();
-			final float turnRate = simulation.getUnitData().getTurnRate(this.unit.getTypeId());
+			final float turnRate = this.unit.getUnitType().getTurnRate();
 
 			if (delta < -180) {
 				delta = 360 + delta;

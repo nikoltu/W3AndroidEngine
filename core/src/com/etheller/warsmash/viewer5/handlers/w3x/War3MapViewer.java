@@ -68,6 +68,7 @@ import com.etheller.warsmash.util.QuadtreeIntersector;
 import com.etheller.warsmash.util.RenderMathUtils;
 import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.util.WarsmashConstants;
+import com.etheller.warsmash.util.PerfStats;
 import com.etheller.warsmash.util.WorldEditStrings;
 import com.etheller.warsmash.viewer5.Bounds;
 import com.etheller.warsmash.viewer5.CanvasProvider;
@@ -92,9 +93,9 @@ import com.etheller.warsmash.viewer5.handlers.mdx.MdxNode;
 import com.etheller.warsmash.viewer5.handlers.mdx.SequenceLoopMode;
 import com.etheller.warsmash.viewer5.handlers.tga.TgaFile;
 import com.etheller.warsmash.viewer5.handlers.w3x.AnimationTokens.SecondaryTag;
+import com.etheller.warsmash.viewer5.Camera;
 import com.etheller.warsmash.viewer5.handlers.w3x.SplatModel.SplatMover;
 import com.etheller.warsmash.viewer5.handlers.w3x.environment.BuildingShadow;
-import com.etheller.warsmash.viewer5.handlers.w3x.environment.GroundTexture;
 import com.etheller.warsmash.viewer5.handlers.w3x.environment.PathingGrid;
 import com.etheller.warsmash.viewer5.handlers.w3x.environment.PathingGrid.PathingType;
 import com.etheller.warsmash.viewer5.handlers.w3x.environment.PathingGrid.RemovablePathingMapInstance;
@@ -131,6 +132,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnitClassification;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CWidget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CWidgetFilterFunction;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.blight.CAbilityBlight;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityTarget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.attacks.CUnitAttackInstant;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.attacks.CUnitAttackListener;
@@ -163,6 +165,7 @@ import mpq.MPQArchive;
 import mpq.MPQException;
 
 public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoader {
+	private static final int MAX_STEPS_PER_FRAME = 3;
 	private final EnumSet<PauseSource> pauseSources = EnumSet.noneOf(PauseSource.class);
 	private static final List<String> ORIGIN_STRING_LIST = Arrays.asList("origin");
 
@@ -185,6 +188,7 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 	private static final Vector3 normalHeap = new Vector3();
 	public static final Vector3 intersectionHeap = new Vector3();
 	public static final Vector3 intersectionHeap2 = new Vector3();
+	private final Vector3 constructionPickHeap = new Vector3();
 	private static final Rectangle rectangleHeap = new Rectangle();
 	public static final StreamDataCallbackImplementation streamDataCallback = new StreamDataCallbackImplementation();
 
@@ -201,7 +205,14 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 	public MappedData doodadMetaData = new MappedData();
 	public MappedData destructableMetaData = new MappedData();
 	public List<RenderDoodad> doodads = new ArrayList<>();
+	private static final float SKY_FAR_PLANE = 100000f;
+	private static final float UNIT_INDICATOR_SECONDS = 3f;
+	private static final float UNIT_INDICATOR_PULSE_SECONDS = 1f;
+	private Scene skyScene;
+	private MdxComplexInstance skyInstance;
+	private final List<UnitIndicator> unitIndicators = new ArrayList<>();
 	public List<RenderDoodad> decals = new ArrayList<>();
+	private int fogDoodadTicks;
 	public List<TerrainDoodad> terrainDoodads = new ArrayList<>();
 	public boolean doodadsReady;
 	public boolean unitsAndItemsLoaded;
@@ -729,9 +740,13 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 		final CTimer fogGpuUpdateTimer = new CTimer() {
 			@Override
 			public void onFire(final CSimulation simulation) {
-				War3MapViewer.this.terrain.reloadFogOfWarDataToGPU(simulation);
-				for (final RenderDoodad doodad : War3MapViewer.this.decals) {
-					doodad.updateFog(War3MapViewer.this);
+				final boolean fogChanged = War3MapViewer.this.terrain.reloadFogOfWarDataToGPU(simulation);
+				// Doodads fade with the ground fog, so they only need the step while it changes; once a second they
+				// are checked anyway.
+				if (fogChanged || ((++War3MapViewer.this.fogDoodadTicks % 30) == 0)) {
+					for (final RenderDoodad doodad : War3MapViewer.this.decals) {
+						doodad.updateFog(War3MapViewer.this);
+					}
 				}
 			}
 		};
@@ -1143,6 +1158,31 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 		return null;
 	}
 
+	/**
+	 * CreateUbersplat: the name is a row of Splats\\UberSplatData.slk.
+	 */
+	public SplatMover addNamedUberSplat(final float x, final float y, final String name) {
+		final Element row = this.terrain.uberSplatTable.get(name);
+		if (row == null) {
+			return null;
+		}
+		final String texture = row.getField("Dir") + "\\" + row.getField("file") + ".blp";
+		return addUberSplatIngame(x, y, texture, row.getFieldFloatValue("Scale"));
+	}
+
+	public void destroyUberSplat(final SplatMover splat) {
+		splat.destroy(Gdx.gl30, this.terrain.centerOffset);
+	}
+
+	public void showUberSplat(final SplatMover splat, final boolean show) {
+		if (show) {
+			splat.show(this.terrain.centerOffset);
+		}
+		else {
+			splat.hide();
+		}
+	}
+
 	public SplatMover addUberSplatIngame(final float unitX, final float unitY, final String texturePath,
 			final float s) {
 		SplatMover buildingUberSplatDynamicIngame;
@@ -1215,15 +1255,18 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 
 	@Override
 	public void update() {
+		PerfStats.frameStart();
 		if (this.anyReady) {
 			this.successfulFrames++;
 			// while paused everything is still placed and drawn, but no game or animation time passes
 			final boolean paused = isGamePaused();
 			final float deltaTime = paused ? 0 : Gdx.graphics.getDeltaTime();
 			this.terrain.update(deltaTime);
+			PerfStats.end(PerfStats.Section.TERRAIN_UPDATE);
 
 			final float rawDeltaTime = paused ? 0 : Gdx.graphics.getRawDeltaTime();
 			super.update(rawDeltaTime);
+			PerfStats.end(PerfStats.Section.SCENE_UPDATE);
 
 			this.updateTime += rawDeltaTime;
 
@@ -1258,10 +1301,20 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 				}
 			}
 
+			PerfStats.end(PerfStats.Section.WIDGETS);
+			int stepsThisFrame = 0;
 			while (this.updateTime >= WarsmashConstants.SIMULATION_STEP_TIME) {
+				if (stepsThisFrame >= MAX_STEPS_PER_FRAME) {
+					// A slow device would otherwise spend the next frame catching up and fall further behind each
+					// time; like the original, the game runs slower instead.
+					this.updateTime = 0;
+					break;
+				}
+				stepsThisFrame++;
 				if (this.gameTurnManager.getLatestCompletedTurn() >= this.simulation.getGameTurnTick()) {
 					this.updateTime -= WarsmashConstants.SIMULATION_STEP_TIME;
 					this.simulation.update();
+					PerfStats.simulationStep();
 					this.gameTurnManager.turnCompleted(this.simulation.getGameTurnTick());
 				} else {
 					if (this.updateTime > (WarsmashConstants.SIMULATION_STEP_TIME * 3)) {
@@ -1271,6 +1324,7 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 					break;
 				}
 			}
+			PerfStats.end(PerfStats.Section.SIMULATION);
 			if (this.dncTerrain != null) {
 				this.dncTerrain.setFrameByRatio(
 						this.simulation.getGameTimeOfDay() / this.simulation.getGameplayConstants().getGameDayHours());
@@ -1294,42 +1348,174 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 		this.worldHidden = worldHidden;
 	}
 
+	/**
+	 * SetSkyModel. The sky draws behind everything and moves with the camera, so it has a scene of its own whose far
+	 * plane the map's camera distance settings cannot cut through.
+	 */
+	public void setSkyModel(final String path) {
+		if (this.skyInstance != null) {
+			this.skyInstance.detach();
+			this.skyInstance = null;
+		}
+		if ((path == null) || path.isEmpty()) {
+			return;
+		}
+		if (this.skyScene == null) {
+			this.skyScene = addSimpleScene();
+			this.skyScene.alpha = true;
+		}
+		final MdxModel model = loadModelMdx(this.dataSource, this, path, this.mapPathSolver, this.solverParams);
+		this.skyInstance = (MdxComplexInstance) model.addInstance();
+		this.skyInstance.setSequenceLoopMode(SequenceLoopMode.ALWAYS_LOOP);
+		this.skyInstance.setSequence(0);
+		this.skyInstance.setScene(this.skyScene);
+	}
+
+	private void renderSky() {
+		final Camera camera = this.worldScene.camera;
+		final Camera skyCamera = this.skyScene.camera;
+		skyCamera.viewport(camera.rect);
+		skyCamera.perspective(camera.getFov(), camera.getAspect(), 16f, SKY_FAR_PLANE);
+		skyCamera.setLocation(camera.location);
+		skyCamera.setRotation(camera.rotation);
+		skyCamera.update();
+		this.skyInstance.setLocation(camera.location);
+		this.skyScene.startFrame();
+		this.skyScene.renderOpaque();
+		this.skyScene.renderTranslucent();
+		this.gl.glDepthMask(true);
+		this.gl.glClear(GL20.GL_DEPTH_BUFFER_BIT);
+	}
+
+	/**
+	 * UnitAddIndicator: the unit pulses in the color for a moment.
+	 */
+	public void addIndicator(final CWidget widget, final int red, final int green, final int blue, final int alpha) {
+		if (widget instanceof CUnit) {
+			final RenderUnit peer = getRenderPeer((CUnit) widget);
+			if (peer != null) {
+				final UnitIndicator indicator = new UnitIndicator();
+				indicator.unit = peer;
+				indicator.color = new float[] { red / 255f, green / 255f, blue / 255f };
+				indicator.strength = alpha / 255f;
+				indicator.original = peer.getVertexColoring().clone();
+				this.unitIndicators.add(indicator);
+			}
+		}
+	}
+
+	private void updateUnitIndicators(final float deltaTime) {
+		for (final Iterator<UnitIndicator> iterator = this.unitIndicators.iterator(); iterator.hasNext();) {
+			final UnitIndicator indicator = iterator.next();
+			indicator.elapsed += deltaTime;
+			final float[] original = indicator.original;
+			if (indicator.elapsed >= UNIT_INDICATOR_SECONDS) {
+				indicator.unit.setVertexColoring(this, original[0], original[1], original[2]);
+				iterator.remove();
+			}
+			else {
+				final float pulse = indicator.strength
+						* (float) Math.abs(Math.sin((indicator.elapsed * Math.PI * 2) / UNIT_INDICATOR_PULSE_SECONDS));
+				final float[] color = indicator.color;
+				indicator.unit.setVertexColoring(this, original[0] + ((color[0] - original[0]) * pulse),
+						original[1] + ((color[1] - original[1]) * pulse),
+						original[2] + ((color[2] - original[2]) * pulse));
+			}
+		}
+	}
+
+	private static final class UnitIndicator {
+		private RenderUnit unit;
+		private float[] color;
+		private float[] original;
+		private float strength;
+		private float elapsed;
+	}
+
+	/**
+	 * SetDoodadAnimation. Null area means every doodad of the type.
+	 */
+	public void setDoodadAnimation(final String doodadId, final Rectangle area, final float centerX,
+			final float centerY, final float radius, final boolean nearestOnly, final String animation) {
+		RenderDoodad nearest = null;
+		float nearestDistance = Float.MAX_VALUE;
+		for (final RenderDoodad doodad : this.doodads) {
+			if (!doodad.isOfType(doodadId)) {
+				continue;
+			}
+			final float dx = doodad.getX() - centerX;
+			final float dy = doodad.getY() - centerY;
+			final float distance = (dx * dx) + (dy * dy);
+			if (area != null) {
+				if (area.contains(doodad.getX(), doodad.getY())) {
+					doodad.playAnimation(animation);
+				}
+			}
+			else if (distance <= (radius * radius)) {
+				if (nearestOnly) {
+					if (distance < nearestDistance) {
+						nearestDistance = distance;
+						nearest = doodad;
+					}
+				}
+				else {
+					doodad.playAnimation(animation);
+				}
+			}
+		}
+		if (nearest != null) {
+			nearest.playAnimation(animation);
+		}
+	}
+
 	@Override
 	public void render() {
 		if (this.anyReady) {
 			final Scene worldScene = this.worldScene;
 
+			PerfStats.mark();
 			startFrame();
 			worldScene.startFrame();
+			if (!this.worldHidden && (this.skyInstance != null)) {
+				renderSky();
+			}
 			// The score screen covers the game: only the interface scenes are drawn.
 			if (!this.worldHidden && (DEBUG_DEPTH > 0)) {
 				worldScene.renderOpaque(this.dynamicShadowManager, this.webGL);
 			}
+			PerfStats.end(PerfStats.Section.SHADOWS);
 			if (!this.worldHidden && (DEBUG_DEPTH > 1)) {
 				this.terrain.renderGround(this.dynamicShadowManager);
 			}
+			PerfStats.end(PerfStats.Section.GROUND);
 			if (!this.worldHidden && (DEBUG_DEPTH > 2)) {
 				this.terrain.renderCliffs();
 			}
+			PerfStats.end(PerfStats.Section.CLIFFS);
 			if (!this.worldHidden && (DEBUG_DEPTH > 3)) {
 				worldScene.renderOpaque();
 			}
+			PerfStats.end(PerfStats.Section.OPAQUE);
 			if (!this.worldHidden && (DEBUG_DEPTH > 4)) {
 				this.terrain.renderUberSplats(false);
 			}
+			PerfStats.end(PerfStats.Section.SPLATS);
 			if (!this.worldHidden && (DEBUG_DEPTH > 5)) {
 				this.terrain.renderWater();
 			}
+			PerfStats.end(PerfStats.Section.WATER);
 			if (!this.worldHidden && (DEBUG_DEPTH > 6)) {
 				worldScene.renderTranslucent();
 			}
+			PerfStats.end(PerfStats.Section.TRANSLUCENT);
 			if (!this.worldHidden && (DEBUG_DEPTH > 7)) {
 				this.terrain.renderUberSplats(true);
 			}
+			PerfStats.end(PerfStats.Section.SPLATS);
 
 			final List<Scene> scenes = this.scenes;
 			for (final Scene scene : scenes) {
-				if (scene != worldScene) {
+				if ((scene != worldScene) && (scene != this.skyScene)) {
 					scene.startFrame();
 					if (DEBUG_DEPTH > 8) {
 						scene.renderOpaque();
@@ -1339,10 +1525,14 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 					}
 				}
 			}
+			PerfStats.end(PerfStats.Section.INTERFACE);
 
-			final int glGetError = Gdx.gl.glGetError();
-			if (glGetError != GL20.GL_NO_ERROR) {
-				throw new IllegalStateException("GL ERROR: " + glGetError);
+			// glGetError waits for the GPU on phones, so it is only asked while debugging.
+			if (WarsmashConstants.ENABLE_DEBUG) {
+				final int glGetError = Gdx.gl.glGetError();
+				if (glGetError != GL20.GL_NO_ERROR) {
+					throw new IllegalStateException("GL ERROR: " + glGetError);
+				}
 			}
 		}
 	}
@@ -1684,7 +1874,42 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 				}
 			}
 		}
+		if (entity == null) {
+			entity = pickConstructionByFootprint(x, y, filter);
+		}
 		return entity;
+	}
+
+	/**
+	 * A building still rising out of the ground (Night Elf birth animation) has its collision shapes below the
+	 * terrain, so the model ray test misses it; the original still selects it by clicking where it stands.
+	 */
+	private RenderWidget pickConstructionByFootprint(final float x, final float y,
+			final CWidgetFilterFunction filter) {
+		getClickLocation(this.constructionPickHeap, (int) x, (int) y, false, false);
+		final float pickX = this.constructionPickHeap.x;
+		final float pickY = this.constructionPickHeap.y;
+		RenderWidget best = null;
+		float bestDistance = Float.MAX_VALUE;
+		for (final RenderWidget widget : this.widgets) {
+			if (!(widget instanceof RenderUnit)) {
+				continue;
+			}
+			final CUnit unit = ((RenderUnit) widget).getSimulationUnit();
+			if (!unit.isBuilding() || !unit.isConstructing() || !widget.getInstance().shown()
+					|| !filter.call(unit)) {
+				continue;
+			}
+			final float radius = Math.max(unit.getUnitType().getCollisionSize(), 48f);
+			final float dx = unit.getX() - pickX;
+			final float dy = unit.getY() - pickY;
+			final float distance = (dx * dx) + (dy * dy);
+			if ((distance <= (radius * radius)) && (distance < bestDistance)) {
+				best = widget;
+				bestDistance = distance;
+			}
+		}
+		return best;
 	}
 
 	private static final class MappedDataCallbackImplementation implements LoadGenericCallback {
@@ -1764,6 +1989,9 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 	private int localPlayerServerSlot;
 
 	private final Rectangle tempBlightRect = new Rectangle();
+	private int[] blightChangedCorners = new int[512];
+	private float[] blightSources = new float[48];
+	private int blightSourceCount;
 
 	private RenderUnitTypeData renderUnitTypeData;
 	private RenderItemTypeData renderItemTypeData;
@@ -2359,65 +2587,144 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 
 	public void setBlight(final float whichLocationX, final float whichLocationY, final float radius,
 			final boolean square, final boolean blighted) {
-		final float rSquared = square ? Float.MAX_VALUE : radius * radius;
-		final Rectangle blightRectangle = new Rectangle(whichLocationX - radius, whichLocationY - radius, radius * 2,
-				radius * 2);
-		final float blightRectangleMaxX = blightRectangle.x + blightRectangle.width;
-		final float blightRectangleMaxY = blightRectangle.y + blightRectangle.height;
-		boolean changedData = false;
-		// The ground texture changes on the terrain corners (every 128) inside the radius.
-		final float cornerStartX = this.terrain.get128WorldCoordinateFromCellX(
-				this.terrain.get128CellX(whichLocationX - radius));
-		final float cornerStartY = this.terrain.get128WorldCoordinateFromCellY(
-				this.terrain.get128CellY(whichLocationY - radius));
-		for (float x = cornerStartX; x <= (whichLocationX + radius + 128); x += 128.0f) {
-			for (float y = cornerStartY; y <= (whichLocationY + radius + 128); y += 128.0f) {
-				final float dx = x - whichLocationX;
-				final float dy = y - whichLocationY;
-				if ((((dx * dx) + (dy * dy)) <= rSquared) && (Math.abs(dx) <= radius) && (Math.abs(dy) <= radius)) {
-					final RenderCorner corner = this.terrain.getCorner(x, y);
-					if (corner == null) {
+		// Measured on the original game: blight is set on the terrain corners (every 128) around the corner nearest
+		// to the point (halves rounded away from zero), with the radius rounded to whole corners and a corner counted
+		// when it is within that many corners plus a little; a 128 tile is blighted, for building and blight checks
+		// too, when any of its four corners is.
+		final int cornerRadius = getBlightCornerRadius(radius);
+		final float cornerReach = cornerRadius + 0.35f;
+		final float centerX = roundHalfAwayFromZero(whichLocationX / 128f) * 128f;
+		final float centerY = roundHalfAwayFromZero(whichLocationY / 128f) * 128f;
+		int changedCount = 0;
+		int minI = Integer.MAX_VALUE;
+		int maxI = Integer.MIN_VALUE;
+		int minJ = Integer.MAX_VALUE;
+		int maxJ = Integer.MIN_VALUE;
+		boolean sourcesFound = false;
+		for (int i = -cornerRadius; i <= cornerRadius; i++) {
+			for (int j = -cornerRadius; j <= cornerRadius; j++) {
+				if (!square && (((i * i) + (j * j)) > (cornerReach * cornerReach))) {
+					continue;
+				}
+				final float x = centerX + (i * 128f);
+				final float y = centerY + (j * 128f);
+				final RenderCorner corner = this.terrain.getCorner(x, y);
+				if ((corner == null) || ((corner.getBlight() != 0) == blighted)) {
+					continue;
+				}
+				if (!blighted) {
+					if (!sourcesFound) {
+						findStandingBlightSources(centerX, centerY, cornerRadius);
+						sourcesFound = true;
+					}
+					if (isInStandingBlightSource(x, y)) {
 						continue;
 					}
-					final GroundTexture currentTex = this.terrain.groundTextures.get(corner.getGroundTexture());
-					if (currentTex.isBuildable()) {
-						changedData |= corner.setBlight(blighted);
-					}
 				}
+				corner.setBlight(blighted);
+				if (this.blightChangedCorners.length < ((changedCount + 1) * 2)) {
+					this.blightChangedCorners = Arrays.copyOf(this.blightChangedCorners,
+							this.blightChangedCorners.length * 2);
+				}
+				this.blightChangedCorners[changedCount * 2] = i;
+				this.blightChangedCorners[(changedCount * 2) + 1] = j;
+				changedCount++;
+				minI = Math.min(minI, i);
+				maxI = Math.max(maxI, i);
+				minJ = Math.min(minJ, j);
+				maxJ = Math.max(maxJ, j);
 			}
 		}
-		// The blight that rules building and blight checks is per 32 pathing cell, as in the original game.
+		if (changedCount == 0) {
+			return;
+		}
 		final PathingGrid pathingGrid = this.simulation.getPathingGrid();
-		final float cellStartX = ((float) Math.floor((whichLocationX - radius) / 32f) * 32f) + 16f;
-		final float cellStartY = ((float) Math.floor((whichLocationY - radius) / 32f) * 32f) + 16f;
-		for (float x = cellStartX; x <= (whichLocationX + radius); x += 32f) {
-			for (float y = cellStartY; y <= (whichLocationY + radius); y += 32f) {
-				final float dx = x - whichLocationX;
-				final float dy = y - whichLocationY;
-				if ((((dx * dx) + (dy * dy)) <= rSquared) && (Math.abs(dx) <= radius) && (Math.abs(dy) <= radius)
-						&& pathingGrid.contains(x, y)) {
-					final RenderCorner corner = this.terrain.getCorner(x, y);
-					if ((corner != null)
-							&& this.terrain.groundTextures.get(corner.getGroundTexture()).isBuildable()) {
-						pathingGrid.setBlighted(x, y, blighted);
+		for (int k = 0; k < changedCount; k++) {
+			final float cornerX = centerX + (this.blightChangedCorners[k * 2] * 128f);
+			final float cornerY = centerY + (this.blightChangedCorners[(k * 2) + 1] * 128f);
+			for (int a = -1; a <= 0; a++) {
+				for (int b = -1; b <= 0; b++) {
+					final float tileX = cornerX + (a * 128f);
+					final float tileY = cornerY + (b * 128f);
+					final boolean tileBlighted = blighted || isCornerBlighted(tileX, tileY)
+							|| isCornerBlighted(tileX + 128f, tileY) || isCornerBlighted(tileX, tileY + 128f)
+							|| isCornerBlighted(tileX + 128f, tileY + 128f);
+					for (float x = tileX + 16f; x < (tileX + 128f); x += 32f) {
+						for (float y = tileY + 16f; y < (tileY + 128f); y += 32f) {
+							if (pathingGrid.contains(x, y)) {
+								pathingGrid.setBlighted(x, y, tileBlighted);
+							}
+						}
 					}
 				}
 			}
 		}
-		if (changedData) {
-			final int cellMinX = this.terrain.get128CellX(blightRectangle.x);
-			final int cellMinY = this.terrain.get128CellY(blightRectangle.y);
-			final int cellMaxX = this.terrain.get128CellX(blightRectangleMaxX);
-			final int cellMaxY = this.terrain.get128CellY(blightRectangleMaxY);
-			final Rectangle blightRectangleCellUnits = this.tempBlightRect.set(cellMinX, cellMinY, cellMaxX - cellMinX,
-					cellMaxY - cellMinY);
-			this.terrain.updateGroundTextures(blightRectangleCellUnits);
-		}
-
+		final float minX = centerX + ((minI - 1) * 128f);
+		final float minY = centerY + ((minJ - 1) * 128f);
+		final Rectangle blightRectangle = new Rectangle(minX, minY, ((maxI - minI) + 2) * 128f,
+				((maxJ - minJ) + 2) * 128f);
+		final int cellMinX = this.terrain.get128CellX(centerX + (minI * 128f));
+		final int cellMinY = this.terrain.get128CellY(centerY + (minJ * 128f));
+		this.terrain.updateGroundTextures(this.tempBlightRect.set(cellMinX, cellMinY, maxI - minI, maxJ - minJ));
 		if (blighted) {
 			this.simulation.getWorldCollision().enumDestructablesInRect(blightRectangle,
 					TreeBlightingCallback.INSTANCE.reset(this.simulation));
 		}
+	}
+
+	private static int getBlightCornerRadius(final float radius) {
+		return (int) ((radius / 128f) + 0.5f);
+	}
+
+	/**
+	 * Measured: the blight of a standing blight source (Necropolis) cannot be removed, it stays as it was.
+	 */
+	private void findStandingBlightSources(final float centerX, final float centerY, final int cornerRadius) {
+		this.blightSourceCount = 0;
+		final float reach = (cornerRadius + 2) * 128f;
+		for (final CUnit unit : this.simulation.getUnitsIncludingNew()) {
+			final CAbilityBlight blight = unit.getFirstAbilityOfType(CAbilityBlight.class);
+			if ((blight == null) || !blight.isCreatesBlight() || blight.isDisabled() || unit.isDead()) {
+				continue;
+			}
+			final int sourceRadius = getBlightCornerRadius(blight.getCurrentRadius());
+			final float sourceX = roundHalfAwayFromZero(unit.getX() / 128f) * 128f;
+			final float sourceY = roundHalfAwayFromZero(unit.getY() / 128f) * 128f;
+			final float sourceReach = reach + (sourceRadius * 128f);
+			final float dx = sourceX - centerX;
+			final float dy = sourceY - centerY;
+			if (((dx * dx) + (dy * dy)) > (sourceReach * sourceReach)) {
+				continue;
+			}
+			if (this.blightSources.length < ((this.blightSourceCount + 1) * 3)) {
+				this.blightSources = Arrays.copyOf(this.blightSources, this.blightSources.length * 2);
+			}
+			final float sourceCornerReach = sourceRadius + 0.35f;
+			this.blightSources[this.blightSourceCount * 3] = sourceX;
+			this.blightSources[(this.blightSourceCount * 3) + 1] = sourceY;
+			this.blightSources[(this.blightSourceCount * 3) + 2] = sourceCornerReach * sourceCornerReach;
+			this.blightSourceCount++;
+		}
+	}
+
+	private boolean isInStandingBlightSource(final float x, final float y) {
+		for (int k = 0; k < this.blightSourceCount; k++) {
+			final int i = Math.round((x - this.blightSources[k * 3]) / 128f);
+			final int j = Math.round((y - this.blightSources[(k * 3) + 1]) / 128f);
+			if (((i * i) + (j * j)) <= this.blightSources[(k * 3) + 2]) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private boolean isCornerBlighted(final float x, final float y) {
+		final RenderCorner corner = this.terrain.getCorner(x, y);
+		return (corner != null) && (corner.getBlight() != 0);
+	}
+
+	private static float roundHalfAwayFromZero(final float value) {
+		return (int) (value + (value < 0 ? -0.5f : 0.5f));
 	}
 
 	public CPlayerFogOfWar getFogOfWar() {
@@ -3088,7 +3395,7 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 
 							@Override
 							public ArgbImage getBuildingPathingPixelMap(final War3ID rawcode) {
-								return War3MapViewer.this.renderUnitTypeData.get(rawcode).getBuildingPathingPixelMap();
+								return War3MapViewer.this.renderUnitTypeData.getBuildingPathingPixelMap(rawcode);
 							}
 
 							@Override

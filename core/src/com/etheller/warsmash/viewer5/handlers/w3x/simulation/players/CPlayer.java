@@ -529,6 +529,16 @@ public class CPlayer extends CBasePlayer {
 		}
 	}
 
+	public void fireUnitSummonEvents(final CUnit summoner, final CUnit summoned) {
+		final List<CPlayerEvent> eventList = getEventList(JassGameEventsWar3.EVENT_PLAYER_UNIT_SUMMON);
+		if (eventList != null) {
+			for (final CPlayerEvent event : eventList) {
+				event.fire(summoned, CommonTriggerExecutionScope.unitSummonScope(
+						JassGameEventsWar3.EVENT_PLAYER_UNIT_SUMMON, event.getTrigger(), summoner, summoned, this));
+			}
+		}
+	}
+
 	public void fireHeroLevelEvents(final CUnit hero) {
 		firePlayerUnitEvents(hero, CommonTriggerExecutionScope::playerHeroRevivableScope,
 				JassGameEventsWar3.EVENT_PLAYER_HERO_LEVEL);
@@ -649,6 +659,11 @@ public class CPlayer extends CBasePlayer {
 			this.eventTypeToEvents.put(eventType, playerEvents);
 		}
 		return playerEvents;
+	}
+
+	public boolean hasPlayerEvents(final JassGameEventsWar3 eventType) {
+		final List<CPlayerEvent> eventList = getEventList(eventType);
+		return (eventList != null) && !eventList.isEmpty();
 	}
 
 	private List<CPlayerEvent> getEventList(final JassGameEventsWar3 eventType) {

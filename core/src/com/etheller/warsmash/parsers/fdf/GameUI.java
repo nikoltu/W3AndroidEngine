@@ -561,6 +561,10 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 					if (backgroundArt != null) {
 						setSpriteFrameModel(spriteFrame, backgroundArt);
 					}
+					if ("MODEL".equals(frameDefinition.getFrameType()) && (frameDefinition.getFloat("Width") == null)
+							&& (frameDefinition.getFloat("Height") == null) && !frameDefinition.has("SetAllPoints")) {
+						spriteFrame.setSizedByModel(true);
+					}
 					viewport2 = this.viewport; // TODO was fdfCoordinateResolutionDummyViewport here previously, but is
 												// that
 					// a good idea?

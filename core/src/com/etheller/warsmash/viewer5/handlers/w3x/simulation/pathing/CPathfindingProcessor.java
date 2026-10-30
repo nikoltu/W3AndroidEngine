@@ -8,6 +8,7 @@ import java.util.LinkedList;
 import java.util.PriorityQueue;
 
 import com.badlogic.gdx.math.Rectangle;
+import com.etheller.warsmash.util.PerfStats;
 import com.etheller.warsmash.viewer5.handlers.w3x.environment.PathingGrid;
 import com.etheller.warsmash.viewer5.handlers.w3x.environment.PathingGrid.MovementType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
@@ -27,6 +28,7 @@ public class CPathfindingProcessor {
 	private int goals = 0;
 	private int pathfindJobId = 0;
 	private static final int NEAREST_PATHABLE_RINGS = 32;
+	private static final int MIN_SEARCH_ITERATIONS = 4096;
 	private int totalIterations = 0;
 	private int totalJobLoops = 0;
 	private final int pathingGridCellCount;
@@ -115,6 +117,30 @@ public class CPathfindingProcessor {
 		return (((2 * (int) collisionSize) / 32) % 2) == 1;
 	}
 
+	/**
+	 * Whether the job's unit fits at a grid point, the same test pathableBetween makes for each of its three points. A
+	 * point is tested by up to eight of its neighbors, so the answer is kept for the rest of the job's work in this
+	 * tick (units do not move within a tick, so it cannot change).
+	 */
+	private boolean nodePathable(final PathfindingJob job, final CSimulation simulation, final float x, final float y) {
+		final Node node = node(job.searchGraph, job.gridMapping.getY(this.pathingGrid, y),
+				job.gridMapping.getX(this.pathingGrid, x));
+		final int tick = simulation.getGameTurnTick();
+		if ((node.pathableJobId != this.pathfindJobId) || (node.pathableTick != tick)) {
+			node.pathableJobId = this.pathfindJobId;
+			node.pathableTick = tick;
+			node.pathable = this.pathingGrid.isPathable(x, y, job.movementType, job.collisionSize)
+					&& isPathableDynamically(x, y, job.ignoreIntersectionsWithThisUnit,
+							job.ignoreIntersectionsWithThisSecondUnit, job.movementType);
+		}
+		return node.pathable;
+	}
+
+	private static void openAdd(final PathfindingJob job, final Node node) {
+		node.open = true;
+		job.openSet.add(node);
+	}
+
 	public double f(final Node n) {
 		return n.g + h(n);
 	}
@@ -150,6 +176,10 @@ public class CPathfindingProcessor {
 		private double g;
 		private Node cameFrom;
 		private int pathfindJobId;
+		private boolean open;
+		private int pathableJobId;
+		private int pathableTick = -1;
+		private boolean pathable;
 
 		private Node(final CPathPoint point) {
 			this.point = point;
@@ -161,6 +191,7 @@ public class CPathfindingProcessor {
 				this.f = Float.POSITIVE_INFINITY;
 				this.cameFrom = null;
 				this.cameFromDirection = null;
+				this.open = false;
 				this.pathfindJobId = pathfindJobId;
 			}
 		}
@@ -226,6 +257,7 @@ public class CPathfindingProcessor {
 				this.totalIterations = 0;
 				this.totalJobLoops = 0;
 				job.jobStarted = true;
+				PerfStats.pathJob();
 				workIterations += 5; // setup of job predicted cost
 				job.goalX = job.goal.x;
 				job.goalY = job.goal.y;
@@ -238,6 +270,9 @@ public class CPathfindingProcessor {
 								job.ignoreIntersectionsWithThisSecondUnit, job.movementType)) {
 					job.weightForHittingWalls = 5E2f;
 				}
+				final double straightCells = StrictMath.hypot(job.goalX - job.startX, job.goalY - job.startY) / 32;
+				job.iterationLimit = (int) Math.min(this.pathingGridCellCount,
+						Math.max(MIN_SEARCH_ITERATIONS, 4 * straightCells * straightCells));
 				if ((job.startX == job.goalX) && (job.startY == job.goalY)) {
 					job.queueItem.pathFound(Collections.emptyList(), simulation);
 					this.moveQueue.poll();
@@ -279,7 +314,7 @@ public class CPathfindingProcessor {
 				job.openSet = new PriorityQueue<>(new Comparator<Node>() {
 					@Override
 					public int compare(final Node a, final Node b) {
-						return Double.compare(f(a), f(b));
+						return Double.compare(a.f, b.f);
 					}
 				});
 
@@ -324,14 +359,14 @@ public class CPathfindingProcessor {
 								final double tentativeScore = possibleNode.point.distance(job.startX, job.startY);
 								possibleNode.g = tentativeScore;
 								possibleNode.f = tentativeScore + h(possibleNode);
-								job.openSet.add(possibleNode);
+								openAdd(job, possibleNode);
 
 							}
 							else {
 								final double tentativeScore = job.weightForHittingWalls;
 								possibleNode.g = tentativeScore;
 								possibleNode.f = tentativeScore + h(possibleNode);
-								job.openSet.add(possibleNode);
+								openAdd(job, possibleNode);
 
 							}
 						}
@@ -342,6 +377,7 @@ public class CPathfindingProcessor {
 			while (!job.openSet.isEmpty()) {
 				Node current = job.openSet.poll();
 				current.touch(this.pathfindJobId);
+				current.open = false;
 				if (isGoal(current)) {
 					final LinkedList<CPathPoint> totalPath = new LinkedList<>();
 					Direction lastCameFromDirection = null;
@@ -423,9 +459,8 @@ public class CPathfindingProcessor {
 							turnCost = 0;
 						}
 						double tentativeScore = current.g + ((direction.length + turnCost) * 32);
-						if (!pathableBetween(job.ignoreIntersectionsWithThisUnit,
-								job.ignoreIntersectionsWithThisSecondUnit, current.point.x, current.point.y,
-								job.movementType, job.collisionSize, x, y)) {
+						if (!nodePathable(job, simulation, x, y) || !nodePathable(job, simulation, current.point.x, y)
+								|| !nodePathable(job, simulation, x, current.point.y)) {
 							tentativeScore += (direction.length) * job.weightForHittingWalls;
 						}
 						final Node neighbor = node(job.searchGraph, job.gridMapping.getY(this.pathingGrid, y),
@@ -436,17 +471,19 @@ public class CPathfindingProcessor {
 							neighbor.cameFromDirection = direction;
 							neighbor.g = tentativeScore;
 							neighbor.f = tentativeScore + h(neighbor);
-							if (!job.openSet.contains(neighbor)) {
-								job.openSet.add(neighbor);
+							if (!neighbor.open) {
+								openAdd(job, neighbor);
 							}
 						}
 					}
 				}
 				workIterations++;
 				this.totalIterations++;
+				PerfStats.pathIteration();
 				// Measured: the original walks across a whole melee map; a fixed cap stopped such paths after a few
-				// steps. The search is already spread over ticks, so only the time to find a path grows.
-				if (this.totalIterations > this.pathingGridCellCount) {
+				// steps. A short chase into a crowd of units has no way through and searched the whole map each time
+				// a unit in a fight moved, so the limit grows with the distance instead.
+				if (this.totalIterations > job.iterationLimit) {
 					break;
 				}
 				if (workIterations >= 1500) {
@@ -506,6 +543,7 @@ public class CPathfindingProcessor {
 		public float goalY;
 		public float goalX;
 		public float weightForHittingWalls;
+		int iterationLimit;
 		Node[][] searchGraph;
 		GridMapping gridMapping;
 		PriorityQueue<Node> openSet;

@@ -108,6 +108,61 @@ public class TextAreaFrame extends ControlFrame implements ScrollBarFrame.Scroll
 		updateUI(gameUI, viewport);
 	}
 
+	/**
+	 * Fills the area with text, broken into lines at |n and wherever a word does not fit; a color started on one line
+	 * goes on in the next.
+	 */
+	public void setText(final String text, final GameUI gameUI, final Viewport viewport) {
+		final List<String> lines = new ArrayList<>();
+		float width = this.renderBounds.width - (this.inset * 2);
+		if (this.scrollBarFrame != null) {
+			width -= this.scrollBarFrame.getAssignedWidth();
+		}
+		final GlyphLayout glyphLayout = gameUI.getGlyphLayout();
+		String color = "";
+		for (final String paragraph : text.split("\\|[nN]|\n", -1)) {
+			final StringBuilder line = new StringBuilder(color);
+			boolean lineHasWord = false;
+			for (final String word : paragraph.split(" ", -1)) {
+				final String candidate = lineHasWord ? line + " " + word : line + word;
+				glyphLayout.setText(this.frameFont, withoutColorCodes(candidate));
+				if (lineHasWord && (glyphLayout.width > width)) {
+					lines.add(line.toString());
+					line.setLength(0);
+					line.append(color).append(word);
+				}
+				else {
+					line.setLength(0);
+					line.append(candidate);
+				}
+				lineHasWord = true;
+				color = activeColorCode(word, color);
+			}
+			lines.add(line.toString());
+		}
+		setItems(lines, gameUI, viewport);
+	}
+
+	private static String withoutColorCodes(final String text) {
+		return text.replaceAll("\\|[cC][0-9a-fA-F]{8}|\\|[rR]", "");
+	}
+
+	private static String activeColorCode(final String word, final String color) {
+		String active = color;
+		for (int i = 0; (i + 1) < word.length(); i++) {
+			if (word.charAt(i) == '|') {
+				final char code = Character.toLowerCase(word.charAt(i + 1));
+				if ((code == 'c') && ((i + 10) <= word.length())) {
+					active = word.substring(i, i + 10);
+				}
+				else if (code == 'r') {
+					active = "";
+				}
+			}
+		}
+		return active;
+	}
+
 	public void removeItem(final String item, final GameUI gameUI, final Viewport viewport) {
 		this.listItems.remove(item);
 		updateUI(gameUI, viewport);

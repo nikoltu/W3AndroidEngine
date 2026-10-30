@@ -14,6 +14,15 @@ public class MPQException extends Exception {
 		super(arg0);
 	}
 
+	// Looking for a file that is not in the archive is routine (map archives are searched before the game data),
+	// so that answer is one shared exception without a stack trace; filling in a stack trace for every miss was a
+	// noticeable part of starting a game on phones.
+	static final MPQException LOOKUP_NOT_FOUND = new MPQException("lookup not found", false);
+
+	private MPQException(String message, boolean writableStackTrace) {
+		super(message, null, false, writableStackTrace);
+	}
+
 	public MPQException(Throwable arg0) {
 		super(arg0);
 	}

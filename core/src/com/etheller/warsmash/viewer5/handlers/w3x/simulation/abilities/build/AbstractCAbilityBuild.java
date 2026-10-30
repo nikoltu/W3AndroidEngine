@@ -2,9 +2,11 @@ package com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.build;
 
 import java.util.*;
 
+import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 import com.etheller.warsmash.util.ArgbImage;
 import com.etheller.warsmash.util.War3ID;
+import com.etheller.warsmash.viewer5.handlers.w3x.environment.PathingGrid;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnitType;
@@ -15,6 +17,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.menu.CAbi
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityPointTarget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityTarget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.pathing.CBuildingPathingType;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CAllianceType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayer;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.unit.BuildOnBuildingIntersector;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.AbilityActivationReceiver;
@@ -184,24 +187,62 @@ public abstract class AbstractCAbilityBuild extends AbstractCAbility implements 
 
 			if (!simulation.getPathingGrid().checkPathingTexture(targetX, targetY,
 					(int) simulation.getGameplayConstants().getBuildingAngle(), buildingPathingPixelMap,
-					preventedPathingTypes, requiredPathingTypes, simulation.getWorldCollision(), worker)) {
+					preventedPathingTypes, requiredPathingTypes, simulation.getWorldCollision(), worker, simulation,
+					worker == null ? -1 : worker.getPlayerIndex())) {
 				buildLocationObstructed = true;
 			}
 		}
 		return buildLocationObstructed;
 	}
 
+	private static final Rectangle footprintRect = new Rectangle();
+	private static final List<CUnit> unitsToMoveAside = new ArrayList<>();
+
+	public static void moveControlledUnitsAside(final CSimulation simulation, final CUnit structure,
+			final CUnit worker) {
+		final ArgbImage pathingMap = structure.getUnitType().getBuildingPathingPixelMap();
+		if (pathingMap == null) {
+			return;
+		}
+		final float width = pathingMap.getWidth() * 32f;
+		final float height = pathingMap.getHeight() * 32f;
+		final float offsetX = ((pathingMap.getWidth() % 2) == 1) ? 16f : 0f;
+		final float offsetY = ((pathingMap.getHeight() % 2) == 1) ? 16f : 0f;
+		footprintRect.set((structure.getX() - (width / 2)) + offsetX, (structure.getY() - (height / 2)) + offsetY,
+				width, height);
+		final int controllerIndex = worker.getPlayerIndex();
+		unitsToMoveAside.clear();
+		simulation.getWorldCollision().enumUnitsInRect(footprintRect, (unit) -> {
+			if ((unit != structure) && (unit != worker) && !unit.isBuilding()
+					&& (unit.getMovementType() != PathingGrid.MovementType.FLY)
+					&& ((unit.getPlayerIndex() == controllerIndex) || simulation.getPlayer(unit.getPlayerIndex())
+							.hasAlliance(controllerIndex, CAllianceType.SHARED_CONTROL))) {
+				unitsToMoveAside.add(unit);
+			}
+			return false;
+		});
+		for (int i = 0; i < unitsToMoveAside.size(); i++) {
+			final CUnit unit = unitsToMoveAside.get(i);
+			unit.setPointAndCheckUnstuck(unit.getX(), unit.getY(), simulation);
+		}
+		unitsToMoveAside.clear();
+	}
+
 	public static void roundTargetPoint(final Vector2 point, final CUnitType unitType) {
 		final ArgbImage buildingPathingPixelMap = unitType.getBuildingPathingPixelMap();
 		if (buildingPathingPixelMap != null) {
-			point.x = (float) Math.floor(point.x / 64f) * 64f;
-			point.y = (float) Math.floor(point.y / 64f) * 64f;
-			if (((buildingPathingPixelMap.getWidth() / 2) % 2) == 1) {
-				point.x += 32f;
-			}
-			if (((buildingPathingPixelMap.getHeight() / 2) % 2) == 1) {
-				point.y += 32f;
-			}
+			point.x = roundToBuildGrid(point.x, buildingPathingPixelMap.getWidth());
+			point.y = roundToBuildGrid(point.y, buildingPathingPixelMap.getHeight());
 		}
+	}
+
+	// Measured: the original game cuts the point towards zero to the 64 grid; a footprint with an odd number of
+	// 64 steps sits 32 further away from zero.
+	public static float roundToBuildGrid(final float value, final int pathingCells) {
+		final float cut = (int) (value / 64f) * 64f;
+		if (((pathingCells / 2) % 2) == 1) {
+			return value < 0 ? cut - 32f : cut + 32f;
+		}
+		return cut;
 	}
 }

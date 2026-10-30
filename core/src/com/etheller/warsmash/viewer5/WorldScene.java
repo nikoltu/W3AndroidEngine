@@ -1,6 +1,7 @@
 package com.etheller.warsmash.viewer5;
 
 import java.util.ArrayList;
+import java.util.List;
 
 /**
  * A scene.
@@ -22,6 +23,7 @@ public class WorldScene extends Scene {
 
 	public Grid grid;
 	private final InstanceProcessor instanceProcessor = new InstanceProcessor();
+	private final List<ModelInstance> cellInstances = new ArrayList<>();
 
 	public WorldScene(final ModelViewer viewer, final SceneLightManager lightManager) {
 		super(viewer, lightManager);
@@ -59,15 +61,20 @@ public class WorldScene extends Scene {
 		// Update and collect all of the visible instances.
 		instanceProcessor.reset(dt, frame);
 		for (final GridCell cell : this.grid.cells) {
-			if (cell.isVisible(this.camera) || true) {
+			if (cell.isVisible(this.camera)) {
 				this.visibleCells += 1;
 
-				for (final ModelInstance instance : new ArrayList<>(cell.instances)) {
-					instanceProcessor.call(instance);
+				// An update can move an instance to another cell, so the cell's list is copied first.
+				this.cellInstances.clear();
+				for (int i = 0, n = cell.instances.size(); i < n; i++) {
+					this.cellInstances.add(cell.instances.get(i));
+				}
+				for (int i = 0, n = this.cellInstances.size(); i < n; i++) {
+					instanceProcessor.call(this.cellInstances.get(i));
 				}
 			}
 		}
-	}
+}
 
 	private final class InstanceProcessor implements ModelInstanceCallback {
 		private float dt;

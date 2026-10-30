@@ -82,6 +82,7 @@ public class CBehaviorUndeadBuild extends CAbstractRangedBehavior {
 			if (!buildLocationObstructed) {
 				final CUnit constructedStructure = simulation.createUnit(this.orderId, playerIndex, this.target.getX(),
 						this.target.getY(), simulation.getGameplayConstants().getBuildingAngle(), true);
+				AbstractCAbilityBuild.moveControlledUnitsAside(simulation, constructedStructure, this.unit);
 				if (canBeBuiltOnThem) {
 					CAbilityGoldMinable abilityGoldMine = null;
 					if (this.buildOnBuildingIntersector.getUnitToBuildOn() != null) {

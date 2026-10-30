@@ -1,5 +1,7 @@
 package com.etheller.warsmash.viewer5.handlers.w3x;
 
+import java.nio.FloatBuffer;
+import java.nio.ShortBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
@@ -8,6 +10,7 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.GL30;
 import com.badlogic.gdx.graphics.glutils.ShaderProgram;
+import com.badlogic.gdx.utils.BufferUtils;
 import com.etheller.warsmash.util.RenderMathUtils;
 import com.etheller.warsmash.viewer5.ViewerTextureRenderable;
 
@@ -302,6 +305,48 @@ public class SplatModel implements Comparable<SplatModel> {
 		}
 	}
 
+	// Splats move with their units every frame; the moved geometry goes through these shared buffers (GL copies
+	// it right away) instead of a new direct buffer for each upload.
+	private static FloatBuffer scratchFloatBuffer = BufferUtils.newFloatBuffer(256);
+	private static ShortBuffer scratchShortBuffer = BufferUtils.newShortBuffer(256);
+
+	private static FloatBuffer scratchFloats(final List<float[]> values) {
+		int count = 0;
+		for (int i = 0, n = values.size(); i < n; i++) {
+			count += values.get(i).length;
+		}
+		if (scratchFloatBuffer.capacity() < count) {
+			scratchFloatBuffer = BufferUtils.newFloatBuffer(Math.max(count, scratchFloatBuffer.capacity() * 2));
+		}
+		final FloatBuffer buffer = scratchFloatBuffer;
+		buffer.clear();
+		for (int i = 0, n = values.size(); i < n; i++) {
+			buffer.put(values.get(i));
+		}
+		buffer.flip();
+		return buffer;
+	}
+
+	private static ShortBuffer scratchShorts(final List<int[]> values) {
+		int count = 0;
+		for (int i = 0, n = values.size(); i < n; i++) {
+			count += values.get(i).length;
+		}
+		if (scratchShortBuffer.capacity() < count) {
+			scratchShortBuffer = BufferUtils.newShortBuffer(Math.max(count, scratchShortBuffer.capacity() * 2));
+		}
+		final ShortBuffer buffer = scratchShortBuffer;
+		buffer.clear();
+		for (int i = 0, n = values.size(); i < n; i++) {
+			final int[] face = values.get(i);
+			for (int j = 0; j < face.length; j++) {
+				buffer.put((short) face[j]);
+			}
+		}
+		buffer.flip();
+		return buffer;
+	}
+
 	public static final class SplatMover {
 		public int absHeightsOffset;
 		public int faceBuffer;
@@ -409,7 +454,7 @@ public class SplatModel implements Comparable<SplatModel> {
 					uvItem[1] = 1.0f - ((y - y0) / this.uvYScale);
 				}
 				gl.glBufferSubData(GL30.GL_ARRAY_BUFFER, this.startOffset, 4 * 3 * this.vertices.size(),
-						RenderMathUtils.wrap(this.vertices));
+						scratchFloats(this.vertices));
 
 				final int step = (ix1 - ix0) + 1;
 				int faceIndicesIndex = 0;
@@ -435,7 +480,7 @@ public class SplatModel implements Comparable<SplatModel> {
 				}
 				gl.glBindBuffer(GL30.GL_ELEMENT_ARRAY_BUFFER, this.faceBuffer);
 				gl.glBufferSubData(GL30.GL_ELEMENT_ARRAY_BUFFER, this.indicesStartOffset, 6 * 2 * this.indices.size(),
-						RenderMathUtils.wrapFaces(this.indices));
+						scratchShorts(this.indices));
 				this.ix0 = ix0;
 				this.iy0 = iy0;
 				this.ix1 = ix1;
@@ -456,7 +501,7 @@ public class SplatModel implements Comparable<SplatModel> {
 				}
 			}
 			gl.glBufferSubData(GL30.GL_ARRAY_BUFFER, this.uvsOffset + ((this.startOffset / 3) * 2),
-					4 * 2 * this.uvs.size(), RenderMathUtils.wrap(this.uvs));
+					4 * 2 * this.uvs.size(), scratchFloats(this.uvs));
 			if (this.heightIsAbsolute) {
 				updateAbsoluteHeightParams();
 			}
@@ -489,12 +534,12 @@ public class SplatModel implements Comparable<SplatModel> {
 			}
 			gl.glBindBuffer(GL30.GL_ARRAY_BUFFER, this.vertexBuffer);
 			gl.glBufferSubData(GL30.GL_ARRAY_BUFFER, this.startOffset, 4 * 3 * this.vertices.size(),
-					RenderMathUtils.wrap(this.vertices));
+					scratchFloats(this.vertices));
 			gl.glBindBuffer(GL30.GL_ELEMENT_ARRAY_BUFFER, this.faceBuffer);
 			gl.glBufferSubData(GL30.GL_ELEMENT_ARRAY_BUFFER, this.indicesStartOffset, 6 * 2 * this.indices.size(),
-					RenderMathUtils.wrapFaces(this.indices));
+					scratchShorts(this.indices));
 			gl.glBufferSubData(GL30.GL_ARRAY_BUFFER, this.uvsOffset + ((this.startOffset / 3) * 2),
-					4 * 2 * this.uvs.size(), RenderMathUtils.wrap(this.uvs));
+					4 * 2 * this.uvs.size(), scratchFloats(this.uvs));
 			this.hidden = true;
 		}
 

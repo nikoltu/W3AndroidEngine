@@ -21,7 +21,7 @@ This fork continues Retera's work on Warsmash and adapts it for Android. The aim
 
 ## Status
 
-Current version: **v0.1.042**
+Current version: **v0.1.070**
 
 | Area | State |
 |---|---|
@@ -31,7 +31,8 @@ Current version: **v0.1.042**
 | Android app (tested on a Galaxy Tab S8 Ultra) | Working |
 | Touch controls (tap, long press, box select, two finger pan and pinch zoom, pen button, control group bar, hero buttons) | Working, being tuned |
 | Melee games | In progress: all hero abilities of the four races can be cast, including illusions (Mirror Image, Wand of Illusion); the unit abilities and researches of all four races are in place (for example Spell Steal, Cloud, Web, Possession, the Meat Wagon corpse hold, Cyclone, Sentinel, Ultravision); autocast spells are also used in combat; taverns, mercenary camps, the goblin laboratory and the marketplace sell heroes, units and items, and items can be sold to shops; hero experience, revival, blight, building refunds and the melee victory and defeat rules follow the game data; every race can train its units, research its upgrades and upgrade its main hall; creeps call for help, guard their camps and sleep at night; map scripts gain natives and events for timed life, buffs, hero skills and transports; computer opponents of all four races play the melee game with their own AI scripts |
-| 60 FPS with classic graphics | Reached on the test tablet, not yet measured on phones |
+| Campaigns | In progress: Human 01 of the classic campaign plays through its intro into the game, with quests and cinematics; save and load are not there yet |
+| 60 FPS with classic graphics | About 60 FPS on the test tablet in a 40 unit fight, with short drops still to remove; not yet measured on phones |
 
 ## Running on desktop
 

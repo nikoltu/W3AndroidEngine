@@ -1,5 +1,7 @@
 package com.etheller.warsmash.viewer5;
 
+import java.util.List;
+
 import com.badlogic.gdx.graphics.Color;
 import com.etheller.warsmash.units.Element;
 
@@ -21,8 +23,13 @@ public class FogSettings {
 				+ this.start + ", end=" + this.end + "]";
 	}
 
-	public static FogSettings parse(final Element zFogElement, final int index) {
+	public static FogSettings parse(final Element zFogElement, final int gameVersionIndex) {
 		final FogSettings newFogSettings = new FogSettings();
+		// Some entries (DefaultZFog) list one value for every game version; past its end every field reads 0, which
+		// is linear black fog ending at the camera and blacks out the whole world after ResetTerrainFog.
+		final List<String> styles = zFogElement.getFieldAsList("Style");
+		final int index = styles == null ? gameVersionIndex
+				: Math.max(0, Math.min(gameVersionIndex, styles.size() - 1));
 		final int styleValue = zFogElement.getFieldAsInteger("Style", index) + 1;
 		newFogSettings.setStyleByIndex(styleValue);
 		newFogSettings.start = zFogElement.getFieldAsFloat("Start", index);

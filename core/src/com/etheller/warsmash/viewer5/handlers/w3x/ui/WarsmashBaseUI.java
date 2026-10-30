@@ -10,6 +10,12 @@ public interface WarsmashBaseUI {
 
 	void render(SpriteBatch batch, GlyphLayout glyphLayout);
 
+	/**
+	 * Draws the modal dialogs, in a layer above the interface's 3D models.
+	 */
+	default void renderModal(final SpriteBatch batch, final GlyphLayout glyphLayout) {
+	}
+
 	void dispose();
 
 	void resize(int width, int height);

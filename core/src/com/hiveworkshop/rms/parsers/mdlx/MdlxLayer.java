@@ -29,8 +29,10 @@ public class MdlxLayer extends MdlxAnimatedObject {
 			this.token = token;
 		}
 
+		private static final FilterMode[] VALUES = values();
+
 		public static FilterMode fromId(final int id) {
-			return values()[id];
+			return VALUES[id];
 		}
 
 		public static int nameToId(final String name) {

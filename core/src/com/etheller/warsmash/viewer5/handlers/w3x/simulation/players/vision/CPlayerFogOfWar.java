@@ -1,6 +1,7 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.vision;
 
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 
 import com.badlogic.gdx.math.Rectangle;
 import com.etheller.warsmash.viewer5.handlers.w3x.environment.PathingGrid;
@@ -13,25 +14,20 @@ public class CPlayerFogOfWar {
 	public static final int GRID_STEP = PATHING_RATIO * 32;
 	private final int width;
 	private final int height;
+	// Plain arrays: a get or put per cell on a direct buffer is slow on Android, and vision checks touch every cell
+	// in sight of every unit each second.
+	private final byte[] fogOfWar;
+	private final byte[] detection;
 	private final ByteBuffer fogOfWarBuffer;
-	private final ByteBuffer detectionBuffer;
 
 	public CPlayerFogOfWar(final PathingGrid pathingGrid) {
 		this.width = (pathingGrid.getWidth() / PATHING_RATIO) + 1;
 		this.height = (pathingGrid.getHeight() / PATHING_RATIO) + 1;
 		final int fogOfWarBufferLen = this.width * this.height;
-		this.fogOfWarBuffer = ByteBuffer.allocateDirect(fogOfWarBufferLen);
-		this.detectionBuffer = ByteBuffer.allocateDirect(fogOfWarBufferLen);
-		this.fogOfWarBuffer.clear();
-		while (this.fogOfWarBuffer.hasRemaining()) {
-			this.fogOfWarBuffer.put((byte) -1);
-		}
-		this.fogOfWarBuffer.clear();
-		this.detectionBuffer.clear();
-		while (this.detectionBuffer.hasRemaining()) {
-			this.detectionBuffer.put((byte) 0);
-		}
-		this.detectionBuffer.clear();
+		this.fogOfWar = new byte[fogOfWarBufferLen];
+		this.detection = new byte[fogOfWarBufferLen];
+		Arrays.fill(this.fogOfWar, (byte) -1);
+		this.fogOfWarBuffer = ByteBuffer.wrap(this.fogOfWar);
 	}
 
 	public int getWidth() {
@@ -55,16 +51,16 @@ public class CPlayerFogOfWar {
 
 	private byte getState(CFogMaskSettings fogMaskSettings, final int indexX, final int indexY) {
 		final int index = (indexY * getWidth()) + indexX;
-		if ((index >= 0) && (index < this.fogOfWarBuffer.capacity())) {
-			return fogMaskSettings.getFogStateFromSettings(this.fogOfWarBuffer.get(index));
+		if ((index >= 0) && (index < this.fogOfWar.length)) {
+			return fogMaskSettings.getFogStateFromSettings(this.fogOfWar[index]);
 		}
 		return 0;
 	}
 
 	private byte getDetectionState(final int indexX, final int indexY) {
 		final int index = (indexY * getWidth()) + indexX;
-		if ((index >= 0) && (index < this.detectionBuffer.capacity())) {
-			return this.detectionBuffer.get(index);
+		if ((index >= 0) && (index < this.detection.length)) {
+			return this.detection[index];
 		}
 		return 0;
 	}
@@ -108,8 +104,8 @@ public class CPlayerFogOfWar {
 
 	private void setState(final int indexX, final int indexY, final byte fogOfWarState) {
 		final int writeIndex = (indexY * getWidth()) + indexX;
-		if ((writeIndex >= 0) && (writeIndex < this.fogOfWarBuffer.capacity())) {
-			this.fogOfWarBuffer.put(writeIndex, fogOfWarState);
+		if ((writeIndex >= 0) && (writeIndex < this.fogOfWar.length)) {
+			this.fogOfWar[writeIndex] = fogOfWarState;
 		}
 	}
 
@@ -142,15 +138,25 @@ public class CPlayerFogOfWar {
 
 	public void setDetecting(final int indexX, final int indexY, final CFogState fogOfWarState, byte detectLevels) {
 		final int writeIndex = (indexY * getWidth()) + indexX;
-		if ((writeIndex >= 0) && (writeIndex < this.fogOfWarBuffer.capacity())) {
-			this.fogOfWarBuffer.put(writeIndex, fogOfWarState.getMask());
-			this.detectionBuffer.put(writeIndex, (byte) (this.detectionBuffer.get(writeIndex) | detectLevels));
+		if ((writeIndex >= 0) && (writeIndex < this.fogOfWar.length)) {
+			this.fogOfWar[writeIndex] = fogOfWarState.getMask();
+			this.detection[writeIndex] |= detectLevels;
 		}
+	}
+
+	// A cell another unit already made visible cannot change by being seen again (unless detection is added), and
+	// units of one player mostly stand within each other's sight, so the terrain and line of sight checks are skipped.
+	private boolean isAlreadyVisible(final int indexX, final int indexY) {
+		final int index = (indexY * this.width) + indexX;
+		return (index >= 0) && (index < this.fogOfWar.length) && (this.fogOfWar[index] == 0);
 	}
 
 	public void checkCardinalVision(final CSimulation game, final PathingGrid pathingGrid, final boolean flying,
 			final int dx, final int dy, final int dxp, final int dyp, final float dxf, final float dyf,
 			final float dxfp, final float dyfp, final int myZ) {
+		if (isAlreadyVisible(dx, dy)) {
+			return;
+		}
 		if ((flying || game.isTerrainWater(dxf, dyf) || (myZ > game.getTerrainHeight(dxf, dyf))
 				|| (!game.isTerrainRomp(dxf, dyf) && (myZ == game.getTerrainHeight(dxf, dyf))))
 				&& (flying || !pathingGrid.isBlockVision(dxfp, dyfp)) && this.isVisible(game, dxp, dyp)) {
@@ -161,6 +167,9 @@ public class CPlayerFogOfWar {
 	public void checkCardinalVision(final CSimulation game, final PathingGrid pathingGrid, final byte detections,
 			final boolean flying, final int dx, final int dy, final int dxp, final int dyp, final float dxf,
 			final float dyf, final float dxfp, final float dyfp, final int myZ) {
+		if ((detections == 0) && isAlreadyVisible(dx, dy)) {
+			return;
+		}
 		if ((flying || game.isTerrainWater(dxf, dyf) || (myZ > game.getTerrainHeight(dxf, dyf))
 				|| (!game.isTerrainRomp(dxf, dyf) && (myZ == game.getTerrainHeight(dxf, dyf))))
 				&& (flying || !pathingGrid.isBlockVision(dxfp, dyfp)) && this.isVisible(game, dxp, dyp)) {
@@ -171,6 +180,9 @@ public class CPlayerFogOfWar {
 	public void checkDiagonalVision(final CSimulation game, final PathingGrid pathingGrid, final boolean flying,
 			final int x, final int y, final int dx, final int dy, final int dxp, final int dyp, final float dxf,
 			final float dyf, final float dxfp, final float dyfp, final int myZ) {
+		if (isAlreadyVisible(dx, dy)) {
+			return;
+		}
 		if ((flying || game.isTerrainWater(dxf, dyf) || (myZ > game.getTerrainHeight(dxf, dyf))
 				|| (!game.isTerrainRomp(dxf, dyf) && (myZ == game.getTerrainHeight(dxf, dyf))))
 				&& (flying || !pathingGrid.isBlockVision(dxfp, dyfp)) && this.isVisible(game, dxp, dyp)
@@ -186,6 +198,9 @@ public class CPlayerFogOfWar {
 	public void checkDiagonalVision(final CSimulation game, final PathingGrid pathingGrid, final byte detections,
 			final boolean flying, final int x, final int y, final int dx, final int dy, final int dxp, final int dyp,
 			final float dxf, final float dyf, final float dxfp, final float dyfp, final int myZ) {
+		if ((detections == 0) && isAlreadyVisible(dx, dy)) {
+			return;
+		}
 		if ((flying || game.isTerrainWater(dxf, dyf) || (myZ > game.getTerrainHeight(dxf, dyf))
 				|| (!game.isTerrainRomp(dxf, dyf) && (myZ == game.getTerrainHeight(dxf, dyf))))
 				&& (flying || !pathingGrid.isBlockVision(dxfp, dyfp)) && this.isVisible(game, dxp, dyp)
@@ -199,12 +214,13 @@ public class CPlayerFogOfWar {
 	}
 
 	public void convertVisibleToFogged() {
-		for (int i = 0; i < this.fogOfWarBuffer.capacity(); i++) {
-			if (this.fogOfWarBuffer.get(i) == 0) {
-				this.fogOfWarBuffer.put(i, (byte) 127);
+		final byte[] cells = this.fogOfWar;
+		for (int i = 0; i < cells.length; i++) {
+			if (cells[i] == 0) {
+				cells[i] = 127;
 			}
-			this.detectionBuffer.put(i, (byte) 0);
 		}
+		Arrays.fill(this.detection, (byte) 0);
 	}
 
 	public void setFogStateRadius(PathingGrid pathingGrid, float myX, float myY, float radius, CFogState state) {

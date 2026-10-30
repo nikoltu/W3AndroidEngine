@@ -1,5 +1,7 @@
 package com.etheller.warsmash.viewer5;
 
+import com.etheller.warsmash.viewer5.gl.BoneAtlas;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -251,6 +253,9 @@ public abstract class ModelInstance extends Node {
 	public abstract void renderOpaque(Matrix4 mvp);
 
 	public abstract void renderTranslucent();
+
+	public void packBones(final BoneAtlas atlas) {
+	}
 
 	public abstract void load();
 

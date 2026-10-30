@@ -60,7 +60,10 @@ public class CAbilityGoldMine extends AbstractGenericNoIconAbility implements CA
 		}
 		for (int i = this.activeMiners.size() - 1; i >= 0; i--) {
 			final CBehaviorHarvest activeMiner = this.activeMiners.get(i);
-			if (game.getGameTurnTick() >= activeMiner.getPopoutFromMineTurnTick()) {
+			if (activeMiner.isRemovedFrom(game)) {
+				this.activeMiners.remove(i);
+			}
+			else if (game.getGameTurnTick() >= activeMiner.getPopoutFromMineTurnTick()) {
 
 				int goldMined;
 				if (this.gold > 0) {

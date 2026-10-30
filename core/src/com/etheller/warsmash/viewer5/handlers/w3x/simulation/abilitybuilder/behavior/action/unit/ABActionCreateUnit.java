@@ -50,6 +50,7 @@ public class ABActionCreateUnit implements ABSingleAction {
 		
 		if (addSummonedTag == null || addSummonedTag.callback(game, caster, localStore, castId)) {
 			createdUnit.addClassification(CUnitClassification.SUMMONED);
+			game.unitSummoned(caster, createdUnit);
 		}
 		
 		if (removeFood != null && removeFood.callback(game, caster, localStore, castId)) {

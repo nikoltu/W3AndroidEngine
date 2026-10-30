@@ -29,6 +29,7 @@ import com.etheller.warsmash.units.DataTable;
 import com.etheller.warsmash.units.ObjectData;
 import com.etheller.warsmash.util.ArgbImage;
 import com.etheller.warsmash.util.War3ID;
+import com.etheller.warsmash.util.PerfStats;
 import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.viewer5.handlers.w3x.AnimationTokens.PrimaryTag;
 import com.etheller.warsmash.viewer5.handlers.w3x.SequenceUtils;
@@ -79,6 +80,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CRaceManage
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CRacePreference;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.vision.CFogModifier;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.vision.CPlayerFogOfWar;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.quest.CQuestLog;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.region.CRegionManager;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.state.FalseTimeOfDay;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.timers.CTimer;
@@ -137,13 +139,15 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 	private final LinkedList<Trigger> onTickTriggers = new LinkedList<>();
 	private transient CommandErrorListener commandErrorListener;
 	private final CRegionManager regionManager;
+	private final List<com.etheller.warsmash.viewer5.handlers.w3x.simulation.unit.CUnitInRangeEvent> unitInRangeEvents = new ArrayList<>();
+	private final Map<Long, com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.vision.CUnitVisionFogModifier> sharedVisions = new HashMap<>();
 	private final List<TimeOfDayEvent> timeOfDayVariableEvents = new ArrayList<>();
 	private final EnumMap<JassGameEventsWar3, List<CGlobalEvent>> eventTypeToEvents = new EnumMap<>(
 			JassGameEventsWar3.class);
 	private boolean timeOfDaySuspended;
+	private float timeOfDayScale = 1.0f;
 	private int allItemTypeSlots = -1;
 	private int allUnitTypeSlots = -1;
-	private Float nextGameTime = null;
 	private FalseTimeOfDay falseTimeOfDay = null;
 	private boolean daytime;
 	private final Set<CDestructable> ownedTreeSet = new HashSet<>();
@@ -152,7 +156,9 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 	private boolean fogMaskEnabled = true;
 	private boolean fogEnabled = true;
 	private final List<Runnable> postUpdateCallbacks = new ArrayList<>();
+	private final Set<Integer> queuedRequirementUpdates = new HashSet<>();
 	private final List<Runnable> runningPostUpdateCallbacks = new ArrayList<>();
+	private final CQuestLog questLog = new CQuestLog();
 
 	public CSimulation(final War3MapConfig config, final int mapVersion, final DataTable miscData,
 			final ObjectData parsedUnitData, final ObjectData parsedItemData, final ObjectData parsedDestructableData,
@@ -246,6 +252,30 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 			}
 		}
 
+		if (config.isLobbyTeams()) {
+			// Team mates chosen in game setup start allied with shared vision and allied victory, as in the original.
+			for (int i = 0; i < WarsmashConstants.MAX_PLAYERS; i++) {
+				final CBasePlayer configPlayer = config.getPlayer(i);
+				if (configPlayer.getSlotState() != CPlayerSlotState.PLAYING) {
+					continue;
+				}
+				for (int j = 0; j < WarsmashConstants.MAX_PLAYERS; j++) {
+					final CBasePlayer otherPlayer = config.getPlayer(j);
+					if ((i != j) && (otherPlayer.getSlotState() == CPlayerSlotState.PLAYING)
+							&& (otherPlayer.getTeam() == configPlayer.getTeam())) {
+						final CPlayer player = this.players.get(i);
+						final CPlayer teamMate = this.players.get(j);
+						player.setAlliance(teamMate, CAllianceType.PASSIVE, true);
+						player.setAlliance(teamMate, CAllianceType.HELP_REQUEST, true);
+						player.setAlliance(teamMate, CAllianceType.HELP_RESPONSE, true);
+						player.setAlliance(teamMate, CAllianceType.SHARED_XP, true);
+						player.setAlliance(teamMate, CAllianceType.SHARED_SPELLS, true);
+						player.setAlliance(teamMate, CAllianceType.SHARED_VISION, true);
+						player.setPlayerState(this, CPlayerState.ALLIED_VICTORY, 1);
+					}
+				}
+			}
+		}
 		this.allianceChangesLocked = config.isMapFlagSet(CMapFlag.MAP_LOCK_ALLIANCE_CHANGES);
 		this.sharedAdvancedControl = config.isMapFlagSet(CMapFlag.MAP_SHARED_ADVANCED_CONTROL);
 		if (config.isMapFlagSet(CMapFlag.MAP_SHARED_ADVANCED_CONTROL)) {
@@ -648,6 +678,7 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 	}
 
 	protected void updateFogOfWar() {
+		final long fogStart = System.nanoTime();
 		for (final CPlayer player : this.players) {
 			player.getFogOfWar().convertVisibleToFogged();
 			player.updateFogModifiers(this);
@@ -658,9 +689,48 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 		for (final CPlayer player : this.players) {
 			player.updateFogModifiersAfterUnits(this);
 		}
+		PerfStats.addStep(PerfStats.Step.FOG, System.nanoTime() - fogStart);
+	}
+
+	public void addUnitInRangeEvent(final com.etheller.warsmash.viewer5.handlers.w3x.simulation.unit.CUnitInRangeEvent event) {
+		this.unitInRangeEvents.add(event);
+	}
+
+	public void removeUnitInRangeEvent(final com.etheller.warsmash.viewer5.handlers.w3x.simulation.unit.CUnitInRangeEvent event) {
+		this.unitInRangeEvents.remove(event);
+	}
+
+	public void unitSummoned(final CUnit summoner, final CUnit summoned) {
+		getPlayer(summoner.getPlayerIndex()).fireUnitSummonEvents(summoner, summoned);
+	}
+
+	/**
+	 * UnitShareVision: while shared the viewer sees what the unit sees, like an ally's unit; measured on 1.29.
+	 */
+	public void setUnitSharedVision(final CUnit unit, final CPlayer viewer, final boolean share) {
+		final long key = (((long) unit.getHandleId()) << 8) | viewer.getId();
+		final com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.vision.CUnitVisionFogModifier existing = this.sharedVisions.remove(key);
+		if (existing != null) {
+			viewer.removeFogModifer(this, existing);
+		}
+		if (share) {
+			final com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.vision.CUnitVisionFogModifier modifier = new com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.vision.CUnitVisionFogModifier(
+					unit, false);
+			viewer.addFogModifer(this, modifier, false);
+			this.sharedVisions.put(key, modifier);
+		}
+	}
+
+	public boolean isUnitVisionShared(final CUnit unit, final CPlayer viewer) {
+		return !this.sharedVisions.isEmpty()
+				&& this.sharedVisions.containsKey((((long) unit.getHandleId()) << 8) | viewer.getId());
 	}
 
 	public void update() {
+		PerfStats.stepMark();
+		for (int i = this.unitInRangeEvents.size() - 1; i >= 0; i--) {
+			this.unitInRangeEvents.get(i).update(this);
+		}
 		final Iterator<CUnit> unitIterator = this.units.iterator();
 		while (unitIterator.hasNext()) {
 			final CUnit unit = unitIterator.next();
@@ -676,6 +746,7 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 			}
 		}
 		finishAddingNewUnits();
+		PerfStats.stepEnd(PerfStats.Step.UNITS);
 		for (final CDestructable destructable : this.removedDestructables) {
 			this.simulationRenderController.removeDestructable(destructable);
 			destructable.onRemove(this);
@@ -690,30 +761,23 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 		}
 		this.projectiles.addAll(this.newProjectiles);
 		this.newProjectiles.clear();
+		PerfStats.stepEnd(PerfStats.Step.PROJECTILES);
 		for (final CPathfindingProcessor pathfindingProcessor : this.pathfindingProcessors) {
 			if (pathfindingProcessor != null) {
 				pathfindingProcessor.update(this);
 			}
 		}
+		PerfStats.stepEnd(PerfStats.Step.PATHING);
 		this.gameTurnTick++;
 		final float timeOfDayBefore = getGameTimeOfDay();
 		if (this.falseTimeOfDay != null) {
-			if (this.nextGameTime != null) {
-				this.falseTimeOfDay.setTimeOfDay(this.nextGameTime);
-				this.nextGameTime = null;
-			}
 			if (!this.falseTimeOfDay.tick()) {
 				this.falseTimeOfDay = null;
 			}
-		} else {
-			if (this.nextGameTime != null) {
-				this.currentGameDayTimeElapsed = (this.nextGameTime / this.gameplayConstants.getGameDayHours())
-						* this.gameplayConstants.getGameDayLength();
-				this.nextGameTime = null;
-			} else if (!this.timeOfDaySuspended) {
-				this.currentGameDayTimeElapsed = (this.currentGameDayTimeElapsed
-						+ WarsmashConstants.SIMULATION_STEP_TIME) % this.gameplayConstants.getGameDayLength();
-			}
+		} else if (!this.timeOfDaySuspended) {
+			this.currentGameDayTimeElapsed = (this.currentGameDayTimeElapsed
+					+ (WarsmashConstants.SIMULATION_STEP_TIME * this.timeOfDayScale))
+					% this.gameplayConstants.getGameDayLength();
 		}
 		final float timeOfDayAfter = getGameTimeOfDay();
 		this.daytime = (timeOfDayAfter >= this.gameplayConstants.getDawnTimeGameHours())
@@ -736,18 +800,18 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 			this.activeTimers.pop().fire(this);
 		}
 		checkTimeOfDayEvents(timeOfDayBefore, timeOfDayAfter);
+		PerfStats.stepEnd(PerfStats.Step.TIMERS);
 		this.onTickTriggers.addAll(this.addedOnTickTriggers);
 		this.addedOnTickTriggers.clear();
 		for (final Trigger trigger : this.onTickTriggers) {
 			final TriggerExecutionScope triggerScope = trigger.getTriggerExecutionScope();
-			if (trigger.evaluate(this.globalScope, triggerScope)) {
-				trigger.execute(this.globalScope, triggerScope);
-			}
+			trigger.fire(this.globalScope, triggerScope, triggerScope);
 		}
 		this.onTickTriggers.removeAll(this.removedOnTickTriggers);
 		this.removedOnTickTriggers.clear();
 
 		this.globalScope.runThreads();
+		PerfStats.stepEnd(PerfStats.Step.JASS);
 		for (final CPlayer player : this.players) {
 			final JassAIEnvironment aiScript = player.getAiScript();
 			if (aiScript != null) {
@@ -755,6 +819,7 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 			}
 		}
 
+		PerfStats.stepEnd(PerfStats.Step.AI);
 		this.runningPostUpdateCallbacks.clear();
 		this.runningPostUpdateCallbacks.addAll(this.postUpdateCallbacks);
 		this.postUpdateCallbacks.clear();
@@ -803,7 +868,26 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 	}
 
 	public void setGameTimeOfDay(final float value) {
-		this.nextGameTime = value;
+		final float timeOfDayBefore = getGameTimeOfDay();
+		if (this.falseTimeOfDay != null) {
+			this.falseTimeOfDay.setTimeOfDay(value);
+		}
+		else {
+			this.currentGameDayTimeElapsed = (value / this.gameplayConstants.getGameDayHours())
+					* this.gameplayConstants.getGameDayLength();
+		}
+		final float timeOfDayAfter = getGameTimeOfDay();
+		this.daytime = (timeOfDayAfter >= this.gameplayConstants.getDawnTimeGameHours())
+				&& (timeOfDayAfter < this.gameplayConstants.getDuskTimeGameHours());
+		checkTimeOfDayEvents(timeOfDayBefore, timeOfDayAfter);
+	}
+
+	public float getTimeOfDayScale() {
+		return this.timeOfDayScale;
+	}
+
+	public void setTimeOfDayScale(final float timeOfDayScale) {
+		this.timeOfDayScale = timeOfDayScale;
 	}
 
 	private void checkTimeOfDayEvents(final float timeOfDayBefore, final float timeOfDayAfter) {
@@ -882,6 +966,10 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 
 	public boolean isScriptOrder() {
 		return this.scriptOrder;
+	}
+
+	public CQuestLog getQuestLog() {
+		return this.questLog;
 	}
 
 	public boolean isAllianceChangesLocked() {
@@ -1536,10 +1624,17 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 		}
 	}
 
+	// Deaths and trained units each ask for this, so a fight queued it many times a step; a second run in the same
+	// step changes nothing.
 	public void fireRequirementUpdateForAbilities(final CPlayer player, final boolean disable) {
+		final Integer key = (player.getId() * 2) + (disable ? 1 : 0);
+		if (!this.queuedRequirementUpdates.add(key)) {
+			return;
+		}
 		this.postUpdateCallbacks.add(new Runnable() {
 			@Override
 			public void run() {
+				CSimulation.this.queuedRequirementUpdates.remove(key);
 				for (final CUnit unit : getUnits()) {
 					if (unit.getPlayerIndex() == player.getId()) {
 						unit.checkDisabledAbilities(CSimulation.this, disable);

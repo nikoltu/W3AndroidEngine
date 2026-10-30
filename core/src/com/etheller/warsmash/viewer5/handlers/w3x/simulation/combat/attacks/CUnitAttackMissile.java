@@ -97,7 +97,8 @@ public class CUnitAttackMissile extends CUnitAttack {
 			final float damage, final float x, final float y, final int bounceIndex,
 			final CUnitAttackListener attackListener, final CUnitAttackSettings settings) {
 		final CWidget widget = target.visit(AbilityTargetWidgetVisitor.INSTANCE);
-		if (widget != null) {
+		// A target removed (or hidden) while the missile flew is out of the game; it takes nothing.
+		if ((widget != null) && !((widget instanceof CUnit) && ((CUnit) widget).isHidden())) {
 			CUnitAttackPreDamageListenerDamageModResult modDamage = runPreDamageListeners(cSimulation, source, target,
 					target.visit(AbilityTargetVisitor.POINT) != null ? target.visit(AbilityTargetVisitor.POINT)
 							: new AbilityPointTarget(x, y),

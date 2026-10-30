@@ -9,8 +9,10 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.CA
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityTarget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityTargetVisitor;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.definitions.impl.AbilityFields;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.CAttackType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.orders.OrderIds;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CAllianceType;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.CDamageType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.CEffectType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.SimulationRenderComponentLightning;
 
@@ -100,9 +102,10 @@ public class CAbilitySiphonMana extends CAbilityTargetSpellBase {
 				final float mana = Math.min(targetUnit.getMana(), this.manaDrainedPerSecond * this.interval);
 				targetUnit.setMana(targetUnit.getMana() - mana);
 				caster.setMana(Math.min(caster.getMaximumMana(), caster.getMana() + mana));
-				final float life = Math.min(targetUnit.getLife(), this.lifeDrainedPerSecond * this.interval);
-				if (life > 0) {
-					targetUnit.setLife(simulation, targetUnit.getLife() - life);
+				if (this.lifeDrainedPerSecond > 0) {
+					// Measured: the drain is spell damage, so heroes lose 70% of it and armor does not count.
+					targetUnit.damage(simulation, caster, DAMAGE_FLAGS, CAttackType.SPELLS, CDamageType.UNIVERSAL,
+							null, this.lifeDrainedPerSecond * this.interval);
 					caster.setLife(simulation, Math.min(caster.getMaximumLife(),
 							caster.getLife() + (this.lifeTransferredPerSecond * this.interval)));
 				}

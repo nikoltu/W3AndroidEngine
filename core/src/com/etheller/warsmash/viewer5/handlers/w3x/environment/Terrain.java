@@ -4,11 +4,13 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.Buffer;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -107,6 +109,7 @@ public class Terrain {
 	private final float[] groundHeights;
 	private final float[] groundCornerHeights;
 	private final short[] groundTextureList;
+	private ByteBuffer groundTextureUploadBuffer;
 	private final float[] waterHeights;
 	private final byte[] waterExistsData;
 
@@ -129,6 +132,7 @@ public class Terrain {
 	private final List<SplatModel> uberSplatModelsList;
 	private int shadowMap;
 	private int fogOfWarMap;
+	private boolean fogOfWarMapAllocated;
 	public final Map<String, Splat> splats = new HashMap<>();
 	public final Map<String, List<float[]>> shadows = new HashMap<>();
 	public final Map<String, Texture> shadowTextures = new HashMap<>();
@@ -143,8 +147,13 @@ public class Terrain {
 	private boolean initShadowsFinished = false;
 	private byte[] staticShadowData;
 	private byte[] shadowData;
+	private ByteBuffer shadowDataBuffer;
+	private final Map<RawOpenGLTextureResource, boolean[]> shadowMasks = new IdentityHashMap<>();
 	private CPlayerFogOfWar fogOfWarData;
 	private ByteBuffer visualFogData;
+	private byte[] visualFogArray;
+	private byte[] fogStateArray;
+	private final byte[] fogStateMapping = new byte[256];
 
 	public Terrain(final War3MapW3e w3eFile, final War3MapWpm terrainPathing, final War3MapW3i w3iFile,
 			final WebGL webGL, final DataSource dataSource, final WorldEditStrings worldEditStrings,
@@ -776,7 +785,29 @@ public class Terrain {
 			}
 		}
 
-		uploadGroundTexture();
+		uploadGroundTextureRows((int) updateArea.getY(), (int) updateArea.getHeight());
+	}
+
+	/**
+	 * Uploads only the changed rows from one reused direct buffer: the whole texture with a new direct buffer each
+	 * time stalls phones when blight grows.
+	 */
+	private void uploadGroundTextureRows(final int firstRow, final int rowCount) {
+		if ((this.groundTextureData == -1) || (rowCount <= 0)) {
+			return;
+		}
+		final int rowShorts = (this.columns - 1) * 4;
+		if (this.groundTextureUploadBuffer == null) {
+			this.groundTextureUploadBuffer = ByteBuffer.allocateDirect(this.groundTextureList.length * 2)
+					.order(ByteOrder.nativeOrder());
+		}
+		final ByteBuffer buffer = this.groundTextureUploadBuffer;
+		buffer.clear();
+		buffer.asShortBuffer().put(this.groundTextureList, firstRow * rowShorts, rowCount * rowShorts);
+		buffer.limit(rowCount * rowShorts * 2);
+		Gdx.gl30.glBindTexture(GL30.GL_TEXTURE_2D, this.groundTextureData);
+		Gdx.gl30.glTexSubImage2D(GL30.GL_TEXTURE_2D, 0, 0, firstRow, this.columns - 1, rowCount,
+				GL30.GL_RGBA_INTEGER, GL30.GL_UNSIGNED_SHORT, buffer);
 	}
 
 	public void removeTerrainCell(final int i, final int j) {
@@ -1233,10 +1264,7 @@ public class Terrain {
 			final int columns = (this.columns - 1) * 4;
 			final int rows = (this.rows - 1) * 4;
 			blitShadowData(columns, rows, shadowX, shadowY, texture);
-			final GL30 gl = Gdx.gl30;
-			gl.glBindTexture(GL30.GL_TEXTURE_2D, this.shadowMap);
-			gl.glTexImage2D(GL30.GL_TEXTURE_2D, 0, GL30.GL_R8, columns, rows, 0, GL30.GL_RED, GL30.GL_UNSIGNED_BYTE,
-					RenderMathUtils.wrap(this.shadowData));
+			uploadShadowData(columns, rows);
 		}
 		return new BuildingShadow() {
 			@Override
@@ -1320,8 +1348,11 @@ public class Terrain {
 		gl.glTexParameteri(GL30.GL_TEXTURE_2D, GL30.GL_TEXTURE_MIN_FILTER, GL30.GL_LINEAR);
 		gl.glTexParameteri(GL30.GL_TEXTURE_2D, GL30.GL_TEXTURE_WRAP_S, GL30.GL_CLAMP_TO_EDGE);
 		gl.glTexParameteri(GL30.GL_TEXTURE_2D, GL30.GL_TEXTURE_WRAP_T, GL30.GL_CLAMP_TO_EDGE);
+		this.shadowDataBuffer = ByteBuffer.allocateDirect(this.shadowData.length).order(ByteOrder.nativeOrder());
+		this.shadowDataBuffer.put(this.shadowData);
+		this.shadowDataBuffer.clear();
 		gl.glTexImage2D(GL30.GL_TEXTURE_2D, 0, GL30.GL_R8, columns, rows, 0, GL30.GL_RED, GL30.GL_UNSIGNED_BYTE,
-				RenderMathUtils.wrap(this.shadowData));
+				this.shadowDataBuffer);
 		this.initShadowsFinished = true;
 
 		this.fogOfWarMap = gl.glGenTexture();
@@ -1350,6 +1381,7 @@ public class Terrain {
 			final float v2, final byte[] shadowData) {
 		final int x0 = (int) Math.floor((v - centerOffset[0]) / 32.0) - x01;
 		final int y0 = (int) Math.floor((v2 - centerOffset[1]) / 32.0) + y01;
+		final boolean[] mask = getShadowMask(texture, width, height);
 		for (int y = 0; y < height; ++y) {
 			if (((y0 - y) < 0) || ((y0 - y) >= rows)) {
 				continue;
@@ -1358,11 +1390,26 @@ public class Terrain {
 				if (((x0 + x) < 0) || ((x0 + x) >= columns)) {
 					continue;
 				}
-				if (texture.getData().get((((y * width) + x) * 4) + 3) != 0) {
+				if (mask[(y * width) + x]) {
 					shadowData[((y0 - y) * columns) + x0 + x] = (byte) 128;
 				}
 			}
 		}
+	}
+
+	// Reading the texture's direct buffer pixel by pixel was slow on phones, and every shadow is drawn again when one
+	// of them goes away.
+	private boolean[] getShadowMask(final RawOpenGLTextureResource texture, final int width, final int height) {
+		boolean[] mask = this.shadowMasks.get(texture);
+		if (mask == null) {
+			mask = new boolean[width * height];
+			final ByteBuffer data = texture.getData();
+			for (int i = 0; i < mask.length; i++) {
+				mask[i] = data.get((i * 4) + 3) != 0;
+			}
+			this.shadowMasks.put(texture, mask);
+		}
+		return mask;
 	}
 
 //	public Vector3 groundNormal(final Vector3 out, int x, int y) {
@@ -1721,10 +1768,19 @@ public class Terrain {
 		final int columns = (Terrain.this.columns - 1) * 4;
 		final int rows = (Terrain.this.rows - 1) * 4;
 		reloadShadowData(Terrain.this.centerOffset, columns, rows);
+		uploadShadowData(columns, rows);
+	}
+
+	// Building shadows change whenever a building appears, moves or goes away; the map stays allocated and is
+	// refilled through one buffer instead of being created again from a new buffer each time.
+	private void uploadShadowData(final int columns, final int rows) {
+		this.shadowDataBuffer.clear();
+		this.shadowDataBuffer.put(this.shadowData);
+		this.shadowDataBuffer.clear();
 		final GL30 gl = Gdx.gl30;
-		gl.glBindTexture(GL30.GL_TEXTURE_2D, Terrain.this.shadowMap);
-		gl.glTexImage2D(GL30.GL_TEXTURE_2D, 0, GL30.GL_R8, columns, rows, 0, GL30.GL_RED, GL30.GL_UNSIGNED_BYTE,
-				RenderMathUtils.wrap(Terrain.this.shadowData));
+		gl.glBindTexture(GL30.GL_TEXTURE_2D, this.shadowMap);
+		gl.glTexSubImage2D(GL30.GL_TEXTURE_2D, 0, 0, 0, columns, rows, GL30.GL_RED, GL30.GL_UNSIGNED_BYTE,
+				this.shadowDataBuffer);
 	}
 
 	private static char getRampLetter(final int layerHeightOffset, final boolean isRamp) {
@@ -1751,23 +1807,61 @@ public class Terrain {
 	public void setFogOfWarData(CFogMaskSettings fogMaskSettings, final CPlayerFogOfWar fogOfWarData) {
 		this.fogOfWarData = fogOfWarData;
 		this.visualFogData = ByteBuffer.allocateDirect(fogOfWarData.getFogOfWarBuffer().capacity());
+		this.visualFogArray = new byte[this.visualFogData.capacity()];
+		this.fogStateArray = new byte[this.visualFogData.capacity()];
+		this.fogOfWarMapAllocated = false;
 		reloadFogOfWarDataToGPU(fogMaskSettings);
 	}
 
-	public void reloadFogOfWarDataToGPU(CFogMaskSettings fogMaskSettings) {
+	/**
+	 * Moves the drawn fog one fade step toward the fog of war and sends it to the GPU.
+	 *
+	 * @return false when the drawn fog already matched, so nothing was sent
+	 */
+	public boolean reloadFogOfWarDataToGPU(CFogMaskSettings fogMaskSettings) {
 		final GL30 gl = Gdx.gl30;
 		final ByteBuffer fogOfWarBuffer = this.fogOfWarData.getFogOfWarBuffer();
-		for (int i = 0; i < this.visualFogData.capacity(); i++) {
-			this.visualFogData.put(i, War3MapViewer.fadeLineOfSightColor(this.visualFogData.get(i),
-					fogMaskSettings.getFogStateFromSettings(fogOfWarBuffer.get(i))));
+		boolean changed = !this.fogOfWarMapAllocated;
+		final byte[] mapping = this.fogStateMapping;
+		for (int i = 0; i < 256; i++) {
+			mapping[i] = fogMaskSettings.getFogStateFromSettings((byte) i);
 		}
+		final byte[] visual = this.visualFogArray;
+		final byte[] states = this.fogStateArray;
+		final ByteBuffer source = fogOfWarBuffer.duplicate();
+		source.clear();
+		source.get(states, 0, Math.min(states.length, source.remaining()));
+		for (int i = 0; i < visual.length; i++) {
+			final byte previous = visual[i];
+			final byte faded = War3MapViewer.fadeLineOfSightColor(previous, mapping[states[i] & 0xFF]);
+			if (faded != previous) {
+				visual[i] = faded;
+				changed = true;
+			}
+		}
+		// The fog fades for a moment after each fog of war update and then stays; sending the whole texture every
+		// tick anyway cost phones several milliseconds a frame.
+		if (!changed) {
+			return false;
+		}
+		this.visualFogData.clear();
+		this.visualFogData.put(visual);
+		this.visualFogData.clear();
 		gl.glBindTexture(GL30.GL_TEXTURE_2D, Terrain.this.fogOfWarMap);
-		gl.glTexParameteri(GL30.GL_TEXTURE_2D, GL30.GL_TEXTURE_MAG_FILTER, GL30.GL_LINEAR);
-		gl.glTexParameteri(GL30.GL_TEXTURE_2D, GL30.GL_TEXTURE_MIN_FILTER, GL30.GL_LINEAR);
-		gl.glTexParameteri(GL30.GL_TEXTURE_2D, GL30.GL_TEXTURE_WRAP_S, GL30.GL_CLAMP_TO_EDGE);
-		gl.glTexParameteri(GL30.GL_TEXTURE_2D, GL30.GL_TEXTURE_WRAP_T, GL30.GL_CLAMP_TO_EDGE);
-		gl.glTexImage2D(GL30.GL_TEXTURE_2D, 0, GL30.GL_R8, this.fogOfWarData.getWidth(), this.fogOfWarData.getHeight(),
-				0, GL30.GL_RED, GL30.GL_UNSIGNED_BYTE, this.visualFogData);
+		if (!this.fogOfWarMapAllocated) {
+			gl.glTexParameteri(GL30.GL_TEXTURE_2D, GL30.GL_TEXTURE_MAG_FILTER, GL30.GL_LINEAR);
+			gl.glTexParameteri(GL30.GL_TEXTURE_2D, GL30.GL_TEXTURE_MIN_FILTER, GL30.GL_LINEAR);
+			gl.glTexParameteri(GL30.GL_TEXTURE_2D, GL30.GL_TEXTURE_WRAP_S, GL30.GL_CLAMP_TO_EDGE);
+			gl.glTexParameteri(GL30.GL_TEXTURE_2D, GL30.GL_TEXTURE_WRAP_T, GL30.GL_CLAMP_TO_EDGE);
+			gl.glTexImage2D(GL30.GL_TEXTURE_2D, 0, GL30.GL_R8, this.fogOfWarData.getWidth(),
+					this.fogOfWarData.getHeight(), 0, GL30.GL_RED, GL30.GL_UNSIGNED_BYTE, this.visualFogData);
+			this.fogOfWarMapAllocated = true;
+		}
+		else {
+			gl.glTexSubImage2D(GL30.GL_TEXTURE_2D, 0, 0, 0, this.fogOfWarData.getWidth(), this.fogOfWarData.getHeight(),
+					GL30.GL_RED, GL30.GL_UNSIGNED_BYTE, this.visualFogData);
+		}
+		return true;
 	}
 
 	public int getFogOfWarMap() {

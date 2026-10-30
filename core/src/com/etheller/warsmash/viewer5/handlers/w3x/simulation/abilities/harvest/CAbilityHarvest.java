@@ -4,6 +4,7 @@ import java.util.EnumSet;
 import java.util.List;
 
 import com.etheller.warsmash.util.War3ID;
+import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.viewer5.handlers.w3x.SequenceUtils;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CDestructable;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
@@ -24,6 +25,8 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.CWeaponType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.attacks.CUnitAttack;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.attacks.CUnitAttackNormal;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.orders.OrderIds;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.unit.NonStackingStatBuff;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.unit.NonStackingStatBuffType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.AbilityActivationReceiver;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.AbilityTargetCheckReceiver;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.CommandStringErrorKeys;
@@ -42,6 +45,18 @@ public class CAbilityHarvest extends AbstractGenericSingleIconActiveAbility {
 	private CUnitAttack treeAttack;
 	private CWidget lastHarvestTarget;
 	private CBehaviorAttack behaviorTreeAttack;
+	// Measured in 1.29: at every mine entry a gold worker's speed is set so that its trip from the mine and back
+	// takes the target cycle minus the time inside (the mean of its last two trips), between half and 1.2 times its
+	// own speed. A cycle twice the target or any other order clears it.
+	private static final float MINE_CYCLE_TARGET = 5.0f;
+	private static final float MINE_SPEED_MIN = 0.5f;
+	private static final float MINE_SPEED_MAX = 1.2f;
+	private static final float MINE_SPEED_IDLE_RESET = 0.5f;
+	private int mineExitTick = -1;
+	private float lastTripSpeed;
+	private NonStackingStatBuff mineSpeedBuff;
+	private int lastTick;
+	private int idleSinceTick = -1;
 
 	public CAbilityHarvest(final int handleId, final War3ID code, final War3ID alias, final int damageToTree,
 			final int goldCapacity, final int lumberCapacity, final float castRange, final float duration) {
@@ -84,6 +99,74 @@ public class CAbilityHarvest extends AbstractGenericSingleIconActiveAbility {
 
 	@Override
 	public void onTick(final CSimulation game, final CUnit unit) {
+		final int tick = game.getGameTurnTick();
+		final int skipped = tick - this.lastTick;
+		this.lastTick = tick;
+		if ((this.mineExitTick < 0) && (this.mineSpeedBuff == null)) {
+			return;
+		}
+		final int resetTicks = (int) (MINE_SPEED_IDLE_RESET / WarsmashConstants.SIMULATION_STEP_TIME);
+		if (skipped > resetTicks) {
+			resetMineSpeed(game, unit);
+			return;
+		}
+		final CBehavior behavior = unit.getCurrentBehavior();
+		final boolean harvesting = (behavior != null)
+				&& ((behavior == this.behaviorHarvest) || (behavior == this.behaviorReturnResources)
+						|| (behavior.getHighlightOrderId() == OrderIds.harvest)
+						|| (behavior.getHighlightOrderId() == OrderIds.returnresources));
+		if (harvesting) {
+			this.idleSinceTick = -1;
+		}
+		else if (this.idleSinceTick < 0) {
+			this.idleSinceTick = tick;
+		}
+		else if ((tick - this.idleSinceTick) > resetTicks) {
+			resetMineSpeed(game, unit);
+		}
+	}
+
+	public void onMineExit(final CSimulation game) {
+		this.mineExitTick = game.getGameTurnTick();
+	}
+
+	public void onMineEntry(final CSimulation game, final CUnit unit, final float miningDuration) {
+		if (this.mineExitTick < 0) {
+			return;
+		}
+		final float tripTime = (game.getGameTurnTick() - this.mineExitTick) * WarsmashConstants.SIMULATION_STEP_TIME;
+		this.mineExitTick = -1;
+		final float tripTarget = MINE_CYCLE_TARGET - miningDuration;
+		if (((tripTime + miningDuration) > (2 * MINE_CYCLE_TARGET)) || (tripTarget <= 0)) {
+			resetMineSpeed(game, unit);
+			return;
+		}
+		final float tripSpeed = (unit.getSpeed() * tripTime) / tripTarget;
+		final float wantedSpeed = this.lastTripSpeed > 0 ? (this.lastTripSpeed + tripSpeed) / 2 : tripSpeed;
+		this.lastTripSpeed = tripSpeed;
+		removeMineSpeedBuff(game, unit);
+		final int ownSpeed = unit.getSpeed();
+		if (ownSpeed <= 0) {
+			return;
+		}
+		final float factor = Math.max(MINE_SPEED_MIN, Math.min(MINE_SPEED_MAX, wantedSpeed / ownSpeed));
+		this.mineSpeedBuff = new NonStackingStatBuff(NonStackingStatBuffType.MVSPDPCT, "harvestMineSpeed",
+				factor - 1);
+		unit.addNonStackingStatBuff(game, this.mineSpeedBuff);
+	}
+
+	public void resetMineSpeed(final CSimulation game, final CUnit unit) {
+		this.mineExitTick = -1;
+		this.lastTripSpeed = 0;
+		this.idleSinceTick = -1;
+		removeMineSpeedBuff(game, unit);
+	}
+
+	private void removeMineSpeedBuff(final CSimulation game, final CUnit unit) {
+		if (this.mineSpeedBuff != null) {
+			unit.removeNonStackingStatBuff(game, this.mineSpeedBuff);
+			this.mineSpeedBuff = null;
+		}
 	}
 
 	@Override

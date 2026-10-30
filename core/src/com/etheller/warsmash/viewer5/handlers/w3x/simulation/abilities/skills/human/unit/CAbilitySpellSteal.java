@@ -24,7 +24,8 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.CommandStringE
 /**
  * Spell Steal (Spell Breaker): takes the newest positive buff from an enemy and gives it to the nearest friendly
  * unit around the target, or the newest negative buff from a friendly unit to the nearest enemy around it. Only
- * dispellable timed buffs move, and they keep their remaining time.
+ * dispellable timed buffs move, and they keep their remaining time. With no one to receive it the buff is only
+ * removed.
  */
 public class CAbilitySpellSteal extends CAbilityTargetSpellBase implements CAutocastAbility {
 	private float areaOfEffect;
@@ -80,7 +81,7 @@ public class CAbilitySpellSteal extends CAbilityTargetSpellBase implements CAuto
 		final CUnit[] best = { null };
 		final double[] bestDistance = { Double.MAX_VALUE };
 		game.getWorldCollision().enumUnitsInRange(target.getX(), target.getY(), this.areaOfEffect, (enumUnit) -> {
-			if ((enumUnit != target) && !enumUnit.isDead() && !enumUnit.isBuilding()
+			if ((enumUnit != target) && (enumUnit != caster) && !enumUnit.isDead() && !enumUnit.isBuilding()
 					&& (isFriendly(game, caster, enumUnit) == wantFriendly)
 					&& enumUnit.canBeTargetedBy(game, caster, getTargetsAllowed())) {
 				final double distance = enumUnit.distance(target);
@@ -98,8 +99,7 @@ public class CAbilitySpellSteal extends CAbilityTargetSpellBase implements CAuto
 	protected void innerCheckCanTargetSpell(final CSimulation game, final CUnit unit, final int orderId,
 			final CWidget target, final AbilityTargetCheckReceiver<CWidget> receiver) {
 		final CUnit targetUnit = target instanceof CUnit ? (CUnit) target : null;
-		if ((targetUnit == null) || targetUnit.isBuilding() || (stealableBuff(game, unit, targetUnit) == null)
-				|| (recipient(game, unit, targetUnit) == null)) {
+		if ((targetUnit == null) || targetUnit.isBuilding() || (stealableBuff(game, unit, targetUnit) == null)) {
 			receiver.targetCheckFailed(
 					CommandStringErrorKeys.MUST_TARGET_AN_ENEMY_UNIT_WITH_POSITIVE_BUFFS_OR_A_SUMMONED_UNIT);
 		}
@@ -116,17 +116,21 @@ public class CAbilitySpellSteal extends CAbilityTargetSpellBase implements CAuto
 		}
 		final CBuff buff = stealableBuff(simulation, caster, targetUnit);
 		final CUnit recipient = recipient(simulation, caster, targetUnit);
-		if ((buff == null) || (recipient == null)) {
+		if (buff == null) {
 			return false;
 		}
-		if (buff instanceof CBuffTimed) {
+		if ((recipient != null) && (buff instanceof CBuffTimed)) {
 			((CBuffTimed) buff).carryRemainingTime(simulation);
 		}
 		targetUnit.remove(simulation, buff);
-		recipient.add(simulation, buff);
+		if (recipient != null) {
+			recipient.add(simulation, buff);
+		}
 		simulation.createTemporarySpellEffectOnUnit(caster, getAlias(), CEffectType.CASTER);
 		simulation.createTemporarySpellEffectOnUnit(targetUnit, getAlias(), CEffectType.TARGET);
-		simulation.createTemporarySpellEffectOnUnit(recipient, getAlias(), CEffectType.SPECIAL);
+		if (recipient != null) {
+			simulation.createTemporarySpellEffectOnUnit(recipient, getAlias(), CEffectType.SPECIAL);
+		}
 		return false;
 	}
 

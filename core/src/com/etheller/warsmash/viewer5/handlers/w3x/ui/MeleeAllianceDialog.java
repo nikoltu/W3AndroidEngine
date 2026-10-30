@@ -81,11 +81,21 @@ public class MeleeAllianceDialog {
 		cancelButton.setOnClick(() -> setVisible(false));
 		// Melee victory (Blizzard.j MeleeCheckForVictors) reads this as the player's allied victory state.
 		this.alliedVictory = (CheckBoxFrame) rootFrame.getFrameByName("AlliedVictoryCheckBox", 0);
+		// Every other player's row fits in the dialog, and the bar has no place set in the FDF.
+		rootFrame.getFrameByName("AllianceDialogScrollBar", 0).setVisible(false);
 		this.container.setVisible(false);
+	}
+
+	public UIFrame getFrame() {
+		return this.container;
 	}
 
 	public boolean isVisible() {
 		return this.container.isVisible();
+	}
+
+	public boolean contains(final float uiX, final float uiY) {
+		return isVisible() && ((AbstractRenderableFrame) this.dialog).getRenderBounds().contains(uiX, uiY);
 	}
 
 	public void setVisible(final boolean visible) {

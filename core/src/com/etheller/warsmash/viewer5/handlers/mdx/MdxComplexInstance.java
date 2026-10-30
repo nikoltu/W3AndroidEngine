@@ -26,6 +26,8 @@ import com.etheller.warsmash.viewer5.Texture;
 import com.etheller.warsmash.viewer5.TextureMapper;
 import com.etheller.warsmash.viewer5.UpdatableObject;
 import com.etheller.warsmash.viewer5.gl.DataTexture;
+import com.badlogic.gdx.graphics.glutils.ShaderProgram;
+import com.etheller.warsmash.viewer5.gl.BoneAtlas;
 import com.etheller.warsmash.viewer5.handlers.w3x.DynamicShadowManager;
 import com.hiveworkshop.rms.parsers.mdlx.MdlxGeoset;
 
@@ -68,7 +70,15 @@ public class MdxComplexInstance extends ModelInstance {
 	public float[][] uvAnims;
 	public Matrix4[] worldMatrices;
 	public FloatBuffer worldMatricesCopyHeap;
-	public DataTexture boneTexture;
+	// Filled first and copied in one call: one put per float into a direct buffer is slow on Android.
+	private float[] worldMatricesCopyArray;
+	// Only for frames in which the instance was not packed into its scene's bone atlas.
+	private DataTexture boneTexture;
+	private boolean boneTextureStale = true;
+	private boolean hasBones;
+	private BoneAtlas packedAtlas;
+	private int packedStamp;
+	private int packedBase;
 	public Texture[] replaceableTextures = new Texture[WarsmashConstants.REPLACEABLE_TEXTURE_LIMIT];
 	public Texture[] replaceableTextures_diffuse = new Texture[WarsmashConstants.REPLACEABLE_TEXTURE_LIMIT];
 	public Texture[] replaceableTextures_normal = new Texture[WarsmashConstants.REPLACEABLE_TEXTURE_LIMIT];
@@ -115,6 +125,7 @@ public class MdxComplexInstance extends ModelInstance {
 		this.worldMatrices = ((List<Matrix4>) sharedNodeData[1]).toArray(new Matrix4[0]);
 		this.worldMatricesCopyHeap = ByteBuffer.allocateDirect(16 * this.worldMatrices.length * 4)
 				.order(ByteOrder.nativeOrder()).asFloatBuffer();
+		this.worldMatricesCopyArray = new float[16 * this.worldMatrices.length];
 
 		// And now initialize all of the nodes and objects
 		for (final Bone bone : model.bones) {
@@ -216,9 +227,7 @@ public class MdxComplexInstance extends ModelInstance {
 		// the model loaded.
 		setSequence(this.sequence);
 
-		if (model.bones.size() != 0) {
-			this.boneTexture = new DataTexture(model.viewer.gl, 4, model.bones.size() * 4, 1);
-		}
+		this.hasBones = model.bones.size() != 0;
 	}
 
 	/*
@@ -292,8 +301,8 @@ public class MdxComplexInstance extends ModelInstance {
 	public void hide() {
 		super.hide();
 
-		for (final AttachmentInstance attachment : this.attachments) {
-			attachment.internalInstance.hide();
+		for (int i = 0, n = this.attachments.size(); i < n; i++) {
+			this.attachments.get(i).internalInstance.hide();
 		}
 	}
 
@@ -519,29 +528,76 @@ public class MdxComplexInstance extends ModelInstance {
 	}
 
 	public void updateBoneTexture() {
-		if (this.boneTexture != null) {
-			this.worldMatricesCopyHeap.clear();
+		if (this.hasBones) {
+			final float[] copy = this.worldMatricesCopyArray;
 			for (int i = 0, l = this.worldMatrices.length; i < l; i++) {
-				final Matrix4 worldMatrix = this.worldMatrices[i];
-				this.worldMatricesCopyHeap.put((i * 16) + 0, worldMatrix.val[Matrix4.M00]);
-				this.worldMatricesCopyHeap.put((i * 16) + 1, worldMatrix.val[Matrix4.M10]);
-				this.worldMatricesCopyHeap.put((i * 16) + 2, worldMatrix.val[Matrix4.M20]);
-				this.worldMatricesCopyHeap.put((i * 16) + 3, worldMatrix.val[Matrix4.M30]);
-				this.worldMatricesCopyHeap.put((i * 16) + 4, worldMatrix.val[Matrix4.M01]);
-				this.worldMatricesCopyHeap.put((i * 16) + 5, worldMatrix.val[Matrix4.M11]);
-				this.worldMatricesCopyHeap.put((i * 16) + 6, worldMatrix.val[Matrix4.M21]);
-				this.worldMatricesCopyHeap.put((i * 16) + 7, worldMatrix.val[Matrix4.M31]);
-				this.worldMatricesCopyHeap.put((i * 16) + 8, worldMatrix.val[Matrix4.M02]);
-				this.worldMatricesCopyHeap.put((i * 16) + 9, worldMatrix.val[Matrix4.M12]);
-				this.worldMatricesCopyHeap.put((i * 16) + 10, worldMatrix.val[Matrix4.M22]);
-				this.worldMatricesCopyHeap.put((i * 16) + 11, worldMatrix.val[Matrix4.M32]);
-				this.worldMatricesCopyHeap.put((i * 16) + 12, worldMatrix.val[Matrix4.M03]);
-				this.worldMatricesCopyHeap.put((i * 16) + 13, worldMatrix.val[Matrix4.M13]);
-				this.worldMatricesCopyHeap.put((i * 16) + 14, worldMatrix.val[Matrix4.M23]);
-				this.worldMatricesCopyHeap.put((i * 16) + 15, worldMatrix.val[Matrix4.M33]);
+				final float[] val = this.worldMatrices[i].val;
+				final int base = i * 16;
+				copy[base + 0] = val[Matrix4.M00];
+				copy[base + 1] = val[Matrix4.M10];
+				copy[base + 2] = val[Matrix4.M20];
+				copy[base + 3] = val[Matrix4.M30];
+				copy[base + 4] = val[Matrix4.M01];
+				copy[base + 5] = val[Matrix4.M11];
+				copy[base + 6] = val[Matrix4.M21];
+				copy[base + 7] = val[Matrix4.M31];
+				copy[base + 8] = val[Matrix4.M02];
+				copy[base + 9] = val[Matrix4.M12];
+				copy[base + 10] = val[Matrix4.M22];
+				copy[base + 11] = val[Matrix4.M32];
+				copy[base + 12] = val[Matrix4.M03];
+				copy[base + 13] = val[Matrix4.M13];
+				copy[base + 14] = val[Matrix4.M23];
+				copy[base + 15] = val[Matrix4.M33];
 			}
-			this.boneTexture.bindAndUpdate(this.worldMatricesCopyHeap);
+			this.boneTextureStale = true;
 		}
+	}
+
+	@Override
+	public void packBones(final BoneAtlas atlas) {
+		if (this.hasBones) {
+			this.packedAtlas = atlas;
+			this.packedStamp = atlas.getStamp();
+			this.packedBase = atlas.add(this.worldMatricesCopyArray, ((MdxModel) this.model).bones.size() * 16);
+		}
+	}
+
+	/**
+	 * Returns false for a model without bones.
+	 */
+	public boolean bindBones(final ShaderProgram shader) {
+		if (!this.hasBones) {
+			return false;
+		}
+		final DataTexture texture;
+		final int base;
+		if ((this.packedAtlas != null) && (this.packedStamp == this.packedAtlas.getStamp())
+				&& (this.packedBase != -1)) {
+			texture = this.packedAtlas.getTexture();
+			base = this.packedBase;
+		}
+		else {
+			if (this.boneTexture == null) {
+				this.boneTexture = new DataTexture(this.model.viewer.gl, 4,
+						((MdxModel) this.model).bones.size() * 4, 1);
+			}
+			if (this.boneTextureStale) {
+				this.worldMatricesCopyHeap.clear();
+				this.worldMatricesCopyHeap.put(this.worldMatricesCopyArray);
+				this.worldMatricesCopyHeap.clear();
+				this.boneTexture.bindAndUpdate(this.worldMatricesCopyHeap);
+				this.boneTextureStale = false;
+			}
+			texture = this.boneTexture;
+			base = 0;
+		}
+		texture.bind(15);
+		shader.setUniformi("u_boneMap", 15);
+		shader.setUniformf("u_vectorSize", 1f / texture.getWidth());
+		shader.setUniformf("u_rowSize", 1f / texture.getHeight());
+		shader.setUniformf("u_boneBase", base);
+		return true;
 	}
 
 	@Override
@@ -549,14 +605,18 @@ public class MdxComplexInstance extends ModelInstance {
 		final MdxModel model = (MdxModel) this.model;
 
 		if (!this.additiveOverrideMeshMode) {
-			for (final GenericGroup group : model.opaqueGroups) {
+			for (int i = 0, n = model.opaqueGroups.size(); i < n; i++) {
+				final GenericGroup group = model.opaqueGroups.get(i);
 				group.render(this, mvp);
 			}
 		}
 
-		final int glGetError = Gdx.gl.glGetError();
-		if ((glGetError != GL20.GL_NO_ERROR) && WarsmashConstants.ENABLE_DEBUG) {
-			throw new IllegalStateException("GL ERROR: " + glGetError + " ON " + model.name + " (Opaque)");
+		// glGetError waits for the GPU on phones, so it is only asked while debugging.
+		if (WarsmashConstants.ENABLE_DEBUG) {
+			final int glGetError = Gdx.gl.glGetError();
+			if (glGetError != GL20.GL_NO_ERROR) {
+				throw new IllegalStateException("GL ERROR: " + glGetError + " ON " + model.name + " (Opaque)");
+			}
 		}
 	}
 
@@ -568,16 +628,20 @@ public class MdxComplexInstance extends ModelInstance {
 		final MdxModel model = (MdxModel) this.model;
 
 		if (this.additiveOverrideMeshMode) {
-			for (final GenericGroup group : model.opaqueGroups) {
+			for (int i = 0, n = model.opaqueGroups.size(); i < n; i++) {
+				final GenericGroup group = model.opaqueGroups.get(i);
 				group.render(this, this.scene.camera.viewProjectionMatrix);
 			}
 		}
-		for (final GenericGroup group : model.translucentGroups) {
+		for (int i = 0, n = model.translucentGroups.size(); i < n; i++) {
+			final GenericGroup group = model.translucentGroups.get(i);
 			group.render(this, this.scene.camera.viewProjectionMatrix);
 
-			final int glGetError = Gdx.gl.glGetError();
-			if ((glGetError != GL20.GL_NO_ERROR) && WarsmashConstants.ENABLE_DEBUG) {
-				throw new IllegalStateException("GL ERROR: " + glGetError + " ON " + model.name + " (Translucent)");
+			if (WarsmashConstants.ENABLE_DEBUG) {
+				final int glGetError = Gdx.gl.glGetError();
+				if (glGetError != GL20.GL_NO_ERROR) {
+					throw new IllegalStateException("GL ERROR: " + glGetError + " ON " + model.name + " (Translucent)");
+				}
 			}
 		}
 	}
@@ -678,7 +742,8 @@ public class MdxComplexInstance extends ModelInstance {
 
 	@Override
 	protected void updateLights(final Scene scene) {
-		for (final LightInstance light : this.lights) {
+		for (int i = 0, n = this.lights.size(); i < n; i++) {
+			final LightInstance light = this.lights.get(i);
 			light.update(scene);
 		}
 	}

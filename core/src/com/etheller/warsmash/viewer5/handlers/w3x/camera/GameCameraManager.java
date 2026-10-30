@@ -1,10 +1,14 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.camera;
 
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.math.Vector3;
+
+import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.RenderUnit;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.CCameraField;
 
 public final class GameCameraManager extends CameraManager {
 	private Vector2 quickPosition;
@@ -21,6 +25,7 @@ public final class GameCameraManager extends CameraManager {
 	private Rectangle cameraBounds;
 	private int currentPreset = 0;
 	private float fov;
+	private boolean started;
 	private float targetZOffset = 0.0f;
 	private RenderUnit targetControllerUnit;
 	private float targetControllerXOffset;
@@ -32,6 +37,10 @@ public final class GameCameraManager extends CameraManager {
 	private Vector2 panRate;
 	private Float zOffsetDestination;
 	private float zOffsetRate;
+	private final CameraNoise sourceNoise = new CameraNoise(1.7f);
+	private final CameraNoise targetNoise = new CameraNoise(0.9f);
+	private final Vector3 noisyEye = new Vector3();
+	private final Vector3 noisyTarget = new Vector3();
 
 	public GameCameraManager(final CameraPreset[] presets, final CameraRates cameraRates) {
 		this.presets = presets;
@@ -61,7 +70,9 @@ public final class GameCameraManager extends CameraManager {
 	@Override
 	public void updateCamera() {
 		final CameraSetup setup = getCurrentSetup();
-		final CameraRates cameraRate = getCurrentRates();
+		// The game starts with the camera already at its preset, not moving towards it.
+		final CameraRates cameraRate = this.started ? getCurrentRates() : CameraRates.INFINITY;
+		this.started = true;
 		updateCamera(setup, cameraRate);
 		if (this.panDestination != null) {
 			this.target.x = applyAtRate(this.target.x, this.panDestination.x, this.panRate.x);
@@ -69,6 +80,12 @@ public final class GameCameraManager extends CameraManager {
 			// A pan left running would keep pulling the camera back after the player moves it some other way.
 			if ((this.target.x == this.panDestination.x) && (this.target.y == this.panDestination.y)) {
 				clearPan();
+			}
+		}
+		if (this.zOffsetDestination != null) {
+			this.targetZOffset = applyAtRate(this.targetZOffset, this.zOffsetDestination, this.zOffsetRate);
+			if (this.targetZOffset == this.zOffsetDestination) {
+				this.zOffsetDestination = null;
 			}
 		}
 	}
@@ -122,13 +139,84 @@ public final class GameCameraManager extends CameraManager {
 		this.position.scl(this.distance);
 		this.position = this.position.add(this.target);
 		this.fov = applyAtRate(this.fov, (float) Math.toRadians(cameraPreset.getFov() / 2),
-				(float) Math.toRadians(cameraRate.fov));
+				(float) Math.toRadians(cameraRate.fov / 2));
 		this.camera.perspective(this.fov, this.camera.getAspect(), cameraPreset.getNearZ(), cameraPreset.getFarZ());
 
-		this.camera.moveToAndFace(this.position, this.target, this.worldUp);
+		final float deltaTime = Gdx.graphics.getDeltaTime();
+		this.noisyEye.set(this.position);
+		this.noisyTarget.set(this.target);
+		this.sourceNoise.apply(deltaTime, this.noisyEye);
+		this.targetNoise.apply(deltaTime, this.noisyTarget);
+		this.camera.moveToAndFace(this.noisyEye, this.noisyTarget, this.worldUp);
+	}
+
+	public void setSourceNoise(final float magnitude, final float velocity, final boolean verticalOnly) {
+		this.sourceNoise.set(magnitude, velocity, verticalOnly);
+	}
+
+	public void setTargetNoise(final float magnitude, final float velocity, final boolean verticalOnly) {
+		this.targetNoise.set(magnitude, velocity, verticalOnly);
+	}
+
+	/**
+	 * Measured on 1.29: the camera position natives report the shaken camera, not the steady one.
+	 */
+	public float getNoisyTargetX() {
+		return this.noisyTarget.x;
+	}
+
+	public float getNoisyTargetY() {
+		return this.noisyTarget.y;
+	}
+
+	public float getEyeX() {
+		return this.noisyEye.x;
+	}
+
+	public float getEyeY() {
+		return this.noisyEye.y;
+	}
+
+	public float getEyeZ() {
+		return this.noisyEye.z;
+	}
+
+	private static final class CameraNoise {
+		private final float phaseOffset;
+		private float magnitude;
+		private float velocity;
+		private boolean verticalOnly;
+		private float phase;
+
+		private CameraNoise(final float phaseOffset) {
+			this.phaseOffset = phaseOffset;
+		}
+
+		private void set(final float magnitude, final float velocity, final boolean verticalOnly) {
+			this.magnitude = magnitude;
+			this.velocity = velocity;
+			this.verticalOnly = verticalOnly;
+		}
+
+		private void apply(final float deltaTime, final Vector3 point) {
+			if (this.magnitude == 0) {
+				return;
+			}
+			// Velocity is how many world units a second the point sweeps, so the phase advances relative to the size.
+			this.phase += (deltaTime * this.velocity) / Math.max(this.magnitude, 1f);
+			final float t = this.phase + this.phaseOffset;
+			point.z += this.magnitude * (float) Math.sin(t * 1.3f);
+			if (!this.verticalOnly) {
+				point.x += this.magnitude * (float) Math.sin(t);
+				point.y += this.magnitude * (float) Math.cos(t * 0.7f);
+			}
+		}
 	}
 
 	public static float applyAtRate(final float oldValue, final float newValue, float rate) {
+		if (Float.isInfinite(rate)) {
+			return newValue;
+		}
 		rate *= Gdx.graphics.getDeltaTime();
 		final float deltaDistance = newValue - oldValue;
 		if (Math.abs(deltaDistance) < rate) {
@@ -140,6 +228,9 @@ public final class GameCameraManager extends CameraManager {
 	}
 
 	public static float applyAtRateAngle(final float oldValue, final float newValue, float rate) {
+		if (Float.isInfinite(rate)) {
+			return newValue;
+		}
 		rate *= Gdx.graphics.getDeltaTime();
 		final float deltaDistance = newValue - oldValue;
 		final float absDistance = Math.abs(deltaDistance);
@@ -225,7 +316,6 @@ public final class GameCameraManager extends CameraManager {
 	private void clearPan() {
 		this.panDestination = null;
 		this.panRate = null;
-		this.zOffsetDestination = null;
 	}
 
 	public void updateTargetZ(final float groundHeight) {
@@ -331,16 +421,136 @@ public final class GameCameraManager extends CameraManager {
 		this.targetZOffset = targetZOffset;
 	}
 
-	public void setTargetZOffset(float targetZOffset, float duration) {
+	public void setTargetZOffset(final float targetZOffset, final float duration) {
+		if (duration <= 0) {
+			setTargetZOffset(targetZOffset);
+			return;
+		}
 		final float rate = Math.abs((targetZOffset - this.targetZOffset) / duration);
 		this.zOffsetDestination = targetZOffset;
 		this.zOffsetRate = rate;
+	}
+
+	private float currentAoaDegrees() {
+		return normalizeDegrees((float) Math.toDegrees(this.verticalAngle) + 270);
+	}
+
+	private float currentRotationDegrees() {
+		return normalizeDegrees((float) Math.toDegrees(this.horizontalAngle) + 90);
+	}
+
+	private static float normalizeDegrees(final float degrees) {
+		final float normalized = degrees % 360;
+		return normalized < 0 ? normalized + 360 : normalized;
+	}
+
+	/**
+	 * The camera as it is now, the way GetCameraField reports it: angles in radians.
+	 */
+	public float getField(final CCameraField field) {
+		switch (field) {
+		case TARGET_DISTANCE:
+			return this.distance;
+		case ANGLE_OF_ATTACK:
+			return (float) Math.toRadians(currentAoaDegrees());
+		case ROTATION:
+			return (float) Math.toRadians(currentRotationDegrees());
+		case FIELD_OF_VIEW:
+			return this.fov * 2;
+		case ZOFFSET:
+			return this.targetZOffset;
+		case ROLL:
+			return (float) Math.toRadians(getCurrentSetup().getRoll());
+		case FARZ:
+		case NEARZ:
+			return getCurrentSetup().getField(field);
+		default:
+			return 0;
+		}
+	}
+
+	/**
+	 * SetCameraField: one field of the game camera moves linearly to the value over the duration (angles in
+	 * degrees), the others keep going where they were going.
+	 */
+	public void setField(final CCameraField field, final float value, final float duration) {
+		if (field == CCameraField.ZOFFSET) {
+			setTargetZOffset(value, duration);
+			return;
+		}
+		final CameraSetup current = getCurrentSetup();
+		final CustomCameraSetup setup = new CustomCameraSetup(current.getAoa(), current.getFov(),
+				current.getRotation(), current.getRoll(), current.getDistance(), current.getFarZ(),
+				current.getNearZ(), current.getHeight());
+		if (current instanceof CustomCameraSetup) {
+			setup.setDestPositionX(((CustomCameraSetup) current).getDestPositionX());
+			setup.setDestPositionY(((CustomCameraSetup) current).getDestPositionY());
+		}
+		setup.setField(field, value);
+		final CameraRates rates = getCurrentRates();
+		float aoaRate = rates.aoa;
+		float fovRate = rates.fov;
+		float rotationRate = rates.rotation;
+		float distanceRate = rates.distance;
+		final boolean instant = duration <= 0;
+		switch (field) {
+		case ANGLE_OF_ATTACK: {
+			float delta = Math.abs(normalizeDegrees(value) - currentAoaDegrees());
+			delta = Math.min(delta, 360 - delta);
+			aoaRate = instant ? Float.POSITIVE_INFINITY : delta / duration;
+			break;
+		}
+		case ROTATION: {
+			float delta = Math.abs(normalizeDegrees(value) - currentRotationDegrees());
+			delta = Math.min(delta, 360 - delta);
+			rotationRate = instant ? Float.POSITIVE_INFINITY : delta / duration;
+			break;
+		}
+		case FIELD_OF_VIEW:
+			fovRate = instant ? Float.POSITIVE_INFINITY
+					: Math.abs(value - (float) Math.toDegrees(this.fov * 2)) / duration;
+			break;
+		case TARGET_DISTANCE:
+			distanceRate = instant ? Float.POSITIVE_INFINITY : Math.abs(value - this.distance) / duration;
+			break;
+		default:
+			break;
+		}
+		this.customSetup = setup;
+		this.customCameraRates = new CameraRates(aoaRate, fovRate, rotationRate, distanceRate,
+				this.cameraRates.forward, this.cameraRates.strafe);
+		if (instant) {
+			updateCamera(setup, this.customCameraRates);
+		}
+	}
+
+	public void adjustField(final CCameraField field, final float offset, final float duration) {
+		final float current;
+		switch (field) {
+		case ANGLE_OF_ATTACK:
+			current = currentAoaDegrees();
+			break;
+		case ROTATION:
+			current = currentRotationDegrees();
+			break;
+		case FIELD_OF_VIEW:
+			current = (float) Math.toDegrees(this.fov * 2);
+			break;
+		case ROLL:
+			current = getCurrentSetup().getRoll();
+			break;
+		default:
+			current = getField(field);
+			break;
+		}
+		setField(field, current + offset, duration);
 	}
 
 	public void applyCameraSetupForceDuration(final CustomCameraSetup cameraSetup, final boolean doPan,
 			final float forceDuration) {
 		final CameraSetup previousSetup = getCurrentSetup();
 		this.customSetup = cameraSetup;
+		setTargetZOffset(cameraSetup.getHeight(), forceDuration);
 		if (forceDuration > 0) {
 			final float aoaRate = (cameraSetup.getAoa() - previousSetup.getAoa()) / forceDuration;
 			final float fovRate = (cameraSetup.getFov() - previousSetup.getFov()) / forceDuration;
@@ -372,9 +582,10 @@ public final class GameCameraManager extends CameraManager {
 		}
 	}
 
-	public void resetToGameCamera(float duration) {
+	public void resetToGameCamera(final float duration) {
 		final CameraSetup previousSetup = getCurrentSetup();
 		clearCustomSetup();
+		setTargetZOffset(0, duration);
 		if (duration == 0) {
 			this.customCameraRates = new CameraRates(9999, 9999, 9999, 9999, this.cameraRates.forward,
 					this.cameraRates.strafe);
@@ -384,7 +595,7 @@ public final class GameCameraManager extends CameraManager {
 			final float aoaRate = (cameraSetup.getAoa() - previousSetup.getAoa()) / duration;
 			final float fovRate = (cameraSetup.getFov() - previousSetup.getFov()) / duration;
 			float rotationDistance = Math.abs(cameraSetup.getRotation() - previousSetup.getRotation());
-			rotationDistance = Math.min(rotationDistance, TWO_PI - rotationDistance);
+			rotationDistance = Math.min(rotationDistance, 360 - rotationDistance);
 			final float rotationRate = rotationDistance / duration;
 			final float distanceRate = (cameraSetup.getDistance() - previousSetup.getDistance()) / duration;
 			this.customCameraRates = new CameraRates(Math.abs(aoaRate), Math.abs(fovRate), Math.abs(rotationRate),
@@ -404,7 +615,10 @@ public final class GameCameraManager extends CameraManager {
 		}
 	}
 
+	// An instant placement replaces any timed pan still running; otherwise that pan keeps moving the camera off the
+	// new spot (Human01 ends its intro on a pan's path, far from Arthas).
 	private void setTarget(float x, float y) {
+		clearPan();
 		this.target.x = x;
 		this.target.y = y;
 	}

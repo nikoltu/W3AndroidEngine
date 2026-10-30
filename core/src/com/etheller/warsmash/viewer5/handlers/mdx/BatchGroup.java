@@ -69,7 +69,6 @@ public class BatchGroup extends GenericGroup {
 
 		shader.setUniformMatrix(hd ? "u_VP" : "u_mvp", mvp);
 
-		final DataTexture boneTexture = instance.boneTexture;
 		final DataTexture unitLightsTexture = lightManager.getUnitLightsTexture();
 
 		unitLightsTexture.bind(14);
@@ -78,13 +77,8 @@ public class BatchGroup extends GenericGroup {
 		shader.setUniformf("u_lightTextureHeight", unitLightsTexture.getHeight());
 
 		// Instances of models with no bones don't have a bone texture.
-		if (boneTexture != null) {
-			boneTexture.bind(15);
-
+		if (instance.bindBones(shader)) {
 			shader.setUniformf("u_hasBones", 1);
-			shader.setUniformi("u_boneMap", 15);
-			shader.setUniformf("u_vectorSize", 1f / boneTexture.getWidth());
-			shader.setUniformf("u_rowSize", 1);
 		}
 		else {
 			shader.setUniformf("u_hasBones", 0);
@@ -112,7 +106,7 @@ public class BatchGroup extends GenericGroup {
 			tempFloat3Array[2] = camera.location.z;
 			shader.setUniform3fv("u_eyePos", tempFloat3Array, 0, 3);
 
-			for (final int index : this.objects) {
+			for (final int index : getObjectArray()) {
 				final Batch batch = batches.get(index);
 				final Geoset geoset = batch.geoset;
 				final Material material = batch.material;
@@ -204,7 +198,7 @@ public class BatchGroup extends GenericGroup {
 
 			shader.setUniform4fv("u_vertexColor", instance.vertexColor, 0, instance.vertexColor.length);
 
-			for (final int index : this.objects) {
+			for (final int index : getObjectArray()) {
 				final Batch batch = batches.get(index);
 				final Geoset geoset = batch.geoset;
 				final Layer layer = batch.layer;

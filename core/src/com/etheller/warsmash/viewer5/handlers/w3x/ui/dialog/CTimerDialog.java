@@ -1,5 +1,6 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.ui.dialog;
 
+import com.badlogic.gdx.graphics.Color;
 import com.etheller.warsmash.parsers.fdf.GameUI;
 import com.etheller.warsmash.parsers.fdf.frames.StringFrame;
 import com.etheller.warsmash.parsers.fdf.frames.UIFrame;
@@ -20,6 +21,18 @@ public class CTimerDialog {
 		this.timerDialogFrame = timerDialogFrame;
 		this.valueFrame = valueFrame;
 		this.titleFrame = titleFrame;
+	}
+
+	public void setTitleColor(final int rgba) {
+		if (this.titleFrame != null) {
+			this.titleFrame.setColor(new Color(rgba));
+		}
+	}
+
+	public void setTimeColor(final int rgba) {
+		if (this.valueFrame != null) {
+			this.valueFrame.setColor(new Color(rgba));
+		}
 	}
 
 	public void setTitle(final String title) {

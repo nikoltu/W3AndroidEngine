@@ -132,7 +132,8 @@ public class CUnitAttackMissileSplash extends CUnitAttackMissile {
 				settings);
 		if (!SplashDamageConsumer.INSTANCE.hitTarget && this.isProjectileHomingEnabled()) {
 			final CWidget widget = target.visit(AbilityTargetWidgetVisitor.INSTANCE);
-			if (widget != null) {
+			// A target removed (or hidden) while the missile flew is out of the game; it takes nothing.
+			if ((widget != null) && !((widget instanceof CUnit) && ((CUnit) widget).isHidden())) {
 				SplashDamageConsumer.INSTANCE.damageTarget(widget);
 			}
 		}

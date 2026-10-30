@@ -147,7 +147,7 @@ public class BackdropFrame extends AbstractUIFrame {
 			final float borderVerticalRepeatCount = (heightNeedingEdge / this.cornerSize);
 			final float heightRemainder = (heightNeedingEdge % this.cornerSize) / this.cornerSize;
 			final int heightRemainderByHeight = (int) (heightRemainder * this.edgeFileHeight);
-			final int heightRemainderByCornerSize = (int) (heightRemainder * this.cornerSize);
+			final float heightRemainderByCornerSize = heightRemainder * this.cornerSize;
 			final int borderVerticalRepeatCountFloored = (int) Math.floor(borderVerticalRepeatCount);
 			if (this.cornerFlags.contains(BackdropCornerFlags.L)) {
 				for (int i = 0; i < borderVerticalRepeatCountFloored; i++) {
@@ -179,7 +179,7 @@ public class BackdropFrame extends AbstractUIFrame {
 			final float borderHorizontalRepeatCount = widthNeedingEdge / this.cornerSize;
 			final float widthRemainder = (widthNeedingEdge % this.cornerSize) / this.cornerSize;
 			final int widthRemainderByHeight = (int) (widthRemainder * this.edgeFileHeight);
-			final int widthRemainderByCornerSize = (int) (widthRemainder * this.cornerSize);
+			final float widthRemainderByCornerSize = widthRemainder * this.cornerSize;
 			final int borderHorizontalRepeatCountFloored = (int) Math.floor(borderHorizontalRepeatCount);
 			final float halfPi = 270;
 			if (this.cornerFlags.contains(BackdropCornerFlags.B)) {

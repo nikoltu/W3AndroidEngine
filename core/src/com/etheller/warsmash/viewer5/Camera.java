@@ -153,6 +153,10 @@ public class Camera {
 		this.dirty = true;
 	}
 
+	public float getFov() {
+		return this.fov;
+	}
+
 	public float getAspect() {
 		return this.aspect;
 	}

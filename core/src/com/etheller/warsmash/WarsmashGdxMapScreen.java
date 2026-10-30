@@ -40,6 +40,7 @@ import com.etheller.warsmash.parsers.jass.Jass2.RootFrameListener;
 import com.etheller.warsmash.units.DataTable;
 import com.etheller.warsmash.units.Element;
 import com.etheller.warsmash.util.ImageUtils;
+import com.etheller.warsmash.util.PerfStats;
 import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.util.WarsmashUtils;
 import com.etheller.warsmash.viewer5.Model;
@@ -55,6 +56,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.War3MapViewer;
 import com.etheller.warsmash.viewer5.handlers.w3x.camera.CameraPreset;
 import com.etheller.warsmash.viewer5.handlers.w3x.camera.CameraRates;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayerUnitOrderListener;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.campaign.CCampaignProgress;
 import com.etheller.warsmash.viewer5.handlers.w3x.ui.MeleeUI;
 import com.etheller.warsmash.viewer5.handlers.w3x.ui.WarsmashUI;
 import com.etheller.warsmash.viewer5.handlers.w3x.ui.toggle.MeleeToggleUI;
@@ -196,15 +198,26 @@ public class WarsmashGdxMapScreen implements InputProcessor, Screen, TouchTarget
 					public void run() {
 						WarsmashGdxMapScreen.this.menuScreen.onReturnFromGame();
 						WarsmashGdxMapScreen.this.screenManager.setScreen(WarsmashGdxMapScreen.this.menuScreen);
+						final String nextLevel = CCampaignProgress.consumePendingLevel();
+						if (nextLevel != null) {
+							WarsmashGdxMapScreen.this.menuScreen.startMap(nextLevel);
+						}
 					}
 				});
 		final MeleeToggleUI toggleUI = new MeleeToggleUI(baseMeleeUI, Arrays.asList(baseMeleeUI));
 		this.meleeUI = toggleUI;
 		this.viewer.getCommandErrorListener().setDelegate(this.meleeUI);
-		final ModelInstance libgdxContentInstance = new LibGDXContentLayerModel(null, this.viewer, "",
-				this.viewer.mapPathSolver, "").addInstance();
+		final LibGDXContentLayerModel libgdxContentModel = new LibGDXContentLayerModel(null, this.viewer, "",
+				this.viewer.mapPathSolver, "");
+		final ModelInstance libgdxContentInstance = libgdxContentModel.addInstance();
 		libgdxContentInstance.setLocation(0f, 0f, -0.5f);
 		libgdxContentInstance.setScene(this.uiScene);
+		// The interface's 3D models (time of day, cooldowns) sit between the two layers, the cursor above both.
+		final LibGDXContentLayerModelInstance modalContentInstance = (LibGDXContentLayerModelInstance) libgdxContentModel
+				.addInstance();
+		modalContentInstance.modal = true;
+		modalContentInstance.setLocation(0f, 0f, 0.5f);
+		modalContentInstance.setScene(this.uiScene);
 		this.meleeUI.main();
 		toggleUI.setCurrentUI(0);
 
@@ -306,7 +319,7 @@ public class WarsmashGdxMapScreen implements InputProcessor, Screen, TouchTarget
 		Gdx.gl30.glActiveTexture(GL30.GL_TEXTURE0);
 	}
 
-	private void renderLibGDXContent() {
+	private void renderLibGDXContent(final boolean modal) {
 
 		Gdx.gl30.glClear(GL30.GL_DEPTH_BUFFER_BIT);
 		Gdx.gl30.glDisable(GL30.GL_SCISSOR_TEST);
@@ -320,9 +333,16 @@ public class WarsmashGdxMapScreen implements InputProcessor, Screen, TouchTarget
 		this.uiViewport.apply();
 		this.batch.setColor(1, 1, 1, 1);
 		this.batch.setProjectionMatrix(this.uiCamera.combined);
+		final int drawsBefore = this.batch.totalRenderCalls;
 		this.batch.begin();
-		this.meleeUI.render(this.batch, this.glyphLayout);
+		if (modal) {
+			this.meleeUI.renderModal(this.batch, this.glyphLayout);
+		}
+		else {
+			this.meleeUI.render(this.batch, this.glyphLayout);
+		}
 		this.batch.end();
+		PerfStats.interfaceDraws(this.batch.totalRenderCalls - drawsBefore);
 
 		Gdx.gl30.glEnable(GL30.GL_SCISSOR_TEST);
 		Gdx.gl30.glBindVertexArray(WarsmashGdxGame.VAO);
@@ -453,6 +473,11 @@ public class WarsmashGdxMapScreen implements InputProcessor, Screen, TouchTarget
 	}
 
 	@Override
+	public boolean skipCinematic() {
+		return this.meleeUI.skipCinematic();
+	}
+
+	@Override
 	public int touchOverlaySlotAt(final int screenX, final int screenY) {
 		return this.meleeUI.touchOverlaySlotAt(screenX, screenY);
 	}
@@ -478,6 +503,8 @@ public class WarsmashGdxMapScreen implements InputProcessor, Screen, TouchTarget
 	}
 
 	private class LibGDXContentLayerModelInstance extends ModelInstance {
+		private boolean modal;
+
 
 		public LibGDXContentLayerModelInstance(final Model model) {
 			super(model);
@@ -505,7 +532,7 @@ public class WarsmashGdxMapScreen implements InputProcessor, Screen, TouchTarget
 
 		@Override
 		public void renderTranslucent() {
-			renderLibGDXContent();
+			renderLibGDXContent(this.modal);
 		}
 
 		@Override

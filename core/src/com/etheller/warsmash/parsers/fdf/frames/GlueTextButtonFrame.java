@@ -9,9 +9,25 @@ import com.etheller.warsmash.parsers.fdf.GameUI;
 
 public class GlueTextButtonFrame extends GlueButtonFrame {
 	private UIFrame buttonText;
+	private boolean keyboardFocus;
 
 	public GlueTextButtonFrame(final String name, final UIFrame parent) {
 		super(name, parent);
+	}
+
+	/**
+	 * The button with the keyboard focus (TabFocusDefault) shows its text in the highlight color, as under the mouse.
+	 */
+	public void setKeyboardFocus(final boolean keyboardFocus) {
+		this.keyboardFocus = keyboardFocus;
+		if (isEnabled() && (this.buttonText instanceof StringFrame)) {
+			final StringFrame stringFrame = (StringFrame) this.buttonText;
+			final Color color = keyboardFocus ? stringFrame.getFontHighlightColor()
+					: stringFrame.getFontOriginalColor();
+			if (color != null) {
+				stringFrame.setColor(color);
+			}
+		}
 	}
 
 	public void setButtonText(final UIFrame buttonText) {
@@ -68,7 +84,7 @@ public class GlueTextButtonFrame extends GlueButtonFrame {
 	@Override
 	protected void onMouseExit() {
 		super.onMouseExit();
-		if (isEnabled()) {
+		if (isEnabled() && !this.keyboardFocus) {
 			if (this.buttonText instanceof StringFrame) {
 				final StringFrame stringFrame = (StringFrame) this.buttonText;
 				final Color fontOriginalColor = stringFrame.getFontOriginalColor();

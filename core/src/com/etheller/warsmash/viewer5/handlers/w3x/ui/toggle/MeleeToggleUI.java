@@ -1,5 +1,6 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.ui.toggle;
 
+import com.etheller.warsmash.viewer5.handlers.w3x.ui.CineFilter;
 import java.util.List;
 
 import com.badlogic.gdx.Gdx;
@@ -15,6 +16,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CItem;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayerColor;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.timers.CTimer;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.campaign.CLeaderboard;
 import com.etheller.warsmash.viewer5.handlers.w3x.ui.MeleeUI;
 import com.etheller.warsmash.viewer5.handlers.w3x.ui.WarsmashBaseUI;
 import com.etheller.warsmash.viewer5.handlers.w3x.ui.WarsmashToggleableUI;
@@ -116,6 +118,11 @@ public class MeleeToggleUI implements WarsmashUI {
 	}
 
 	@Override
+	public void renderModal(final SpriteBatch batch, final GlyphLayout glyphLayout) {
+		this.currentUI.renderModal(batch, glyphLayout);
+	}
+
+	@Override
 	public void dispose() {
 		for (final WarsmashBaseUI ui : this.allUIs) {
 			ui.dispose();
@@ -182,6 +189,22 @@ public class MeleeToggleUI implements WarsmashUI {
 	@Override
 	public Music playMusic(final String musicField, final boolean random, final int index) {
 		return this.meleeUI.playMusic(musicField, random, index);
+	}
+
+	@Override
+	public void pingMinimap(final float x, final float y, final float duration, final int red, final int green,
+			final int blue, final boolean extraEffects) {
+		this.meleeUI.pingMinimap(x, y, duration, red, green, blue, extraEffects);
+	}
+
+	@Override
+	public void setLeaderboard(final CLeaderboard leaderboard) {
+		this.meleeUI.setLeaderboard(leaderboard);
+	}
+
+	@Override
+	public void removeTimerDialog(final CTimerDialog dialog) {
+		this.meleeUI.removeTimerDialog(dialog);
 	}
 
 	@Override
@@ -326,6 +349,21 @@ public class MeleeToggleUI implements WarsmashUI {
 	}
 
 	@Override
+	public boolean skipCinematic() {
+		return this.meleeUI.skipCinematic();
+	}
+
+	@Override
+	public void enableUserUI(final boolean enable) {
+		this.meleeUI.enableUserUI(enable);
+	}
+
+	@Override
+	public CineFilter getCineFilter() {
+		return this.meleeUI.getCineFilter();
+	}
+
+	@Override
 	public void endCinematicScene() {
 		this.meleeUI.endCinematicScene();
 	}
@@ -333,5 +371,15 @@ public class MeleeToggleUI implements WarsmashUI {
 	@Override
 	public void forceCinematicSubtitles(boolean value) {
 		this.meleeUI.forceCinematicSubtitles(value);
+	}
+
+	@Override
+	public void flashQuestDialogButton() {
+		this.meleeUI.flashQuestDialogButton();
+	}
+
+	@Override
+	public void forceQuestDialogUpdate() {
+		this.meleeUI.forceQuestDialogUpdate();
 	}
 }

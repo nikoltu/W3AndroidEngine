@@ -30,6 +30,8 @@ public class CDestructable extends CWidget {
 	private Rectangle registeredEnumRectangle;
 
 	private List<CDestructableBuff> buffs;
+	private float maxLifeOverride = -1;
+	private float occluderHeightOverride = -1;
 
 	public CDestructable(final int handleId, final float x, final float y, final float life,
 			final CDestructableType destTypeInstance, final RemovablePathingMapInstance pathingInstance,
@@ -196,7 +198,27 @@ public class CDestructable extends CWidget {
 
 	@Override
 	public float getMaxLife() {
-		return this.destType.getMaxLife();
+		return this.maxLifeOverride >= 0 ? this.maxLifeOverride : this.destType.getMaxLife();
+	}
+
+	/**
+	 * SetDestructableMaxLife, measured: the life keeps its share of the maximum.
+	 */
+	public void setMaxLife(final CSimulation simulation, final float maxLife) {
+		final float previousMax = getMaxLife();
+		final float share = previousMax > 0 ? getLife() / previousMax : 1;
+		this.maxLifeOverride = maxLife;
+		if (!isDead()) {
+			setLife(simulation, maxLife * share);
+		}
+	}
+
+	public float getOccluderHeight() {
+		return this.occluderHeightOverride >= 0 ? this.occluderHeightOverride : this.destType.getOcclusionHeight();
+	}
+
+	public void setOccluderHeight(final float height) {
+		this.occluderHeightOverride = height;
 	}
 
 	public void setInvulnerable(final boolean invulnerable) {

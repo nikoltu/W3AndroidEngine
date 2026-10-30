@@ -78,6 +78,13 @@ public class RenderUnitTypeData extends RenderWidgetTypeData<RenderUnitType> {
 		return path;
 	}
 
+	// The simulation asks for every unit type's pathing map as soon as it knows the type (a shop knows every unit it
+	// sells), and making the whole render type for that loaded its models: seconds of a map's start on phones.
+	public ArgbImage getBuildingPathingPixelMap(final War3ID key) {
+		final GameObject row = this.objectData.get(key);
+		return row == null ? null : getBuildingPathingPixelMap(row);
+	}
+
 	private ArgbImage getBuildingPathingPixelMap(final GameObject row) {
 		final String pathingTexture = row.getFieldAsString(UNIT_PATHING, 0);
 		final ArgbImage buildingPathingPixelMap = this.mapViewer.loadPathingTexture(pathingTexture);
@@ -140,10 +147,10 @@ public class RenderUnitTypeData extends RenderWidgetTypeData<RenderUnitType> {
 		if ("_".equals(buildingShadow)) {
 			buildingShadow = null;
 		}
-		final String requiredAnimationNamesForAttachmentsString = row.getFieldAsString(ATTACHMENT_ANIM_PROPS, 0);
+		final String requiredAnimationNamesForAttachmentsString = row.getField(ATTACHMENT_ANIM_PROPS);
 		final EnumSet<SecondaryTag> requiredAnimationNamesForAttachments = parseSecondaryTags(
 				requiredAnimationNamesForAttachmentsString);
-		final String requireAnimationNamesString = row.getFieldAsString(ANIM_PROPS, 0);
+		final String requireAnimationNamesString = row.getField(ANIM_PROPS);
 		final EnumSet<SecondaryTag> requiredAnimationNames = parseSecondaryTags(requireAnimationNamesString);
 
 		final float red = row.getFieldAsInteger(RED, 0) / 255f;
@@ -171,7 +178,7 @@ public class RenderUnitTypeData extends RenderWidgetTypeData<RenderUnitType> {
 		final EnumSet<SecondaryTag> requiredAnimationNamesForAttachments = EnumSet.noneOf(SecondaryTag.class);
 		TokenLoop: for (final String animationName : requiredAnimationNamesForAttachmentsString.split(",")) {
 			final String upperCaseToken = animationName.toUpperCase();
-			for (final SecondaryTag secondaryTag : SecondaryTag.values()) {
+			for (final SecondaryTag secondaryTag : SecondaryTag.VALUES) {
 				if (upperCaseToken.equals(secondaryTag.name())) {
 					requiredAnimationNamesForAttachments.add(secondaryTag);
 					continue TokenLoop;

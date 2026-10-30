@@ -58,7 +58,8 @@ public class CTimerJass extends CTimerJassBase implements CExtensibleHandle, CHa
 		try {
 			if (handlerFunc != null) {
 				final JassThread timerThread = globalScope.createThread(handlerFunc, handlerScope);
-				globalScope.queueThread(timerThread);
+				timerThread.setSleepEndsThread(true);
+				globalScope.runThreadUntilSleep(timerThread);
 			}
 		}
 		catch (final Exception e) {

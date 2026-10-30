@@ -12,6 +12,8 @@ package com.etheller.warsmash.units;
  */
 public final class StringKey {
 	private final String string;
+	private int hash;
+	private boolean hashed;
 
 	public StringKey(final String string) {
 		this.string = string;
@@ -23,10 +25,28 @@ public final class StringKey {
 
 	@Override
 	public int hashCode() {
-		final int prime = 31;
-		int result = 1;
-		result = (prime * result) + ((this.string.toLowerCase() == null) ? 0 : this.string.toLowerCase().hashCode());
-		return result;
+		if (!this.hashed) {
+			this.hash = 31 + lowerCaseHash(this.string);
+			this.hashed = true;
+		}
+		return this.hash;
+	}
+
+	// Same value as string.toLowerCase().hashCode(), without making the lower case copy for plain ASCII keys: object
+	// data lookups hash a new key every time, and lowering those strings was a third of the game start on phones.
+	private static int lowerCaseHash(final String string) {
+		int hash = 0;
+		for (int i = 0, n = string.length(); i < n; i++) {
+			char c = string.charAt(i);
+			if (c >= 128) {
+				return string.toLowerCase().hashCode();
+			}
+			if ((c >= 'A') && (c <= 'Z')) {
+				c += 'a' - 'A';
+			}
+			hash = (31 * hash) + c;
+		}
+		return hash;
 	}
 
 	@Override

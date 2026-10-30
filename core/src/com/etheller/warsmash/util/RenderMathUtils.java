@@ -344,6 +344,32 @@ public enum RenderMathUtils {
 		return -1;
 	}
 
+	/**
+	 * Like testCell, but the cell is a box from bottomZ to topZ instead of a flat square at height 0.
+	 */
+	public static int testCell(final Vector4[] planes, final float left, final float right, final float bottom,
+			final float top, final float bottomZ, final float topZ, int first) {
+		if (first == -1) {
+			first = 0;
+		}
+
+		for (int i = 0; i < 6; i++) {
+			final int index = (first + i) % 6;
+			final Vector4 plane = planes[index];
+
+			if ((distanceToPlane3(plane, left, bottom, bottomZ) < 0) && (distanceToPlane3(plane, left, top, bottomZ) < 0)
+					&& (distanceToPlane3(plane, right, top, bottomZ) < 0)
+					&& (distanceToPlane3(plane, right, bottom, bottomZ) < 0)
+					&& (distanceToPlane3(plane, left, bottom, topZ) < 0) && (distanceToPlane3(plane, left, top, topZ) < 0)
+					&& (distanceToPlane3(plane, right, top, topZ) < 0)
+					&& (distanceToPlane3(plane, right, bottom, topZ) < 0)) {
+				return index;
+			}
+		}
+
+		return -1;
+	}
+
 	public static float distance2Plane2(final Vector4 plane, final float px, final float py) {
 		return (plane.x * px) + (plane.y * py) + plane.w;
 	}

@@ -7,6 +7,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.behavior.callback.fxcallbacks.ABFXCallback;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.core.ABSingleAction;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.SimulationRenderComponent;
 
 public class ABActionRemoveEffect implements ABSingleAction {
 
@@ -15,7 +16,10 @@ public class ABActionRemoveEffect implements ABSingleAction {
 	@Override
 	public void runAction(final CSimulation game, final CUnit caster, final Map<String, Object> localStore,
 			final int castId) {
-		this.effect.callback(game, caster, localStore, castId).remove();
+		final SimulationRenderComponent fx = this.effect.callback(game, caster, localStore, castId);
+		if (fx != null) {
+			fx.remove();
+		}
 	}
 
 	@Override

@@ -223,7 +223,7 @@ public class RenderDestructable extends RenderDoodad implements RenderWidget {
 					continue TokenLoop;
 				}
 			}
-			for (final SecondaryTag secondaryTag : SecondaryTag.values()) {
+			for (final SecondaryTag secondaryTag : SecondaryTag.VALUES) {
 				if (upperCaseToken.equals(secondaryTag.name())) {
 					secondaryTags.add(secondaryTag);
 					continue TokenLoop;
@@ -234,6 +234,30 @@ public class RenderDestructable extends RenderDoodad implements RenderWidget {
 		this.dead = this.simulationDestructable.isDead();
 		this.life = this.simulationDestructable.getLife();
 		this.unitAnimationListenerImpl.playAnimation(true, bestPrimaryTag, secondaryTags, 1.0f, true);
+	}
+
+	public void setHidden(final boolean hidden) {
+		if (this.instance != null) {
+			if (hidden) {
+				this.instance.hide();
+			}
+			else {
+				this.instance.show();
+			}
+		}
+	}
+
+	/**
+	 * Destructable animations are single sequences here, so a queued one plays right away.
+	 */
+	public void queueAnimation(final String sequence) {
+		setAnimation(sequence);
+	}
+
+	public void setAnimationSpeed(final float speed) {
+		if (this.instance instanceof MdxComplexInstance) {
+			((MdxComplexInstance) this.instance).setAnimationSpeed(speed);
+		}
 	}
 
 	public void notifyLifeRestored() {

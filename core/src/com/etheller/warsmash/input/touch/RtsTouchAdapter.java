@@ -25,6 +25,8 @@ public final class RtsTouchAdapter implements GestureListener {
 	private boolean aimingBuilding;
 	private float aimX;
 	private float aimY;
+	private int aimStartCursorX;
+	private int aimStartCursorY;
 	private boolean ghostPlaced;
 	private float ghostX;
 	private float ghostY;
@@ -62,6 +64,12 @@ public final class RtsTouchAdapter implements GestureListener {
 	@Override
 	public void pointerAt(final float x, final float y) {
 		final InputProcessor processor = processor();
+		final TouchTarget target = target();
+		// The finger may still become a two finger pan, so the ghost waits for a tap or a drag before it moves.
+		if ((target != null) && VirtualCursor.isFingerInput() && target.isPlacingBuilding()
+				&& !target.isOverClickableUi(Math.round(x), Math.round(y))) {
+			return;
+		}
 		if (processor != null) {
 			moveTo(processor, x, y);
 		}
@@ -125,8 +133,12 @@ public final class RtsTouchAdapter implements GestureListener {
 		if (processor == null) {
 			return;
 		}
-		moveTo(processor, x, y);
 		final TouchTarget target = target();
+		if ((target != null) && target.skipCinematic()) {
+			log("long press -> skip cinematic");
+			return;
+		}
+		moveTo(processor, x, y);
 		final int slot = (target == null) ? -1 : target.touchOverlaySlotAt(Math.round(x), Math.round(y));
 		if ((slot >= 0) && (slot != SHIFT_SLOT)) {
 			target.assignControlGroupSlot(slot, VirtualModifiers.isShiftDown());
@@ -182,6 +194,8 @@ public final class RtsTouchAdapter implements GestureListener {
 				&& !target.isOverClickableUi(Math.round(x), Math.round(y))) {
 			this.aiming = true;
 			this.aimingBuilding = target.isPlacingBuilding() && !pen;
+			this.aimStartCursorX = VirtualCursor.getX();
+			this.aimStartCursorY = VirtualCursor.getY();
 			aimAt(processor, x, y);
 			log("aim start" + (this.aimingBuilding ? " (building)" : ""));
 			return;
@@ -301,6 +315,11 @@ public final class RtsTouchAdapter implements GestureListener {
 
 	@Override
 	public void cancel() {
+		final InputProcessor processor = processor();
+		if ((processor != null) && this.aiming && this.aimingBuilding) {
+			// A second finger turned the drag into a pan, so the ghost goes back to where it was before the drag.
+			moveTo(processor, this.aimStartCursorX, this.aimStartCursorY);
+		}
 		this.aiming = false;
 		this.itemDrag = false;
 		this.overlayDrag = false;

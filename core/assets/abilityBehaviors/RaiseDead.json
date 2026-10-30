@@ -11,9 +11,18 @@
 					"type": "getCastingUnit"
 				},
 				"range": {
-					"type": "getUnitAcquisitionRange",
-					"unit": {
-						"type": "getCastingUnit"
+					"type": "inlineConditionFloat",
+					"condition": {
+						"type": "wasAutoCast"
+					},
+					"pass": {
+						"type": "getUnitAcquisitionRange",
+						"unit": {
+							"type": "getCastingUnit"
+						}
+					},
+					"fail": {
+						"type": "getAbilityArea"
 					}
 				},
 				"conditions": [{
@@ -44,9 +53,18 @@
 						"type": "getCastingUnit"
 					},
 					"range": {
-						"type": "getUnitAcquisitionRange",
-						"unit": {
-							"type": "getCastingUnit"
+						"type": "inlineConditionFloat",
+						"condition": {
+							"type": "wasAutoCast"
+						},
+						"pass": {
+							"type": "getUnitAcquisitionRange",
+							"unit": {
+								"type": "getCastingUnit"
+							}
+						},
+						"fail": {
+							"type": "getAbilityArea"
 						}
 					},
 					"conditions": [{
@@ -171,7 +189,7 @@
 				}
 			}]
 	},{
-		"ids": [{"id":"AUcb", "castId": "carrionscarabs", "autoCastOnId": "carrionscarabson", "autoCastOffId": "carrionscarabsoff", "autoCastType": "NOTARGET"}],
+		"ids": [{"id":"AUcb", "castId": "carrionscarabs", "instantCastId": "carrionscarabsinstant", "autoCastOnId": "carrionscarabson", "autoCastOffId": "carrionscarabsoff", "autoCastType": "NOTARGET"}],
 		"type": "NORMAL_AUTOTARGET",
 		"extraCastConditions": [{
 			"type": "setCantUseReasonOnFailure",
@@ -181,9 +199,18 @@
 					"type": "getCastingUnit"
 				},
 				"range": {
-					"type": "getUnitAcquisitionRange",
-					"unit": {
-						"type": "getCastingUnit"
+					"type": "inlineConditionFloat",
+					"condition": {
+						"type": "wasAutoCast"
+					},
+					"pass": {
+						"type": "getUnitAcquisitionRange",
+						"unit": {
+							"type": "getCastingUnit"
+						}
+					},
+					"fail": {
+						"type": "getAbilityArea"
 					}
 				},
 				"conditions": [{
@@ -227,9 +254,18 @@
 						"type": "getCastingUnit"
 					},
 					"range": {
-						"type": "getUnitAcquisitionRange",
-						"unit": {
-							"type": "getCastingUnit"
+						"type": "inlineConditionFloat",
+						"condition": {
+							"type": "wasAutoCast"
+						},
+						"pass": {
+							"type": "getUnitAcquisitionRange",
+							"unit": {
+								"type": "getCastingUnit"
+							}
+						},
+						"fail": {
+							"type": "getAbilityArea"
 						}
 					},
 					"conditions": [{

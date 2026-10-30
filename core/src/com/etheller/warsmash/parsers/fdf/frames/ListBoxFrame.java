@@ -18,9 +18,12 @@ import com.etheller.warsmash.util.AbstractListItemProperty;
 import com.etheller.warsmash.util.ListItemEnum;
 import com.etheller.warsmash.datasources.DataSource;
 import com.etheller.warsmash.parsers.fdf.GameUI;
+import com.etheller.warsmash.input.touch.TouchInputRouter;
 import com.etheller.warsmash.parsers.fdf.datamodel.FramePoint;
+import com.etheller.warsmash.viewer5.handlers.w3x.ui.command.ClickableFrame;
 
-public class ListBoxFrame extends ControlFrame implements ScrollBarFrame.ScrollBarChangeListener {
+public class ListBoxFrame extends ControlFrame
+		implements ScrollBarFrame.ScrollBarChangeListener, ClickableFrame {
 	// TODO where are these colors in the UI definition files?
 	public static final Color SELECT_COLOR = Color.BLUE;
 	public static final Color MOUSE_OVER_HIGHLIGHT_COLOR = new Color(0.3f, 0.3f, 1.0f, 0.25f);
@@ -32,6 +35,11 @@ public class ListBoxFrame extends ControlFrame implements ScrollBarFrame.ScrollB
 	private float listBoxBorder;
 	private int selectedIndex = -1;
 	private int mouseOverIndex = -1;
+	private float pressX;
+	private float pressY;
+	private int pressScrollValue;
+	private boolean touchPress;
+	private boolean pressDragged;
 
 	private final TextureFrame selectionFrame;
 	private final TextureFrame mouseHighlightFrame;
@@ -325,19 +333,31 @@ public class ListBoxFrame extends ControlFrame implements ScrollBarFrame.ScrollB
 					return sliderFrameChildUnderMouse;
 				}
 			}
-			int index = 0;
-			for (final AbstractListItemDisplay listFrame : this.listFrames) {
-				if (listFrame.getParentFrame().getRenderBounds().contains(screenX, screenY)) {
-					this.selectedIndex = index + computeScrollOffset(this.listFrames.size());
-					break;
-				}
-				index++;
+			this.pressX = screenX;
+			this.pressY = screenY;
+			this.pressScrollValue = (this.scrollBarFrame == null) ? 0 : this.scrollBarFrame.getValue();
+			this.touchPress = TouchInputRouter.isActive();
+			this.pressDragged = false;
+			// A finger press may still turn into a drag that scrolls the list, so touch selects on release.
+			if (!this.touchPress) {
+				selectAt(screenX, screenY);
 			}
-			updateUI(this.gameUI, this.viewport);
-			this.selectionListener.onSelectionChanged(this.selectedIndex, getSelectedItem());
 			return this;
 		}
 		return super.touchDown(screenX, screenY, button);
+	}
+
+	private void selectAt(final float screenX, final float screenY) {
+		int index = 0;
+		for (final AbstractListItemDisplay listFrame : this.listFrames) {
+			if (listFrame.getParentFrame().getRenderBounds().contains(screenX, screenY)) {
+				this.selectedIndex = index + computeScrollOffset(this.listFrames.size());
+				break;
+			}
+			index++;
+		}
+		updateUI(this.gameUI, this.viewport);
+		this.selectionListener.onSelectionChanged(this.selectedIndex, getSelectedItem());
 	}
 
 	@Override
@@ -349,8 +369,59 @@ public class ListBoxFrame extends ControlFrame implements ScrollBarFrame.ScrollB
 					return sliderFrameChildUnderMouse;
 				}
 			}
+			return this;
 		}
 		return super.touchUp(screenX, screenY, button);
+	}
+
+	@Override
+	public void mouseDown(final GameUI gameUI, final Viewport uiViewport) {
+	}
+
+	@Override
+	public void mouseUp(final GameUI gameUI, final Viewport uiViewport) {
+	}
+
+	@Override
+	public void mouseEnter(final GameUI gameUI, final Viewport uiViewport) {
+	}
+
+	@Override
+	public void mouseExit(final GameUI gameUI, final Viewport uiViewport) {
+	}
+
+	@Override
+	public void onClick(final int button) {
+		if (this.touchPress && !this.pressDragged) {
+			selectAt(this.pressX, this.pressY);
+		}
+	}
+
+	@Override
+	public String getSoundKey() {
+		return SOUND_KEY_NONE;
+	}
+
+	@Override
+	public void mouseDragged(final GameUI rootFrame, final Viewport uiViewport, final float x, final float y) {
+		if (!this.touchPress || (this.scrollBarFrame == null) || this.listFrames.isEmpty()) {
+			return;
+		}
+		this.pressDragged = true;
+		final int hiddenItems = this.listItems.size() - this.listFrames.size();
+		if (hiddenItems <= 0) {
+			return;
+		}
+		final float itemHeight = this.listFrames.get(0).getParentFrame().getRenderBounds().height;
+		if (itemHeight <= 0) {
+			return;
+		}
+		// Content follows the finger: moving up reveals later items, which is a lower scroll bar value.
+		final float draggedItems = (y - this.pressY) / itemHeight;
+		final int newValue = Math.round(this.pressScrollValue - ((draggedItems * 100f) / hiddenItems));
+		if (newValue != this.scrollBarFrame.getValue()) {
+			this.scrollBarFrame.setValue(rootFrame, uiViewport, newValue);
+		}
 	}
 
 	@Override

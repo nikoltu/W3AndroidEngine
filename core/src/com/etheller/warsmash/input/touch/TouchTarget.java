@@ -16,7 +16,7 @@ public interface TouchTarget {
 	boolean isPlacingBuilding();
 
 	/**
-	 * @return the touch overlay slot under the point: 0 to 9 for control groups, 10 for Shift, -1 for none
+	 * @return the touch overlay slot under the point: 0 to 9 for control groups, 10 for Shift, 11 for the plus button, -1 for none
 	 */
 	int touchOverlaySlotAt(int screenX, int screenY);
 
@@ -32,4 +32,11 @@ public interface TouchTarget {
 	 * end. A tooltip is shown only while a finger is held on a button.
 	 */
 	void endTouchHover();
+
+	/**
+	 * A one finger long press skips a cinematic on a touch screen, as Escape does on desktop.
+	 *
+	 * @return true if cinematic mode is on and the skip was sent
+	 */
+	boolean skipCinematic();
 }

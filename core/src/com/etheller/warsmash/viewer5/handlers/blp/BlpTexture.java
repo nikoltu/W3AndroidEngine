@@ -34,10 +34,10 @@ public class BlpTexture extends RawOpenGLTextureResource {
 		try {
 			final ByteBuffer data = ByteBuffer.wrap(IOUtils.toByteArray(src));
 			if (DdsDecoder.isDds(data)) {
-				// A missing .blp can resolve to its .dds; the ImageIO path uploaded those with
-				// the sRGB format as well.
+				// A missing .blp can resolve to its .dds. Classic data stores the same colors in
+				// both, so the .dds takes the plain RGBA format of the .blp below.
 				final DdsDecoder image = DdsDecoder.decode(data);
-				update(image.getWidth(), image.getHeight(), image.getRgba(), true);
+				update(image.getWidth(), image.getHeight(), image.getRgba(), false);
 				return;
 			}
 			if (BlpDecoder.isPalettedBlp1(data) || BlpDecoder.isJpegBlp1(data)) {

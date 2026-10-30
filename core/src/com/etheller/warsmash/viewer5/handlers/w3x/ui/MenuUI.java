@@ -55,6 +55,7 @@ import com.etheller.warsmash.parsers.fdf.frames.GlueButtonFrame;
 import com.etheller.warsmash.parsers.fdf.frames.GlueTextButtonFrame;
 import com.etheller.warsmash.parsers.fdf.frames.ListBoxFrame;
 import com.etheller.warsmash.parsers.fdf.frames.ListBoxFrame.ListBoxSelelectionListener;
+import com.etheller.warsmash.parsers.fdf.frames.MenuFrame;
 import com.etheller.warsmash.parsers.fdf.frames.SetPoint;
 import com.etheller.warsmash.parsers.fdf.frames.SimpleFrame;
 import com.etheller.warsmash.parsers.fdf.frames.SpriteFrame;
@@ -1732,7 +1733,7 @@ public class MenuUI {
 		}
 		catch (final Exception exc) {
 			exc.printStackTrace();
-			this.mainMenuGlueScreenLoop = new UnitSound(0, 0, 0, 0, 0, 0, false);
+			this.mainMenuGlueScreenLoop = new UnitSound(null, 0, 0, 0, 0, 0, 0, false);
 		}
 		this.glueScreenLoop = this.mainMenuGlueScreenLoop;
 		this.glueScreenLoop.play(this.uiScene.audioContext, 0f, 0f, 0f);
@@ -1866,8 +1867,6 @@ public class MenuUI {
 			final CBasePlayer player = this.currentMapConfig.getPlayer(i);
 			if (player.getController() == CMapControl.USER) {
 				player.setSlotState(CPlayerSlotState.PLAYING);
-//					player.setName(MenuUI.this.profileManager.getCurrentProfile());
-//					break;
 				if (localPlayerIndex == -1) {
 					localPlayerIndex = i;
 				}
@@ -1901,6 +1900,9 @@ public class MenuUI {
 					}
 				}
 			}
+		}
+		if (localPlayerIndex != -1) {
+			this.currentMapConfig.getPlayer(localPlayerIndex).setName(this.profileManager.getCurrentProfile());
 		}
 		MenuUI.this.beginGameInformation.localPlayerIndex = localPlayerIndex;
 //		this.beginGameInformation.loadingStarted = true;
@@ -1937,6 +1939,7 @@ public class MenuUI {
 		for (int i = 0; i < playerCount; i++) {
 			config.getPlayer(i).setTeam(i);
 		}
+		config.setLobbyTeams(true);
 		return playerCount;
 	}
 
@@ -2572,6 +2575,7 @@ public class MenuUI {
 		screenCoordsVector.set(screenX, screenY);
 		this.uiViewport.unproject(screenCoordsVector);
 		final UIFrame clickedUIFrame = this.rootFrame.touchDown(screenCoordsVector.x, screenCoordsVector.y, button);
+		closePopupMenusOutside(clickedUIFrame);
 		if (clickedUIFrame != null) {
 			if (clickedUIFrame instanceof ClickableFrame) {
 				this.mouseDownUIFrame = (ClickableFrame) clickedUIFrame;
@@ -2589,6 +2593,26 @@ public class MenuUI {
 					}
 				}
 			}
+		}
+		return false;
+	}
+
+	private void closePopupMenusOutside(final UIFrame clickedUIFrame) {
+		for (final UIFrame childFrame : this.rootFrame.getChildFrames()) {
+			if ((childFrame instanceof MenuFrame) && childFrame.isVisible()
+					&& (childFrame.getParent() instanceof ClickableFrame)
+					&& !isSelfOrDescendant(clickedUIFrame, childFrame.getParent())) {
+				childFrame.setVisible(false);
+			}
+		}
+	}
+
+	private static boolean isSelfOrDescendant(UIFrame frame, final UIFrame ancestor) {
+		while (frame != null) {
+			if (frame == ancestor) {
+				return true;
+			}
+			frame = frame.getParent();
 		}
 		return false;
 	}
@@ -2759,6 +2783,13 @@ public class MenuUI {
 		@Override
 		public void setPlayerHandicap(final int index, final float handicap) {
 			this.war3MapConfig.getPlayer(index).setHandicap(handicap);
+			this.teamSetupPane.notifyPlayerDataUpdated(index, this.rootFrame, this.uiViewport, this.war3MapConfig,
+					this.mapInfo);
+		}
+
+		@Override
+		public void setPlayerColor(final int index, final int color) {
+			this.war3MapConfig.getPlayer(index).setColor(color);
 			this.teamSetupPane.notifyPlayerDataUpdated(index, this.rootFrame, this.uiViewport, this.war3MapConfig,
 					this.mapInfo);
 		}

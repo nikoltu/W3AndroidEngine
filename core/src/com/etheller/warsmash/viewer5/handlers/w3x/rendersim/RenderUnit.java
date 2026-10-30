@@ -8,6 +8,7 @@ import com.badlogic.gdx.math.Quaternion;
 import com.badlogic.gdx.math.Vector3;
 import com.etheller.warsmash.parsers.fdf.GameUI;
 import com.etheller.warsmash.util.RenderMathUtils;
+import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.viewer5.handlers.mdx.MdxComplexInstance;
 import com.etheller.warsmash.viewer5.handlers.mdx.MdxModel;
 import com.etheller.warsmash.viewer5.handlers.mdx.Sequence;
@@ -27,6 +28,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.commandbuttons.Comma
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CAllianceType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnitType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CWidget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbility;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.generic.AbilityGenericSingleIconPassiveAbility;
@@ -481,8 +483,12 @@ public class RenderUnit implements RenderWidget {
 		}
 		this.unitAnimationListenerImpl.update();
 		if (!dead && this.simulationUnit.isConstructingOrUpgrading()) {
+			final War3ID upgradeIdType = this.simulationUnit.getUpgradeIdType();
+			final CUnitType constructedType = upgradeIdType != null
+					? map.simulation.getUnitData().getUnitType(upgradeIdType)
+					: this.simulationUnit.getUnitType();
 			this.instance.setFrameByRatio(
-					this.simulationUnit.getConstructionProgress() / this.simulationUnit.getUnitType().getBuildTime());
+					this.simulationUnit.getConstructionProgress() / constructedType.getBuildTime());
 		}
 	}
 
@@ -737,6 +743,11 @@ public class RenderUnit implements RenderWidget {
 		Sequence.populateTags(primaryTags, secondaryTag, whichAnimation);
 		final AnimationTokens.PrimaryTag primaryTag = Sequence.any(primaryTags);
 		this.unitAnimationListenerImpl.playAnimation(true, primaryTag, secondaryTag, 1.0f, true);
+	}
+
+	public void resetAnimation() {
+		this.unitAnimationListenerImpl.playAnimation(true, AnimationTokens.PrimaryTag.STAND, SequenceUtils.EMPTY, 1.0f,
+				true);
 	}
 
 	public void playAnimation(final int index) {

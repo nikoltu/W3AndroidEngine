@@ -78,7 +78,7 @@ public class WebGL {
 		final int hash = stringHash(vertexSrc + fragmentSrc);
 		ShaderProgram.pedantic = false;
 		if (!shaderPrograms.containsKey(hash)) {
-			shaderPrograms.put(hash, new ShaderProgram(vertexSrc, fragmentSrc));
+			shaderPrograms.put(hash, new CachedShaderProgram(vertexSrc, fragmentSrc));
 		}
 
 		final ShaderProgram shaderProgram = shaderPrograms.get(hash);

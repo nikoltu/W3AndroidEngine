@@ -5,6 +5,7 @@ import java.util.Collections;
 import java.util.List;
 
 import com.etheller.interpreter.ast.debug.JassException;
+import com.etheller.interpreter.ast.execution.JassStackFrame;
 import com.etheller.interpreter.ast.execution.JassThread;
 import com.etheller.interpreter.ast.function.JassFunction;
 import com.etheller.interpreter.ast.scope.GlobalScope;
@@ -69,23 +70,57 @@ public class Trigger implements CHandle {
 	}
 
 	public boolean evaluate(final GlobalScope globalScope, final TriggerExecutionScope triggerScope) {
-		for (final TriggerBooleanExpression condition : this.conditions) {
+		// Every condition runs, even after one has failed (1.29).
+		boolean result = true;
+		for (final TriggerBooleanExpression condition : new ArrayList<>(this.conditions)) {
 			if (!condition.evaluate(globalScope, triggerScope)) {
-				return false;
+				result = false;
 			}
 		}
-		return true;
+		return result;
 	}
 
-	public void execute(final GlobalScope globalScope, final TriggerExecutionScope triggerScope) {
-		for (final JassFunction action : this.actions) {
-			try {
-				action.call(Collections.emptyList(), globalScope, triggerScope);
-			}
-			catch (final Exception e) {
-				throw new JassException(globalScope, "Exception during Trigger action execute", e);
+	/**
+	 * Runs the trigger for one of its events: the conditions, then the actions on a new thread that runs right away
+	 * until it finishes or sleeps.
+	 */
+	public void fire(final GlobalScope globalScope, final TriggerExecutionScope evaluateScope,
+			final TriggerExecutionScope executeScope) {
+		this.evalCount++;
+		if (evaluate(globalScope, evaluateScope)) {
+			this.execCount++;
+			runActions(globalScope, executeScope);
+		}
+	}
+
+	/**
+	 * TriggerExecute: the actions without the conditions, also when the trigger is disabled.
+	 *
+	 * @return the thread if it is still running (it slept), otherwise null
+	 */
+	public JassThread execute(final GlobalScope globalScope, final TriggerExecutionScope triggerScope) {
+		this.evalCount++;
+		this.execCount++;
+		return runActions(globalScope, triggerScope);
+	}
+
+	private JassThread runActions(final GlobalScope globalScope, final TriggerExecutionScope triggerScope) {
+		if (this.actions.isEmpty()) {
+			return null;
+		}
+		final ActionsThread thread = new ActionsThread(globalScope, triggerScope, new ArrayList<>(this.actions));
+		try {
+			if (thread.advance() && globalScope.runThreadUntilSleep(thread)) {
+				return thread;
 			}
 		}
+		catch (final JassException e) {
+			throw e;
+		}
+		catch (final Exception e) {
+			throw new JassException(globalScope, "Exception during Trigger action execute", e);
+		}
+		return null;
 	}
 
 	public boolean isEnabled() {
@@ -125,7 +160,7 @@ public class Trigger implements CHandle {
 		return this.handleId;
 	}
 
-	private final class JassThreadActionFunc implements JassFunction {
+	private static final class JassThreadActionFunc implements JassFunction {
 		private final CodeJassValue codeJassValue;
 
 		public JassThreadActionFunc(final CodeJassValue codeJassValue) {
@@ -135,11 +170,54 @@ public class Trigger implements CHandle {
 		@Override
 		public JassValue call(final List<JassValue> arguments, final GlobalScope globalScope,
 				final TriggerExecutionScope triggerScope) {
-			final JassThread triggerThread = globalScope.createThread(this.codeJassValue, triggerScope);
-			globalScope.queueThread(triggerThread);
+			globalScope.runThreadUntilSleep(globalScope.createThread(this.codeJassValue, triggerScope));
 			return null;
 		}
 
+	}
+
+	/**
+	 * All actions of one trigger run in order on one thread, so a sleep in one action also delays the next.
+	 */
+	private static final class ActionsThread extends JassThread {
+		private final List<JassFunction> actions;
+		private int nextAction;
+		private JassThread waiter;
+
+		public ActionsThread(final GlobalScope globalScope, final TriggerExecutionScope triggerScope,
+				final List<JassFunction> actions) {
+			super(null, globalScope, triggerScope, -1);
+			this.actions = actions;
+		}
+
+		@Override
+		public boolean advance() {
+			while (this.nextAction < this.actions.size()) {
+				final JassFunction action = this.actions.get(this.nextAction++);
+				if (action instanceof JassThreadActionFunc) {
+					final CodeJassValue code = ((JassThreadActionFunc) action).codeJassValue;
+					this.stackFrame = new JassStackFrame();
+					this.stackFrame.returnAddressInstructionPtr = -1;
+					this.instructionPtr = code.getUserFunctionInstructionPtr();
+					code.initStack(this.stackFrame);
+					return true;
+				}
+				action.call(Collections.emptyList(), this.globalScope, this.triggerScope);
+			}
+			if (this.waiter != null) {
+				this.waiter.setSleeping(false);
+				this.waiter = null;
+			}
+			return false;
+		}
+	}
+
+	/**
+	 * TriggerExecuteWait: the waiting thread sleeps until the trigger's thread is done.
+	 */
+	public static void wakeWhenDone(final JassThread triggerThread, final JassThread waiter) {
+		((ActionsThread) triggerThread).waiter = waiter;
+		waiter.setSleeping(true);
 	}
 
 	public TriggerExecutionScope getTriggerExecutionScope() {

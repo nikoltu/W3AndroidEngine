@@ -7,6 +7,7 @@ public class AbilityBuilderDupe {
 
 	private String castId;
 	private String uncastId;
+	private String instantCastId;
 	private String autoCastOnId;
 	private String autoCastOffId;
 	private AutocastType autoCastType;
@@ -33,6 +34,14 @@ public class AbilityBuilderDupe {
 
 	public void setUncastId(String uncastId) {
 		this.uncastId = uncastId;
+	}
+
+	public String getInstantCastId() {
+		return instantCastId;
+	}
+
+	public void setInstantCastId(String instantCastId) {
+		this.instantCastId = instantCastId;
 	}
 
 	public String getAutoCastOnId() {

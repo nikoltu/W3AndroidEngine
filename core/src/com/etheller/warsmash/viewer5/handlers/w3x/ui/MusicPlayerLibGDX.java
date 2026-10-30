@@ -100,6 +100,9 @@ public class MusicPlayerLibGDX implements MusicPlayer {
 
 	@Override
 	public Music playDefaultMusic() {
+		if (this.defaultMusicField == null) {
+			return null;
+		}
 		return playMusicEx(this.defaultMusicField, this.defaultMusicRandom, this.defaultMusicIndex, 0, -1);
 	}
 

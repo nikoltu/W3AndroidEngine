@@ -3,15 +3,15 @@ package com.etheller.warsmash.viewer5.handlers.w3x.rendersim.ability;
 import com.badlogic.gdx.graphics.Texture;
 
 public class IconUI {
-	private final Texture icon;
-	private final Texture iconDisabled;
+	private final IconTexture icon;
+	private final IconTexture iconDisabled;
 	private final int buttonPositionX;
 	private final int buttonPositionY;
 	private final String toolTip;
 	private final String uberTip;
 	private final char hotkey;
 
-	public IconUI(final Texture icon, final Texture iconDisabled, final int buttonPositionX, final int buttonPositionY,
+	public IconUI(final IconTexture icon, final IconTexture iconDisabled, final int buttonPositionX, final int buttonPositionY,
 			final String toolTip, final String uberTip, final char hotkey) {
 		this.icon = icon;
 		this.iconDisabled = iconDisabled;
@@ -23,11 +23,11 @@ public class IconUI {
 	}
 
 	public Texture getIcon() {
-		return this.icon;
+		return this.icon.get();
 	}
 
 	public Texture getIconDisabled() {
-		return this.iconDisabled;
+		return this.iconDisabled.get();
 	}
 
 	public int getButtonPositionX() {

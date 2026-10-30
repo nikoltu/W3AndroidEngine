@@ -18,8 +18,10 @@ public class MdlxLight extends MdlxGenericObject {
 			this.token = token;
 		}
 
+		private static final Type[] VALUES = values();
+
 		public static Type fromId(final int id) {
-			return values()[id];
+			return VALUES[id];
 		}
 
 		@Override

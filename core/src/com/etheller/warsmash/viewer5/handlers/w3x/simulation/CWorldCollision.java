@@ -1,12 +1,17 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Set;
 
 import com.badlogic.gdx.math.Rectangle;
 import com.etheller.warsmash.util.Quadtree;
 import com.etheller.warsmash.util.QuadtreeIntersector;
 import com.etheller.warsmash.viewer5.handlers.w3x.environment.PathingGrid.MovementType;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CAllianceType;
 
 public class CWorldCollision {
 	private static final float MINIMUM_COLLISION_SIZE = 0.001f /* THIS IS TO STOP QUADTREE FROM BUSTING */;
@@ -20,6 +25,8 @@ public class CWorldCollision {
 	private final Quadtree<CDestructable> destructablesForEnum;
 	private final Quadtree<CItem> itemsForEnum;
 	private final float maxCollisionRadius;
+	private final List<Set<CUnit>> enumSets = new ArrayList<>();
+	private int enumSetDepth;
 	private final AnyUnitExceptTwoIntersector anyUnitExceptTwoIntersector;
 	private final EachUnitOnlyOnceIntersector eachUnitOnlyOnceIntersector;
 	private final DestructableEnumIntersector destructableEnumIntersector;
@@ -52,7 +59,7 @@ public class CWorldCollision {
 					collisionSize * 2);
 			unit.setCollisionRectangle(bounds);
 		}
-		if (unit.isBoneCorpse()) {
+		if (unit.isUsableCorpse()) {
 			this.deadUnitCollision.add(unit, bounds);
 		}
 		else {
@@ -115,7 +122,7 @@ public class CWorldCollision {
 		final Rectangle bounds = unit.getCollisionRectangle();
 		if (bounds != null) {
 			this.anyUnitEnumerableCollision.remove(unit, bounds);
-			if (unit.isBoneCorpse()) {
+			if (unit.isUsableCorpse()) {
 				this.deadUnitCollision.remove(unit, bounds);
 			}
 			else {
@@ -154,44 +161,67 @@ public class CWorldCollision {
 	}
 
 	public void enumUnitsInRect(final Rectangle rect, final CUnitEnumFunction callback) {
-		// NOTE: allocation here seems quite wasteful, but when it was a recycled
-		// value there were times this function looped units in rect, killed a few,
-		// then entered the function again to apply xp gain in an area iterated
-		// around the killed units before finishing the other iteration...
-		// and so a recycled allocation did not work
-		final Set<CUnit> intersectedUnits = new HashSet<>();
-		this.anyUnitEnumerableCollision.intersect(rect, (unit) -> {
-			if (unit.isHidden() || unit.isUnenumerable() || !intersectedUnits.add(unit)) {
-				return false;
-			}
-			return callback.call(unit);
-		});
+		final Set<CUnit> intersectedUnits = acquireEnumSet();
+		try {
+			this.anyUnitEnumerableCollision.intersect(rect, (unit) -> {
+				if (unit.isHidden() || unit.isUnenumerable() || !intersectedUnits.add(unit)) {
+					return false;
+				}
+				return callback.call(unit);
+			});
+		}
+		finally {
+			releaseEnumSet();
+		}
 	}
 
 	public void enumCorpsesInRect(final Rectangle rect, final CUnitEnumFunction callback) {
-		// NOTE: allocation here seems quite wasteful, see note on enumUnitsInRect
-		final Set<CUnit> intersectedUnits = new HashSet<>();
-		this.deadUnitCollision.intersect(rect, (unit) -> {
-			if (unit.isHidden() || unit.isUnenumerable() || !intersectedUnits.add(unit)) {
-				return false;
-			}
-			return callback.call(unit);
-		});
-	}
-	
-	public void enumUnitsOrCorpsesInRect(final Rectangle rect, final CUnitEnumFunction callback) {
-		// NOTE: allocation here seems quite wasteful, see note on enumUnitsInRect
-		final Set<CUnit> intersectedUnits = new HashSet<>();
-		final QuadtreeIntersector<CUnit> intersectorFxn = (unit) -> {
-			if (unit.isHidden() || unit.isUnenumerable() || !intersectedUnits.add(unit)) {
-				return false;
-			}
-			return callback.call(unit);
-		};
-		if (!this.anyUnitEnumerableCollision.intersect(rect, intersectorFxn)) {
-			this.deadUnitCollision.intersect(rect, intersectorFxn);
+		final Set<CUnit> intersectedUnits = acquireEnumSet();
+		try {
+			this.deadUnitCollision.intersect(rect, (unit) -> {
+				if (unit.isHidden() || unit.isUnenumerable() || !intersectedUnits.add(unit)) {
+					return false;
+				}
+				return callback.call(unit);
+			});
 		}
+		finally {
+			releaseEnumSet();
+		}
+	}
 
+	public void enumUnitsOrCorpsesInRect(final Rectangle rect, final CUnitEnumFunction callback) {
+		final Set<CUnit> intersectedUnits = acquireEnumSet();
+		try {
+			final QuadtreeIntersector<CUnit> intersectorFxn = (unit) -> {
+				if (unit.isHidden() || unit.isUnenumerable() || !intersectedUnits.add(unit)) {
+					return false;
+				}
+				return callback.call(unit);
+			};
+			if (!this.anyUnitEnumerableCollision.intersect(rect, intersectorFxn)) {
+				this.deadUnitCollision.intersect(rect, intersectorFxn);
+			}
+		}
+		finally {
+			releaseEnumSet();
+		}
+	}
+
+	// A callback can start another enumeration (killing units in an area gives experience to units around them),
+	// so each nesting depth gets its own set. Identity sets keep their entries in one array, so adding a unit
+	// allocates nothing; a new set for every enumeration was a large share of the garbage made during fights.
+	private Set<CUnit> acquireEnumSet() {
+		if (this.enumSetDepth == this.enumSets.size()) {
+			this.enumSets.add(Collections.newSetFromMap(new IdentityHashMap<>()));
+		}
+		final Set<CUnit> set = this.enumSets.get(this.enumSetDepth++);
+		set.clear();
+		return set;
+	}
+
+	private void releaseEnumSet() {
+		this.enumSetDepth--;
 	}
 
 	public void enumCorpsesInRange(final float x, final float y, final float radius, final CUnitEnumFunction callback) {
@@ -255,6 +285,16 @@ public class CWorldCollision {
 
 	public boolean intersectsAnythingOtherThan(final Rectangle newPossibleRectangle, final CUnit sourceUnitToIgnore,
 			final CUnit sourceSecondUnitToIgnore, final MovementType movementType, final boolean forConstruction) {
+		return intersectsAnythingOtherThan(newPossibleRectangle, sourceUnitToIgnore, sourceSecondUnitToIgnore,
+				movementType, forConstruction, null, -1);
+	}
+
+	// Units the player ignoredControllerIndex controls (its own and those of players sharing control with it) are
+	// skipped: they step aside for a building that player places.
+	public boolean intersectsAnythingOtherThan(final Rectangle newPossibleRectangle, final CUnit sourceUnitToIgnore,
+			final CUnit sourceSecondUnitToIgnore, final MovementType movementType, final boolean forConstruction,
+			final CSimulation simulation, final int ignoredControllerIndex) {
+		this.anyUnitExceptTwoIntersector.ignoreControlledBy(simulation, ignoredControllerIndex);
 		if (movementType != null) {
 			switch (movementType) {
 			case AMPHIBIOUS:
@@ -292,7 +332,7 @@ public class CWorldCollision {
 		final MovementType movementType = unit.getMovementType();
 		final Rectangle bounds = unit.getCollisionRectangle();
 		if (bounds != null) {
-			if (unit.isBoneCorpse()) {
+			if (unit.isUsableCorpse()) {
 				this.deadUnitCollision.translate(unit, bounds, xShift, yShift);
 			}
 			else {
@@ -353,12 +393,20 @@ public class CWorldCollision {
 		private CUnit secondUnit;
 		private boolean forConstruction;
 
+		private CSimulation simulation;
+		private int ignoredControllerIndex = -1;
+
 		public AnyUnitExceptTwoIntersector reset(final CUnit firstUnit, final CUnit secondUnit,
 				final boolean forConstruction) {
 			this.firstUnit = firstUnit;
 			this.secondUnit = secondUnit;
 			this.forConstruction = forConstruction;
 			return this;
+		}
+
+		public void ignoreControlledBy(final CSimulation simulation, final int ignoredControllerIndex) {
+			this.simulation = simulation;
+			this.ignoredControllerIndex = simulation == null ? -1 : ignoredControllerIndex;
 		}
 
 		@Override
@@ -368,6 +416,13 @@ public class CWorldCollision {
 					|| (this.forConstruction && intersectingObject.isNoBuildingCollision())
 					|| (!this.forConstruction && intersectingObject.isNoUnitCollision())) {
 				return false;
+			}
+			if (this.ignoredControllerIndex >= 0) {
+				final int ownerIndex = intersectingObject.getPlayerIndex();
+				if ((ownerIndex == this.ignoredControllerIndex) || this.simulation.getPlayer(ownerIndex)
+						.hasAlliance(this.ignoredControllerIndex, CAllianceType.SHARED_CONTROL)) {
+					return false;
+				}
 			}
 			return (intersectingObject != this.firstUnit) && (intersectingObject != this.secondUnit);
 		}

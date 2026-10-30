@@ -16,8 +16,7 @@ public class CAbilityBlight extends AbstractGenericNoIconAbility {
 	private boolean createsBlight;
 	private float expansionAmount;
 	private float areaOfEffect;
-	private static final float INITIAL_RADIUS = 64;
-	private static final float EXPANSION_MARGIN = 128;
+	private static final float INITIAL_RADIUS = 0;
 	private float secondsPerBlightExpansion;
 	private int startTick;
 	private float currentRadius;
@@ -43,14 +42,13 @@ public class CAbilityBlight extends AbstractGenericNoIconAbility {
 			// Measured: buildings that exist when the map starts (melee start, preplaced) have their whole blight at
 			// once; only ones created later grow it.
 			if (this.startTick == 0) {
-				this.currentRadius = this.areaOfEffect + EXPANSION_MARGIN;
-				game.setBlight(unit.getX(), unit.getY(), this.currentRadius, this.createsBlight);
+				this.currentRadius = this.areaOfEffect;
 			}
 			else {
-				// Measured on a Necropolis: the first blight is the square under the building, not a circle.
+				// Measured on a Necropolis: the first blight is the corner nearest to the building.
 				this.currentRadius = INITIAL_RADIUS;
-				game.setBlightSquare(unit.getX(), unit.getY(), INITIAL_RADIUS, this.createsBlight);
 			}
+			game.setBlight(unit.getX(), unit.getY(), this.currentRadius, this.createsBlight);
 		}
 	}
 
@@ -59,8 +57,8 @@ public class CAbilityBlight extends AbstractGenericNoIconAbility {
 	}
 
 	/**
-	 * Measured on the original game (Necropolis): the blight starts at once 64 around the building, then grows by the
-	 * expansion amount every expansion interval, reaching 128 beyond the ability's area.
+	 * Measured on the original game (Necropolis): the blight starts at once on the corner nearest to the building, then
+	 * grows by the expansion amount every expansion interval up to the ability's area.
 	 */
 	@Override
 	public void onTick(final CSimulation game, final CUnit unit) {
@@ -72,7 +70,7 @@ public class CAbilityBlight extends AbstractGenericNoIconAbility {
 				? (int) Math.floor(elapsed / this.secondsPerBlightExpansion) + 1
 				: Integer.MAX_VALUE;
 		final float area = Math.min(this.areaOfEffect, expansions * this.expansionAmount);
-		final float radius = area > 0 ? area + EXPANSION_MARGIN : INITIAL_RADIUS;
+		final float radius = area;
 		if (radius > this.currentRadius) {
 			this.currentRadius = radius;
 			game.setBlight(unit.getX(), unit.getY(), radius, this.createsBlight);
@@ -128,6 +126,14 @@ public class CAbilityBlight extends AbstractGenericNoIconAbility {
 	protected void innerCheckCanUse(final CSimulation game, final CUnit unit, final int playerIndex, final int orderId,
 			final AbilityActivationReceiver receiver) {
 		receiver.notAnActiveAbility();
+	}
+
+	public boolean isCreatesBlight() {
+		return this.createsBlight;
+	}
+
+	public float getCurrentRadius() {
+		return this.currentRadius;
 	}
 
 	public void setCreatesBlight(final boolean createsBlight) {

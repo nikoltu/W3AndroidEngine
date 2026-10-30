@@ -1,5 +1,6 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.behavior.action.unit;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -7,11 +8,15 @@ import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnitType;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbility;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.ability.AbilityBuilderAbility;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.behavior.callback.booleancallbacks.ABBooleanCallback;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.behavior.callback.floatcallbacks.ABFloatCallback;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.behavior.callback.idcallbacks.ABIDCallback;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.behavior.callback.unitcallbacks.ABUnitCallback;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.buff.ABBuff;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.buff.ABTimedInstantTransformationBuff;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.buff.ABTimedTransformationBuff;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.core.ABAction;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.core.ABLocalStoreKeys;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.handler.TransformationHandler;
@@ -146,6 +151,11 @@ public class ABActionTransformUnitInstant implements ABAction {
 			theBuffId = buffId.callback(game, caster, localStore, castId);
 		}
 
+		if (!addAlternateTagAfter) {
+			// The timed buff that would have changed the unit back is left over when it is changed back early (e.g.
+			// Back to Work): it keeps its timer in the unit panel and could end a later transformation early.
+			removeTransformBackBuffs(game, u1, theBuffId != null ? theBuffId : abil.getAlias());
+		}
 		localStore.put(ABLocalStoreKeys.TRANSFORMINGTOALT + castId, addAlternateTagAfter);
 		if (transTime > 0) {
 			TransformationHandler.playMorphAnimation(u1, addAlternateTagAfter);
@@ -160,6 +170,15 @@ public class ABActionTransformUnitInstant implements ABAction {
 			}
 		}
 
+	}
+
+	private static void removeTransformBackBuffs(final CSimulation game, final CUnit unit, final War3ID alias) {
+		for (final CAbility ability : new ArrayList<>(unit.getAbilities())) {
+			if (((ability instanceof ABTimedTransformationBuff) || (ability instanceof ABTimedInstantTransformationBuff))
+					&& ability.getAlias().equals(alias)) {
+				unit.remove(game, (ABBuff) ability);
+			}
+		}
 	}
 
 }

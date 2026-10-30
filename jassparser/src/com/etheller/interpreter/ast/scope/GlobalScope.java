@@ -597,7 +597,9 @@ public final class GlobalScope {
 		try {
 			while (!thread.isSleeping()) {
 				if (thread.instructionPtr == -1) {
-					break;
+					if (!thread.advance()) {
+						break;
+					}
 				}
 				else {
 					this.instructions.get(thread.instructionPtr++).run(thread);
@@ -612,6 +614,21 @@ public final class GlobalScope {
 		finally {
 			this.currentThread = parentThread;
 		}
+	}
+
+	/**
+	 * Runs the thread on the caller's stack until it finishes or sleeps; a sleeping thread is then resumed by
+	 * {@link #runThreads()} like any other.
+	 *
+	 * @return true if the thread is still running
+	 */
+	public boolean runThreadUntilSleep(final JassThread thread) {
+		runThreadUntilCompletion(thread);
+		if (thread.isSleeping() && !thread.isHalted()) {
+			queueThread(thread);
+			return true;
+		}
+		return false;
 	}
 
 	public JassValue runThreadUntilCompletionAndReadReturnValue(final JassThread thread,
@@ -645,13 +662,18 @@ public final class GlobalScope {
 			try {
 				while (!thread.isSleeping()) {
 					if (thread.instructionPtr == -1) {
-						this.threads.remove(threadIndex);
-						this.yieldedCurrentThread = false;
-						break;
+						if (!thread.advance()) {
+							this.threads.remove(threadIndex);
+							this.yieldedCurrentThread = false;
+							break;
+						}
 					}
 					else {
 						this.instructions.get(thread.instructionPtr++).run(thread);
 					}
+				}
+				if (thread.isHalted()) {
+					this.threads.remove(threadIndex);
 				}
 			}
 			catch (final Exception exc) {
@@ -704,9 +726,7 @@ public final class GlobalScope {
 					return;
 				}
 			}
-			if (trigger.evaluate(this, evaluateScope)) {
-				trigger.execute(this, executeScope);
-			}
+			trigger.fire(this, evaluateScope, executeScope);
 		}
 	}
 
@@ -747,9 +767,7 @@ public final class GlobalScope {
 					return;
 				}
 			}
-			if (this.trigger.evaluate(globalScope, this.evaluateScope)) {
-				this.trigger.execute(globalScope, this.executeScope);
-			}
+			this.trigger.fire(globalScope, this.evaluateScope, this.executeScope);
 		}
 	}
 

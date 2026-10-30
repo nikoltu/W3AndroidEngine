@@ -47,6 +47,7 @@ public class CAbilitySummonQuilbeast extends CAbilityNoTargetSpellBase {
 			final CUnit summonedUnit = simulation.createUnitSimple(this.summonUnitId, unit.getPlayerIndex(), x, y,
 					facing);
 			summonedUnit.addClassification(CUnitClassification.SUMMONED);
+			simulation.unitSummoned(unit, summonedUnit);
 			summonedUnit.add(simulation,
 					new CBuffTimedLife(simulation.getHandleIdAllocator().createId(), this.buffId, getDuration(), true));
 			simulation.createTemporarySpellEffectOnUnit(summonedUnit, getAlias(), CEffectType.TARGET);

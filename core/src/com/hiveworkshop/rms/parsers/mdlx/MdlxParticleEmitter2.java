@@ -20,8 +20,10 @@ public class MdlxParticleEmitter2 extends MdlxGenericObject {
 			this.token = token;
 		}
 
+		private static final FilterMode[] VALUES = values();
+
 		public static FilterMode fromId(final int id) {
-			return values()[id];
+			return VALUES[id];
 		}
 
 		public static int nameToId(final String name) {
@@ -54,8 +56,10 @@ public class MdlxParticleEmitter2 extends MdlxGenericObject {
 			this.includesTail = includesTail;
 		}
 
+		private static final HeadOrTail[] VALUES = values();
+
 		public static HeadOrTail fromId(final int id) {
-			return values()[id & 0x3];
+			return VALUES[id & 0x3];
 		}
 
 		public static int nameToId(final String name) {

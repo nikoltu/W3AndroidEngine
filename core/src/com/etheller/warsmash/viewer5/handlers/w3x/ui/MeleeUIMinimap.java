@@ -1,5 +1,7 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.ui;
 
+import java.util.Arrays;
+
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
@@ -26,10 +28,20 @@ public class MeleeUIMinimap {
 	private final Texture[] teamColors;
 	private final Texture[] specialIcons;
 	private float heroAlpha = 0.90f;
+	private static final int ICON_VALUES = 7;
+	private Texture[] iconTextures = new Texture[64];
+	private float[] iconValues = new float[64 * ICON_VALUES];
+	private int iconCount;
 	private byte polarity = -1;
 	private boolean visible = true;
 	private final float[] cameraFootprint = new float[8];
 	private Texture lineTexture;
+	// The fog was drawn as one sprite per fog cell every frame, thousands of them, which phones could not keep up
+	// with; it is now painted into a texture a few times a second and drawn as one sprite.
+	private static final long FOG_REFRESH_MILLIS = 250;
+	private Pixmap fogPixmap;
+	private Texture fogTexture;
+	private long fogRefreshedMillis;
 
 	public MeleeUIMinimap(final Rectangle displayArea, final Rectangle playableMapArea, final Texture minimapTexture,
 			final Texture[] teamColors, final Texture[] specialIcons) {
@@ -64,19 +76,44 @@ public class MeleeUIMinimap {
 		final float mapXMod = this.minimapFilledArea.width / (maxX - minX);
 		final float mapYMod = this.minimapFilledArea.height / (maxY - minY);
 
-		for (int y = 0; y < (maxY - minY); y++) {
-			for (int x = 0; x < (maxX - minX); x++) {
-				final CFogState state = fogOfWar.getFogState(game, x + minX, y + minY);
-				if (CFogState.FOGGED.equals(state)) {
-					batch.setColor(0f, 0f, 0f, 0.5f);
-					batch.draw(this.teamColors[0], this.minimapFilledArea.x + (x * mapXMod),
-							this.minimapFilledArea.y + (y * mapYMod), mapXMod, mapYMod);
-				} else if (CFogState.MASKED.equals(state)) {
-					batch.setColor(0f, 0f, 0f, 1f);
-					batch.draw(this.teamColors[0], this.minimapFilledArea.x + (x * mapXMod),
-							this.minimapFilledArea.y + (y * mapYMod), mapXMod, mapYMod);
+		final int width = maxX - minX;
+		final int height = maxY - minY;
+		if ((width > 0) && (height > 0)) {
+			if ((this.fogPixmap == null) || (this.fogPixmap.getWidth() != width)
+					|| (this.fogPixmap.getHeight() != height)) {
+				if (this.fogTexture != null) {
+					this.fogTexture.dispose();
+					this.fogPixmap.dispose();
 				}
+				this.fogPixmap = new Pixmap(width, height, Pixmap.Format.RGBA8888);
+				this.fogPixmap.setBlending(Pixmap.Blending.None);
+				this.fogTexture = new Texture(this.fogPixmap);
+				this.fogTexture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+				this.fogRefreshedMillis = 0;
 			}
+			final long now = System.currentTimeMillis();
+			if ((now - this.fogRefreshedMillis) >= FOG_REFRESH_MILLIS) {
+				this.fogRefreshedMillis = now;
+				for (int y = 0; y < height; y++) {
+					for (int x = 0; x < width; x++) {
+						final CFogState state = fogOfWar.getFogState(game, x + minX, y + minY);
+						final int rgba;
+						if (CFogState.FOGGED.equals(state)) {
+							rgba = 0x0000007F;
+						} else if (CFogState.MASKED.equals(state)) {
+							rgba = 0x000000FF;
+						} else {
+							rgba = 0;
+						}
+						// Pixmap rows run top down, the minimap's fog cells bottom up.
+						this.fogPixmap.drawPixel(x, height - 1 - y, rgba);
+					}
+				}
+				this.fogTexture.draw(this.fogPixmap, 0, 0);
+			}
+			batch.setColor(1f, 1f, 1f, 1f);
+			batch.draw(this.fogTexture, this.minimapFilledArea.x, this.minimapFilledArea.y, width * mapXMod,
+					height * mapYMod);
 		}
 
 		drawCameraFootprint(batch);
@@ -87,12 +124,16 @@ public class MeleeUIMinimap {
 			this.polarity *= -1;
 		}
 
+		this.iconCount = 0;
 		for (final RenderUnit unit : units) {
 			final CUnit simUnit = unit.getSimulationUnit();
 			int dimensions = 4;
 			if (!(simUnit.isHidden() || simUnit.isHideMinimapIcon() || simUnit.isDead())
 					&& simUnit.isVisible(game, player.getId())) {
-				batch.setColor(1, 1, 1, 1);
+				float red = 1f;
+				float green = 1f;
+				float alpha = 1f;
+				int layer = 1;
 				final Texture minimapIcon;
 				if (simUnit.getGoldMineData() != null) {
 					minimapIcon = this.specialIcons[0];
@@ -109,18 +150,18 @@ public class MeleeUIMinimap {
 					minimapIcon = this.specialIcons[1];
 					dimensions = 21;
 				} else if (simUnit.isHero()) {
-					if (player.hasAlliance(simUnit.getFakePlayerIndex(), CAllianceType.PASSIVE)) {
-						batch.setColor(1f, 1f, 1f, this.heroAlpha);
-					} else {
-//						Color pc = new Color(game.getPlayer(simUnit.getPlayerIndex()).getColor());
-						batch.setColor(1f, 0.2f, 0.2f, this.heroAlpha);
+					if (!player.hasAlliance(simUnit.getFakePlayerIndex(), CAllianceType.PASSIVE)) {
+						green = 0.2f;
 					}
+					alpha = this.heroAlpha;
+					layer = 2;
 					minimapIcon = this.specialIcons[2];
 					dimensions = 28;
 				} else {
 					if (simUnit.isBuilding()) {
 						dimensions = 10;
 					}
+					layer = 0;
 					if (simUnit.getFakePlayerIndex() == player.getId()) {
 						minimapIcon = this.specialIcons[5];
 					}
@@ -129,15 +170,59 @@ public class MeleeUIMinimap {
 					}
 				}
 				final int offset = dimensions / 2;
-				batch.draw(minimapIcon,
-						(this.minimapFilledArea.x + (((unit.location[0] - this.playableMapArea.getX())
-								/ (this.playableMapArea.getWidth())) * this.minimapFilledArea.width)) - offset,
+				addIcon(minimapIcon, layer, (this.minimapFilledArea.x + (((unit.location[0] - this.playableMapArea.getX())
+						/ (this.playableMapArea.getWidth())) * this.minimapFilledArea.width)) - offset,
 						(this.minimapFilledArea.y + (((unit.location[1] - this.playableMapArea.getY())
 								/ (this.playableMapArea.getHeight())) * this.minimapFilledArea.height)) - offset,
-						dimensions, dimensions);
-				batch.setColor(1, 1, 1, 1);
+						dimensions, red, green, alpha);
 			}
 		}
+		drawIcons(batch);
+	}
+
+	// Icons are drawn grouped by texture, since every texture change is a separate draw call and the dots of
+	// different players otherwise alternate unit by unit.
+	private void addIcon(final Texture texture, final int layer, final float x, final float y, final int dimensions,
+			final float red, final float green, final float alpha) {
+		final int index = this.iconCount++;
+		if (index >= this.iconTextures.length) {
+			final int size = this.iconTextures.length * 2;
+			this.iconTextures = Arrays.copyOf(this.iconTextures, size);
+			this.iconValues = Arrays.copyOf(this.iconValues, size * ICON_VALUES);
+		}
+		this.iconTextures[index] = texture;
+		final float[] values = this.iconValues;
+		final int base = index * ICON_VALUES;
+		values[base] = layer;
+		values[base + 1] = x;
+		values[base + 2] = y;
+		values[base + 3] = dimensions;
+		values[base + 4] = red;
+		values[base + 5] = green;
+		values[base + 6] = alpha;
+	}
+
+	private void drawIcons(final SpriteBatch batch) {
+		final Texture[] textures = this.iconTextures;
+		final float[] values = this.iconValues;
+		final int count = this.iconCount;
+		for (int layer = 0; layer <= 2; layer++) {
+			for (int i = 0; i < count; i++) {
+				final Texture texture = textures[i];
+				if ((texture == null) || (values[i * ICON_VALUES] != layer)) {
+					continue;
+				}
+				for (int j = i; j < count; j++) {
+					if ((textures[j] == texture) && (values[j * ICON_VALUES] == layer)) {
+						final int base = j * ICON_VALUES;
+						batch.setColor(values[base + 4], values[base + 5], values[base + 5], values[base + 6]);
+						batch.draw(texture, values[base + 1], values[base + 2], values[base + 3], values[base + 3]);
+						textures[j] = null;
+					}
+				}
+			}
+		}
+		batch.setColor(1, 1, 1, 1);
 	}
 
 	public float[] getCameraFootprint() {
@@ -160,13 +245,13 @@ public class MeleeUIMinimap {
 		}
 	}
 
-	private float toMinimapX(final float worldX) {
+	public float toMinimapX(final float worldX) {
 		final float x = this.minimapFilledArea.x + (((worldX - this.playableMapArea.getX())
 				/ this.playableMapArea.getWidth()) * this.minimapFilledArea.width);
 		return Math.max(this.minimapFilledArea.x, Math.min(this.minimapFilledArea.x + this.minimapFilledArea.width, x));
 	}
 
-	private float toMinimapY(final float worldY) {
+	public float toMinimapY(final float worldY) {
 		final float y = this.minimapFilledArea.y + (((worldY - this.playableMapArea.getY())
 				/ this.playableMapArea.getHeight()) * this.minimapFilledArea.height);
 		return Math.max(this.minimapFilledArea.y,

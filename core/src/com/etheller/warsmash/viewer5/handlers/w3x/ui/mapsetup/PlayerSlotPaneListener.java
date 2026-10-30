@@ -13,4 +13,7 @@ public interface PlayerSlotPaneListener {
 
 	default void setPlayerHandicap(final int index, final float handicap) {
 	}
+
+	default void setPlayerColor(final int index, final int color) {
+	}
 }

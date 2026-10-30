@@ -47,6 +47,7 @@ public class CAbilityFactory extends CAbilityPassiveSpellBase {
 			final CUnit spawnedUnit = game.createUnitSimple(this.spawnUnitId, factory.getPlayerIndex(), x, y, facing);
 			game.unitSoundEffectEvent(factory, getAlias());
 			spawnedUnit.addClassification(CUnitClassification.SUMMONED);
+			game.unitSummoned(factory, spawnedUnit);
 			spawnedUnit.add(game,
 					new CBuffTimedLife(game.getHandleIdAllocator().createId(), this.buffId, getDuration(), false));
 			final AbilityTarget rallyPoint = factory.getRallyPoint();

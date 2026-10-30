@@ -28,13 +28,18 @@ public class ABActionCreateSpellEffectOnUnit implements ABAction {
 		} else {
 			theId = id.callback(game, caster, localStore, castId);
 		}
+		final CUnit targetUnit = target.callback(game, caster, localStore, castId);
+		if ((targetUnit == null) || (game.getUnit(targetUnit.getHandleId()) != targetUnit)) {
+			// Timers of an ability can outlive its removed unit (Spirit of Vengeance orbs).
+			localStore.remove(ABLocalStoreKeys.LASTCREATEDFX);
+			return;
+		}
 		if (index == null) {
-			SimulationRenderComponent ret = game.createPersistentSpellEffectOnUnit(
-					(target.callback(game, caster, localStore, castId)), theId, this.effectType);
+			SimulationRenderComponent ret = game.createPersistentSpellEffectOnUnit(targetUnit, theId,
+					this.effectType);
 			localStore.put(ABLocalStoreKeys.LASTCREATEDFX, ret);
 		} else {
-			SimulationRenderComponent ret = game.createPersistentSpellEffectOnUnit(
-					(target.callback(game, caster, localStore, castId)),
+			SimulationRenderComponent ret = game.createPersistentSpellEffectOnUnit(targetUnit,
 					this.id.callback(game, caster, localStore, castId), this.effectType,
 					this.index.callback(game, caster, localStore, castId));
 			localStore.put(ABLocalStoreKeys.LASTCREATEDFX, ret);

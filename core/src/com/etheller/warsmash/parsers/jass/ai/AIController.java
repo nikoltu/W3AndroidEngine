@@ -31,6 +31,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnitTypeRequiremen
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUpgradeType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbility;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.build.AbstractCAbilityBuild;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.build.CAbilityRepair;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.harvest.CAbilityAcolyteHarvest;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.harvest.CAbilityHarvest;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.harvest.CAbilityWispHarvest;
@@ -263,6 +264,15 @@ public class AIController {
 			}
 		}
 		return false;
+	}
+
+	private static int repairOrderId(final CUnit unit) {
+		for (final CAbility ability : unit.getAbilities()) {
+			if (ability instanceof CAbilityRepair) {
+				return ((CAbilityRepair) ability).getBaseOrderId();
+			}
+		}
+		return OrderIds.repair;
 	}
 
 	private static boolean minesFromOverlay(final CUnit unit) {
@@ -1349,7 +1359,7 @@ public class AIController {
 					best = worker;
 				}
 			}
-			if ((best != null) && best.order(this.simulation, OrderIds.repair, unit)) {
+			if ((best != null) && best.order(this.simulation, repairOrderId(best), unit)) {
 				return;
 			}
 		}

@@ -313,7 +313,7 @@
 										}
 									},
 									"thenActions": [{
-											"type": "createTimedBuff",
+											"type": "createTimedPausedExpirationBuff",
 											"buffId": {
 												"type": "getFirstBuffId"
 											},
@@ -621,7 +621,7 @@
 												"type": "getLastCreatedNonStackingStatBuff"
 											}
 										},{
-											"type": "createTimedTickingBuff",
+											"type": "createTimedTickingPausedBuff",
 											"buffId": {
 												"type": "getFirstBuffId"
 											},

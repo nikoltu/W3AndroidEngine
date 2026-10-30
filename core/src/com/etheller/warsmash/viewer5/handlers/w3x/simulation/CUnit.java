@@ -226,6 +226,7 @@ public class CUnit extends CWidget {
 	private boolean decays;
 	private boolean corpse;
 	private boolean boneCorpse;
+	private boolean freshCorpse;
 	private boolean falseDeath;
 
 	private transient CUnitAnimationListener unitAnimationListener;
@@ -256,8 +257,10 @@ public class CUnit extends CWidget {
 	private boolean constructingPaused = false;
 	private boolean structure;
 	private War3ID upgradeIdType = null;
+	private final List<War3ID> upgradedFromTypeIds = new ArrayList<>();
 	private float constructionProgress;
 	private boolean hidden = false;
+	private boolean removedFromGame;
 	private boolean paused = false;
 	private boolean acceptingOrders = true;
 	private boolean invulnerable = false;
@@ -348,6 +351,7 @@ public class CUnit extends CWidget {
 	private boolean unenumerable = false;
 
 	private MovementType movementOverride = null;
+	private boolean pathingDisabled;
 	private MovementType nextMovementOverride = null;
 
 	private boolean repairBlocked;
@@ -2351,17 +2355,19 @@ public class CUnit extends CWidget {
 	 * this unit from the game.
 	 */
 	public boolean update(final CSimulation game) {
-		for (final StateListenerUpdate update : this.stateListenersUpdates) {
-			switch (update.getUpdateType()) {
-			case ADD:
-				this.stateNotifier.subscribe(update.listener);
-				break;
-			case REMOVE:
-				this.stateNotifier.unsubscribe(update.listener);
-				break;
+		if (!this.stateListenersUpdates.isEmpty()) {
+			for (final StateListenerUpdate update : this.stateListenersUpdates) {
+				switch (update.getUpdateType()) {
+				case ADD:
+					this.stateNotifier.subscribe(update.listener);
+					break;
+				case REMOVE:
+					this.stateNotifier.unsubscribe(update.listener);
+					break;
+				}
 			}
+			this.stateListenersUpdates.clear();
 		}
-		this.stateListenersUpdates.clear();
 		if (this.guarding && !isDead()) {
 			updateGuard(game);
 			updateNightSleep(game);
@@ -2370,11 +2376,17 @@ public class CUnit extends CWidget {
 			if (!this.falseDeath) {
 				final int gameTurnTick = game.getGameTurnTick();
 				if (!this.corpse) {
-					if (this.collisionRectangle != null) {
+					if ((this.collisionRectangle != null) && !this.freshCorpse) {
 						// Moved this here because doing it on "kill" was able to happen in some cases
 						// while also iterating over the units that are in the collision system, and
 						// then it hit the "writing while iterating" problem.
 						game.getWorldCollision().removeUnit(this);
+						// Measured: the original raises or resurrects a unit one second after it dies, during
+						// its death animation, so the corpse can be used from the moment of death.
+						if (isRaisable() && isDecays() && !this.unitType.isHero() && !isHidden()) {
+							this.freshCorpse = true;
+							game.getWorldCollision().addUnit(this);
+						}
 					}
 					if (gameTurnTick > (this.deathTurnTick
 							+ (int) (this.unitType.getDeathTime() / WarsmashConstants.SIMULATION_STEP_TIME))) {
@@ -2400,7 +2412,7 @@ public class CUnit extends CWidget {
 						this.boneCorpse = true;
 						this.deathTurnTick = gameTurnTick;
 
-						if (isRaisable()) {
+						if (isRaisable() && !this.freshCorpse) {
 							game.getWorldCollision().addUnit(this);
 						}
 					}
@@ -2469,8 +2481,13 @@ public class CUnit extends CWidget {
 							if (this.unitType.getFoodMade() != 0) {
 								player.setFoodCap(player.getFoodCap() - this.unitType.getFoodMade());
 							}
+							final War3ID previousTypeId = this.typeId;
 							setTypeId(game, this.upgradeIdType, true);
 							this.upgradeIdType = null;
+							// Measured: an upgraded building still meets requirements for the types it was upgraded
+							// from, so a Castle unlocks what a Keep unlocks.
+							this.upgradedFromTypeIds.add(previousTypeId);
+							player.addTechtreeUnlocked(game, previousTypeId);
 						}
 						if (this.unitType.getFoodMade() != 0) {
 							player.setFoodCap(player.getFoodCap() + this.unitType.getFoodMade());
@@ -2552,9 +2569,8 @@ public class CUnit extends CWidget {
 								player.removeTechtreeInProgress(game, queuedRawcode);
 								player.addTechtreeUnlocked(game, queuedRawcode);
 								player.scoreUnitGained(trainedUnitType);
+								trainedUnit.placeTrainedUnit(game, this, this.rallyPoint);
 								fireTrainFinishEvents(game, trainedUnit);
-								// nudge the trained unit out around us
-								trainedUnit.nudgeAround(game, this);
 								game.unitTrainedEvent(this, trainedUnit);
 								if (this.rallyPoint != null) {
 									final int rallyOrderId = OrderIds.smart;
@@ -2583,9 +2599,8 @@ public class CUnit extends CWidget {
 								player.removeTechtreeInProgress(game, queuedRawcode);
 								player.addTechtreeUnlocked(game, queuedRawcode);
 								player.scoreUnitGained(trainedUnitType);
+								trainedUnit.placeTrainedUnit(game, this, this.rallyPoint);
 								fireTrainFinishEvents(game, trainedUnit);
-								// nudge the trained unit out around us
-								trainedUnit.nudgeAround(game, this);
 								game.unitTrainedEvent(this, trainedUnit);
 								if (this.rallyPoint != null) {
 									final int rallyOrderId = OrderIds.smart;
@@ -2734,9 +2749,7 @@ public class CUnit extends CWidget {
 						final Trigger trigger = this.onTickTriggers.get(i);
 						final TriggerExecutionScope triggerExecutionScope = CommonTriggerExecutionScope
 								.unitTriggerScope(null, trigger, this);
-						if (trigger.evaluate(globalScope, triggerExecutionScope)) {
-							trigger.execute(globalScope, triggerExecutionScope);
-						}
+						trigger.fire(globalScope, triggerExecutionScope, triggerExecutionScope);
 					}
 				}
 			} else if (!this.constructing) {
@@ -3111,7 +3124,8 @@ public class CUnit extends CWidget {
 	}
 
 	public <T> T getAbility(final CAbilityVisitor<T> visitor) {
-		for (final CAbility ability : this.abilities) {
+		for (int i = 0, n = this.abilities.size(); i < n; i++) {
+			final CAbility ability = this.abilities.get(i);
 			final T visited = ability.visit(visitor);
 			if (visited != null) {
 				return visited;
@@ -3121,7 +3135,8 @@ public class CUnit extends CWidget {
 	}
 
 	public <T extends CAbility> T getFirstAbilityOfType(final Class<T> cAbilityClass) {
-		for (final CAbility ability : this.abilities) {
+		for (int i = 0, n = this.abilities.size(); i < n; i++) {
+			final CAbility ability = this.abilities.get(i);
 			if (cAbilityClass.isAssignableFrom(ability.getClass())) {
 				return (T) ability;
 			}
@@ -3208,6 +3223,11 @@ public class CUnit extends CWidget {
 		final CWorldCollision collision = game.getWorldCollision();
 		final PathingGrid pathingGrid = game.getPathingGrid();
 		;
+		if (this.pathingDisabled) {
+			setPoint(newX, newY, collision, game.getRegionManager());
+			game.unitRepositioned(this);
+			return;
+		}
 		float outputX = newX, outputY = newY;
 		int checkX = 0;
 		int checkY = 0;
@@ -3848,6 +3868,9 @@ public class CUnit extends CWidget {
 				player.removeTechtreeInProgress(simulation, this.unitType.getTypeId());
 			} else {
 				player.removeTechtreeUnlocked(simulation, this.unitType.getTypeId());
+				for (final War3ID upgradedFromTypeId : this.upgradedFromTypeIds) {
+					player.removeTechtreeUnlocked(simulation, upgradedFromTypeId);
+				}
 			}
 		}
 		// else its a hero and techtree "remains unlocked" which is currently meaning
@@ -4129,6 +4152,10 @@ public class CUnit extends CWidget {
 		return this.boneCorpse;
 	}
 
+	public boolean isUsableCorpse() {
+		return this.boneCorpse || this.freshCorpse;
+	}
+
 	@Override
 	public boolean canBeTargetedBy(final CSimulation simulation, final CUnit source,
 			final EnumSet<CTargetType> targetsAllowed, final AbilityTargetCheckReceiver<CWidget> receiver) {
@@ -4215,7 +4242,7 @@ public class CUnit extends CWidget {
 												if (!targetsAllowed.contains(CTargetType.NONHERO)
 														|| (getHeroData() == null)) {
 													if (isDead()) {
-														if (isRaisable() && isDecays() && isBoneCorpse()) {
+														if (isRaisable() && isDecays() && isUsableCorpse()) {
 															if (targetsAllowed.contains(CTargetType.DEAD)) {
 																return true;
 															} else {
@@ -4365,6 +4392,7 @@ public class CUnit extends CWidget {
 		simulation.getWorldCollision().removeUnit(this);
 		this.corpse = false;
 		this.boneCorpse = false;
+		this.freshCorpse = false;
 		this.deathTurnTick = 0;
 		this.explodesOnDeath = false;
 		this.explodesOnDeathBuffId = null;
@@ -4879,6 +4907,75 @@ public class CUnit extends CWidget {
 		setPointAndCheckUnstuck(structure.getX(), structure.getY(), simulation);
 	}
 
+	/**
+	 * Measured in 1.29: a trained unit goes to the first 32 cell, along the same square spiral as
+	 * {@link #findNearestFreeCell} from the trainer's centre, whose lower left corner lies outside the trainer's whole
+	 * pathing texture (its walkable border too), whatever the unit's collision size. The spiral's first leg turns with
+	 * the rally point: none goes down, up and to the right goes up, up and to the left goes left, and so on. The
+	 * centre must also be pathable for this unit, because the engine cannot move a unit off a blocked start.
+	 */
+	public void placeTrainedUnit(final CSimulation simulation, final CUnit trainer, final AbilityTarget rallyPoint) {
+		final ArgbImage trainerPathing = trainer.getUnitType().getBuildingPathingPixelMap();
+		if (isBuilding() || !trainer.isBuilding() || (trainerPathing == null)) {
+			nudgeAround(simulation, trainer);
+			return;
+		}
+		final CWorldCollision collision = simulation.getWorldCollision();
+		final PathingGrid pathingGrid = simulation.getPathingGrid();
+		final float collisionSize = this.unitType.getCollisionSize();
+		if (this.collisionRectangle != null) {
+			tempRect.set(this.collisionRectangle);
+		}
+		else {
+			tempRect.setSize(16, 16);
+		}
+		final float halfWidth = (trainerPathing.getWidth() * 32) / 2f;
+		final float halfHeight = (trainerPathing.getHeight() * 32) / 2f;
+		final float trainerX = trainer.getX();
+		final float trainerY = trainer.getY();
+		int direction = 0;
+		if ((rallyPoint != null) && (rallyPoint != trainer)) {
+			final double rallyDx = rallyPoint.getX() - trainerX;
+			final double rallyDy = rallyPoint.getY() - trainerY;
+			if ((rallyDx != 0) || (rallyDy != 0)) {
+				double angle = Math.toDegrees(Math.atan2(rallyDy, rallyDx));
+				if (angle < 0) {
+					angle += 360;
+				}
+				final int[] directionByQuadrant = { 2, 3, 0, 1 };
+				direction = directionByQuadrant[Math.min(3, (int) (angle / 90))];
+			}
+		}
+		final float baseX = (float) Math.floor(trainerX / 32f) * 32f;
+		final float baseY = (float) Math.floor(trainerY / 32f) * 32f;
+		final int[] stepX = { 0, 1, 0, -1 };
+		final int[] stepY = { -1, 0, 1, 0 };
+		int cellX = 0;
+		int cellY = 0;
+		for (int legLength = 1; legLength <= 128; legLength++) {
+			for (int leg = 0; leg < 2; leg++) {
+				for (int step = 0; step < legLength; step++) {
+					final float cx = baseX + (cellX * 32f);
+					final float cy = baseY + (cellY * 32f);
+					if ((Math.abs(cx - trainerX) > halfWidth) || (Math.abs(cy - trainerY) > halfHeight)) {
+						tempRect.setCenter(cx + 16f, cy + 16f);
+						if (!collision.intersectsAnythingOtherThan(tempRect, this, getMovementType(), false)
+								&& pathingGrid.isPathable(cx, cy, getMovementType(), collisionSize)
+								&& pathingGrid.isPathable(cx + 16f, cy + 16f, getMovementType(), collisionSize)) {
+							setPoint(cx + 16f, cy + 16f, collision, simulation.getRegionManager());
+							simulation.unitRepositioned(this);
+							return;
+						}
+					}
+					cellX += stepX[direction];
+					cellY += stepY[direction];
+				}
+				direction = (direction + 1) % 4;
+			}
+		}
+		nudgeAround(simulation, trainer);
+	}
+
 	@Override
 	public void setLife(final CSimulation simulation, final float life) {
 		final boolean wasDead = isDead();
@@ -5105,6 +5202,7 @@ public class CUnit extends CWidget {
 		heroData.setAwaitingRevive(false);
 		this.corpse = false;
 		this.boneCorpse = false;
+		this.freshCorpse = false;
 		this.deathTurnTick = 0;
 		setX(reviver.getX());
 		setY(reviver.getY());
@@ -5115,6 +5213,43 @@ public class CUnit extends CWidget {
 		setMana((getMaximumMana() * manaFactor) + (manaStart * this.unitType.getManaInitial()));
 		nudgeAround(game, reviver);
 		game.unitRepositioned(this); // dont blend animation
+	}
+
+	/**
+	 * ReviveHero from a script: the hero comes back at the point with the same life and mana rules as an altar.
+	 */
+	public void reviveHeroAtPoint(final CSimulation game, final float x, final float y, final boolean doEyecandy) {
+		final CAbilityHero heroData = getHeroData();
+		heroData.setReviving(false);
+		heroData.setAwaitingRevive(false);
+		this.corpse = false;
+		this.boneCorpse = false;
+		this.freshCorpse = false;
+		this.deathTurnTick = 0;
+		setX(x);
+		setY(y);
+		game.getWorldCollision().addUnit(this);
+		setPoint(x, y, game.getWorldCollision(), game.getRegionManager());
+		setHidden(false);
+		setLife(game, getMaximumLife());
+		setMana(getMaximumMana());
+		game.unitRepositioned(this);
+	}
+
+	public boolean isPathingDisabled() {
+		return this.pathingDisabled;
+	}
+
+	public void setPathingDisabled(final boolean pathingDisabled) {
+		this.pathingDisabled = pathingDisabled;
+		setNoCollisionMovementType(pathingDisabled);
+	}
+
+	public void resetCooldowns() {
+		this.rawcodeToCooldownExpireTime.clear();
+		this.rawcodeToCooldownStartTime.clear();
+		this.cooldownEndTime = 0;
+		fireCooldownsChangedEvent();
 	}
 
 	public void queueResearch(final CSimulation game, final War3ID rawcode) {
@@ -5262,7 +5397,8 @@ public class CUnit extends CWidget {
 	}
 
 	public CAbilityGoldMinable getGoldMineData() {
-		for (final CAbility ability : this.abilities) {
+		for (int i = 0, n = this.abilities.size(); i < n; i++) {
+			final CAbility ability = this.abilities.get(i);
 			if (ability instanceof CAbilityGoldMinable) {
 				return (CAbilityGoldMinable) ability;
 			}
@@ -5271,7 +5407,8 @@ public class CUnit extends CWidget {
 	}
 
 	public CAbilityOverlayedMine getOverlayedGoldMineData() {
-		for (final CAbility ability : this.abilities) {
+		for (int i = 0, n = this.abilities.size(); i < n; i++) {
+			final CAbility ability = this.abilities.get(i);
 			if (ability instanceof CAbilityOverlayedMine) {
 				return (CAbilityOverlayedMine) ability;
 			}
@@ -5280,7 +5417,8 @@ public class CUnit extends CWidget {
 	}
 
 	public int getGold() {
-		for (final CAbility ability : this.abilities) {
+		for (int i = 0, n = this.abilities.size(); i < n; i++) {
+			final CAbility ability = this.abilities.get(i);
 			if (ability instanceof CAbilityGoldMinable) {
 				return ((CAbilityGoldMinable) ability).getGold();
 			}
@@ -5311,7 +5449,8 @@ public class CUnit extends CWidget {
 	}
 
 	public CAbilityHero getHeroData() {
-		for (final CAbility ability : this.abilities) {
+		for (int i = 0, n = this.abilities.size(); i < n; i++) {
+			final CAbility ability = this.abilities.get(i);
 			if (ability instanceof CAbilityHero) {
 				return (CAbilityHero) ability;
 			}
@@ -5320,7 +5459,8 @@ public class CUnit extends CWidget {
 	}
 
 	public CAbilityRoot getRootData() {
-		for (final CAbility ability : this.abilities) {
+		for (int i = 0, n = this.abilities.size(); i < n; i++) {
+			final CAbility ability = this.abilities.get(i);
 			if (ability instanceof CAbilityRoot) {
 				return (CAbilityRoot) ability;
 			}
@@ -5329,7 +5469,8 @@ public class CUnit extends CWidget {
 	}
 
 	public CAbilityInventory getInventoryData() {
-		for (final CAbility ability : this.abilities) {
+		for (int i = 0, n = this.abilities.size(); i < n; i++) {
+			final CAbility ability = this.abilities.get(i);
 			if (ability instanceof CAbilityInventory) {
 				return (CAbilityInventory) ability;
 			}
@@ -5338,7 +5479,8 @@ public class CUnit extends CWidget {
 	}
 
 	public CAbilityNeutralBuilding getNeutralBuildingData() {
-		for (final CAbility ability : this.abilities) {
+		for (int i = 0, n = this.abilities.size(); i < n; i++) {
+			final CAbility ability = this.abilities.get(i);
 			if (ability instanceof CAbilityNeutralBuilding) {
 				return (CAbilityNeutralBuilding) ability;
 			}
@@ -5347,7 +5489,8 @@ public class CUnit extends CWidget {
 	}
 
 	public CAbilityCargoHold getCargoData() {
-		for (final CAbility ability : this.abilities) {
+		for (int i = 0, n = this.abilities.size(); i < n; i++) {
+			final CAbility ability = this.abilities.get(i);
 			if (ability instanceof CAbilityCargoHold) {
 				return (CAbilityCargoHold) ability;
 			}
@@ -5454,6 +5597,9 @@ public class CUnit extends CWidget {
 					player.removeTechtreeInProgress(simulation, this.unitType.getTypeId());
 				} else {
 					player.removeTechtreeUnlocked(simulation, this.unitType.getTypeId());
+					for (final War3ID upgradedFromTypeId : this.upgradedFromTypeIds) {
+						player.removeTechtreeUnlocked(simulation, upgradedFromTypeId);
+					}
 				}
 			} // else techtree was removed upon death
 			setHidden(true);
@@ -5462,6 +5608,15 @@ public class CUnit extends CWidget {
 		}
 		killPathingInstance();
 		simulation.getWorldCollision().removeUnit(this);
+		this.removedFromGame = true;
+	}
+
+	/**
+	 * After the step that removed it, a unit's handle no longer refers to anything: as measured in the original game,
+	 * scripts then read type 0, position 0, no owner and not hidden.
+	 */
+	public boolean isRemovedFromGame() {
+		return this.removedFromGame;
 	}
 
 	private static enum StateListenerUpdateType {
@@ -5570,11 +5725,12 @@ public class CUnit extends CWidget {
 
 	public void setUnitState(final CSimulation game, final CUnitState whichUnitState, final float value) {
 		switch (whichUnitState) {
+		// Measured: the original keeps a script's life and mana within the unit's maximum.
 		case LIFE:
-			setLife(game, value);
+			setLife(game, Math.min(value, getMaximumLife()));
 			break;
 		case MANA:
-			setMana(value);
+			setMana(Math.max(0, Math.min(value, getMaximumMana())));
 			break;
 		case MAX_LIFE:
 			setMaximumLife((int) value);
@@ -6433,7 +6589,8 @@ public class CUnit extends CWidget {
 				final int myZ = flying ? Integer.MAX_VALUE : game.getTerrainHeight(myX, myY);
 				final PathingGrid pathingGrid = game.getPathingGrid();
 				byte detections = 0;
-				for (final int detectionLevel : this.detectorLevels) {
+				for (int d = 0, dn = this.detectorLevels.size(); d < dn; d++) {
+					final int detectionLevel = this.detectorLevels.get(d);
 					if ((detectionLevel >> 8) > 0) {
 						detections |= (byte) detectionLevel;
 					}
@@ -6447,7 +6604,8 @@ public class CUnit extends CWidget {
 				final int maxYi = pathingGrid.getFogOfWarIndexY(myY + sightRadius);
 				for (int a = 1; a <= Math.max(maxYi - myYi, maxXi - myXi); a++) {
 					detections = 0;
-					for (final int detectionLevel : this.detectorLevels) {
+					for (int d = 0, dn = this.detectorLevels.size(); d < dn; d++) {
+						final int detectionLevel = this.detectorLevels.get(d);
 						if ((detectionLevel >> 8) > a) {
 							detections |= (byte) detectionLevel;
 						}
@@ -6473,7 +6631,8 @@ public class CUnit extends CWidget {
 					for (int x = 1; x <= (maxXi - myXi); x++) {
 						final float distance = (x * x) + (y * y);
 						detections = 0;
-						for (final int detectionLevel : this.detectorLevels) {
+						for (int d = 0, dn = this.detectorLevels.size(); d < dn; d++) {
+							final int detectionLevel = this.detectorLevels.get(d);
 							if (((detectionLevel >> 8) * (detectionLevel >> 8)) > distance) {
 								detections |= (byte) detectionLevel;
 							}
@@ -6741,6 +6900,10 @@ public class CUnit extends CWidget {
 		if (this.isDead() || (((toPlayerIndex == this.playerIndex)
 				|| toPlayer.hasAlliance(this.playerIndex, CAllianceType.SHARED_VISION))
 				&& (getCurrentSightRadius(simulation) > 0))) {
+			return true;
+		}
+		// Takes effect at once, not at the next fog update (measured).
+		if (simulation.isUnitVisionShared(this, toPlayer)) {
 			return true;
 		}
 		if ((this.invisLevels > 0) && ((this.detections & (1 << toPlayerIndex)) == 0)) {

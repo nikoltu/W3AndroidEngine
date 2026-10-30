@@ -69,6 +69,7 @@ public class CBehaviorOrcBuild extends CAbstractRangedBehavior {
 			if (!buildLocationObstructed) {
 				final CUnit constructedStructure = simulation.createUnit(this.orderId, playerIndex, this.target.getX()
 						, this.target.getY(), simulation.getGameplayConstants().getBuildingAngle(), true);
+				AbstractCAbilityBuild.moveControlledUnitsAside(simulation, constructedStructure, this.unit);
 				this.constructedStructure = constructedStructure;
 				if (canBeBuiltOnThem) {
 					CAbilityGoldMinable abilityGoldMine = null;

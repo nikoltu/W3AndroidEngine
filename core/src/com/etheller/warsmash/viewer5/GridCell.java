@@ -37,7 +37,9 @@ public class GridCell {
 	}
 
 	public boolean isVisible(final Camera camera) {
-		this.plane = RenderMathUtils.testCell(camera.planes, this.left, this.right, this.bottom, this.top, this.plane);
+		// Terrain, flying units and tall models stand well above or below height 0, so the cell is tested as a tall box.
+		this.plane = RenderMathUtils.testCell(camera.planes, this.left, this.right, this.bottom, this.top, -2048, 4096,
+				this.plane);
 
 		return this.plane == -1;
 	}
