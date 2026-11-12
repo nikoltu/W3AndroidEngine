@@ -301,7 +301,7 @@ final class ProfilePage extends LauncherViews {
 				status = getString(R.string.profile_not_started);
 				color = this.activity.art.text2();
 			}
-			else if (progress.isEndingCinematicAvailable(entry.getNumber())) {
+			else if (CampaignCatalog.isCompleted(entry, progress)) {
 				status = getString(R.string.profile_completed);
 				color = LauncherKit.OK;
 			}

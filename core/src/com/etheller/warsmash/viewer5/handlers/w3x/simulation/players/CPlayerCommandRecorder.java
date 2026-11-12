@@ -155,4 +155,10 @@ public class CPlayerCommandRecorder implements CPlayerUnitOrderListener {
 		this.encoder.trackableEvent(trackableHandleId, hit);
 		apply();
 	}
+
+	@Override
+	public void mouseEvent(final int eventId, final float x, final float y, final int button) {
+		this.encoder.mouseEvent(eventId, x, y, button);
+		apply();
+	}
 }

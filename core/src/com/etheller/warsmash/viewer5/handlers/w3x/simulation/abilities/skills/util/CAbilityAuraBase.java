@@ -1,5 +1,6 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.util;
 
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.CAreaTargetVisibility;
 import com.etheller.warsmash.units.GameObject;
 import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
@@ -48,7 +49,7 @@ public abstract class CAbilityAuraBase extends CAbilityPassiveSpellBase {
 		final int gameTurnTick = game.getGameTurnTick();
 		if (gameTurnTick >= nextAreaCheck) {
 			game.getWorldCollision().enumUnitsInRange(source.getX(), source.getY(), getAreaOfEffect(), (enumUnit) -> {
-				if (enumUnit.canBeTargetedBy(game, source, getTargetsAllowed())) {
+				if (enumUnit.canBeAreaTargetedBy(game, source, CAreaTargetVisibility.ANY, getTargetsAllowed())) {
 					// TODO: the below system of adding an ability instead leveling it should maybe
 					// be standardized
 					final CLevelingAbility existingBuff = enumUnit

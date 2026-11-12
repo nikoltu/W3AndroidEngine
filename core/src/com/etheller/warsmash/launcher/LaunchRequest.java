@@ -39,6 +39,8 @@ public final class LaunchRequest {
 	public String saveFile;
 	/** A replay of the Replay folder, by its full path. */
 	public String replayFile;
+	/** The replay is played although this engine would refuse it. */
+	public boolean replayForced;
 	/** The map the game starts on, whose loading screen the engine shows from its first frame on. */
 	public String mapFile;
 	/** The launcher's skin: {@link #SKIN_REFORGED} shows the Reforged loading screens of maps. */
@@ -89,8 +91,14 @@ public final class LaunchRequest {
 
 	/** A replay this engine plays. */
 	public static LaunchRequest replay(final GameCatalog.ReplayEntry entry) {
+		return replay(entry, false);
+	}
+
+	/** @param forced play it although this engine would refuse it (the player chose to try anyway) */
+	public static LaunchRequest replay(final GameCatalog.ReplayEntry entry, final boolean forced) {
 		final LaunchRequest request = new LaunchRequest();
 		request.replayFile = entry.file.getAbsolutePath();
+		request.replayForced = forced;
 		request.mapFile = entry.mapFile;
 		return request;
 	}
@@ -101,13 +109,29 @@ public final class LaunchRequest {
 				: this.customMap != null ? SOURCE_CUSTOM : this.replayFile != null ? SOURCE_REPLAY : SOURCE_LOAD;
 	}
 
+	/**
+	 * Where the game ended up, as the result tells the launcher: the campaign follows the game actually played, so a
+	 * save loaded in the game from another campaign (or from none) is that campaign's mission (or a loaded game), not
+	 * the one the game was started as.
+	 */
+	public String source(final GameResult played) {
+		if ((played == null) || (played.campaign == GameResult.CAMPAIGN_UNKNOWN) || (this.replayFile != null)) {
+			return source();
+		}
+		if (played.campaign >= 0) {
+			return SOURCE_CAMPAIGN;
+		}
+		return (this.campaign >= 0) || (this.saveFile != null) ? SOURCE_LOAD : source();
+	}
+
 	/** Sets up the engine's menu screen to show only this game's loading screen; before the menu is built. */
 	public void prepare(final WarsmashGdxMenuScreen menuScreen) {
 		menuScreen.setLauncherMode(true);
 		menuScreen.setWaitForTap(true);
 		menuScreen.setReforgedLoadingScreens(SKIN_REFORGED.equals(this.skin));
-		// A won mission's result comes before the next mission, as on the Reforged campaign screen.
-		menuScreen.setEndsAtCampaignVictory(this.campaign >= 0);
+		// A won mission's result comes before the next mission, as on the Reforged campaign screen; a game loaded in
+		// the game from a campaign's mission ends the same way, whatever this game was started as.
+		menuScreen.setEndsAtCampaignVictory(true);
 		menuScreen.setReforgedPortrait(this.portrait);
 		menuScreen.setStartupMap(this.mapFile);
 		menuScreen.setStartupSlots(this.slots);
@@ -130,7 +154,7 @@ public final class LaunchRequest {
 				return menu.startSkirmish(this.customMap, this.slots, this.options);
 			}
 			if (this.replayFile != null) {
-				return menu.startReplay(Gdx.files.absolute(this.replayFile));
+				return menu.startReplay(Gdx.files.absolute(this.replayFile), 0, this.replayForced);
 			}
 		}
 		catch (final RuntimeException e) {
@@ -152,6 +176,6 @@ public final class LaunchRequest {
 	@Override
 	public String toString() {
 		return "campaign=" + this.campaign + " mission=" + this.mission + " custom=" + this.customMap + " save="
-				+ this.saveFile + " replay=" + this.replayFile + " map=" + this.mapFile;
+				+ this.saveFile + " replay=" + this.replayFile + (this.replayForced ? " (forced)" : "") + " map=" + this.mapFile;
 	}
 }

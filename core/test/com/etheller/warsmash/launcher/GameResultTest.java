@@ -195,4 +195,47 @@ class GameResultTest {
 		result.result = "defeat";
 		assertEquals("DEFEAT", CampaignResult.title(result)[0]);
 	}
+
+	@Test
+	void campaignOfTheGamePlayedComesBackAndOlderResultsDoNotTellIt() {
+		final GameResult result = won();
+		assertEquals(GameResult.CAMPAIGN_UNKNOWN, GameResult.fromJson(result.toJson()).campaign);
+		result.campaign = 3;
+		assertEquals(3, GameResult.fromJson(result.toJson()).campaign);
+		result.campaign = -1;
+		assertEquals(-1, GameResult.fromJson(result.toJson()).campaign);
+	}
+
+	@Test
+	void resultFollowsTheCampaignOfTheGamePlayedNotOfTheOneStarted() {
+		final LaunchRequest started = new LaunchRequest();
+		started.campaign = 1;
+		started.mission = 2;
+		final GameResult played = new GameResult();
+		assertEquals(LaunchRequest.SOURCE_CAMPAIGN, started.source(played));
+		played.campaign = 4;
+		assertEquals(LaunchRequest.SOURCE_CAMPAIGN, started.source(played));
+		played.campaign = -1;
+		assertEquals(LaunchRequest.SOURCE_LOAD, started.source(played));
+		assertEquals(LaunchRequest.SOURCE_CAMPAIGN, started.source(null));
+	}
+
+	@Test
+	void campaignSaveLoadedInACustomGameEndsAsThatCampaignsMission() {
+		final LaunchRequest custom = new LaunchRequest();
+		custom.customMap = "Maps/Skirmish.w3x";
+		final GameResult played = new GameResult();
+		played.campaign = -1;
+		assertEquals(LaunchRequest.SOURCE_CUSTOM, custom.source(played));
+		played.campaign = 2;
+		assertEquals(LaunchRequest.SOURCE_CAMPAIGN, custom.source(played));
+		assertTrue(CampaignResult.shows(withSource(played, custom)));
+	}
+
+	private static GameResult withSource(final GameResult played, final LaunchRequest request) {
+		played.source = request.source(played);
+		played.result = "victory";
+		played.score = new GameResult.Score();
+		return played;
+	}
 }

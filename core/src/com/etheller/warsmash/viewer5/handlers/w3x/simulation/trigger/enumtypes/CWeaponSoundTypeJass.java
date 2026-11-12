@@ -38,7 +38,7 @@ public enum CWeaponSoundTypeJass implements CHandle {
 		return this.soundKey;
 	}
 
-	public static CWeaponSoundTypeJass[] VALUES = values();
+	public static final CWeaponSoundTypeJass[] VALUES = values();
 
 	@Override
 	public int getHandleId() {

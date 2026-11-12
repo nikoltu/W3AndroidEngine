@@ -1,8 +1,10 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.human.archmage;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 
 import com.etheller.warsmash.units.GameObject;
 import com.etheller.warsmash.util.War3ID;
@@ -20,8 +22,8 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.SimulationRend
 
 public class CAbilityMassTeleport extends CAbilityTargetSpellBase {
 	// Only the caster's own units go along, flying ones too, whatever the data's target flags say; never wards.
-	private static final EnumSet<CTargetType> TELEPORTED_UNITS = EnumSet.of(CTargetType.AIR, CTargetType.GROUND,
-			CTargetType.PLAYERUNITS, CTargetType.VULNERABLE, CTargetType.INVULNERABLE);
+	private static final Set<CTargetType> TELEPORTED_UNITS = Collections.unmodifiableSet(EnumSet.of(CTargetType.AIR,
+			CTargetType.GROUND, CTargetType.PLAYERUNITS, CTargetType.VULNERABLE, CTargetType.INVULNERABLE));
 
 	private int numberOfUnitsTeleported;
 	private boolean useTeleportClustering;

@@ -61,9 +61,6 @@ public class WaveBuilder {
 				+ waterRow.getField("shoreOCFile") + "0.mdx";
 		final String insideCorner = waterRow.getField("shoreDir") + "\\" + waterRow.getField("shoreICFile") + "\\"
 				+ waterRow.getField("shoreICFile") + "0.mdx";
-//		final String shoreline = "Buildings\\Other\\TempArtB\\TempArtB.mdx";
-//		final String outsideCorner = "Buildings\\Other\\TempArtB\\TempArtB.mdx";
-//		final String insideCorner = "Buildings\\Other\\TempArtB\\TempArtB.mdx";
 
 		this.locations = new float[3];
 

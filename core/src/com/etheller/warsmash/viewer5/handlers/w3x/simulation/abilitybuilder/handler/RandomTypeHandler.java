@@ -1,5 +1,7 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.handler;
 
+import java.util.Locale;
+
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -25,7 +27,7 @@ public class RandomTypeHandler {
 		airCritters = new ArrayList<>();
 		seaCritters = new ArrayList<>();
 		Collection<CUnitType> types = game.getUnitData().getAllUnitTypesLightweight();
-		String tileset = ("" + game.getTileset()).toUpperCase();
+		String tileset = ("" + game.getTileset()).toUpperCase(Locale.ROOT);
 
 		for (CUnitType type : types) {
 			if (type.getRace() == CUnitRace.CRITTERS

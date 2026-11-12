@@ -12,7 +12,7 @@ public enum CPathingTypeJass implements CHandle {
 	FLOATABILITY,
 	AMPHIBIOUSPATHING;
 
-	public static CPathingTypeJass[] VALUES = values();
+	public static final CPathingTypeJass[] VALUES = values();
 
 	@Override
 	public int getHandleId() {

@@ -1,5 +1,7 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.data;
 
+import java.util.Locale;
+
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -143,7 +145,7 @@ public class CItemData {
 			final String classificationString = itemType.getFieldAsString(CLASSIFICATION, 0);
 			CItemTypeJass itemClass = CItemTypeJass.UNKNOWN;
 			try {
-				itemClass = CItemTypeJass.valueOf(classificationString.toUpperCase());
+				itemClass = CItemTypeJass.valueOf(classificationString.toUpperCase(Locale.ROOT));
 			}
 			catch (final Exception exc) {
 				// do not bother to log this, means it didn't match constant (it's a user input)

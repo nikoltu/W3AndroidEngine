@@ -25,6 +25,9 @@ final class CSoundParameters {
 	float coneX;
 	float coneY;
 	float coneZ;
+	float velocityX;
+	float velocityY;
+	float velocityZ;
 	RenderUnit attachedUnit;
 	String dialogueSpeakerNameKey = "";
 	String dialogueTextKey = "";

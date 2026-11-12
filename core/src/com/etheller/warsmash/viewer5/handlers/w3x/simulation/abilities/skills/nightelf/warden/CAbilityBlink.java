@@ -2,6 +2,7 @@ package com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.n
 
 import com.etheller.warsmash.units.GameObject;
 import com.etheller.warsmash.util.War3ID;
+import com.etheller.warsmash.viewer5.handlers.w3x.environment.PathingGrid;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.CAbilityPointTargetSpellBase;
@@ -14,6 +15,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.AbilityTargetC
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.CommandStringErrorKeys;
 
 public class CAbilityBlink extends CAbilityPointTargetSpellBase {
+	private static final float BEYOND_RANGE_FACTOR = 0.8f;
 
 	private float minimumRange;
 	private float maximumRange;
@@ -40,8 +42,43 @@ public class CAbilityBlink extends CAbilityPointTargetSpellBase {
 			receiver.targetCheckFailed(CommandStringErrorKeys.TARGET_IS_INSIDE_MINIMUM_RANGE);
 		}
 		else {
-			super.innerCheckCanTarget(game, unit, orderId, target, receiver);
+			final AbilityPointTarget point = blinkPoint(game, unit, target);
+			if (point == null) {
+				receiver.targetCheckFailed(CommandStringErrorKeys.UNABLE_TO_TARGET_THERE);
+			}
+			else {
+				super.innerCheckCanTarget(game, unit, orderId, point, receiver);
+			}
 		}
+	}
+
+	/**
+	 * Measured (1.29): a point beyond the maximum range is taken at 4/5 of that range in its direction, and a point
+	 * on ground the caster cannot stand on (deep water, cliffs) is taken at the nearest place it can; the spell events
+	 * see that point. A point blocked only by a destructable (trees) cannot be targeted: null.
+	 */
+	private AbilityPointTarget blinkPoint(final CSimulation game, final CUnit unit, final AbilityPointTarget target) {
+		float x = target.getX();
+		float y = target.getY();
+		if (StrictMath.hypot(x - unit.getX(), y - unit.getY()) > this.maximumRange) {
+			final double angleTo = unit.angleTo(target);
+			final float distance = this.maximumRange * BEYOND_RANGE_FACTOR;
+			x = unit.getX() + (float) (StrictMath.cos(angleTo) * distance);
+			y = unit.getY() + (float) (StrictMath.sin(angleTo) * distance);
+		}
+		final PathingGrid pathingGrid = game.getPathingGrid();
+		if (!pathingGrid.isPathable(x, y, unit.getMovementType())) {
+			if (unit.getMovementType().isPathable(pathingGrid.getTerrainPathing(x, y))) {
+				return null;
+			}
+			final float[] free = unit.findFreePoint(x, y, game);
+			x = free[0];
+			y = free[1];
+		}
+		if ((x == target.getX()) && (y == target.getY())) {
+			return target;
+		}
+		return new AbilityPointTarget(x, y);
 	}
 
 	@Override
@@ -49,15 +86,14 @@ public class CAbilityBlink extends CAbilityPointTargetSpellBase {
 		final float casterX = caster.getX();
 		final float casterY = caster.getY();
 		simulation.spawnSpellEffectOnPoint(casterX, casterY, 0, getAlias(), CEffectType.AREA_EFFECT, 0).remove();
-		final double distance = caster.distance(target);
-		float resultingX = target.getX();
-		float resultingY = target.getY();
-		if (distance > maximumRange) {
-			final double angleTo = caster.angleTo(target);
-			resultingX = casterX + (float) (StrictMath.cos(angleTo) * maximumRange);
-			resultingY = casterY + (float) (StrictMath.sin(angleTo) * maximumRange);
+		final AbilityPointTarget point = blinkPoint(simulation, caster,
+				new AbilityPointTarget(target.getX(), target.getY()));
+		if (point != null) {
+			caster.setPointAndCheckUnstuck(point.getX(), point.getY(), simulation);
 		}
-		caster.setPointAndCheckUnstuck(resultingX, resultingY, simulation);
+		else {
+			caster.setPointAndCheckUnstuck(target.getX(), target.getY(), simulation);
+		}
 		simulation.spawnSpellEffectOnPoint(caster.getX(), caster.getY(), 0, getAlias(), CEffectType.SPECIAL, 0)
 				.remove();
 		return false;

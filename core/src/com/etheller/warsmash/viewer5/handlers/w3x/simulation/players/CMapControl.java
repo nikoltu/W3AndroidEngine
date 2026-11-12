@@ -10,7 +10,7 @@ public enum CMapControl implements CHandle {
 	CREEP,
 	NONE;
 
-	public static CMapControl[] VALUES = values();
+	public static final CMapControl[] VALUES = values();
 
 	@Override
 	public int getHandleId() {

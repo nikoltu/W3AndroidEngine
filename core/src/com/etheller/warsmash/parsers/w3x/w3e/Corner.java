@@ -155,6 +155,14 @@ public class Corner {
 		return this.groundTexture;
 	}
 
+	public void setGroundTexture(final int groundTexture) {
+		this.groundTexture = groundTexture;
+	}
+
+	public void setGroundVariation(final int groundVariation) {
+		this.groundVariation = groundVariation;
+	}
+
 	public int getCliffVariation() {
 		return this.cliffVariation;
 	}

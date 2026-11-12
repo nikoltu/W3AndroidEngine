@@ -14,7 +14,7 @@ public enum CAllianceType implements CHandle {
 	RESCUABLE,
 	SHARED_VISION_FORCED;
 
-	public static CAllianceType[] VALUES = values();
+	public static final CAllianceType[] VALUES = values();
 
 	@Override
 	public int getHandleId() {

@@ -37,7 +37,7 @@ public enum CUnitTypeJass implements CHandle {
 	ETHEREAL,
 	MAGIC_IMMUNE;
 
-	public static CUnitTypeJass[] VALUES = values();
+	public static final CUnitTypeJass[] VALUES = values();
 
 	@Override
 	public int getHandleId() {

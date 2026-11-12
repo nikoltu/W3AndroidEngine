@@ -28,41 +28,49 @@ public final class CCampaignProgress {
 		private final Set<Integer> campaigns = new HashSet<>();
 		private final Set<Integer> openingCinematics = new HashSet<>();
 		private final Set<Integer> endingCinematics = new HashSet<>();
+		private final Set<Long> wonMissions = new HashSet<>();
 		private boolean tutorialCleared;
 		private int menuCampaignIndex = -1;
 		private int classicMenuCampaignIndex = -1;
+		/** SetDefaultDifficulty, or -1 while the game difficulty is the default. */
+		private int defaultDifficulty = -1;
+		private final Set<Integer> customCampaignButtons = new HashSet<>();
 
 		private void write(final DataOutputStream out) throws IOException {
-			out.writeInt(this.missions.size());
-			for (final long mission : this.missions) {
-				out.writeLong(mission);
-			}
+			writeMissions(out, this.missions);
 			writeFlags(out, this.campaigns);
 			writeFlags(out, this.openingCinematics);
 			writeFlags(out, this.endingCinematics);
 			out.writeBoolean(this.tutorialCleared);
 			out.writeInt(this.menuCampaignIndex);
 			out.writeInt(this.classicMenuCampaignIndex);
+			writeMissions(out, this.wonMissions);
+			out.writeInt(this.defaultDifficulty);
+			writeFlags(out, this.customCampaignButtons);
 		}
 
-		private void read(final DataInputStream in, final boolean hasClassicMenuIndex) throws IOException {
-			final int missionCount = in.readInt();
-			for (int i = 0; i < missionCount; i++) {
-				this.missions.add(in.readLong());
-			}
+		private void read(final DataInputStream in, final int version) throws IOException {
+			readMissions(in, this.missions);
 			readFlags(in, this.campaigns);
 			readFlags(in, this.openingCinematics);
 			readFlags(in, this.endingCinematics);
 			this.tutorialCleared = in.readBoolean();
 			this.menuCampaignIndex = in.readInt();
-			this.classicMenuCampaignIndex = hasClassicMenuIndex ? in.readInt() : -1;
+			this.classicMenuCampaignIndex = version >= 2 ? in.readInt() : -1;
+			if (version >= 4) {
+				readMissions(in, this.wonMissions);
+			}
+			if (version >= 5) {
+				this.defaultDifficulty = in.readInt();
+				readFlags(in, this.customCampaignButtons);
+			}
 		}
 	}
 
 	private static final Map<CampaignList, Progress> PROGRESS = new EnumMap<>(CampaignList.class);
 	private static CampaignList campaignList = CampaignList.COMBINED;
 	private static final String STORE_FILE = "Campaigns.w3v";
-	private static final int STORE_VERSION = 3;
+	private static final int STORE_VERSION = 5;
 	private static boolean loaded;
 
 	private CCampaignProgress() {
@@ -121,7 +129,7 @@ public final class CCampaignProgress {
 		if (version < 3) {
 			// Older files kept one progress, written with the campaign list this game data still has.
 			final Progress progress = new Progress();
-			progress.read(in, version >= 2);
+			progress.read(in, version);
 			read.put(olderFileList, progress);
 		}
 		else {
@@ -129,7 +137,7 @@ public final class CCampaignProgress {
 			for (int i = 0; i < lists; i++) {
 				final String listName = in.readUTF();
 				final Progress progress = new Progress();
-				progress.read(in, true);
+				progress.read(in, version);
 				try {
 					read.put(CampaignList.valueOf(listName), progress);
 				}
@@ -168,6 +176,11 @@ public final class CCampaignProgress {
 			return this.progress.openingCinematics.contains(campaign);
 		}
 
+		/** A mission the player has won; scripts do not tell for every campaign's last mission. */
+		public boolean isMissionWon(final int campaign, final int mission) {
+			return this.progress.wonMissions.contains(missionKey(campaign, mission));
+		}
+
 		/** Scripts open a campaign's ending cinematic when its last mission is won. */
 		public boolean isEndingCinematicAvailable(final int campaign) {
 			return this.progress.endingCinematics.contains(campaign);
@@ -185,6 +198,20 @@ public final class CCampaignProgress {
 
 	public static Snapshot readSnapshot(final DataInputStream in, final CampaignList list) throws IOException {
 		return new Snapshot(parse(in, list).get(list));
+	}
+
+	private static void writeMissions(final DataOutputStream out, final Set<Long> missions) throws IOException {
+		out.writeInt(missions.size());
+		for (final long mission : missions) {
+			out.writeLong(mission);
+		}
+	}
+
+	private static void readMissions(final DataInputStream in, final Set<Long> missions) throws IOException {
+		final int count = in.readInt();
+		for (int i = 0; i < count; i++) {
+			missions.add(in.readLong());
+		}
 	}
 
 	private static void writeFlags(final DataOutputStream out, final Set<Integer> flags) throws IOException {
@@ -219,6 +246,13 @@ public final class CCampaignProgress {
 
 	public static boolean isMissionAvailable(final int campaign, final int mission) {
 		return current().missions.contains(missionKey(campaign, mission));
+	}
+
+	/** The player won a campaign's mission, as the campaign screens mark it. */
+	public static void setMissionWon(final int campaign, final int mission) {
+		if (current().wonMissions.add(missionKey(campaign, mission))) {
+			save();
+		}
 	}
 
 	public static void setCampaignAvailable(final int campaign, final boolean available) {
@@ -278,5 +312,24 @@ public final class CCampaignProgress {
 
 	public static int getClassicMenuCampaignIndex() {
 		return current().classicMenuCampaignIndex;
+	}
+
+	/** The campaign difficulty the menu starts on, as an ordinal of the difficulties; -1 when scripts never set one. */
+	public static int getDefaultDifficulty() {
+		return current().defaultDifficulty;
+	}
+
+	public static void setDefaultDifficulty(final int difficulty) {
+		current().defaultDifficulty = difficulty;
+		save();
+	}
+
+	public static boolean isCustomCampaignButtonVisible(final int button) {
+		return current().customCampaignButtons.contains(button);
+	}
+
+	public static void setCustomCampaignButtonVisible(final int button, final boolean visible) {
+		setFlag(current().customCampaignButtons, button, visible);
+		save();
 	}
 }

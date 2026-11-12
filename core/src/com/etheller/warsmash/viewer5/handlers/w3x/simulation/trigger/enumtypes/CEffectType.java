@@ -11,7 +11,7 @@ public enum CEffectType implements CHandle {
 	MISSILE,
 	LIGHTNING;
 
-	public static CEffectType[] VALUES = values();
+	public static final CEffectType[] VALUES = values();
 
 	@Override
 	public int getHandleId() {

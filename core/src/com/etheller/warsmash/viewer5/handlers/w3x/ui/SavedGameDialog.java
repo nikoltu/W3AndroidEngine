@@ -5,11 +5,15 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.files.FileHandle;
 import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.utils.viewport.Viewport;
+import com.etheller.warsmash.input.touch.OnscreenKeyboard;
 import com.etheller.warsmash.parsers.fdf.GameUI;
+import com.etheller.warsmash.parsers.fdf.datamodel.AnchorDefinition;
 import com.etheller.warsmash.parsers.fdf.datamodel.FramePoint;
 import com.etheller.warsmash.parsers.fdf.frames.EditBoxFrame;
 import com.etheller.warsmash.parsers.fdf.frames.GlueTextButtonFrame;
@@ -40,6 +44,24 @@ public final class SavedGameDialog {
 		SavedGame.Loadability loadability(FileHandle file);
 
 		void closed();
+
+		/** The names of the replays View Replay lists, the one the last game left first. */
+		default List<String> replayNames() {
+			return new ArrayList<>();
+		}
+
+		/** Why the replay cannot be played as it is, or null when it can. */
+		default String replayProblem(final String name) {
+			return null;
+		}
+
+		/** Whether a replay with a problem can still be tried, ignoring the recorded checksums. */
+		default boolean replayTryable(final String name) {
+			return false;
+		}
+
+		default void playReplay(final String name, final boolean forced) {
+		}
 	}
 
 	private final GameUI rootFrame;
@@ -74,6 +96,10 @@ public final class SavedGameDialog {
 	private boolean selectionLoadable;
 	private StringFrame reasonText;
 	private final Map<String, SavedGame.Loadability> loadability = new HashMap<>();
+	private float keyboardLift;
+	private boolean replayMode;
+	private String armedReplay;
+	private final Map<String, String> replayProblems = new HashMap<>();
 
 	public SavedGameDialog(final GameUI rootFrame, final Viewport uiViewport, final SimpleFrame holder,
 			final UIFrame backdrop, final Host host) {
@@ -105,6 +131,15 @@ public final class SavedGameDialog {
 		this.fileList.setSetAllPoints(true);
 		this.fileList.setFrameFont(nameText.getFrameFont());
 		this.fileList.setSelectionListener((index, item) -> {
+			if (this.replayMode) {
+				final String problem = item == null ? null : this.replayProblems.get(item);
+				this.armedReplay = null;
+				this.selectionLoadable = (item != null) && ((problem == null) || this.host.replayTryable(item));
+				rootFrame.setText(this.reasonText, problem == null ? ""
+						: rootFrame.getTemplates().getDecoratedString("REPLAY_CONFIRM"));
+				updateButtons();
+				return;
+			}
 			if ((item != null) && this.saveOnly.isVisible()) {
 				this.nameBox.setText(item, rootFrame, uiViewport);
 			}
@@ -182,7 +217,50 @@ public final class SavedGameDialog {
 		this.host.focusOn(this.nameBox);
 	}
 
+	/** View Replay: the same list as Load Game, of the replays. */
+	public void showReplays() {
+		this.replayMode = true;
+		this.armedReplay = null;
+		this.replayProblems.clear();
+		final List<AbstractListItemProperty> items = new ArrayList<>();
+		for (final String name : this.host.replayNames()) {
+			final String problem = this.host.replayProblem(name);
+			if (problem != null) {
+				this.replayProblems.put(name, problem);
+			}
+			items.add(new ListItemStringProperty(name, problem != null ? Color.GRAY : null));
+		}
+		this.fileList.setSelectedIndex(-1);
+		this.fileList.setItems(items, this.rootFrame, this.uiViewport);
+		this.rootFrame.setText(this.reasonText, "");
+		showContainer(this.saveLoadContainer);
+		this.saveAndLoad.setVisible(true);
+		setLoadTexts("VIEW_REPLAY", "KEY_VIEW_REPLAY");
+		this.saveOnly.setVisible(false);
+		this.loadOnly.setVisible(true);
+		this.activeButtons = this.loadButtons;
+		this.cancelAction = this::close;
+		this.enterAction = this::loadClicked;
+		updateButtons();
+		this.host.focusOn(null);
+	}
+
+	private void setLoadTexts(final String titleKey, final String buttonKey) {
+		final StringFrame title = (StringFrame) this.rootFrame.getFrameByName("LoadGameTitleText", 0);
+		if (title != null) {
+			this.rootFrame.setText(title, this.rootFrame.getTemplates().getDecoratedString(titleKey));
+		}
+		final UIFrame text = this.loadButton.getButtonText();
+		if (text instanceof StringFrame) {
+			this.rootFrame.setText((StringFrame) text, this.rootFrame.getTemplates().getDecoratedString(buttonKey));
+		}
+	}
+
 	public void showLoad() {
+		if (this.replayMode) {
+			this.replayMode = false;
+			setLoadTexts("LOAD_GAME", "KEY_LOAD");
+		}
 		showFiles(true);
 		this.saveOnly.setVisible(false);
 		this.loadOnly.setVisible(true);
@@ -279,6 +357,22 @@ public final class SavedGameDialog {
 
 	private void loadClicked() {
 		final String name = this.fileList.getSelectedItem();
+		if (this.replayMode) {
+			if ((name == null) || !this.selectionLoadable) {
+				return;
+			}
+			final boolean problem = this.replayProblems.containsKey(name);
+			if (problem && !name.equals(this.armedReplay)) {
+				// The original asks before it plays a replay of another version, ignoring the recorded checksums.
+				this.armedReplay = name;
+				this.rootFrame.setText(this.reasonText,
+						this.rootFrame.getTemplates().getDecoratedString("REPLAY_CONFIRM_DESC"));
+				return;
+			}
+			hide();
+			this.host.playReplay(name, problem);
+			return;
+		}
 		if ((name != null) && this.selectionLoadable) {
 			hide();
 			this.host.loadGame(name);
@@ -333,6 +427,30 @@ public final class SavedGameDialog {
 
 	public boolean isShowing() {
 		return this.showing;
+	}
+
+	/**
+	 * Lifts the dialog, whose top is anchored at holderTop below the screen's top, while the on-screen keyboard would
+	 * cover the name box: the keyboard covers the game surface instead of shrinking it.
+	 */
+	public void followKeyboard(final float holderTop) {
+		float lift = 0;
+		final int covered = OnscreenKeyboard.getCoveredHeightPixels();
+		final int screenHeight = Gdx.graphics.getHeight();
+		if (this.showing && this.saveOnly.isVisible() && (covered > 0) && (screenHeight > 0)) {
+			final float worldHeight = this.uiViewport.getWorldHeight();
+			final float keyboardTop = ((worldHeight * covered) / screenHeight)
+					+ GameUI.convertY(this.uiViewport, 0.01f);
+			final Rectangle box = this.nameBox.getRenderBounds();
+			final Rectangle dialog = this.holder.getRenderBounds();
+			final float room = worldHeight - ((dialog.y + dialog.height) - this.keyboardLift);
+			lift = Math.max(0, Math.min(keyboardTop - (box.y - this.keyboardLift), room));
+		}
+		if (lift != this.keyboardLift) {
+			this.keyboardLift = lift;
+			this.holder.addAnchor(new AnchorDefinition(FramePoint.TOP, 0, holderTop + lift));
+			this.holder.positionBounds(this.rootFrame, this.uiViewport);
+		}
 	}
 
 	/** Keys for the open dialog; the name box has first go at them through the host's focus. */

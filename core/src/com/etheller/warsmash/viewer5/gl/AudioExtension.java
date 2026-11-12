@@ -13,6 +13,15 @@ public interface AudioExtension {
 			final boolean is3DSound, float maxDistance, float refDistance, boolean looping);
 
 	/**
+	 * Plays a sound whose loudness and side were worked out by the caller, for a backend without 3D sound. pan is -1
+	 * for left, 1 for right.
+	 */
+	default long playPanned(final Sound buffer, final float volume, final float pitch, final float pan,
+			final boolean looping) {
+		return play(buffer, volume, pitch, 0, 0, 0, false, 1, 1, looping);
+	}
+
+	/**
 	 * Sounds come from data sources rather than plain files, which a backend may not accept as is.
 	 */
 	default Sound newSound(final FileHandle file) {

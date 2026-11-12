@@ -1,5 +1,7 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat;
 
+import java.util.Locale;
+
 import com.etheller.interpreter.ast.util.CHandle;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.CDamageType;
 
@@ -37,7 +39,7 @@ public enum CWeaponType implements CHandle {
 	}
 
 	public static CWeaponType parseWeaponType(final String weaponTypeString) {
-		return valueOf(weaponTypeString.toUpperCase());
+		return valueOf(weaponTypeString.toUpperCase(Locale.ROOT));
 	}
 
 	public boolean isAttackGroundSupported() {

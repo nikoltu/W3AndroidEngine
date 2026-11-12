@@ -7,7 +7,7 @@ public enum CPlayerSlotState implements CHandle {
 	PLAYING,
 	LEFT;
 
-	public static CPlayerSlotState[] VALUES = values();
+	public static final CPlayerSlotState[] VALUES = values();
 
 	@Override
 	public int getHandleId() {

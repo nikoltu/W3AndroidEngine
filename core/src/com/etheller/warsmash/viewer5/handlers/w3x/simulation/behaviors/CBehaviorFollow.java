@@ -9,15 +9,24 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting
 
 public class CBehaviorFollow extends CAbstractRangedBehavior {
 
+	// Measured on 1.29: a smart order on an ally closes to this distance between the two centres, much nearer than
+	// a move order onto it (FollowRange).
+	private static final float SMART_ALLY_FOLLOW_RANGE = 136f;
+
 	private int higlightOrderId;
-	private boolean justAutoAttacked = false;
+	private boolean smart;
 
 	public CBehaviorFollow(final CUnit unit) {
 		super(unit);
 	}
 
 	public CBehavior reset(CSimulation game, final int higlightOrderId, final CWidget target) {
+		return reset(game, higlightOrderId, target, false);
+	}
+
+	public CBehavior reset(CSimulation game, final int higlightOrderId, final CWidget target, final boolean smart) {
 		this.higlightOrderId = higlightOrderId;
+		this.smart = smart;
 		return innerReset(game, target);
 	}
 
@@ -28,10 +37,16 @@ public class CBehaviorFollow extends CAbstractRangedBehavior {
 
 	@Override
 	public boolean isWithinRange(final CSimulation simulation) {
-		if (this.justAutoAttacked = this.unit.autoAcquireTargets(simulation, false)) {
-			return true;
+		// Measured on 1.29: a unit following another never looks for targets on the way.
+		// Measured on 1.29: a unit following one of its own or an ally stops FollowRange away; any other unit is
+		// followed up to touching it.
+		final boolean ally = (this.target instanceof CUnit)
+				&& ((CUnit) this.target).isUnitAlly(simulation.getPlayer(this.unit.getPlayerIndex()));
+		if (ally && this.smart) {
+			return StrictMath.hypot(this.target.getX() - this.unit.getX(),
+					this.target.getY() - this.unit.getY()) <= SMART_ALLY_FOLLOW_RANGE;
 		}
-		return this.unit.canReach(this.target, this.unit.getAcquisitionRange());
+		return this.unit.canReach(this.target, ally ? simulation.getGameplayConstants().getFollowRange() : 0f);
 	}
 
 	@Override
@@ -49,10 +64,6 @@ public class CBehaviorFollow extends CAbstractRangedBehavior {
 
 	@Override
 	protected boolean checkTargetStillValid(final CSimulation simulation) {
-		if (this.justAutoAttacked) {
-			this.justAutoAttacked = false;
-			this.unit.getMoveBehavior().reset(this.target, this, false);
-		}
 		return this.target.visit(AbilityTargetStillAliveVisitor.INSTANCE);
 	}
 

@@ -1,5 +1,7 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat;
 
+import java.util.Locale;
+
 import com.etheller.interpreter.ast.util.CHandle;
 
 public enum CAttackType implements CodeKeyType, CHandle {
@@ -12,7 +14,7 @@ public enum CAttackType implements CodeKeyType, CHandle {
 	HERO(false, false, true),
 	UNKNOWN(false, false, false);
 
-	public static CAttackType[] VALUES = values();
+	public static final CAttackType[] VALUES = values();
 
 	private final String codeKey;
 	private final String damageKey;
@@ -22,7 +24,7 @@ public enum CAttackType implements CodeKeyType, CHandle {
 
 	private CAttackType(boolean universal, boolean magic, boolean physical) {
 		final String name = name();
-		this.codeKey = name.charAt(0) + name.substring(1).toLowerCase();
+		this.codeKey = name.charAt(0) + name.substring(1).toLowerCase(Locale.ROOT);
 		this.damageKey = this.codeKey;
 		this.universal = universal;
 		this.magic = magic;
@@ -39,7 +41,7 @@ public enum CAttackType implements CodeKeyType, CHandle {
 	}
 
 	public static CAttackType parseAttackType(final String attackTypeString) {
-		final String upperCaseAttackType = attackTypeString.trim().toUpperCase();
+		final String upperCaseAttackType = attackTypeString.trim().toUpperCase(Locale.ROOT);
 		// Units without a second attack leave its type empty (Reforged data), which still keeps the attack slot.
 		if (upperCaseAttackType.isEmpty() || "_".equals(upperCaseAttackType)) {
 			return UNKNOWN;
@@ -48,16 +50,6 @@ public enum CAttackType implements CodeKeyType, CHandle {
 			return SIEGE;
 		}
 		return valueOf(upperCaseAttackType);
-	}
-
-	public String nameForJass() {
-		if (this == SPELLS) {
-			return "NORMAL";
-		}
-		if (this == NORMAL) {
-			return "MELEE";
-		}
-		return name();
 	}
 
 	@Override

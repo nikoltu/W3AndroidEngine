@@ -58,9 +58,8 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.root.CBeh
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.root.CBehaviorUproot;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.skills.CBehaviorNoTargetSpellBase;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.skills.CBehaviorTargetSpellBase;
-import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.test.CBehaviorCarrionSwarmDummy;
-import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.test.CBehaviorChannelTest;
-import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.test.CBehaviorCoupleInstant;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.skills.undead.dreadlord.CBehaviorCarrionSwarmDummy;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.channel.CBehaviorChannel;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.projectile.CAbilityProjectile;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.projectile.CAttackProjectile;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.projectile.CAttackProjectileInstant;
@@ -71,6 +70,9 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.projectile.C
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.projectile.CProjectile;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.projectile.CPseudoProjectile;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.timers.CTimer;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.timers.CTimerDamagePoint;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.timers.CTimerFacing;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.timers.CTimerFlyHeight;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.timers.CTimerJass;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.timers.CTimerJassBase;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.timers.CTimerJassStruct;
@@ -102,8 +104,7 @@ final class SimulationTypeCodes {
 		add(CBehaviorBoard.class, "BehaviorBoard");
 		add(CBehaviorBoardTransport.class, "BehaviorBoardTransport");
 		add(CBehaviorCarrionSwarmDummy.class, "BehaviorCarrionSwarmDummy");
-		add(CBehaviorChannelTest.class, "BehaviorChannelTest");
-		add(CBehaviorCoupleInstant.class, "BehaviorCoupleInstant");
+		add(CBehaviorChannel.class, "BehaviorChannelTest");
 		add(CBehaviorDrop.class, "BehaviorDrop");
 		add(CBehaviorDropItem.class, "BehaviorDropItem");
 		add(CBehaviorFinishTransformation.class, "BehaviorFinishTransformation");
@@ -151,6 +152,9 @@ final class SimulationTypeCodes {
 		add(CTimerJassStruct.class, "TimerJassStruct");
 		add(CTimerNativeEvent.class, "TimerNativeEvent");
 		add(CTimerSleepAction.class, "TimerSleepAction");
+		add(CTimerDamagePoint.class, "TimerDamagePoint");
+		add(CTimerFacing.class, "TimerFacing");
+		add(CTimerFlyHeight.class, "TimerFlyHeight");
 		add(CUnit.CTimerUnitFade.class, "TimerUnitFade");
 		add(CSimulation.FogUpdateTimer.class, "FogUpdateTimer");
 		add(CTerrainDeformations.UpdateTimer.class, "TerrainDeformationTimer");

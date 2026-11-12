@@ -18,4 +18,8 @@ public class BeginGameInformation {
 	public CReplay replay;
 	/** The file the replay was read from, which Restart plays again. */
 	public FileHandle replayFile;
+	/** The step the replay plays on to without drawing before it is shown, or 0. */
+	public int replayStartTick;
+	/** The replay is played although this engine would refuse it. */
+	public boolean replayForced;
 }

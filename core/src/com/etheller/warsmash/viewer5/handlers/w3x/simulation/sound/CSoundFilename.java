@@ -89,6 +89,13 @@ public class CSoundFilename extends AbstractCSound {
 	}
 
 	@Override
+	public void setVelocity(final float x, final float y, final float z) {
+		this.parameters.velocityX = x;
+		this.parameters.velocityY = y;
+		this.parameters.velocityZ = z;
+	}
+
+	@Override
 	public void attachToUnit(final RenderUnit unit) {
 		this.parameters.attachedUnit = unit;
 	}
@@ -123,10 +130,17 @@ public class CSoundFilename extends AbstractCSound {
 		if ((this.audioContext == null) || (this.sound == null)) {
 			return;
 		}
+		// The platform cannot start a sound part way in, but one started past its end is silent as in the script.
+		if (!this.looping && (getPlayPosition() >= getDuration())) {
+			return;
+		}
 		final AudioPanner panner = this.audioContext.createPanner(this.stopWhenOutOfRange);
 		final AudioBufferSource source = this.audioContext.createBufferSource();
 
 		this.parameters.updatePositionFromUnit();
+		if (this.parameters.attachedUnit != null) {
+			panner.followLocation = this.parameters.attachedUnit.location;
+		}
 
 		// A 3D sound nobody placed plays at the listener rather than at the map origin.
 		if (this.parameters.positioned) {
@@ -135,6 +149,7 @@ public class CSoundFilename extends AbstractCSound {
 		else {
 			panner.setPosition(this.audioContext.listener.getX(), this.audioContext.listener.getY(),
 					this.audioContext.listener.getZ());
+			panner.followListener = true;
 		}
 		panner.setDistances(Math.min(this.parameters.distanceCutoff, this.parameters.maxDistance),
 				this.parameters.minDistance);
@@ -145,11 +160,13 @@ public class CSoundFilename extends AbstractCSound {
 		source.connect(panner);
 
 		// Make a sound.
-		this.lastSoundId = source.start(0, this.parameters.scaledVolume(1.0f, this.audioContext),
-				this.parameters.startPitch(), this.looping);
-		if ((this.lastSoundId != -1) && this.looping) {
-			CSoundMixer.audible().loopStarted(this.sound, this.lastSoundId, this.parameters.unmixedVolume(1.0f, this.audioContext),
-					this.parameters.channel);
+		if (this.looping) {
+			this.lastSoundId = source.startLoop(this.parameters.unmixedVolume(1.0f, this.audioContext),
+					this.parameters.channel, this.parameters.startPitch(), false);
+		}
+		else {
+			this.lastSoundId = source.start(0, this.parameters.scaledVolume(1.0f, this.audioContext),
+					this.parameters.startPitch(), false);
 		}
 	}
 

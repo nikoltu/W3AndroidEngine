@@ -64,6 +64,12 @@ import com.etheller.warsmash.viewer5.handlers.w3x.ui.command.FocusableFrame;
 final class MeleeUIInput {
 	/** The trackable the mouse is on, whose track event already fired. */
 	private CTrackable trackedTrackable;
+	private final Vector3 mouseEventLocation = new Vector3();
+	private final Vector2 mouseEventScreen = new Vector2();
+	private int mouseMoveSentTick = -1;
+	private boolean mouseMovePending;
+	private float mouseMovePendingX;
+	private float mouseMovePendingY;
 	private static final AbilityPointTarget clickLocationTemp2 = new AbilityPointTarget();
 	private final Vector3 dragCameraTargetOrigin = new Vector3();
 	private final List<MultiSelectUnitStateListener> multiSelectUnitStateListeners = new ArrayList<>();
@@ -234,10 +240,10 @@ final class MeleeUIInput {
 	public boolean keyDown(final int keycode) {
 		if (WarsmashConstants.ENABLE_DEBUG) {
 			if (keycode == Input.Keys.Z) {
-				War3MapViewer.DEBUG_DEPTH++;
+				this.ui.war3MapViewer.debugDepth++;
 			}
 			if (keycode == Input.Keys.X) {
-				War3MapViewer.DEBUG_DEPTH = 0;
+				this.ui.war3MapViewer.debugDepth = 0;
 			}
 			if (keycode == Input.Keys.W) {
 				Terrain.WIREFRAME_TERRAIN = !Terrain.WIREFRAME_TERRAIN;
@@ -327,8 +333,10 @@ final class MeleeUIInput {
 			return true;
 		}
 		if ((keycode == Input.Keys.A) && isAltDown()) {
-			this.ui.minimapPanel.setAllyColorFilterByPlayer(Math.max(0,
-					this.ui.war3MapViewer.getAllyColorFilter().getState()) + 1);
+			if (this.ui.minimapPanel.allyFilterEnabled) {
+				this.ui.minimapPanel.setAllyColorFilterByPlayer(Math.max(0,
+						this.ui.war3MapViewer.getAllyColorFilter().getState()) + 1);
+			}
 			return true;
 		}
 		if ((keycode == Input.Keys.G) && isAltDown()) {
@@ -340,7 +348,9 @@ final class MeleeUIInput {
 			return true;
 		}
 		if ((keycode == Input.Keys.R) && isAltDown()) {
-			this.ui.minimapPanel.setMinimapCreeps(!GameOptions.get().isMinimapCreeps());
+			if (this.ui.minimapPanel.creepFilterEnabled) {
+				this.ui.minimapPanel.setMinimapCreeps(!GameOptions.get().isMinimapCreeps());
+			}
 			return true;
 		}
 		if ((keycode == Input.Keys.F) && isAltDown()) {
@@ -373,7 +383,7 @@ final class MeleeUIInput {
 		for (int j = 0; j < MeleeUI.COMMAND_CARD_HEIGHT; j++) {
 			for (int i = 0; i < MeleeUI.COMMAND_CARD_WIDTH; i++) {
 				boolean match = false;
-				switch (WarsmashConstants.INPUT_HOTKEY_MODE) {
+				switch (this.ui.war3MapViewer.getGameData().getInputHotkeyMode()) {
 				case 0:
 					if (this.ui.commandCard[j][i].checkHotkey(c, keycode)) {
 						match = true;
@@ -447,6 +457,79 @@ final class MeleeUIInput {
 		}
 		this.ui.cameraManager.scrolled((int) amountY);
 		return false;
+	}
+
+	/**
+	 * The local player's mouse events for the map's triggers. They go out as commands, like orders, so every machine
+	 * and a replay fire them in the same step; only over the game world (not the interface), with the point of the
+	 * ground under the pointer, and only while a trigger listens, as the original sends them. A move is sent at most
+	 * once per game step, the last position winning. A finger is the left button; a two-finger pan the middle one.
+	 */
+	void sendMouseEvent(final JassGameEventsWar3 eventType, final int screenX, final int screenY,
+			final float worldScreenY, final int button) {
+		if (this.ui.scoreScreen.isVisible() || (this.ui.unitOrderListener == null)) {
+			return;
+		}
+		final int localPlayerIndex = this.ui.war3MapViewer.getLocalPlayerIndex();
+		if ((localPlayerIndex < 0) || !this.ui.war3MapViewer.simulation.getPlayer(localPlayerIndex)
+				.hasPlayerEvents(eventType)) {
+			return;
+		}
+		if ((screenX < 0) || (screenY < 0) || (screenX >= Gdx.graphics.getWidth())
+				|| (screenY >= Gdx.graphics.getHeight())) {
+			return;
+		}
+		final Vector2 uiPoint = this.mouseEventScreen.set(screenX, screenY);
+		this.ui.uiViewport.unproject(uiPoint);
+		if (this.ui.meleeUIMinimap.containsMouse(uiPoint.x, uiPoint.y) || (getHoveredFrame(this.ui.rootFrame,
+				uiPoint.x, uiPoint.y, this.ui.includeFrames, this.ui.ignoreFrames) != null)) {
+			return;
+		}
+		this.ui.war3MapViewer.getClickLocation(this.mouseEventLocation, screenX, (int) worldScreenY, false, false);
+		final float x = this.mouseEventLocation.x;
+		final float y = this.mouseEventLocation.y;
+		if (eventType == JassGameEventsWar3.EVENT_PLAYER_MOUSE_MOVE) {
+			final int tick = this.ui.war3MapViewer.simulation.getGameTurnTick();
+			if (tick == this.mouseMoveSentTick) {
+				this.mouseMovePending = true;
+				this.mouseMovePendingX = x;
+				this.mouseMovePendingY = y;
+				return;
+			}
+			this.mouseMoveSentTick = tick;
+			this.mouseMovePending = false;
+			this.ui.unitOrderListener.mouseEvent(eventType.getEventId(), x, y, 0);
+			return;
+		}
+		this.ui.unitOrderListener.mouseEvent(eventType.getEventId(), x, y, mouseButtonType(button));
+	}
+
+	/** The last move of a step that already sent one goes out in the next step. */
+	void flushMouseMove() {
+		if (!this.mouseMovePending || (this.ui.unitOrderListener == null)) {
+			return;
+		}
+		final int tick = this.ui.war3MapViewer.simulation.getGameTurnTick();
+		if (tick != this.mouseMoveSentTick) {
+			this.mouseMovePending = false;
+			this.mouseMoveSentTick = tick;
+			this.ui.unitOrderListener.mouseEvent(JassGameEventsWar3.EVENT_PLAYER_MOUSE_MOVE.getEventId(),
+					this.mouseMovePendingX, this.mouseMovePendingY, 0);
+		}
+	}
+
+	/** The numbers of MOUSE_BUTTON_TYPE_LEFT, _MIDDLE and _RIGHT in common.j. */
+	static int mouseButtonType(final int button) {
+		switch (button) {
+		case Input.Buttons.LEFT:
+			return 1;
+		case Input.Buttons.MIDDLE:
+			return 2;
+		case Input.Buttons.RIGHT:
+			return 3;
+		default:
+			return 0;
+		}
 	}
 
 	public boolean touchDown(final int screenX, final int screenY, final float worldScreenY, final int button) {
@@ -1042,7 +1125,7 @@ final class MeleeUIInput {
 			if ((unit.getSimulationUnit().getPlayerIndex() == this.ui.war3MapViewer.getLocalPlayerIndex())
 					|| (((unit.getSimulationUnit().getUnitType().getRace() == CUnitRace.CRITTERS)
 							|| (unit.getSimulationUnit().getUnitType().getRace() == CUnitRace.OTHER))
-							&& (unit.getSimulationUnit().getPlayerIndex() == (WarsmashConstants.MAX_PLAYERS - 1)))) {
+							&& (unit.getSimulationUnit().getPlayerIndex() == (this.ui.war3MapViewer.getGameData().getMaxPlayers() - 1)))) {
 				if (unit.soundset != null) {
 					UnitSound ackSoundToPlay = unit.soundset.what;
 					int soundIndex;
@@ -1148,7 +1231,7 @@ final class MeleeUIInput {
 		else {
 			if (this.ui.draggingMouseButton == Input.Buttons.LEFT) {
 				if (!this.ui.dragSelectPreviewUnits.isEmpty()) {
-					if (this.ui.allowDrag) {
+					if (this.ui.allowDrag && this.ui.isSelectionOn(MeleeUI.SELECT_OFF)) {
 						final List<RenderWidget> selectedWidgets = new ArrayList<>();
 						boolean foundGoal = false;
 						for (final RenderUnit unit : this.ui.dragSelectPreviewUnits) {
@@ -1178,7 +1261,7 @@ final class MeleeUIInput {
 					this.ui.dragSelectPreviewUnits.clear();
 				}
 				else {
-					if (this.ui.allowDrag) {
+					if (this.ui.allowDrag && this.ui.isSelectionOn(MeleeUI.SELECT_OFF)) {
 						if (button == Input.Buttons.LEFT) {
 							updateMouseOverUnit(screenX, worldScreenY);
 							if ((this.ui.mouseOverUnit != null) && isUnitSelectable(this.ui.mouseOverUnit)) {
@@ -1374,6 +1457,7 @@ final class MeleeUIInput {
 		this.ui.uiViewport.unproject(MeleeUI.screenCoordsVector);
 		final UIFrame mousedUIFrame = this.ui.rootFrame.getFrameChildUnderMouse(MeleeUI.screenCoordsVector.x,
 				MeleeUI.screenCoordsVector.y);
+		this.ui.tooltips.setPointer(MeleeUI.screenCoordsVector.x);
 		if (mousedUIFrame != this.ui.mouseOverUIFrame) {
 			if (this.ui.mouseOverUIFrame != null) {
 				this.ui.mouseOverUIFrame.mouseExit(this.ui.rootFrame, this.ui.uiViewport);
@@ -1459,7 +1543,7 @@ final class MeleeUIInput {
 		if (newMouseOverUnit != this.ui.mouseOverUnit) {
 			this.ui.war3MapViewer.clearUnitMouseOverHighlight();
 			this.ui.dragSelectPreviewUnits.clear();
-			if (newMouseOverUnit != null) {
+			if ((newMouseOverUnit != null) && this.ui.isSelectionOn(MeleeUI.PRE_SELECT_UI_OFF)) {
 				this.ui.war3MapViewer.showUnitMouseOverHighlight(newMouseOverUnit);
 			}
 			this.ui.mouseOverUnit = newMouseOverUnit;

@@ -11,10 +11,10 @@ import com.etheller.warsmash.viewer5.GenericNode;
 import com.hiveworkshop.rms.parsers.mdlx.MdlxCollisionShape;
 
 public class CollisionShape extends GenericObject {
-	private static Vector3 intersectHeap = new Vector3();
-	private static Vector3 intersectHeap2 = new Vector3();
-	private static Matrix4 intersectMatrixHeap = new Matrix4();
-	private static Ray intersectRayHeap = new Ray();
+	private static final Vector3 intersectHeap = new Vector3();
+	private static final Vector3 intersectHeap2 = new Vector3();
+	private static final Matrix4 intersectMatrixHeap = new Matrix4();
+	private static final Ray intersectRayHeap = new Ray();
 	private Intersectable intersectable;
 
 	public CollisionShape(final MdxModel model, final MdlxCollisionShape object, final int index) {

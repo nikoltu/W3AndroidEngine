@@ -143,6 +143,10 @@ public interface SimulationRenderController {
 			final float[] offsets) {
 	}
 
+	/** Ground type of terrain corners: a column, row, tile type and variation for each. */
+	default void setTerrainTypes(final int[] cells) {
+	}
+
 	void changeUnitScale(CUnit unit, float scale, boolean multiplier);
 
 	SimulationRenderComponent spawnAbilitySoundEffect(float x, float y, War3ID alias, boolean looping);

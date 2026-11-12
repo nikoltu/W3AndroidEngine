@@ -3,9 +3,11 @@ package com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.n
 import java.util.EnumSet;
 import java.util.List;
 
+import com.badlogic.gdx.math.Rectangle;
 import com.etheller.warsmash.util.War3ID;
 
 import com.etheller.warsmash.viewer5.handlers.w3x.environment.PathingGrid.MovementType;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CDestructable;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CWidget;
@@ -15,6 +17,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.generic.C
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.generic.GenericSingleIconActiveAbility;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.CAbilitySpellBase;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.nightelf.demonhunter.CAbilityImmolation;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.orc.blademaster.CBuffWhirlWindCaster;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityPointTarget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityTargetVisitor;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.ability.AbilityBuilderAbility;
@@ -52,6 +55,8 @@ public interface CCreepCastAbility {
 	// Measured on 1.29: a creep buffs itself (Bloodlust, Inner Fire) only from its third thought in a fight on, other
 	// fighting allies already from the second.
 	int SELF_BUFF_THINKS = 2;
+	// Thinks after which a hero stops waiting for a summon he cannot cast yet.
+	int SUMMON_WAIT_THINKS = 2;
 
 	/**
 	 * @param attackTarget the unit the creep is attacking
@@ -64,6 +69,65 @@ public interface CCreepCastAbility {
 	static boolean isCreepSpell(final CAbility ability) {
 		return (ability instanceof CCreepCastAbility) || ((ability instanceof GenericSingleIconActiveAbility)
 				&& (Rule.of(((GenericSingleIconActiveAbility) ability).getBaseOrderId()) != null));
+	}
+
+	/**
+	 * Measured on 1.29: a hero waits for his summon (Feral Spirit, Summon Phoenix, Force of Nature) before his
+	 * blasts and curses while it is ready, but only for the first seconds of the fight (Chain Lightning came 3 s after
+	 * the wolves, Drain only after the Phoenix).
+	 */
+	static boolean isSummonPending(final CSimulation game, final CUnit hero, final int thinks) {
+		if (thinks > SUMMON_WAIT_THINKS) {
+			return false;
+		}
+		for (final CAbility ability : hero.getAbilities()) {
+			if (ability.isDisabled() || !(ability instanceof GenericSingleIconActiveAbility)) {
+				continue;
+			}
+			final int orderId = ((GenericSingleIconActiveAbility) ability).getBaseOrderId();
+			final Rule rule = Rule.of(orderId);
+			if ((rule == Rule.FIGHT) || (rule == Rule.TREE)) {
+				final BooleanAbilityActivationReceiver activation = BooleanAbilityActivationReceiver.INSTANCE.reset();
+				ability.checkCanUse(game, hero, hero.getPlayerIndex(), orderId, true, activation);
+				if (activation.isOk() && ((rule == Rule.FIGHT) || (findTree(game, hero, ability, orderId) != null))) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Measured on 1.29: a hero who was in a fight when Bladestorm began casts his fight spell (Mirror Image) in the
+	 * very tick it ends, whether or not an enemy is still near.
+	 */
+	static boolean tryCastAfterBladestorm(final CSimulation game, final CUnit hero) {
+		if (hero.isDead() || hero.isHidden()) {
+			return false;
+		}
+		for (final CAbility ability : hero.getAbilities()) {
+			if (ability.isDisabled() || !(ability instanceof GenericSingleIconActiveAbility)) {
+				continue;
+			}
+			final int orderId = ((GenericSingleIconActiveAbility) ability).getBaseOrderId();
+			if (Rule.of(orderId) == Rule.FIGHT) {
+				final BooleanAbilityActivationReceiver activation = BooleanAbilityActivationReceiver.INSTANCE.reset();
+				ability.checkCanUse(game, hero, hero.getPlayerIndex(), orderId, true, activation);
+				if (activation.isOk() && hero.order(game, orderId, null, true)) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	/** Measured on 1.29: a hero casts summons and armour spells before blasts and curses. */
+	static boolean castsFirst(final CAbility ability) {
+		if (!(ability instanceof GenericSingleIconActiveAbility)) {
+			return false;
+		}
+		final Rule rule = Rule.of(((GenericSingleIconActiveAbility) ability).getBaseOrderId());
+		return (rule == Rule.FIGHT) || (rule == Rule.TREE) || (rule == Rule.ARMOR);
 	}
 
 	/**
@@ -81,7 +145,23 @@ public interface CCreepCastAbility {
 		}
 		final GenericSingleIconActiveAbility spell = (GenericSingleIconActiveAbility) ability;
 		final int orderId = spell.getBaseOrderId();
-		final Rule rule = Rule.of(orderId);
+		Rule rule = Rule.of(orderId);
+		// Measured on 1.29: a hero rains Blizzard on an enemy sent against him at once, hero or not, like Inferno, but
+		// only once; he did not rain it again in 14 more seconds.
+		boolean once = false;
+		if ((rule == Rule.GROUP) && (creep.getHeroData() != null)) {
+			if (creep.hasCastOnce(orderId)) {
+				return false;
+			}
+			once = true;
+			rule = Rule.ENEMY_FIRST;
+		}
+		// Measured on 1.29: a hero does not burn with Immolation or swarm with Carrion Swarm by himself, and he casts
+		// nothing during Bladestorm.
+		if ((creep.getHeroData() != null)
+				&& ((rule == Rule.TOGGLE_ON) || (rule == Rule.ENEMY_LATE) || isWhirlingAround(creep))) {
+			return false;
+		}
 		if ((rule == null) || (!rule.everyTick && !think) || (thinks < rule.minimumThinks)) {
 			return false;
 		}
@@ -90,6 +170,15 @@ public interface CCreepCastAbility {
 		if (!activation.isOk()) {
 			return false;
 		}
+		final boolean cast = tryRuleCast(game, creep, ability, orderId, rule, attackTarget, thinks);
+		if (cast && once) {
+			creep.markCastOnce(orderId);
+		}
+		return cast;
+	}
+
+	private static boolean tryRuleCast(final CSimulation game, final CUnit creep, final CAbility ability,
+			final int orderId, final Rule rule, final CUnit attackTarget, final int thinks) {
 		switch (rule) {
 		case AREA: {
 			if (!isFighting(game, creep)) {
@@ -149,8 +238,21 @@ public interface CCreepCastAbility {
 			return tryAllyCast(game, creep, ability, orderId, false, false, true);
 		case SELF_BUFF:
 			return canTarget(game, creep, ability, orderId, creep) && creep.order(game, orderId, creep, true);
+		case BLADESTORM:
+			if (isReadyToCast(game, creep, OrderIds.mirrorimage)) {
+				return false;
+			}
+			// fall through
+		case FIGHT:
+			// Measured on 1.29: the spell comes when an enemy reaches the caster, not when a ranged caster is already
+			// in reach of its own target (Feral Spirit, Summon Phoenix).
+			return isFighting(game, creep) && isHitInReach(game, creep) && creep.order(game, orderId, null, true);
 		case SLEEP:
 			return tryEnemyCast(game, creep, ability, orderId, attackTarget, true, Rule.ENEMY);
+		case TREE:
+			return isFighting(game, creep) && isHitInReach(game, creep) && tryTreeCast(game, creep, ability, orderId);
+		case CORPSE_TARGET:
+			return tryCorpseCast(game, creep, ability, orderId);
 		case CORPSES:
 			creep.order(game, new COrderNoTarget(creep.getPlayerIndex(), ability.getHandleId(), orderId, false, true),
 					false, true);
@@ -224,6 +326,62 @@ public interface CCreepCastAbility {
 			return false;
 		}
 		return creep.order(game, orderId, attackTarget, true);
+	}
+
+	/**
+	 * Measured on 1.29: Force of Nature is aimed at the tree nearest to the caster, like the other summons once an
+	 * enemy reaches him.
+	 */
+	static boolean tryTreeCast(final CSimulation game, final CUnit creep, final CAbility ability, final int orderId) {
+		final CDestructable tree = findTree(game, creep, ability, orderId);
+		return (tree != null)
+				&& creep.order(game, orderId, new AbilityPointTarget(tree.getX(), tree.getY()), true);
+	}
+
+	static CDestructable findTree(final CSimulation game, final CUnit creep, final CAbility ability,
+			final int orderId) {
+		final float range = getCastRange(ability);
+		final CDestructable[] best = { null };
+		final double[] bestDistance = { 0 };
+		game.getWorldCollision().enumDestructablesInRange(creep.getX(), creep.getY(), range, (tree) -> {
+			final double distance = tree.distance(creep.getX(), creep.getY());
+			if (((best[0] == null) || (distance < bestDistance[0])) && !tree.isDead()) {
+				final BooleanAbilityTargetCheckReceiver<AbilityPointTarget> receiver = BooleanAbilityTargetCheckReceiver
+						.<AbilityPointTarget>getInstance().reset();
+				ability.checkCanTarget(game, creep, creep.getPlayerIndex(), orderId, true,
+						new AbilityPointTarget(tree.getX(), tree.getY()), receiver);
+				if (receiver.isTargetable()) {
+					best[0] = tree;
+					bestDistance[0] = distance;
+				}
+			}
+			return false;
+		});
+		return best[0];
+	}
+
+	/**
+	 * Measured on 1.29: Carrion Beetles go to the nearest corpse in reach, so they come once something has died in
+	 * the fight.
+	 */
+	static boolean tryCorpseCast(final CSimulation game, final CUnit creep, final CAbility ability,
+			final int orderId) {
+		final float range = getCastRange(ability);
+		final CUnit[] best = { null };
+		final double[] bestDistance = { 0 };
+		game.getWorldCollision().enumCorpsesInRect(
+				new Rectangle(creep.getX() - range, creep.getY() - range, range * 2, range * 2), (corpse) -> {
+			if (creep.canReach(corpse, range)) {
+				final double distance = creep.distance(corpse);
+				if (((best[0] == null) || (distance < bestDistance[0]))
+						&& canTarget(game, creep, ability, orderId, corpse)) {
+					best[0] = corpse;
+					bestDistance[0] = distance;
+				}
+			}
+			return false;
+		});
+		return (best[0] != null) && creep.order(game, orderId, best[0], true);
 	}
 
 	static boolean tryAllyCast(final CSimulation game, final CUnit creep, final CAbility ability, final int orderId,
@@ -376,6 +534,48 @@ public interface CCreepCastAbility {
 		return attacked[0];
 	}
 
+	static boolean isReadyToCast(final CSimulation game, final CUnit unit, final int orderId) {
+		for (final CAbility ability : unit.getAbilities()) {
+			if ((ability instanceof GenericSingleIconActiveAbility) && !ability.isDisabled()
+					&& (((GenericSingleIconActiveAbility) ability).getBaseOrderId() == orderId)) {
+				final BooleanAbilityActivationReceiver activation = BooleanAbilityActivationReceiver.INSTANCE.reset();
+				ability.checkCanUse(game, unit, unit.getPlayerIndex(), orderId, true, activation);
+				return activation.isOk();
+			}
+		}
+		return false;
+	}
+
+	static boolean isWhirlingAround(final CUnit unit) {
+		for (final CAbility ability : unit.getAbilities()) {
+			if (ability instanceof CBuffWhirlWindCaster) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Whether an enemy of the unit is within the reach of its attack on the unit.
+	 */
+	static boolean isHitInReach(final CSimulation game, final CUnit unit) {
+		final CPlayer player = game.getPlayer(unit.getPlayerIndex());
+		final boolean[] hit = { false };
+		game.getWorldCollision().enumUnitsInRange(unit.getX(), unit.getY(), ATTACKER_SEARCH_RANGE, (enumUnit) -> {
+			if (!enumUnit.isDead() && !enumUnit.isUnitAlly(player)) {
+				final CBehavior behavior = enumUnit.getCurrentBehavior();
+				if ((behavior instanceof CBehaviorAttack)
+						&& (((CBehaviorAttack) behavior).getTarget().visit(AbilityTargetVisitor.UNIT) == unit)
+						&& ((CBehaviorAttack) behavior).isWithinRange(game)) {
+					hit[0] = true;
+					return true;
+				}
+			}
+			return false;
+		});
+		return hit[0];
+	}
+
 	static boolean canTarget(final CSimulation game, final CUnit creep, final CAbility ability, final int orderId,
 			final CUnit target) {
 		final BooleanAbilityTargetCheckReceiver<CWidget> receiver = BooleanAbilityTargetCheckReceiver
@@ -389,7 +589,8 @@ public interface CCreepCastAbility {
 			ability.checkCanTarget(game, creep, creep.getPlayerIndex(), orderId, true, target, receiver);
 		}
 		if (!receiver.isTargetable()) {
-			if (Rule.of(orderId) != Rule.ENEMY_LATE) {
+			if ((Rule.of(orderId) != Rule.ENEMY_LATE) && (orderId != OrderIds.dreadlordinferno)
+					&& (orderId != OrderIds.flamestrike)) {
 				return false;
 			}
 			final BooleanAbilityTargetCheckReceiver<AbilityPointTarget> pointReceiver = BooleanAbilityTargetCheckReceiver
@@ -461,13 +662,20 @@ public interface CCreepCastAbility {
 	 * flyers; Sleep (on an enemy attacking the creep's side), Death Coil (heroes first), Frost Armor and Unholy Frenzy (on the creep itself) at the second;
 	 * Faerie Fire and Raise Dead (with corpses near) at the third; Carrion Swarm and Crushing Wave at the fourth.
 	 * Frost Armor also goes on an ally an enemy is sent against before the fight, like Heal. Polymorph, Hex, Roar,
-	 * Abolish Magic and Rejuvenation on allies were never seen cast.
+	 * Abolish Magic and Rejuvenation on allies were never seen cast. Heroes of such a player also cast Mirror Image,
+	 * Bladestorm, Divine Shield, Feral Spirit, Summon Phoenix and Spirit of Vengeance once they fight, Blizzard and
+	 * Inferno at once (Bladestorm from the second thought on, Mirror Image goes first even when learned later), Storm
+	 * Bolt, Entangling Roots and Mana Burn like the blasts, Force of Nature on the nearest tree once an enemy hits them
+	 * (summons and Frost Armor come before blasts), and Healing Wave on themselves; Carrion Beetles go on the nearest
+	 * corpse; Wind Walk, Holy Light, Summon Water Elemental, Thunder Clap, Shockwave, Hex, Serpent Ward, Starfall, Immolation and
+	 * Fan of Knives were never seen cast.
 	 */
 	enum Rule {
 		AREA(true, 0), GROUP(false, 0), ALLY_BUFF(true, 1), ALLY_HEAL(true, 0), ENEMY_ATTACKING(true, 2),
 		ENEMY(false, 1), TOGGLE_ON(false, 1), ENEMY_AIR(false, 1), ENEMY_RANGED(false, 0), ENEMY_FAERIE(false, 2),
 		ENEMY_FIRST(false, 0), ENEMY_LATE(false, 3), ENEMY_HERO(false, 1), ARMOR(false, 1), SELF_BUFF(false, 1),
-		SELF_HEAL(true, 0), CORPSES(false, 2), SLEEP(false, 1);
+		SELF_HEAL(true, 0), CORPSES(false, 2), SLEEP(false, 1), FIGHT(false, 0), BLADESTORM(false, 1), TREE(false, 0),
+		CORPSE_TARGET(false, 0);
 
 		private final boolean everyTick;
 		private final int minimumThinks;
@@ -516,11 +724,32 @@ public interface CCreepCastAbility {
 				return ENEMY_FAERIE;
 			case OrderIds.sleep:
 				return SLEEP;
+			case OrderIds.mirrorimage:
+			case OrderIds.divineshield:
+			case OrderIds.spiritwolf:
+			case OrderIds.summonphoenix:
+			case OrderIds.spiritofvengeance:
+				return FIGHT;
+			case OrderIds.whirlwind:
+				return BLADESTORM;
+			case OrderIds.forceofnature:
+				return TREE;
+			case OrderIds.carrionscarabs:
+				return CORPSE_TARGET;
+			case OrderIds.dreadlordinferno:
+				return ENEMY_FIRST;
+			case OrderIds.healingwave:
+				return ALLY_HEAL;
+			case OrderIds.thunderbolt:
+			case OrderIds.entanglingroots:
+			case OrderIds.manaburn:
+				return ENEMY;
 			case OrderIds.purge:
 			case OrderIds.firebolt:
 			case OrderIds.frostnova:
 			case OrderIds.chainlightning:
 			case OrderIds.shadowstrike:
+			case OrderIds.flamestrike:
 			case OrderIds.drain:
 				return ENEMY;
 			default:

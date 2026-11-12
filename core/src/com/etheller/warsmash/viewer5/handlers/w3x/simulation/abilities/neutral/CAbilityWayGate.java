@@ -198,9 +198,7 @@ public class CAbilityWayGate extends AbstractGenericAliasedAbility
 	}
 
 	public boolean teleport(final CSimulation game, final CUnit gate, final CUnit unit) {
-		if (unit.isMovementDisabled() || (this.destination == null)
-				|| (Math.abs(unit.getX() - gate.getX()) > (this.teleportAreaWidth / 2))
-				|| (Math.abs(unit.getY() - gate.getY()) > (this.teleportAreaHeight / 2))) {
+		if (unit.isMovementDisabled() || (this.destination == null)) {
 			return false;
 		}
 		game.spawnTemporarySpellEffectOnPoint(unit.getX(), unit.getY(), 0, CAbilityMove.CODE, CEffectType.SPECIAL,

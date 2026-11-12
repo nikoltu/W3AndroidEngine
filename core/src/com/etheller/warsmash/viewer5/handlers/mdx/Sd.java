@@ -16,7 +16,7 @@ public abstract class Sd<TYPE> {
 	public SdSequence<TYPE> globalSequence;
 	public List<SdSequence<TYPE>> sequences;
 
-	public static Map<War3ID, Integer> forcedInterpMap = new HashMap<>();
+	public static final Map<War3ID, Integer> forcedInterpMap = new HashMap<>();
 
 	static {
 		forcedInterpMap.put(War3ID.fromString("KLAV"), 0);
@@ -26,7 +26,7 @@ public abstract class Sd<TYPE> {
 		forcedInterpMap.put(War3ID.fromString("KRVS"), 0);
 	}
 
-	public static Map<War3ID, float[]> defVals = new HashMap<>();
+	public static final Map<War3ID, float[]> defVals = new HashMap<>();
 
 	static {
 		// LAYS

@@ -1,5 +1,7 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.pathing;
 
+import java.util.Locale;
+
 import java.util.EnumSet;
 
 public enum CBuildingPathingType {
@@ -15,7 +17,7 @@ public enum CBuildingPathingType {
 		if ("_".equals(typeString) || "".equals(typeString)) {
 			return null;
 		}
-		return valueOf(typeString.toUpperCase());
+		return valueOf(typeString.toUpperCase(Locale.ROOT));
 	}
 
 	public static EnumSet<CBuildingPathingType> parsePathingTypeListSet(final String pathingListString) {

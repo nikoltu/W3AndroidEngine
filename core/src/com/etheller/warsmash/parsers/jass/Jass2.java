@@ -37,6 +37,7 @@ import com.etheller.warsmash.parsers.fdf.frames.StringFrame;
 import com.etheller.warsmash.parsers.fdf.frames.UIFrame;
 import com.etheller.warsmash.parsers.jass.triggers.UnitGroup;
 import com.etheller.warsmash.units.Element;
+import com.etheller.warsmash.util.GameDataConstants;
 import com.etheller.warsmash.util.Log;
 import com.etheller.warsmash.viewer5.Scene;
 import com.etheller.warsmash.viewer5.handlers.w3x.War3MapViewer;
@@ -56,8 +57,6 @@ import static com.etheller.warsmash.parsers.jass.CommonNatives.enumValue;
 import static com.etheller.warsmash.parsers.jass.CommonNatives.nullable;
 
 public class Jass2 {
-	public static final boolean REPORT_SYNTAX_ERRORS = true;
-
 	public static CommonEnvironment loadCommon(final DataSource dataSource, final Viewport uiViewport,
 			final Scene uiScene, final War3MapViewer war3MapViewer, final WarsmashUI meleeUI, final String... files) {
 
@@ -244,7 +243,7 @@ public class Jass2 {
 						final String skinArg = arguments.get(0).visit(StringJassValueVisitor.getInstance());
 						final GameSkin skin = GameUI.loadSkin(dataSource, skinArg);
 						final GameUI gameUI = new GameUI(dataSource, skin, uiViewport, uiScene, war3MapViewer, 0,
-								war3MapViewer.getAllObjectData().getWts());
+								war3MapViewer.getAllObjectData().getWts(), war3MapViewer.getGameData().getGameVersion());
 						JUIEnvironment.this.gameUI = gameUI;
 						JUIEnvironment.this.skin = skin.getSkin();
 						rootFrameListener.onCreate(gameUI);
@@ -563,7 +562,8 @@ public class Jass2 {
 					mapflagType, mapvisibilityType, mapsettingType, mapdensityType, mapcontrolType, playerslotstateType,
 					volumegroupType, camerafieldType, playercolorType, placementType, startlocprioType,
 					raritycontrolType, blendmodeType, texmapflagsType, effecttypeType, fogstateType, versionType,
-					itemtypeType, attacktypeType, damagetypeType, weapontypeType, soundtypeType, pathingtypeType);
+					itemtypeType, attacktypeType, damagetypeType, weapontypeType, soundtypeType, pathingtypeType,
+					war3MapViewer.getGameData().getRaceManager());
 			ConversionNatives.registerConversionAndStringNatives(jassProgramVisitor, war3MapViewer.getGameUI());
 			final War3MapConfig mapConfig = war3MapViewer.getMapConfig();
 			ConfigNatives.register(jassProgramVisitor, mapConfig, startlocprioType, gametypeType, placementType,
@@ -594,6 +594,7 @@ public class Jass2 {
 			new AbilityDataNatives(this).register();
 			new ProjectileBuffNatives(this).register();
 			CampaignNatives.register(jassProgramVisitor, war3MapViewer, meleeUI);
+			BlzNatives.register(jassProgramVisitor, war3MapViewer);
 			CustomMapNatives.register(jassProgramVisitor, war3MapViewer);
 			ScriptObjectNatives.register(jassProgramVisitor, war3MapViewer);
 		}
@@ -813,7 +814,8 @@ public class Jass2 {
 					mapflagType, mapvisibilityType, mapsettingType, mapdensityType, mapcontrolType, playerslotstateType,
 					volumegroupType, camerafieldType, playercolorType, placementType, startlocprioType,
 					raritycontrolType, blendmodeType, texmapflagsType, effecttypeType, fogstateType, versionType,
-					itemtypeType, attacktypeType, damagetypeType, weapontypeType, soundtypeType, pathingtypeType);
+					itemtypeType, attacktypeType, damagetypeType, weapontypeType, soundtypeType, pathingtypeType,
+					GameDataConstants.current().getRaceManager());
 			ConversionNatives.registerConversionAndStringNatives(jassProgramVisitor, gameUI);
 			final HandleIdAllocator configHandleIds = new HandleIdAllocator();
 			ConfigNatives.register(jassProgramVisitor, mapConfig, startlocprioType, gametypeType, placementType,

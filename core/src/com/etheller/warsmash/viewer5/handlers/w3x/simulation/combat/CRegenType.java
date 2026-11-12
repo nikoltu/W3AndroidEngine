@@ -1,5 +1,7 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat;
 
+import java.util.Locale;
+
 import com.etheller.warsmash.util.Log;
 
 public enum CRegenType {
@@ -10,7 +12,7 @@ public enum CRegenType {
 			return NONE;
 		}
 		try {
-			return valueOf(typeString.toUpperCase());
+			return valueOf(typeString.toUpperCase(Locale.ROOT));
 		}
 		catch (final Exception exc) {
 			Log.error(exc);

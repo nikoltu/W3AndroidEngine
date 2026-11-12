@@ -21,7 +21,7 @@ public class CAbilityTypeDefinitionPhoenixFire extends AbstractCAbilityTypeDefin
 		final float duration = abilityEditorData.getFieldAsFloat(DURATION + level, 0);
 		final float cooldown = abilityEditorData.getFieldAsFloat(COOLDOWN + level, 0);
 		return new CAbilityTypePhoenixFireLevelData(getTargetsAllowed(abilityEditorData, level), initialDamage,
-				damagePerSecond, areaOfEffect, cooldown, duration);
+				damagePerSecond, areaOfEffect, cooldown, duration, getBuffId(abilityEditorData, level));
 	}
 
 	@Override

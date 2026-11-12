@@ -32,7 +32,7 @@ public enum CPlayerColor implements CHandle {
 	NEUTRAL_GRAY3,
 	NEUTRAL_GRAY4;
 
-	public static CPlayerColor[] VALUES = values();
+	public static final CPlayerColor[] VALUES = values();
 
 	public static CPlayerColor getColorByIndex(final int index) {
 		if ((index >= 0) && (index < VALUES.length)) {

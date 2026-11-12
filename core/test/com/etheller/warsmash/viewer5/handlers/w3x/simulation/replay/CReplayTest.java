@@ -20,6 +20,7 @@ import java.util.function.ToIntFunction;
 import org.junit.jupiter.api.Test;
 
 import com.etheller.warsmash.testing.TestObjects;
+import com.etheller.warsmash.util.GameDataConstants;
 import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CPlayerStateListener.CPlayerStateNotifier;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
@@ -48,12 +49,13 @@ public class CReplayTest {
 	};
 
 	private static CReplayHeader header() {
-		return new CReplayHeader("test", "Maps/Test.w3x", 0x1234abcd, 4096, 0x5eed, 1L, 1337, 0, 1.0f,
+		return new CReplayHeader("test", "abc1234", false, "Maps/Test.w3x", 0x1234abcd, 4096, 0x5eed, 1L, 1337, 0, 1.0f,
 				CMapDifficulty.NORMAL, INTERVAL, Collections.emptyList(), null);
 	}
 
 	private static CSimulation gameWithPlayers(final int gold) {
 		final CSimulation game = TestObjects.allocate(CSimulation.class);
+		TestObjects.set(game, "gameData", GameDataConstants.current());
 		final List<CPlayer> players = new ArrayList<>();
 		for (int i = 0; i < WarsmashConstants.MAX_PLAYERS; i++) {
 			final CPlayer player = TestObjects.allocate(CPlayer.class);
@@ -366,13 +368,15 @@ public class CReplayTest {
 		computer.setAIDifficulty(AIDifficulty.INSANE);
 		computer.setStartLocationIndex(0);
 		final byte[] caches = { 5, 6, 7 };
-		final CReplayHeader header = CReplayHeader.of("0.3.1", "Maps/Test/Sample.w3x", -5, 123456789012L, 0x7a7a7a7a,
+		final CReplayHeader header = CReplayHeader.of("0.3.1", "abc1234", true, "Maps/Test/Sample.w3x", -5, 123456789012L, 0x7a7a7a7a,
 				99L, -42, 0, 2.0f, config, INTERVAL, caches);
 
 		final ByteArrayOutputStream bytes = new ByteArrayOutputStream();
 		new CReplayWriter(bytes, header).close();
 		final CReplayHeader read = CReplay.readHeader(new ByteArrayInputStream(bytes.toByteArray()));
 		assertEquals("0.3.1", read.getEngineVersion());
+		assertEquals("abc1234", read.getBuildCommit());
+		assertTrue(read.isOfficialBuild());
 		assertEquals("Maps/Test/Sample.w3x", read.getMapPath());
 		assertEquals(-5, read.getMapChecksum());
 		assertEquals(123456789012L, read.getMapSize());
@@ -384,7 +388,7 @@ public class CReplayTest {
 
 		final War3MapConfig again = new War3MapConfig(WarsmashConstants.MAX_PLAYERS);
 		again.getPlayer(0).setStartLocationIndex(7);
-		read.applyTo(again);
+		read.applyTo(again, WarsmashConstants.RACE_MANAGER);
 		assertEquals(CMapDifficulty.HARD, again.getGameDifficulty());
 		final CBasePlayer human2 = again.getPlayer(0);
 		assertEquals("Profile Name", human2.getName());

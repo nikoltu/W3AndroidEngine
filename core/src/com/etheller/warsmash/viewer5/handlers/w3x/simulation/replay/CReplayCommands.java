@@ -7,10 +7,17 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayerUnit
  * steps; applied again it would stop the playback for good, since the resume comes in a later step.
  */
 final class CReplayCommands implements CPlayerUnitOrderListener {
-	private final CPlayerUnitOrderListener executor;
+	/** Where the chat lines of the recorded player go, to be shown. */
+	interface ChatSink {
+		void chat(int recipient, int recipientPlayerIndex, String message);
+	}
 
-	CReplayCommands(final CPlayerUnitOrderListener executor) {
+	private final CPlayerUnitOrderListener executor;
+	private final ChatSink chatSink;
+
+	CReplayCommands(final CPlayerUnitOrderListener executor, final ChatSink chatSink) {
 		this.executor = executor;
+		this.chatSink = chatSink;
 	}
 
 	@Override
@@ -68,6 +75,9 @@ final class CReplayCommands implements CPlayerUnitOrderListener {
 	@Override
 	public void chatMessage(final int recipient, final int recipientPlayerIndex, final String message) {
 		this.executor.chatMessage(recipient, recipientPlayerIndex, message);
+		if ((message != null) && !message.trim().isEmpty()) {
+			this.chatSink.chat(recipient, recipientPlayerIndex, message);
+		}
 	}
 
 	@Override
@@ -117,5 +127,10 @@ final class CReplayCommands implements CPlayerUnitOrderListener {
 	@Override
 	public void trackableEvent(final int trackableHandleId, final boolean hit) {
 		this.executor.trackableEvent(trackableHandleId, hit);
+	}
+
+	@Override
+	public void mouseEvent(final int eventId, final float x, final float y, final int button) {
+		this.executor.mouseEvent(eventId, x, y, button);
 	}
 }

@@ -1,5 +1,7 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat;
 
+import java.util.Locale;
+
 import com.etheller.interpreter.ast.util.CHandle;
 import com.etheller.warsmash.util.Log;
 
@@ -13,12 +15,12 @@ public enum CDefenseType implements CodeKeyType, CHandle {
 	DIVINE,
 	NONE;
 
-	public static CDefenseType[] VALUES = values();
+	public static final CDefenseType[] VALUES = values();
 
 	private String codeKey;
 
 	private CDefenseType() {
-		this.codeKey = name().charAt(0) + name().substring(1).toLowerCase();
+		this.codeKey = name().charAt(0) + name().substring(1).toLowerCase(Locale.ROOT);
 	}
 
 	@Override
@@ -27,7 +29,7 @@ public enum CDefenseType implements CodeKeyType, CHandle {
 	}
 
 	public static CDefenseType parseDefenseType(final String typeString) {
-		final String upperCaseTypeString = typeString.trim().toUpperCase();
+		final String upperCaseTypeString = typeString.trim().toUpperCase(Locale.ROOT);
 		if (upperCaseTypeString.isEmpty()) {
 			return NONE;
 		}

@@ -14,7 +14,7 @@ public enum CItemTypeJass implements CHandle {
 	UNKNOWN,
 	ANY;
 
-	public static CItemTypeJass[] VALUES = values();
+	public static final CItemTypeJass[] VALUES = values();
 
 	@Override
 	public int getHandleId() {

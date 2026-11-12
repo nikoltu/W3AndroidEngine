@@ -2,6 +2,7 @@ package com.etheller.warsmash.parsers.jass;
 
 import com.etheller.interpreter.ast.scope.variableevent.CLimitOp;
 import com.etheller.interpreter.ast.util.CHandle;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CRaceManager;
 import com.etheller.interpreter.ast.util.JassNumbers;
 import com.etheller.interpreter.ast.util.JassProgram;
 import com.etheller.interpreter.ast.util.JassStringHash;
@@ -19,7 +20,6 @@ import com.etheller.warsmash.parsers.fdf.GameUI;
 import com.etheller.warsmash.units.custom.WTS;
 import com.etheller.warsmash.util.DataErrors;
 import com.etheller.warsmash.util.Log;
-import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.ai.AIDifficulty;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.item.CItemTypeJass;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.orders.OrderIdUtils;
@@ -95,7 +95,7 @@ final class ConversionNatives {
 			final HandleJassType effecttypeType, final HandleJassType fogstateType, final HandleJassType versionType,
 			final HandleJassType itemtypeType, final HandleJassType attacktypeType, final HandleJassType damagetypeType,
 			final HandleJassType weapontypeType, final HandleJassType soundtypeType,
-			final HandleJassType pathingtypeType) {
+			final HandleJassType pathingtypeType, final CRaceManager raceManager) {
 		final ToIntFunction<Object> enumHandleValue = (value) -> (value instanceof CHandle)
 				? ((CHandle) value).getHandleId()
 				: -1;
@@ -115,7 +115,7 @@ final class ConversionNatives {
 		jassProgramVisitor.getJassNativeManager().createNative("ConvertRace",
 				(arguments, globalScope, triggerScope) -> {
 					final int i = arguments.get(0).visit(IntegerJassValueVisitor.getInstance());
-					return enumValue(raceType, WarsmashConstants.RACE_MANAGER.getRace(i), i);
+					return enumValue(raceType, raceManager.getRace(i), i);
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("ConvertAllianceType",
 				(arguments, globalScope, triggerScope) -> {
@@ -125,7 +125,7 @@ final class ConversionNatives {
 		jassProgramVisitor.getJassNativeManager().createNative("ConvertRacePref",
 				(arguments, globalScope, triggerScope) -> {
 					final int i = arguments.get(0).visit(IntegerJassValueVisitor.getInstance());
-					return enumValue(racepreferenceType, WarsmashConstants.RACE_MANAGER.getRacePreference(i), i);
+					return enumValue(racepreferenceType, raceManager.getRacePreference(i), i);
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("ConvertIGameState",
 				(arguments, globalScope, triggerScope) -> {
@@ -495,7 +495,6 @@ final class ConversionNatives {
 					if (key.startsWith(WTS.KEY_PREFIX)) {
 						return new StringJassValue(gameUI.getTrigStr(key));
 					}
-					// TODO this might be wrong, or a subset of the needed return values
 					final String decoratedString = gameUI.getTemplates().getDecoratedString(key);
 					if (key.equals(decoratedString) && key.matches("[A-Z0-9_]+")) {
 						DataErrors.report(DataErrors.MISSING_STRING, key, "GetLocalizedString: NOT FOUND: " + key);

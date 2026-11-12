@@ -16,7 +16,6 @@ import com.etheller.warsmash.parsers.fdf.frames.SetPoint;
 import com.etheller.warsmash.parsers.fdf.frames.SimpleFrame;
 import com.etheller.warsmash.parsers.fdf.frames.StringFrame;
 import com.etheller.warsmash.parsers.fdf.frames.UIFrame;
-import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.viewer5.handlers.mdx.ReplaceableIds;
 import com.etheller.warsmash.viewer5.handlers.w3x.CampaignMaps;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
@@ -71,7 +70,7 @@ public class MeleeAllianceDialog {
 		this.container.setWidth(this.dialog.getAssignedWidth());
 		this.container.setHeight(this.dialog.getAssignedHeight());
 
-		for (int playerIndex = 0; playerIndex < (WarsmashConstants.MAX_PLAYERS - 4); playerIndex++) {
+		for (int playerIndex = 0; playerIndex < (this.simulation.getGameData().getMaxPlayers() - 4); playerIndex++) {
 			final CPlayer other = simulation.getPlayer(playerIndex);
 			if ((playerIndex == localPlayer.getId()) || (other.getSlotState() != CPlayerSlotState.PLAYING)) {
 				continue;

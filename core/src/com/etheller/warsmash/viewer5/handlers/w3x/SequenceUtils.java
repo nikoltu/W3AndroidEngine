@@ -123,9 +123,6 @@ public class SequenceUtils {
 		List<IndexedSequence> filtered = filterSequences(type, tags, sequences);
 		final Comparator<IndexedSequence> sequenceComparator = STAND_SEQUENCE_COMPARATOR;
 
-//		if (filtered.isEmpty() && !tags.isEmpty()) {
-//			filtered = filterSequences(type, EMPTY, sequences);
-//		}
 		if (filtered.isEmpty()) {
 			// find tags
 			EnumSet<SecondaryTag> fallbackTags = null;
@@ -220,19 +217,6 @@ public class SequenceUtils {
 		}
 	}
 
-	public static void randomWalkSequence(final MdxComplexInstance target) {
-		final MdxModel model = (MdxModel) target.model;
-		final List<Sequence> sequences = model.getSequences();
-		final IndexedSequence sequence = selectSequence("walk", sequences);
-
-		if (sequence != null) {
-			target.setSequence(sequence.index);
-		}
-		else {
-			randomStandSequence(target);
-		}
-	}
-
 	public static void randomBirthSequence(final MdxComplexInstance target) {
 		final MdxModel model = (MdxModel) target.model;
 		final List<Sequence> sequences = model.getSequences();
@@ -256,19 +240,6 @@ public class SequenceUtils {
 		}
 		else {
 			randomStandSequence(target);
-		}
-	}
-
-	public static void randomPortraitTalkSequence(final MdxComplexInstance target) {
-		final MdxModel model = (MdxModel) target.model;
-		final List<Sequence> sequences = model.getSequences();
-		final IndexedSequence sequence = selectSequence("portrait talk", sequences);
-
-		if (sequence != null) {
-			target.setSequence(sequence.index);
-		}
-		else {
-			randomPortraitSequence(target);
 		}
 	}
 

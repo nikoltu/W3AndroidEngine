@@ -7,6 +7,8 @@ import com.etheller.interpreter.ast.util.CHandle;
 import com.etheller.warsmash.parsers.fdf.frames.ColorCodedText;
 
 public class TextTag implements CHandle {
+	public static final int NO_RECEIVING_PLAYER = -1;
+
 	private final Vector3 position;
 	private final Vector2 velocity;
 	private String text;
@@ -23,6 +25,8 @@ public class TextTag implements CHandle {
 	private boolean visible;
 	private boolean permanent;
 	private boolean centered;
+	private boolean centeredOnPoint;
+	private int receivingPlayer = NO_RECEIVING_PLAYER;
 	private final ColorCodedText layout = new ColorCodedText();
 
 	public TextTag(final Vector3 position, final Vector2 velocity, final String text, final Color color,
@@ -46,15 +50,8 @@ public class TextTag implements CHandle {
 		}
 		this.screenCoordTravelOffset.add(this.velocity.x * deltaTime, this.velocity.y * deltaTime);
 		this.lifetime += deltaTime;
-		final float fadeStart = getFadeStart();
-		final float remainingLife = getRemainingLife();
-		final float lifetimeDuration = getLifetimeDuration();
-		final float fadingSeconds = lifetimeDuration - fadeStart;
 		if (this.permanent) {
 			return false;
-		}
-		if (remainingLife <= fadingSeconds) {
-			this.color.a = remainingLife / fadingSeconds;
 		}
 		return this.lifetime > this.lifetimeDuration;
 	}
@@ -69,6 +66,21 @@ public class TextTag implements CHandle {
 
 	public Color getColor() {
 		return this.color;
+	}
+
+	/**
+	 * The alpha the tag is drawn with. A permanent tag is opaque whatever the alpha of its color; one that is fading
+	 * takes the share of its fade still to go instead of that alpha.
+	 */
+	public float getDrawAlpha() {
+		if (this.permanent) {
+			return 1f;
+		}
+		final float fadingSeconds = this.lifetimeDuration - this.fadeStart;
+		if ((fadingSeconds > 0) && (this.lifetime > this.fadeStart)) {
+			return Math.max(0f, Math.min(1f, getRemainingLife() / fadingSeconds));
+		}
+		return this.color.a;
 	}
 
 	public String getText() {
@@ -176,6 +188,24 @@ public class TextTag implements CHandle {
 
 	public boolean isCentered() {
 		return this.centered;
+	}
+
+	/** The text the game makes for a unit is centered across the point, but its bottom line stays on the point. */
+	public void setCenteredOnPoint(final boolean centeredOnPoint) {
+		this.centeredOnPoint = centeredOnPoint;
+	}
+
+	public boolean isCenteredOnPoint() {
+		return this.centeredOnPoint;
+	}
+
+	/** The player the text is for; every other player is not shown it. NO_RECEIVING_PLAYER shows it to all. */
+	public void setReceivingPlayer(final int receivingPlayer) {
+		this.receivingPlayer = receivingPlayer;
+	}
+
+	public boolean isShownTo(final int playerIndex) {
+		return (this.receivingPlayer == NO_RECEIVING_PLAYER) || (this.receivingPlayer == playerIndex);
 	}
 
 	/** The text laid out for drawing, kept by the renderer between frames. */

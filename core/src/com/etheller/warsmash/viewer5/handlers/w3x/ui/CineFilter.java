@@ -2,6 +2,7 @@ package com.etheller.warsmash.viewer5.handlers.w3x.ui;
 
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.Texture.TextureWrap;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.etheller.warsmash.parsers.fdf.GameUI;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.CBlendMode;
@@ -15,6 +16,7 @@ public final class CineFilter {
 	private Texture texture;
 	private boolean textureLoaded;
 	private CBlendMode blendMode = CBlendMode.BLEND;
+	private int texMapFlags;
 	private final float[] startUV = { 0, 0, 1, 1 };
 	private final float[] endUV = { 0, 0, 1, 1 };
 	private final int[] startColor = { 255, 255, 255, 255 };
@@ -31,6 +33,11 @@ public final class CineFilter {
 
 	public void setBlendMode(final CBlendMode blendMode) {
 		this.blendMode = blendMode == null ? CBlendMode.BLEND : blendMode;
+	}
+
+	/** TEXMAP_FLAG_WRAP_U (1) and _WRAP_V (2): the texture repeats past 0..1 in that direction instead of clamping. */
+	public void setTexMapFlags(final int texMapFlags) {
+		this.texMapFlags = texMapFlags;
 	}
 
 	public void setStartUV(final float minU, final float minV, final float maxU, final float maxV) {
@@ -102,9 +109,17 @@ public final class CineFilter {
 		}
 		final Texture drawn = this.texture != null ? this.texture : gameUI.loadTexture("Textures\\white.blp");
 		if (drawn != null) {
+			// Textures are shared, so the wrap is set for this draw only.
+			final TextureWrap oldU = drawn.getUWrap();
+			final TextureWrap oldV = drawn.getVWrap();
+			batch.flush();
+			drawn.setWrap((this.texMapFlags & 1) != 0 ? TextureWrap.Repeat : TextureWrap.ClampToEdge,
+					(this.texMapFlags & 2) != 0 ? TextureWrap.Repeat : TextureWrap.ClampToEdge);
 			batch.draw(drawn, x, y, width, height, lerp(this.startUV[0], this.endUV[0], t),
 					lerp(this.startUV[3], this.endUV[3], t), lerp(this.startUV[2], this.endUV[2], t),
 					lerp(this.startUV[1], this.endUV[1], t));
+			batch.flush();
+			drawn.setWrap(oldU, oldV);
 		}
 		batch.enableBlending();
 		batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);

@@ -3,7 +3,6 @@ package com.etheller.warsmash.parsers.fdf;
 import java.util.HashMap;
 import java.util.Map;
 
-import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
 import com.etheller.warsmash.datasources.DataSource;
 import com.etheller.warsmash.units.Element;
 import com.etheller.warsmash.util.DataSourceFileHandle;
@@ -30,7 +29,7 @@ public class DynamicFontGeneratorHolder {
 				throw new IllegalStateException("No such font file: " + fontName + " (for \"" + font + "\")");
 			}
 			fontGenerator = new FontGeneratorHolder(
-					new FreeTypeFontGenerator(new DataSourceFileHandle(this.dataSource, fontName)));
+					new UnroundedAdvanceFontGenerator(new DataSourceFileHandle(this.dataSource, fontName)));
 			this.fontNameToGenerator.put(font, fontGenerator);
 		}
 		return fontGenerator;

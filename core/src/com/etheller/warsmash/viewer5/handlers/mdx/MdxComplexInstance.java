@@ -87,7 +87,12 @@ public class MdxComplexInstance extends ModelInstance {
 	private float blendTime;
 	private float blendTimeRemaining;
 	public boolean additiveOverrideMeshMode = false;
+	/** A still copy of a model (a fog ghost) shows no particles, ribbons or event effects of its own. */
+	public boolean emittersSuppressed = false;
 	private boolean hasAnyUnselectableMesh = false;
+
+	// Models whose instances are attaching their attachment models right now (the instances load on one thread).
+	private static final List<MdxModel> attachingModels = new ArrayList<>();
 
 	public MdxComplexInstance(final MdxModel model) {
 		super(model);
@@ -147,7 +152,8 @@ public class MdxComplexInstance extends ModelInstance {
 
 			// Attachments may have game models attached to them, such as Undead and
 			// Nightelf building animations.
-			if (attachment.internalModel != null) {
+			// A model reached again through its own attachments (A attaches B, B attaches A) is left out there.
+			if ((attachment.internalModel != null) && !attachingModels.contains(attachment.internalModel)) {
 				attachmentInstance = new AttachmentInstance(this, attachment);
 
 				this.attachments.add(attachmentInstance);
@@ -219,8 +225,14 @@ public class MdxComplexInstance extends ModelInstance {
 		// Below, we allow attachments to initialize after the node tree
 		// is finished building. This allows "internalInstance.setParent(...)"
 		// to link the child model instance to the parent
-		for (final AttachmentInstance attachment : this.attachments) {
-			attachment.initialize();
+		attachingModels.add(model);
+		try {
+			for (final AttachmentInstance attachment : this.attachments) {
+				attachment.initialize();
+			}
+		}
+		finally {
+			attachingModels.remove(attachingModels.size() - 1);
 		}
 
 		// If the sequence was changed before the model was loaded, reset it now that
@@ -412,7 +424,7 @@ public class MdxComplexInstance extends ModelInstance {
 				// This includes attachments and emitters.
 				final UpdatableObject object = node.object;
 
-				if (object != null) {
+				if ((object != null) && !(this.emittersSuppressed && (object instanceof MdxEmitter))) {
 					object.update(dt, objectVisible);
 				}
 

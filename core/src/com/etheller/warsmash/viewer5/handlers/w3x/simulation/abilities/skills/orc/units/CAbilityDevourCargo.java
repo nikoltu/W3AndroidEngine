@@ -5,7 +5,7 @@ import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CWidget;
-import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.generic.AbstractGenericNoIconAbility;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.generic.AbstractCAbilityPassiveNoOrders;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.CAbilitySpell;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityPointTarget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.definitions.impl.AbilityFields;
@@ -23,7 +23,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.AbilityTargetC
  * Cargo Hold (Devour): holds the devoured unit, digests it every second, frees it when the holder dies, and lets
  * its owner see through the holder's eyes meanwhile.
  */
-public class CAbilityDevourCargo extends AbstractGenericNoIconAbility implements CAbilitySpell {
+public class CAbilityDevourCargo extends AbstractCAbilityPassiveNoOrders implements CAbilitySpell {
 	private static final CSpellDamageFlags DAMAGE_FLAGS = new CSpellDamageFlags();
 	private static final int TICKS_PER_SECOND = CTimer.wholeSteps(1.0f);
 
@@ -113,10 +113,6 @@ public class CAbilityDevourCargo extends AbstractGenericNoIconAbility implements
 	}
 
 	@Override
-	public void onAdd(final CSimulation game, final CUnit unit) {
-	}
-
-	@Override
 	public void onRemove(final CSimulation game, final CUnit unit) {
 		release(game, unit);
 	}
@@ -124,54 +120,6 @@ public class CAbilityDevourCargo extends AbstractGenericNoIconAbility implements
 	@Override
 	public void onDeath(final CSimulation game, final CUnit unit) {
 		release(game, unit);
-	}
-
-	@Override
-	public CBehavior begin(final CSimulation game, final CUnit caster, final int playerIndex, final int orderId,
-			final boolean autoOrder, final CWidget target) {
-		return null;
-	}
-
-	@Override
-	public CBehavior begin(final CSimulation game, final CUnit caster, final int playerIndex, final int orderId,
-			final boolean autoOrder, final AbilityPointTarget point) {
-		return null;
-	}
-
-	@Override
-	public CBehavior beginNoTarget(final CSimulation game, final CUnit caster, final int playerIndex,
-			final int orderId, final boolean autoOrder) {
-		return null;
-	}
-
-	@Override
-	public void checkCanTarget(final CSimulation game, final CUnit unit, final int playerIndex, final int orderId,
-			final boolean autoOrder, final CWidget target, final AbilityTargetCheckReceiver<CWidget> receiver) {
-		receiver.orderIdNotAccepted();
-	}
-
-	@Override
-	public void checkCanTarget(final CSimulation game, final CUnit unit, final int playerIndex, final int orderId,
-			final boolean autoOrder, final AbilityPointTarget target,
-			final AbilityTargetCheckReceiver<AbilityPointTarget> receiver) {
-		receiver.orderIdNotAccepted();
-	}
-
-	@Override
-	public void checkCanTargetNoTarget(final CSimulation game, final CUnit unit, final int playerIndex,
-			final int orderId, final boolean autoOrder, final AbilityTargetCheckReceiver<Void> receiver) {
-		receiver.orderIdNotAccepted();
-	}
-
-	@Override
-	protected void innerCheckCanUse(final CSimulation game, final CUnit unit, final int playerIndex,
-			final int orderId, final AbilityActivationReceiver receiver) {
-		receiver.notAnActiveAbility();
-	}
-
-	@Override
-	public void onCancelFromQueue(final CSimulation game, final CUnit unit, final int playerIndex,
-			final int orderId) {
 	}
 
 	@Override

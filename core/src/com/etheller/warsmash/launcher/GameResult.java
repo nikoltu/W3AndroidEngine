@@ -9,6 +9,8 @@ import com.badlogic.gdx.utils.SerializationException;
 public final class GameResult {
 	/** 2: the score of the local player, the time played, the difficulty and the map's name. */
 	public static final int FORMAT = 2;
+	/** The engine did not tell the campaign (a game that did not get as far, a result of an older format). */
+	public static final int CAMPAIGN_UNKNOWN = -2;
 
 	/**
 	 * victory, defeat, tie, quit (left the game to the menu), exit (closed the program), error (not started) or crash
@@ -16,6 +18,8 @@ public final class GameResult {
 	 */
 	public String result;
 	public String source;
+	/** The campaign the game played was a mission of, by the number scripts know it by. */
+	public int campaign = CAMPAIGN_UNKNOWN;
 	public String map;
 	public String profile;
 	public String loadFailure;
@@ -70,6 +74,9 @@ public final class GameResult {
 		json.addChild("version", new JsonValue(FORMAT));
 		json.addChild("result", text(this.result));
 		json.addChild("source", text(this.source));
+		if (this.campaign != CAMPAIGN_UNKNOWN) {
+			json.addChild("campaign", new JsonValue(this.campaign));
+		}
 		json.addChild("map", text(this.map));
 		json.addChild("profile", text(this.profile));
 		if (this.loadFailure != null) {
@@ -120,6 +127,7 @@ public final class GameResult {
 		final GameResult result = new GameResult();
 		result.result = json.getString("result", "quit");
 		result.source = json.getString("source", "");
+		result.campaign = json.getInt("campaign", CAMPAIGN_UNKNOWN);
 		result.map = json.getString("map", "");
 		result.profile = json.getString("profile", "");
 		result.loadFailure = json.has("loadFailure") ? json.getString("loadFailure", null) : null;

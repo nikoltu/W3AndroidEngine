@@ -185,24 +185,6 @@ public class Camera {
 		this.dirty = true;
 	}
 
-	public void setRotationAngles(final float horizontalAngle, final float verticalAngle) {
-		this.rotation.idt();
-//		this.rotateAngles(horizontalAngle, verticalAngle);
-		throw new UnsupportedOperationException(
-				"Ghostwolf called a function that does not exist, so I did not know what to do here");
-	}
-
-	public void rotateAround(final Quaternion rotation, final Vector3 point) {
-		this.rotate(rotation);
-
-		quatHeap.conjugate(); // TODO ?????????
-		vectorHeap.set(this.location);
-		vectorHeap.sub(point);
-		rotation.transform(vectorHeap);
-		vectorHeap.add(point);
-		this.location.set(vectorHeap);
-	}
-
 	public void setRotationAround(final Quaternion rotation, final Vector3 point) {
 		this.setRotation(rotation);
 		;
@@ -214,14 +196,6 @@ public class Camera {
 		quatHeap.transform(vectorHeap);
 		vectorHeap.scl(length);
 		this.location.set(vectorHeap.add(point));
-	}
-
-	public void setRotationAroundAngles(final float horizontalAngle, final float verticalAngle, final Vector3 point) {
-		quatHeap.idt();
-		RenderMathUtils.rotateX(quatHeap, quatHeap, verticalAngle);
-		RenderMathUtils.rotateY(quatHeap, quatHeap, horizontalAngle);
-
-		this.setRotationAround(quatHeap, point);
 	}
 
 	public void face(final Vector3 point, final Vector3 worldUp) {

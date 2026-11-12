@@ -1,8 +1,10 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.skills;
 
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CReleaseCheats;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CWidget;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.inventory.CAbilityInventory;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.CAbilitySpellBase;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityPointTarget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityTargetStillAliveAndTargetableVisitor;
@@ -71,7 +73,7 @@ public class CBehaviorTargetSpellBase extends CAbstractRangedBehavior {
 				this.ability.getCastingSecondaryTags(), 1.0f, true);
 		if (this.castStartTick == 0) {
 			this.castStartTick = simulation.getGameTurnTick();
-			this.castPoint.start(simulation, this.unit.getUnitType().getCastPoint());
+			this.castPoint.start(simulation, castPointSeconds());
 			startBackswing(simulation);
 			if (!this.castEventsFired) {
 				this.castEventsFired = true;
@@ -101,7 +103,7 @@ public class CBehaviorTargetSpellBase extends CAbstractRangedBehavior {
 			}
 			this.castEventTick = -1;
 			this.castStartTick = simulation.getGameTurnTick();
-			this.castPoint.start(simulation, this.unit.getUnitType().getCastPoint());
+			this.castPoint.start(simulation, castPointSeconds());
 			startBackswing(simulation);
 			final CBehavior prevBeh = this.unit.getCurrentBehavior();
 			this.unit.fireSpellEvents(simulation, JassGameEventsWar3.EVENT_UNIT_SPELL_CAST, this.ability, this.target);
@@ -119,6 +121,15 @@ public class CBehaviorTargetSpellBase extends CAbstractRangedBehavior {
 			return this.unit.pollNextOrderBehavior(simulation);
 		}
 		return this;
+	}
+
+	/** Measured on 1.29: a spell cast from an item has no cast point, it takes effect once the unit faces the target. */
+	private float castPointSeconds() {
+		final CAbilityInventory inventory = this.unit.getInventoryData();
+		if ((inventory != null) && inventory.isItemSpellCast(this.ability)) {
+			return 0;
+		}
+		return this.unit.getUnitType().getCastPoint();
 	}
 
 	/**
@@ -159,7 +170,7 @@ public class CBehaviorTargetSpellBase extends CAbstractRangedBehavior {
 		boolean wasChanneling = this.channeling;
 		if (!wasEffectDone) {
 			this.doneEffect = true;
-			final int manaCost = this.ability.getManaCost();
+			final int manaCost = CReleaseCheats.manaCost(simulation, this.unit, this.ability.getManaCost());
 			if (this.unit.getMana() < manaCost) {
 				simulation.getCommandErrorListener().showInterfaceError(this.unit.getPlayerIndex(),
 						CommandStringErrorKeys.NOT_ENOUGH_MANA);
@@ -170,6 +181,9 @@ public class CBehaviorTargetSpellBase extends CAbstractRangedBehavior {
 			this.unit.fireSpellEvents(simulation, JassGameEventsWar3.EVENT_UNIT_SPELL_EFFECT, this.ability, this.target);
 			this.unit.setMana(Math.max(0, this.unit.getMana() - manaCost));
 			this.channeling = this.ability.doEffect(simulation, this.unit, this.target);
+			if (this.unit.getInventoryData() != null) {
+				this.unit.getInventoryData().onItemAbilityEffect(simulation, this.unit, this.ability);
+			}
 			if (this.channeling) {
 				simulation.unitLoopSoundEffectEvent(this.unit, this.ability.getAlias());
 			}

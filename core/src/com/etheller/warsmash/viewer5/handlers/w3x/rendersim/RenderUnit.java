@@ -75,6 +75,8 @@ public class RenderUnit implements RenderWidget {
 	public MdxModel specialArtModel;
 	public SplatMover uberSplat;
 	private boolean decalsRemovedWhileHidden;
+	private SplatMover hiddenUberSplat;
+	private boolean buildingShadowHidden;
 	private boolean shownToLocalPlayer;
 	private RenderFogGhost fogGhost;
 	private int shownTeamColor;
@@ -209,6 +211,7 @@ public class RenderUnit implements RenderWidget {
 					this.fogGhost = map.addFogGhost(this);
 				}
 			}
+			showBuildingDecals(map, (this.fogGhost != null) && this.fogGhost.isShown());
 			if (!wasHidden) {
 				if (this.selectionCircle != null) {
 					this.selectionCircle.hide();
@@ -225,6 +228,7 @@ public class RenderUnit implements RenderWidget {
 		} else {
 			this.shownToLocalPlayer = true;
 			this.instance.show();
+			showBuildingDecals(map, true);
 			if (wasHidden) {
 				if (this.selectionCircle != null) {
 					this.selectionCircle.show(map.terrain.centerOffset);
@@ -481,6 +485,9 @@ public class RenderUnit implements RenderWidget {
 		this.instance.rotate(tempQuat.setFromAxisRad(RenderMathUtils.VEC3_UNIT_X, roll));
 
 		map.worldScene.instanceMoved(this.instance, this.location[0], this.location[1]);
+		if (this.building && ((dx != 0) || (dy != 0))) {
+			moveBuildingDecals(map, this.location[0], this.location[1], dx, dy);
+		}
 		if (this.shadow != null) {
 			this.shadow.move(dx, dy, map.terrain.centerOffset);
 			this.shadow.setHeightAbsolute(currentWalkableUnder != null, groundHeight + map.imageWalkableZOffset);
@@ -577,6 +584,16 @@ public class RenderUnit implements RenderWidget {
 		return this.unitAnimationListenerImpl.secondaryAnimationTags;
 	}
 
+	private void moveBuildingDecals(final War3MapViewer map, final float x, final float y, final float dx,
+			final float dy) {
+		if (this.buildingShadowInstance != null) {
+			this.buildingShadowInstance.move(x, y);
+		}
+		if (this.uberSplat != null) {
+			this.uberSplat.move(dx, dy, map.terrain.centerOffset);
+		}
+	}
+
 	public void repositioned(final War3MapViewer map) {
 		final float prevX = this.location[0];
 		final float prevY = this.location[1];
@@ -592,6 +609,9 @@ public class RenderUnit implements RenderWidget {
 		}
 		if (this.selectionPreviewHighlight != null) {
 			this.selectionPreviewHighlight.move(dx, dy, map.terrain.centerOffset);
+		}
+		if (this.building && ((dx != 0) || (dy != 0))) {
+			moveBuildingDecals(map, simulationX, simulationY, dx, dy);
 		}
 		this.location[0] = this.simulationUnit.getX();
 		this.location[1] = this.simulationUnit.getY();
@@ -673,8 +693,48 @@ public class RenderUnit implements RenderWidget {
 		removeSplats(map);
 	}
 
-	public boolean hasFogGhost() {
-		return this.fogGhost != null;
+	/** A ghost that is drawn, not one under the black mask. */
+	public boolean hasShownFogGhost() {
+		return (this.fogGhost != null) && this.fogGhost.isShown();
+	}
+
+	/**
+	 * The ground texture and shadow of a building show where the building does or its ghost does: a building never
+	 * seen, or remembered under the black mask, does not give itself away by them.
+	 */
+	private void showBuildingDecals(final War3MapViewer map, final boolean shown) {
+		if (shown) {
+			if ((this.hiddenUberSplat != null) && (this.hiddenUberSplat == this.uberSplat)) {
+				this.uberSplat.show(map.terrain.centerOffset);
+			}
+			this.hiddenUberSplat = null;
+			if (this.buildingShadowHidden) {
+				this.buildingShadowHidden = false;
+				final String buildingShadow = this.typeData.getBuildingShadow();
+				if ((this.buildingShadowInstance == null) && (buildingShadow != null) && this.building
+						&& !this.simulationUnit.isDead()) {
+					this.buildingShadowInstance = map.terrain.addShadow(buildingShadow, this.simulationUnit.getX(),
+							this.simulationUnit.getY());
+				}
+			}
+		}
+		else {
+			if ((this.uberSplat != null) && (this.hiddenUberSplat != this.uberSplat)) {
+				this.uberSplat.hide();
+				this.hiddenUberSplat = this.uberSplat;
+			}
+			if (this.buildingShadowInstance != null) {
+				this.buildingShadowInstance.remove();
+				this.buildingShadowInstance = null;
+				this.buildingShadowHidden = true;
+			}
+		}
+	}
+
+	void fogGhostMaskChanged(final War3MapViewer map) {
+		if (!this.shownToLocalPlayer) {
+			showBuildingDecals(map, (this.fogGhost != null) && this.fogGhost.isShown());
+		}
 	}
 
 	void fogGhostRemoved(final RenderFogGhost ghost) {

@@ -91,7 +91,7 @@ public final class CAbilitySellUnits extends AbstractCAbility {
 		}
 		boolean requirementsMet = true;
 		for (final CUnitTypeRequirement requirement : unitType.getRequirements()) {
-			if (buyer.getTechtreeUnlocked(requirement.getRequirement()) < requirement.getRequiredLevel()) {
+			if (!buyer.isRequirementMet(requirement.getRequirement(), requirement.getRequiredLevel())) {
 				requirementsMet = false;
 				receiver.missingRequirement(requirement.getRequirement(), requirement.getRequiredLevel());
 			}
@@ -99,7 +99,7 @@ public final class CAbilitySellUnits extends AbstractCAbility {
 		if (unitType.isHero()) {
 			for (final CUnitTypeRequirement requirement : unitType
 					.getRequirementsTier(buyer.getHeroCount(game, true))) {
-				if (buyer.getTechtreeUnlocked(requirement.getRequirement()) < requirement.getRequiredLevel()) {
+				if (!buyer.isRequirementMet(requirement.getRequirement(), requirement.getRequiredLevel())) {
 					requirementsMet = false;
 					receiver.missingRequirement(requirement.getRequirement(), requirement.getRequiredLevel());
 				}

@@ -3,6 +3,8 @@ package com.etheller.warsmash.android;
 import static com.etheller.warsmash.launcher.LauncherKeys.KEY_ANIMATED;
 import static com.etheller.warsmash.launcher.LauncherKeys.KEY_MUSIC;
 import static com.etheller.warsmash.launcher.LauncherKeys.KEY_SKIN;
+import static com.etheller.warsmash.launcher.LauncherKeys.KEY_UPDATE_CHECK;
+import static com.etheller.warsmash.launcher.LauncherKeys.KEY_UPDATE_SKIPPED;
 
 import java.io.File;
 import java.util.List;
@@ -267,10 +269,23 @@ final class OptionsPage extends LauncherViews {
 	}
 
 	private void aboutRows(final LinearLayout rows) {
-		infoRow(rows, R.string.options_launcher, "v" + this.activity.homePage.versionName(), false);
+		infoRow(rows, R.string.options_launcher, this.activity.homePage.buildLine(), false);
 		infoRow(rows, R.string.options_engine, getString(R.string.options_engine_value), false);
 		infoRow(rows, R.string.options_license, getString(R.string.options_license_value), false);
 		infoRow(rows, R.string.options_art, getString(R.string.options_art_value), false);
+		checkRow(rows, R.string.options_check_updates, this.activity.preferences.getBoolean(KEY_UPDATE_CHECK, true),
+				on -> this.activity.preferences.edit().putBoolean(KEY_UPDATE_CHECK, on).apply());
+		final String skipped = this.activity.preferences.getString(KEY_UPDATE_SKIPPED, "");
+		if (!skipped.isEmpty()) {
+			infoRow(rows, R.string.options_skipped_update, getString(R.string.options_skipped_update_value, skipped),
+					false);
+			final View skippedRow = rows.getChildAt(rows.getChildCount() - 1);
+			onTap(skippedRow, false, v -> {
+				this.activity.preferences.edit().remove(KEY_UPDATE_SKIPPED).apply();
+				showOptions(TAB_ABOUT);
+			});
+			skippedRow.setContentDescription(getString(R.string.options_skipped_update));
+		}
 	}
 
 	/** An option row: the gold label on the left, a line above every row but the first. */

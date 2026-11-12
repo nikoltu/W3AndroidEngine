@@ -105,7 +105,7 @@ public class CGameplayConstants {
 	private final float intRegenBonus;
 	private final float agiDefenseBonus;
 	private final float agiDefenseBase;
-	private final int agiMoveBonus;
+	private final float agiMoveBonus;
 	private final float agiAttackSpeedBonus;
 
 	private final int needHeroXPFormulaA;
@@ -326,7 +326,7 @@ public class CGameplayConstants {
 		this.intRegenBonus = miscData.getFieldFloatValue("IntRegenBonus");
 		this.agiDefenseBonus = miscData.getFieldFloatValue("AgiDefenseBonus");
 		this.agiDefenseBase = miscData.getFieldFloatValue("AgiDefenseBase");
-		this.agiMoveBonus = miscData.getFieldValue("AgiMoveBonus");
+		this.agiMoveBonus = miscData.getFieldFloatValue("AgiMoveBonus");
 		this.agiAttackSpeedBonus = miscData.getFieldFloatValue("AgiAttackSpeedBonus");
 
 		this.heroAbilityLevelSkip = miscData.getFieldValue("HeroAbilityLevelSkip");
@@ -567,7 +567,7 @@ public class CGameplayConstants {
 		return this.agiDefenseBase;
 	}
 
-	public int getAgiMoveBonus() {
+	public float getAgiMoveBonus() {
 		return this.agiMoveBonus;
 	}
 

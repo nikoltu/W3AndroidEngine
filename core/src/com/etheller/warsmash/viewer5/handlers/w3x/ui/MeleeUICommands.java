@@ -33,7 +33,6 @@ import com.etheller.warsmash.util.ImageUtils;
 import com.etheller.warsmash.util.Log;
 import com.etheller.warsmash.util.RenderMathUtils;
 import com.etheller.warsmash.util.War3ID;
-import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.viewer5.ViewerTextureRenderable;
 import com.etheller.warsmash.viewer5.handlers.mdx.Attachment;
 import com.etheller.warsmash.viewer5.handlers.mdx.MdxComplexInstance;
@@ -158,7 +157,7 @@ final class MeleeUICommands {
 		final BitmapFont inventoryNumberOverlayFont = this.ui.rootFrame
 				.generateFont(MeleeUI.DEFAULT_INVENTORY_ICON_WIDTH * 0.25f);
 		for (int j = 0; j < MeleeUI.INVENTORY_HEIGHT; j++) {
-			for (int i = 0; i < MeleeUI.INVENTORY_WIDTH; i++) {
+			for (int i = 0; i < this.ui.inventoryWidth; i++) {
 				final CommandCardIcon commandCardIcon = new CommandCardIcon(
 						"SmashInventoryButton_" + commandButtonIndex, this.ui.inventoryBarFrame,
 						this.itemCommandCardCommandListener);
@@ -212,11 +211,13 @@ final class MeleeUICommands {
 				.addSetPoint(new SetPoint(FramePoint.TOPLEFT, this.ui.inventoryBarFrame, FramePoint.TOPLEFT,
 						GameUI.convertX(this.ui.uiViewport, 0.004f), GameUI.convertY(this.ui.uiViewport, 0.0165625f)));
 		this.ui.inventoryTitleFrame.setWidth(
-				GameUI.convertX(this.ui.uiViewport, WarsmashConstants.USE_NINE_ITEM_INVENTORY ? 0.101f : 0.071f));
+				GameUI.convertX(this.ui.uiViewport, this.ui.war3MapViewer.getGameData().isUseNineItemInventory() ? 0.101f : 0.071f));
 		this.ui.inventoryTitleFrame.setHeight(GameUI.convertX(this.ui.uiViewport, 0.01125f));
 		this.ui.inventoryTitleFrame.setFontShadowColor(new Color(0f, 0f, 0f, 0.9f));
 		this.ui.inventoryTitleFrame.setFontShadowOffsetX(GameUI.convertX(this.ui.uiViewport, 0.001f));
 		this.ui.inventoryTitleFrame.setFontShadowOffsetY(GameUI.convertY(this.ui.uiViewport, -0.001f));
+		this.ui.rootFrame.remove(this.ui.inventoryTitleFrame);
+		this.ui.inventoryBarFrame.add(this.ui.inventoryTitleFrame);
 		try {
 			this.ui.consoleInventoryNoCapacityTexture = ImageUtils.getAnyExtensionTexture(this.ui.dataSource,
 					this.ui.rootFrame.getSkinField("ConsoleInventoryNoCapacity"));
@@ -224,7 +225,9 @@ final class MeleeUICommands {
 		catch (final Exception exc) {
 			Log.error(exc);
 		}
- this.ui.inventoryCover = this.ui.rootFrame.createSimpleFrame("SmashConsoleInventoryCover", this.ui.rootFrame, 0);
+		// A piece of the console under the info panel: the HD and DE covers are opaque where the unit display
+		// reaches over them.
+		this.ui.inventoryCover = this.ui.rootFrame.createSimpleFrame("SmashConsoleInventoryCover", this.ui.consoleUI, 0);
 	}
 
 	void createCommandCard() {
@@ -251,7 +254,7 @@ final class MeleeUICommands {
 						"SmashCommandButton_" + commandButtonIndex + "_Autocast", this.ui.rootFrame, "", 0);
 				commandCardIcon.addAnchor(new AnchorDefinition(FramePoint.BOTTOMLEFT,
 						GameUI.convertX(this.ui.uiViewport,
-								0.6175f + (WarsmashConstants.USE_NINE_ITEM_INVENTORY ? 0.0405f : 0.0f) + (0.0434f * i)),
+								0.6175f + (this.ui.war3MapViewer.getGameData().isUseNineItemInventory() ? 0.0405f : 0.0f) + (0.0434f * i)),
 						GameUI.convertY(this.ui.uiViewport, 0.095f - (0.044f * j))));
 				commandCardIcon.setWidth(GameUI.convertX(this.ui.uiViewport, MeleeUI.DEFAULT_COMMAND_CARD_ICON_WIDTH));
 				commandCardIcon.setHeight(GameUI.convertY(this.ui.uiViewport, MeleeUI.DEFAULT_COMMAND_CARD_ICON_WIDTH));
@@ -999,7 +1002,7 @@ final class MeleeUICommands {
 			int index = 0;
 			final CAbilityInventory inventory = this.ui.selectedUnit.getSimulationUnit().getInventoryData();
 			for (int i = 0; i < MeleeUI.INVENTORY_HEIGHT; i++) {
-				for (int j = 0; j < MeleeUI.INVENTORY_WIDTH; j++) {
+				for (int j = 0; j < this.ui.inventoryWidth; j++) {
 					final CommandCardIcon inventoryIcon = this.ui.inventoryIcons[i][j];
 					final CItem item = inventory.getItemInSlot(index);
 					if (item == null) {
@@ -1018,7 +1021,7 @@ final class MeleeUICommands {
 				if (inventory != null) {
 					int index = 0;
 					for (int i = 0; i < MeleeUI.INVENTORY_HEIGHT; i++) {
-						for (int j = 0; j < MeleeUI.INVENTORY_WIDTH; j++) {
+						for (int j = 0; j < this.ui.inventoryWidth; j++) {
 							final CommandCardIcon inventoryIcon = this.ui.inventoryIcons[i][j];
 							final CItem item = inventory.getItemInSlot(index);
 							if (item == null) {
@@ -1330,7 +1333,7 @@ final class MeleeUICommands {
 				if (MeleeUICommands.this.ui.draggingItem != null) {
 					final CUnit activeCmdSimUnit = MeleeUICommands.this.ui.activeCommandUnit.getSimulationUnit();
 					MeleeUICommands.this.ui.unitOrderListener.issueTargetOrder(activeCmdSimUnit.getHandleId(),
-							activeCmdSimUnit.getInventoryData().getHandleId(), OrderIds.itemdrag00 + slot,
+							activeCmdSimUnit.getInventoryData().getHandleId(), OrderIds.itemDragFirst(MeleeUICommands.this.ui.war3MapViewer.getGameData().isUseNineItemInventory()) + slot,
 							MeleeUICommands.this.ui.draggingItem.getHandleId(), false);
 					setDraggingItem(null);
 					MeleeUICommands.this.ui.activeCommand = null;

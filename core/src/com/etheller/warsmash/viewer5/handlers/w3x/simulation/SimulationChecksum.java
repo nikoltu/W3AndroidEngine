@@ -13,12 +13,12 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
-import java.util.WeakHashMap;
 import java.util.zip.CRC32;
 
 import com.etheller.interpreter.ast.function.ConvertedConstant;
@@ -88,10 +88,10 @@ public final class SimulationChecksum {
 	/**
 	 * What seldom changes (script globals, destructables) is kept hashed in blocks of lines, by the object: a block
 	 * whose values are all the same is joined to the checksum by its own checksum, without hashing its lines again.
-	 * Most of a game's lines are script constants and trees.
+	 * Most of a game's lines are script constants and trees. The blocks hold the game's own objects, which reach the
+	 * game again, so they are let go when the game is closed rather than by a weak key that would never be cleared.
 	 */
-	private static final Map<GlobalScope, ScopeLines> SCOPE_LINES = new WeakHashMap<>();
-	private static final Map<CSimulation, DestructableLines> DESTRUCTABLE_LINES = new WeakHashMap<>();
+	private static final Map<CSimulation, GameLines> GAME_LINES = new HashMap<>();
 
 	private final int[] crcs = new int[CATEGORIES.length];
 	private int total;
@@ -247,6 +247,15 @@ public final class SimulationChecksum {
 		if (ended == simulation) {
 			ended = null;
 		}
+		synchronized (GAME_LINES) {
+			GAME_LINES.remove(simulation);
+		}
+	}
+
+	private static GameLines gameLines(final CSimulation simulation) {
+		synchronized (GAME_LINES) {
+			return GAME_LINES.computeIfAbsent(simulation, key -> new GameLines());
+		}
 	}
 
 	private static synchronized void closeAtExit() {
@@ -287,11 +296,11 @@ public final class SimulationChecksum {
 		begin(8, "handles", "next").i("next", handles.getNextId()).i("handle", handles.getNextHandleId())
 				.i("free", handles.getFreeHandleIdCount()).end();
 		hashPathing(simulation);
-		hashJass(10, "jass", simulation.getGlobalScope());
+		hashJass(10, "jass", simulation, simulation.getGlobalScope());
 		for (final CPlayer player : simulation.getPlayers()) {
 			final JassAIEnvironment ai = player.getAiScript();
 			if (ai != null) {
-				hashJass(11, "ai" + player.getId(), ai.getGlobalScope());
+				hashJass(11, "ai" + player.getId(), simulation, ai.getGlobalScope());
 			}
 		}
 		begin(12, "tick", "tick").i("tick", simulation.getGameTurnTick()).end();
@@ -419,12 +428,13 @@ public final class SimulationChecksum {
 			return;
 		}
 		DestructableLines lines;
-		synchronized (DESTRUCTABLE_LINES) {
-			lines = DESTRUCTABLE_LINES.get(simulation);
+		final GameLines game = gameLines(simulation);
+		synchronized (game) {
+			lines = game.destructables;
 			if ((lines == null) || !Arrays.equals(lines.order, destructables)) {
 				// One destructable more or less moves every block after it.
 				lines = new DestructableLines(destructables);
-				DESTRUCTABLE_LINES.put(simulation, lines);
+				game.destructables = lines;
 			}
 		}
 		synchronized (lines) {
@@ -454,6 +464,11 @@ public final class SimulationChecksum {
 	private void destructableLine(final CDestructable destructable) {
 		begin(4, "destructable", destructable.getHandleId()).id("type", destructable.getDestType().getTypeId())
 				.f("x", destructable.getX()).f("y", destructable.getY()).f("life", destructable.getLife());
+	}
+
+	private static final class GameLines {
+		private DestructableLines destructables;
+		private final Map<GlobalScope, ScopeLines> scopes = new HashMap<>();
 	}
 
 	private static final class DestructableLines {
@@ -585,20 +600,22 @@ public final class SimulationChecksum {
 		}
 	}
 
-	private void hashJass(final int category, final String scope, final GlobalScope globalScope) throws IOException {
+	private void hashJass(final int category, final String scope, final CSimulation simulation,
+			final GlobalScope globalScope) throws IOException {
 		if (globalScope == null) {
 			return;
 		}
 		final List<GlobalScopeAssignable> globals = globalScope.getIndexedGlobals();
 		final Map<String, Integer> ids = globalScope.getGlobalIds();
 		ScopeLines lines;
-		synchronized (SCOPE_LINES) {
-			lines = SCOPE_LINES.get(globalScope);
+		final GameLines game = gameLines(simulation);
+		synchronized (game) {
+			lines = game.scopes.get(globalScope);
 			// Globals are only ever added; a scope that got more is named again.
 			if ((lines == null) || !lines.scope.equals(scope) || (lines.names.length != globals.size())
 					|| (lines.idCount != ids.size())) {
 				lines = new ScopeLines(scope, names(globals.size(), ids), ids.size(), globals);
-				SCOPE_LINES.put(globalScope, lines);
+				game.scopes.put(globalScope, lines);
 			}
 		}
 		synchronized (lines) {

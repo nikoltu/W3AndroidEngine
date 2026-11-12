@@ -6,6 +6,7 @@ import com.etheller.interpreter.ast.value.HandleJassType;
 import com.etheller.interpreter.ast.value.visitor.BooleanJassValueVisitor;
 import com.etheller.interpreter.ast.value.visitor.IntegerJassValueVisitor;
 import com.etheller.interpreter.ast.value.visitor.ObjectJassValueVisitor;
+import com.etheller.interpreter.ast.value.visitor.RealJassValueVisitor;
 import com.etheller.interpreter.ast.value.visitor.StringJassValueVisitor;
 import com.etheller.warsmash.parsers.jass.Jass2.CommonEnvironment;
 import com.etheller.warsmash.parsers.jass.scope.CommonTriggerExecutionScope;
@@ -250,6 +251,24 @@ final class QuestNatives extends CommonNatives {
 					final CTimerDialog dialog = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
 					if (dialog != null) {
 						dialog.setVisible(arguments.get(1).visit(BooleanJassValueVisitor.getInstance()));
+					}
+					return null;
+				});
+		jassProgramVisitor.getJassNativeManager().createNative("TimerDialogSetRealTimeRemaining",
+				(arguments, globalScope, triggerScope) -> {
+					final CTimerDialog dialog = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
+					if (dialog != null) {
+						dialog.setRealTimeRemaining(this.simulation,
+								arguments.get(1).visit(RealJassValueVisitor.getInstance()).floatValue());
+					}
+					return null;
+				});
+		jassProgramVisitor.getJassNativeManager().createNative("TimerDialogSetSpeed",
+				(arguments, globalScope, triggerScope) -> {
+					final CTimerDialog dialog = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
+					if (dialog != null) {
+						dialog.setSpeed(this.simulation,
+								arguments.get(1).visit(RealJassValueVisitor.getInstance()).floatValue());
 					}
 					return null;
 				});

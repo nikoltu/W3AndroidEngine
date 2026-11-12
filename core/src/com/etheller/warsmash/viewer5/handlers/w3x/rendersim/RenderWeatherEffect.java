@@ -3,6 +3,7 @@ package com.etheller.warsmash.viewer5.handlers.w3x.rendersim;
 import com.badlogic.gdx.math.Quaternion;
 import com.badlogic.gdx.math.Vector3;
 import com.etheller.warsmash.util.War3ID;
+import com.etheller.warsmash.viewer5.AudioContext;
 import com.etheller.warsmash.viewer5.Camera;
 import com.etheller.warsmash.viewer5.handlers.mdx.MdxComplexInstance;
 import com.etheller.warsmash.viewer5.handlers.mdx.MdxModel;
@@ -17,8 +18,8 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.SimulationRend
  * the whole map costs no more than one over the screen.
  */
 public final class RenderWeatherEffect implements SimulationRenderComponentWeather {
-	// Calibration: the table's emission rate counts per square of this side; the original's unit is not measured yet.
-	private static final float RATE_AREA_SIDE = 512;
+	// Calibration: the table's emission rate counts per square of this side, fitted to the original's rain density.
+	private static final float RATE_AREA_SIDE = 300;
 	// Calibration: how far around the camera target weather is emitted.
 	private static final float VIEW_HALF_SIZE = 1536;
 	private static final Vector3 rayHeap = new Vector3();
@@ -35,6 +36,7 @@ public final class RenderWeatherEffect implements SimulationRenderComponentWeath
 	private final ParticleEmitter2Object emitter;
 	private UnitSound ambientSound;
 	private long ambientSoundId = -1;
+	private boolean ambientSoundTried;
 	private boolean enabled;
 	private boolean removed;
 	private Object savedForm;
@@ -81,11 +83,16 @@ public final class RenderWeatherEffect implements SimulationRenderComponentWeath
 			stopAmbientSound();
 			return;
 		}
-		if ((this.ambientSoundId == -1) && (this.type.getAmbientSound() != null)) {
+		if ((this.ambientSoundId == -1) && !this.ambientSoundTried && (this.type.getAmbientSound() != null)) {
+			// Weather ambience is heard over the whole view rather than from a point, and one try per time in view is
+			// enough: a sound that cannot play now has no better chance on the next frame.
+			this.ambientSoundTried = true;
 			this.ambientSound = viewer.getUiSounds().getSound(this.type.getAmbientSound());
 			if (this.ambientSound != null) {
-				this.ambientSoundId = this.ambientSound.play(viewer.worldScene.audioContext, targetX, targetY,
-						viewer.terrain.getGroundHeight(targetX, targetY));
+				final AudioContext context = viewer.getUiAudioContext() != null ? viewer.getUiAudioContext()
+						: viewer.worldScene.audioContext;
+				this.ambientSoundId = this.ambientSound.play(context, targetX, targetY,
+						viewer.terrain.getGroundHeight(targetX, targetY), true);
 			}
 		}
 		final float width = right - left;
@@ -105,6 +112,7 @@ public final class RenderWeatherEffect implements SimulationRenderComponentWeath
 			this.ambientSound.stop(this.ambientSoundId);
 			this.ambientSoundId = -1;
 		}
+		this.ambientSoundTried = false;
 	}
 
 	@Override

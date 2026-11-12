@@ -13,7 +13,6 @@ import java.util.Set;
 import com.etheller.interpreter.ast.scope.GlobalScope;
 import com.etheller.interpreter.ast.value.CodeJassValue;
 import com.etheller.warsmash.util.War3ID;
-import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.viewer5.handlers.w3x.environment.PathingGrid;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CDestructable;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
@@ -34,6 +33,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.C
 public class AIController {
 	public static final int ATTACK_CAPTAIN = 1;
 	public static final int DEFENSE_CAPTAIN = 2;
+	private static final int MEGA_TARGET_INTERVAL = 200;
 
 	final CSimulation simulation;
 	final GlobalScope globalScope;
@@ -45,6 +45,9 @@ public class AIController {
 	final List<AIBuildJob> buildJobs = new ArrayList<>();
 	final List<int[]> harvestRequests = new ArrayList<>();
 	final Map<CUnit, int[]> harvestJobs = new LinkedHashMap<>();
+	boolean harvestPassPending;
+	int harvestCallTick;
+	final Set<CUnit> harvestUnsent = new LinkedHashSet<>();
 	final Map<Integer, List<CDestructable>> townTrees = new HashMap<>();
 	final Map<Integer, Integer> townTreesTick = new HashMap<>();
 	final AICaptain attackCaptain = new AICaptain();
@@ -52,6 +55,7 @@ public class AIController {
 	final Set<CUnit> injured = new LinkedHashSet<>();
 	final Map<CUnit, float[]> lastPositions = new LinkedHashMap<>();
 	final List<AIGuardPost> guardPosts = new ArrayList<>();
+	final List<AIReplacement> replacements = new ArrayList<>();
 	final Map<CUnit, float[]> guardPositions = new LinkedHashMap<>();
 	boolean unitsSeen;
 	boolean gatheringStopped;
@@ -81,15 +85,23 @@ public class AIController {
 	int ticks;
 
 	private boolean campaign;
-	private boolean targetHeroes;
+	boolean targetHeroes;
 	boolean peonsRepair;
 	boolean heroesFlee;
 	boolean unitsFlee;
 	boolean groupsFlee;
 	boolean ignoreInjured;
-	private boolean heroesTakeItems;
+	boolean heroesTakeItems;
 	boolean newHeroes = true;
-	private int replacementCount;
+	boolean groupTimedLife = true;
+	private boolean watchMegaTargets;
+	private boolean slowChopping;
+	private CUnit megaTarget;
+	final Set<CUnit> ignoredUnits = new LinkedHashSet<>();
+	final Set<CUnit> ignoredHeroes = new LinkedHashSet<>();
+	int replacementCount = 3;
+	boolean amphibious;
+	AILand land;
 
 	static final class AIGuardPost {
 		final War3ID typeId;
@@ -101,6 +113,25 @@ public class AIController {
 			this.typeId = typeId;
 			this.x = x;
 			this.y = y;
+		}
+	}
+
+	/**
+	 * A unit the player had when the AI started, trained anew and sent back to its place when it dies.
+	 */
+	static final class AIReplacement {
+		final War3ID typeId;
+		final float x;
+		final float y;
+		CUnit unit;
+		int used;
+		boolean pending;
+
+		AIReplacement(final CUnit unit) {
+			this.typeId = unit.getTypeId();
+			this.x = unit.getX();
+			this.y = unit.getY();
+			this.unit = unit;
 		}
 	}
 
@@ -140,6 +171,12 @@ public class AIController {
 			AIDefense.placeNewUnits(this);
 			AIZeppelins.updateZepWaves(this);
 			AIAttack.updateCaptains(this);
+			if (this.heroesTakeItems) {
+				AIDefense.takeItems(this);
+			}
+		}
+		if (this.watchMegaTargets && ((this.ticks % MEGA_TARGET_INTERVAL) == (MEGA_TARGET_INTERVAL - 10))) {
+			this.megaTarget = AIMapKnowledge.getMegaTarget(this);
 		}
 		if ((this.ticks % 20) == 5) {
 			AITowns.refreshTowns(this);
@@ -179,12 +216,63 @@ public class AIController {
 		this.heroesTakeItems = heroesTakeItems;
 	}
 
+	public void setSlowChopping(final boolean slowChopping) {
+		this.slowChopping = slowChopping;
+	}
+
+	/**
+	 * Measured: with slow chopping each load a worker brings home is a tenth of its size, at least one, for gold as
+	 * well as lumber; the trips take as long as ever.
+	 */
+	public int scaleHarvestedAmount(final int amount) {
+		return this.slowChopping ? Math.max(1, amount / 10) : amount;
+	}
+
+	public void setWatchMegaTargets(final boolean watchMegaTargets) {
+		this.watchMegaTargets = watchMegaTargets;
+		if (!watchMegaTargets) {
+			this.megaTarget = null;
+		}
+	}
+
+	public void setGroupTimedLife(final boolean groupTimedLife) {
+		this.groupTimedLife = groupTimedLife;
+	}
+
+	/**
+	 * Measured: the summoned units the AI has left out of its groups and the heroes the player had when the AI
+	 * started, per unit type.
+	 */
+	public int getIgnoredUnits(final int typeIdValue) {
+		final War3ID typeId = new War3ID(typeIdValue);
+		int count = 0;
+		for (final CUnit unit : this.ignoredUnits) {
+			if (isOurs(unit) && unit.getTypeId().equals(typeId)) {
+				count++;
+			}
+		}
+		for (final CUnit unit : this.ignoredHeroes) {
+			if (isOurs(unit) && unit.getTypeId().equals(typeId)) {
+				count++;
+			}
+		}
+		return count;
+	}
+
 	public void setNewHeroes(final boolean newHeroes) {
 		this.newHeroes = newHeroes;
 	}
 
 	public void setReplacementCount(final int replacementCount) {
 		this.replacementCount = replacementCount;
+	}
+
+	/**
+	 * Measured: without it the attack captain plans for its amphibious units as if they walked, so they are not sent
+	 * into water.
+	 */
+	public void setAmphibious() {
+		this.amphibious = true;
 	}
 
 	public void setHeroLevelsFunction(final CodeJassValue heroLevelsFunction) {
@@ -247,14 +335,15 @@ public class AIController {
 	 * Workers and the units harvesting for us stay out of the captains.
 	 */
 	boolean isArmyUnit(final CUnit unit) {
-		return isGuardCandidate(unit) && !this.harvestJobs.containsKey(unit) && !isBuildJobWorker(unit);
+		return isGuardCandidate(unit) && !this.harvestJobs.containsKey(unit) && !isBuildJobWorker(unit)
+				&& !this.ignoredUnits.contains(unit);
 	}
 
 	boolean isEnemyPlayer(final int otherIndex) {
 		if ((otherIndex == this.playerIndex) || this.player.hasAlliance(otherIndex, CAllianceType.PASSIVE)) {
 			return false;
 		}
-		return (otherIndex < (WarsmashConstants.MAX_PLAYERS - 4)) || this.simulation.isNeutralAggressive(otherIndex);
+		return (otherIndex < (this.simulation.getGameData().getMaxPlayers() - 4)) || this.simulation.isNeutralAggressive(otherIndex);
 	}
 
 	boolean isEnemy(final CUnit unit) {
@@ -262,7 +351,7 @@ public class AIController {
 	}
 
 	boolean isOpponent(final int otherIndex) {
-		if ((otherIndex >= (WarsmashConstants.MAX_PLAYERS - 4)) || !isEnemyPlayer(otherIndex)) {
+		if ((otherIndex >= (this.simulation.getGameData().getMaxPlayers() - 4)) || !isEnemyPlayer(otherIndex)) {
 			return false;
 		}
 		final CPlayer other = this.simulation.getPlayer(otherIndex);
@@ -364,6 +453,8 @@ public class AIController {
 
 	public void clearHarvestAI() {
 		this.harvestRequests.clear();
+		this.harvestPassPending = true;
+		this.harvestCallTick = this.ticks;
 	}
 
 	public void harvestGold(final int town, final int peons) {
@@ -376,6 +467,8 @@ public class AIController {
 
 	public void stopGathering() {
 		this.harvestRequests.clear();
+		this.harvestPassPending = true;
+		this.harvestCallTick = this.ticks;
 		this.gatheringStopped = true;
 	}
 
@@ -565,8 +658,15 @@ public class AIController {
 		return AIMapKnowledge.getEnemyPower(this);
 	}
 
+	/**
+	 * Measured: only a script that watches mega targets gets one, and it is judged every ten seconds, the first time
+	 * about ten seconds after the script starts.
+	 */
 	public CUnit getMegaTarget() {
-		return AIMapKnowledge.getMegaTarget(this);
+		if ((this.megaTarget != null) && this.megaTarget.isDead()) {
+			this.megaTarget = null;
+		}
+		return this.megaTarget;
 	}
 
 	public boolean isTowered(final CUnit target) {

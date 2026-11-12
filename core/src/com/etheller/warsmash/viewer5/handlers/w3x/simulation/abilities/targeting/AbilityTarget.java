@@ -12,10 +12,4 @@ public interface AbilityTarget {
 		final double dy = target.getY() - source.getY();
 		return StrictMath.atan2(dy, dx);
 	}
-
-	public static double distanceBetweenPoints(final AbilityTarget source, final AbilityTarget target) {
-		final double dx = target.getX() - source.getX();
-		final double dy = target.getY() - source.getY();
-		return StrictMath.sqrt((dx * dx) + (dy * dy));
-	}
 }

@@ -28,7 +28,7 @@ Frame "FRAME" "SmashToolTip" {
 	}
 	Frame "TEXT" "SmashToolTipText" {
 	    DecorateFileNames,
-	    FrameFont "MasterFont", 0.010, "",
+	    FrameFont "MasterFont", 0.011, "",
 	    FontJustificationH JUSTIFYLEFT,
 	    FontJustificationV JUSTIFYTOP,
 	    FontFlags "FIXEDSIZE",
@@ -36,7 +36,7 @@ Frame "FRAME" "SmashToolTip" {
 	}
 	Frame "TEXT" "SmashToolTipInfoText" {
 	    DecorateFileNames,
-	    FrameFont "MasterFont", 0.010, "",
+	    FrameFont "MasterFont", 0.011, "",
 	    FontJustificationH JUSTIFYLEFT,
 	    FontJustificationV JUSTIFYTOP,
 	    FontFlags "FIXEDSIZE",
@@ -44,7 +44,7 @@ Frame "FRAME" "SmashToolTip" {
 	}
 	Frame "TEXT" "SmashUberTipText" {
 	    DecorateFileNames,
-	    FrameFont "MasterFont", 0.010, "",
+	    FrameFont "MasterFont", 0.011, "",
 	    FontJustificationH JUSTIFYLEFT,
 	    FontJustificationV JUSTIFYTOP,
 	    FontFlags "FIXEDSIZE",
@@ -58,18 +58,18 @@ Frame "SIMPLEFRAME" "SmashToolTipIconResource" {
     // --- icon -------------------------------------------------------------
     Texture "SmashToolTipIconResourceBackdrop" {
     	Anchor LEFT, 0.0, 0.0,
-	    Width 0.008,
-	    Height 0.008,
+	    Width 0.0093,
+	    Height 0.0093,
         File "ToolTipStonesIcon",
     }
 
     // --- label ------------------------------------------------------------
     String "SmashToolTipIconResourceLabel" {        
-        SetPoint LEFT, "SmashToolTipIconResourceBackdrop", RIGHT, 0.001, 0.000,
+        SetPoint LEFT, "SmashToolTipIconResourceBackdrop", RIGHT, 0.003, 0.000,
 	    FontJustificationH JUSTIFYLEFT,
 	    FontJustificationV JUSTIFYMIDDLE,
 	    FontColor 0.99 0.827 0.0705 1.0,
-		Font "InfoPanelTextFont",0.0085,
+		Font "MasterFont",0.011,
         Text "275",
     }
 }
@@ -88,7 +88,7 @@ Frame "FRAME" "SmashHoverTip" {
 	}
 	Frame "TEXT" "SmashHoverTipText" {
 	    DecorateFileNames,
-	    FrameFont "MasterFont", 0.010, "",
+	    FrameFont "MasterFont", 0.011, "",
 	    FontJustificationH JUSTIFYLEFT,
 	    FontJustificationV JUSTIFYTOP,
 	    FontFlags "FIXEDSIZE",

@@ -1,5 +1,7 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation;
 
+import java.util.Locale;
+
 import java.util.HashMap;
 import java.util.Map;
 
@@ -62,6 +64,6 @@ public enum CUnitClassification {
 	}
 
 	public static CUnitClassification parseUnitClassification(final String unitEditorKey) {
-		return UNIT_EDITOR_KEY_TO_CLASSIFICATION.get(unitEditorKey.toLowerCase());
+		return UNIT_EDITOR_KEY_TO_CLASSIFICATION.get(unitEditorKey.toLowerCase(Locale.ROOT));
 	}
 }

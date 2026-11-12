@@ -82,27 +82,6 @@ public class Shaders {
 			"}\r\n" + //
 			"#endif";
 
-	public static final String decodeFloat = "\r\n" + //
-			"    vec2 decodeFloat2(float f) {\r\n" + //
-			"      vec2 v;\r\n" + //
-			"      v[1] = floor(f / 256.0);\r\n" + //
-			"      v[0] = floor(f - v[1] * 256.0);\r\n" + //
-			"      return v;\r\n" + //
-			"    }\r\n" + //
-			"    vec3 decodeFloat3(float f) {\r\n" + //
-			"      vec3 v;\r\n" + //
-			"      v[2] = floor(f / 65536.0);\r\n" + //
-			"      v[1] = floor((f - v[2] * 65536.0) / 256.0);\r\n" + //
-			"      v[0] = floor(f - v[2] * 65536.0 - v[1] * 256.0);\r\n" + //
-			"      return v;\r\n" + //
-			"    }\r\n" + //
-			"    vec4 decodeFloat4(float v) {\r\n" + //
-			"      vec4 enc = vec4(1.0, 255.0, 65025.0, 16581375.0) * v;\r\n" + //
-			"      enc = fract(enc);\r\n" + //
-			"      enc -= enc.yzww * vec4(1.0 / 255.0, 1.0 / 255.0, 1.0 / 255.0, 0.0);\r\n" + //
-			"      return enc;\r\n" + //
-			"    }";
-
 	public static final String quatTransform = "\r\n" + //
 			"    // A 2D quaternion*vector.\r\n" + //
 			"    // q is the zw components of the original quaternion.\r\n" + //

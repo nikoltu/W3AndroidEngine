@@ -395,8 +395,7 @@ final class MeleeUICinematics {
 		this.interfaceAlphaChanged = (gameAlpha < 1f) || (cinematicAlpha < 1f);
 		for (final UIFrame frame : new UIFrame[] { this.ui.consoleUI, this.ui.resourceBar, this.ui.timeIndicator,
 				this.ui.minimapButtonBar, this.ui.smashSimpleInfoPanel, this.ui.smashCommandButtons,
-				this.ui.upperButtonBar, this.ui.inventoryCover, this.ui.inventoryBarFrame, this.ui.inventoryTitleFrame,
-				this.ui.heroBar }) {
+				this.ui.upperButtonBar, this.ui.heroBar }) {
 			fadeFrame(frame, gameAlpha);
 		}
 		fadeFrame(this.ui.cinematicPanel, cinematicAlpha);
@@ -467,9 +466,6 @@ final class MeleeUICinematics {
 			this.ui.replayPanel.setVisible(show);
 		}
 		this.ui.upperButtonBar.setVisible(show);
-		this.ui.inventoryCover.setVisible(show);
-		this.ui.inventoryBarFrame.setVisible(show);
-		this.ui.inventoryTitleFrame.setVisible(show);
 		if (this.ui.heroBar != null) {
 			this.ui.heroBar.setVisible(show);
 		}

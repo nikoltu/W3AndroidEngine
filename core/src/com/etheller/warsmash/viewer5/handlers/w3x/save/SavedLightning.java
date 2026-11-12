@@ -22,6 +22,7 @@ public final class SavedLightning extends AllocatedHandle implements SimulationR
 	private float[] points;
 	private float[] color;
 	private float lifeSpan;
+	private boolean checkVisibility;
 	private boolean removed;
 	private LiveRenderObject<SimulationRenderComponentLightning> liveObject;
 
@@ -44,6 +45,7 @@ public final class SavedLightning extends AllocatedHandle implements SimulationR
 		saved.color = lightning.getColor();
 		saved.lifeSpan = lightning.getLifeSpanRemaining();
 		saved.removed = lightning.isRemoved();
+		saved.checkVisibility = lightning.isCheckVisibility();
 		return saved;
 	}
 
@@ -63,7 +65,7 @@ public final class SavedLightning extends AllocatedHandle implements SimulationR
 		}
 		else {
 			lightning = viewer.createLightning(this.lightningId, this.points[0], this.points[1], this.points[2],
-					this.points[3], this.points[4], this.points[5]);
+					this.points[3], this.points[4], this.points[5], this.checkVisibility);
 		}
 		this.liveObject = new LiveRenderObject<>(lightning);
 		if (lightning instanceof RenderLightningEffect) {
@@ -88,6 +90,11 @@ public final class SavedLightning extends AllocatedHandle implements SimulationR
 		if (live() != null) {
 			live().setColor(r, g, b, a);
 		}
+	}
+
+	@Override
+	public float[] getColor() {
+		return this.color;
 	}
 
 	@Override

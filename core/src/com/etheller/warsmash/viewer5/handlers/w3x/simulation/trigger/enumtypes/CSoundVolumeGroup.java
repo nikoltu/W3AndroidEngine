@@ -20,7 +20,7 @@ public enum CSoundVolumeGroup implements CHandle {
 	CINEMATIC_SOUND_EFFECTS_2,
 	CINEMATIC_SOUND_EFFECTS_3;
 
-	public static CSoundVolumeGroup[] VALUES = values();
+	public static final CSoundVolumeGroup[] VALUES = values();
 
 	@Override
 	public int getHandleId() {

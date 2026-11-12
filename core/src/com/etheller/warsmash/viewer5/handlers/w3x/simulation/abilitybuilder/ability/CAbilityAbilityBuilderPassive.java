@@ -94,6 +94,15 @@ public class CAbilityAbilityBuilderPassive extends AbilityGenericSingleIconPassi
 						localStore, 0);
 			}
 		}
+		refreshCostOverrides();
+	}
+
+	@Override
+	protected void refreshCostOverrides() {
+		final Float cooldownOverride = getCooldownOverride(getLevel());
+		if (cooldownOverride != null) {
+			this.cooldown = Math.max(0f, cooldownOverride);
+		}
 	}
 	
 	@Override
@@ -329,7 +338,7 @@ public class CAbilityAbilityBuilderPassive extends AbilityGenericSingleIconPassi
 			CPlayer player = game.getPlayer(unit.getPlayerIndex());
 			if (reqs != null) {
 				for (final CUnitTypeRequirement requirement : reqs) {
-					if (player.getTechtreeUnlocked(requirement.getRequirement()) < requirement.getRequiredLevel()) {
+					if (!player.isRequirementMet(requirement.getRequirement(), requirement.getRequiredLevel())) {
 						receiver.missingRequirement(requirement.getRequirement(), requirement.getRequiredLevel());
 					}
 				}
@@ -345,7 +354,7 @@ public class CAbilityAbilityBuilderPassive extends AbilityGenericSingleIconPassi
 			boolean requirementsMet = player.isTechtreeAllowedByMax(this.getAlias());
 			if (reqs != null) {
 				for (final CUnitTypeRequirement requirement : reqs) {
-					if (player.getTechtreeUnlocked(requirement.getRequirement()) < requirement.getRequiredLevel()) {
+					if (!player.isRequirementMet(requirement.getRequirement(), requirement.getRequiredLevel())) {
 						requirementsMet = false;
 					}
 				}

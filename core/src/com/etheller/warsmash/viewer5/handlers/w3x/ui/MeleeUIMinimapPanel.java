@@ -5,9 +5,11 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
@@ -31,6 +33,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.War3MapViewer;
 import com.etheller.warsmash.viewer5.handlers.w3x.environment.PathingGrid;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.data.CUnitData;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CAllianceType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CMapControl;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayer;
@@ -55,6 +58,9 @@ final class MeleeUIMinimapPanel {
 	private final List<String> creepCampModels = new ArrayList<>();
 	/** The creep camps as the local player last saw them: x, y, level sum. */
 	private final List<float[]> knownCreepCamps = new ArrayList<>();
+	/** Creeps that existed at the start or were already grouped; only units made later can start a new camp. */
+	private final Set<CUnit> accountedCreeps = new HashSet<>();
+	private boolean creepCampsStarted;
 	private long creepCampsRefreshMillis;
 
 	private final Vector3 minimapCornerTemp = new Vector3();
@@ -65,7 +71,7 @@ final class MeleeUIMinimapPanel {
 
 	// Measured on 1.29: the ring spans about a sixth of the minimap's width.
 	private static final float MINIMAP_PING_SCALE = 1f;
-	private static final float MINIMAP_CREEP_CAMP_SCALE = 0.5f;
+	private static final float MINIMAP_CREEP_CAMP_SCALE = 1f;
 	// Minimap-Ping sequences: Birth, Stand, Death, then the same three for "AllyPing".
 	private static final int MINIMAP_PING_BIRTH = 0;
 	private static final int MINIMAP_PING_STAND = 1;
@@ -102,7 +108,7 @@ final class MeleeUIMinimapPanel {
 		else if (war3MapViewer.dataSource.has("war3mapMap.blp")) {
 			minimapTexture = ImageUtils.getAnyExtensionTexture(war3MapViewer.dataSource, "war3mapMap.blp");
 		}
-		final Texture[] teamColors = new Texture[WarsmashConstants.MAX_PLAYERS];
+		final Texture[] teamColors = new Texture[this.ui.war3MapViewer.getGameData().getMaxPlayers()];
 		for (int i = 0; i < teamColors.length; i++) {
 			teamColors[i] = ImageUtils.getAnyExtensionTexture(war3MapViewer.dataSource,
 					"ReplaceableTextures\\" + ReplaceableIds.getPathString(1) + ReplaceableIds.getIdString(i) + ".blp");
@@ -154,6 +160,7 @@ final class MeleeUIMinimapPanel {
 		this.ui.tooltips.setFrameTooltip(this.ui.rootFrame.getFrameByName("MiniMapCreepButton", 0),
 				"MINIMAPCREEPCOLORTOOLTIP");
 		this.ui.tooltips.setFrameTooltip(this.ui.rootFrame.getFrameByName("FormationButton", 0), "FORMATION_TOOLTIP");
+		applyFilterButtonsEnabled();
 	}
 
 	void beginMinimapSignal() {
@@ -203,6 +210,35 @@ final class MeleeUIMinimapPanel {
 		this.ui.war3MapViewer.getAllyColorFilter().setState(mode);
 	}
 
+	boolean allyFilterEnabled = true;
+	boolean creepFilterEnabled = true;
+
+	/** EnableMinimapFilterButtons: the ally and creep buttons grey out and their Alt keys stop working. */
+	void enableFilterButtons(final boolean ally, final boolean creep) {
+		this.allyFilterEnabled = ally;
+		this.creepFilterEnabled = creep;
+		applyFilterButtonsEnabled();
+	}
+
+	void applyFilterButtonsEnabled() {
+		setButtonEnabled("MiniMapAllyButton", this.allyFilterEnabled);
+		setButtonEnabled("MiniMapCreepButton", this.creepFilterEnabled);
+	}
+
+	private void setButtonEnabled(final String name, final boolean enabled) {
+		final UIFrame button = this.ui.rootFrame.getFrameByName(name, 0);
+		if (button instanceof SimpleButtonFrame) {
+			((SimpleButtonFrame) button).setEnabled(enabled);
+		}
+	}
+
+	/** SetCreepCampFilterState: the creep button's state, without keeping it as the player's own choice. */
+	void setCreepCampFilterState(final boolean shown) {
+		GameOptions.get().setMinimapCreeps(shown);
+		this.creepCampsRefreshMillis = 0;
+		this.minimapCreepRedraw.run();
+	}
+
 	void setMinimapCreeps(final boolean shown) {
 		GameOptions.get().setMinimapCreeps(shown);
 		GameOptions.get().save();
@@ -245,41 +281,29 @@ final class MeleeUIMinimapPanel {
 			}
 			return;
 		}
-		this.creepCampsRefreshMillis = currentMillis + CREEP_CAMPS_REFRESH_MILLIS;
 		final CSimulation simulation = this.ui.war3MapViewer.simulation;
+		if (!this.creepCampsStarted && (simulation.getGameTurnTick() == 0)) {
+			// The map's script has not placed its creeps yet.
+			return;
+		}
+		this.creepCampsRefreshMillis = currentMillis + CREEP_CAMPS_REFRESH_MILLIS;
 		final Element misc = this.ui.war3MapViewer.miscData.get("Misc");
 		final Element minimap = this.ui.war3MapViewer.miscData.get("Minimap");
 		final float linkDistance = (misc != null) && misc.hasField("CreepCampPathingCellDistance")
 				? misc.getFieldFloatValue("CreepCampPathingCellDistance") * 32
 				: 26 * 32;
+		final float linkDistanceSq = linkDistance * linkDistance;
+		final int localPlayer = this.ui.war3MapViewer.getLocalPlayerIndex();
+		final boolean observer = this.ui.war3MapViewer.isObserverView();
 		final List<CUnit> creeps = new ArrayList<>();
+		final List<float[]> creepPoints = new ArrayList<>();
 		for (final CUnit unit : simulation.getUnits()) {
 			if (!unit.isDead() && !unit.isHidden() && !unit.isBuilding()
 					&& simulation.isNeutralAggressive(unit.getPlayerIndex())) {
 				creeps.add(unit);
+				creepPoints.add(new float[] { unit.getX(), unit.getY(), unit.getUnitType().getLevel(),
+						(observer || unit.isVisible(simulation, localPlayer)) ? 1 : 0 });
 			}
-		}
-		final int[] camp = new int[creeps.size()];
-		Arrays.fill(camp, -1);
-		int campCount = 0;
-		final float linkDistanceSq = linkDistance * linkDistance;
-		for (int i = 0; i < creeps.size(); i++) {
-			if (camp[i] != -1) {
-				continue;
-			}
-			camp[i] = campCount;
-			final ArrayDeque<Integer> open = new ArrayDeque<>();
-			open.add(i);
-			while (!open.isEmpty()) {
-				final CUnit member = creeps.get(open.poll());
-				for (int j = 0; j < creeps.size(); j++) {
-					if ((camp[j] == -1) && (member.distanceSquaredNoCollision(creeps.get(j)) <= linkDistanceSq)) {
-						camp[j] = campCount;
-						open.add(j);
-					}
-				}
-			}
-			campCount++;
 		}
 		final float middleThreshold = minimapField(minimap, "MinimapMiddleCampThreshold", 10);
 		final float toughThreshold = minimapField(minimap, "MinimapToughCampThreshold", 20);
@@ -288,44 +312,38 @@ final class MeleeUIMinimapPanel {
 		final Color middleColor = minimapColor(minimap, "MinimapMiddleCampColor",
 				new Color(1, 128 / 255f, 0, 1));
 		final Color toughColor = minimapColor(minimap, "MinimapToughCampColor", new Color(220 / 255f, 0, 0, 1));
-		// Measured on 1.29: every camp is on the minimap from the start, like the gold mines under the partially
-		// visible mask. After that a camp changes once one of its creeps is visible, and is forgotten only when its
-		// place is visible and empty.
-		final int localPlayer = this.ui.war3MapViewer.getLocalPlayerIndex();
-		final CPlayerFogOfWar fogOfWar = this.ui.war3MapViewer.getFogOfWar();
-		final PathingGrid pathingGrid = simulation.getPathingGrid();
-		for (int c = 0; c < campCount; c++) {
-			float sumX = 0;
-			float sumY = 0;
-			int members = 0;
-			int levels = 0;
-			boolean seen = false;
-			for (int i = 0; i < creeps.size(); i++) {
-				if (camp[i] == c) {
-					final CUnit unit = creeps.get(i);
-					sumX += unit.getX();
-					sumY += unit.getY();
-					members++;
-					levels += unit.getUnitType().getLevel();
-					seen |= unit.isVisible(simulation, localPlayer);
-				}
+		// Measured on 1.29: the camps on the minimap at the start are those the map placed, also the ones the melee
+		// setup removes at the start locations, so that the minimap does not tell which start locations are taken.
+		// After that a known camp keeps its place and level whatever happens to its creeps (creeps killed in the fog
+		// or the mask, seen killed, or made into it) and is forgotten only when its place is visible and empty;
+		// creeps made where no camp is known show as a new camp at once, always as a weak one whatever their levels.
+		if (!this.creepCampsStarted) {
+			this.creepCampsStarted = true;
+			final List<float[]> initialCreeps = this.ui.war3MapViewer.takeInitialCreeps();
+			// A loaded game has no record of the placed creeps: its camps start from the creeps there are.
+			final List<float[]> startPoints = new ArrayList<>();
+			for (final float[] creep : initialCreeps.isEmpty() ? creepPoints : initialCreeps) {
+				startPoints.add(new float[] { creep[0], creep[1], creep[2], 1 });
 			}
-			final float x = sumX / members;
-			final float y = sumY / members;
-			if (!seen) {
-				seen = true;
-				for (final float[] known : this.knownCreepCamps) {
-					if (distanceSquared(known, x, y) <= linkDistanceSq) {
-						seen = false;
-						break;
-					}
-				}
-			}
-			if (seen) {
-				this.knownCreepCamps.removeIf(known -> distanceSquared(known, x, y) <= linkDistanceSq);
-				this.knownCreepCamps.add(new float[] { x, y, levels });
+			this.knownCreepCamps.addAll(groupCreepCamps(startPoints, linkDistanceSq));
+		}
+		// Creeps that chase or wander away from their camp must not show as a new camp: the player would see
+		// movement in the fog.
+		final List<float[]> newCreepPoints = new ArrayList<>();
+		for (int i = 0; i < creeps.size(); i++) {
+			if (this.accountedCreeps.add(creeps.get(i))) {
+				newCreepPoints.add(creepPoints.get(i));
 			}
 		}
+		this.accountedCreeps.removeIf(CUnit::isDead);
+		for (final float[] camp : groupCreepCamps(newCreepPoints, linkDistanceSq)) {
+			if (!isKnownCreepCamp(camp, linkDistanceSq)) {
+				camp[2] = 0;
+				this.knownCreepCamps.add(camp);
+			}
+		}
+		final CPlayerFogOfWar fogOfWar = this.ui.war3MapViewer.getFogOfWar();
+		final PathingGrid pathingGrid = simulation.getPathingGrid();
 		final java.util.Iterator<float[]> knownIterator = this.knownCreepCamps.iterator();
 		while (knownIterator.hasNext()) {
 			final float[] known = knownIterator.next();
@@ -343,7 +361,7 @@ final class MeleeUIMinimapPanel {
 				}
 			}
 		}
-		campCount = this.knownCreepCamps.size();
+		final int campCount = this.knownCreepCamps.size();
 		for (int c = 0; c < campCount; c++) {
 			final float[] known = this.knownCreepCamps.get(c);
 			final float sumX = known[0];
@@ -377,6 +395,54 @@ final class MeleeUIMinimapPanel {
 		for (int c = campCount; c < this.creepCampFrames.size(); c++) {
 			this.creepCampFrames.get(c).setVisible(false);
 		}
+	}
+
+	/**
+	 * Groups creeps (x, y, level, seen) within the link distance of each other into camps: centre x, y, level sum and
+	 * whether any of them is seen.
+	 */
+	private static List<float[]> groupCreepCamps(final List<float[]> creeps, final float linkDistanceSq) {
+		final List<float[]> camps = new ArrayList<>();
+		final int[] camp = new int[creeps.size()];
+		Arrays.fill(camp, -1);
+		final ArrayDeque<Integer> open = new ArrayDeque<>();
+		for (int i = 0; i < creeps.size(); i++) {
+			if (camp[i] != -1) {
+				continue;
+			}
+			camp[i] = camps.size();
+			open.add(i);
+			float sumX = 0;
+			float sumY = 0;
+			int members = 0;
+			float levels = 0;
+			float seen = 0;
+			while (!open.isEmpty()) {
+				final float[] member = creeps.get(open.poll());
+				sumX += member[0];
+				sumY += member[1];
+				members++;
+				levels += member[2];
+				seen = Math.max(seen, member[3]);
+				for (int j = 0; j < creeps.size(); j++) {
+					if ((camp[j] == -1) && (distanceSquared(member, creeps.get(j)[0], creeps.get(j)[1]) <= linkDistanceSq)) {
+						camp[j] = camps.size();
+						open.add(j);
+					}
+				}
+			}
+			camps.add(new float[] { sumX / members, sumY / members, levels, seen });
+		}
+		return camps;
+	}
+
+	private boolean isKnownCreepCamp(final float[] camp, final float linkDistanceSq) {
+		for (final float[] known : this.knownCreepCamps) {
+			if (distanceSquared(known, camp[0], camp[1]) <= linkDistanceSq) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private static float distanceSquared(final float[] camp, final float x, final float y) {
@@ -484,6 +550,9 @@ final class MeleeUIMinimapPanel {
 				&& (ownerPlayer.getSlotState() == CPlayerSlotState.PLAYING)
 				&& ownerPlayer.hasAlliance(localPlayerIndex, CAllianceType.PASSIVE)
 				&& simulation.getPlayer(localPlayerIndex).hasAlliance(owner, CAllianceType.PASSIVE))) {
+			return;
+		}
+		if (unit.isBuilding() && (unit.getAbilityByRawcode(CUnitData.ALARM_ABILITY_ID) == null)) {
 			return;
 		}
 		if (isOnScreen(unit.getX(), unit.getY())) {

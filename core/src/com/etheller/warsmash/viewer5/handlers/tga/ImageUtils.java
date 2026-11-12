@@ -9,40 +9,6 @@ import java.awt.image.BufferedImage;
 public class ImageUtils {
 
 	/**
-	 * Takes an images as input and generates an array containing this image and all
-	 * possible mipmaps
-	 *
-	 * @param input
-	 * @return
-	 */
-	public static BufferedImage[] generateMipMaps(final BufferedImage input) {
-		int num = 0;
-		int curWidth = input.getWidth();
-		int curHeight = input.getHeight();
-		int pow;
-		do {
-			num++;
-			pow = (int) Math.pow(2.0D, num - 1);
-		}
-		while ((pow < curWidth) || (pow < curHeight));
-		final BufferedImage[] result = new BufferedImage[num];
-		result[0] = input;
-		for (int i = 1; i < num; i++) {
-			curWidth /= 2;
-			curHeight /= 2;
-			if (curHeight == 0) {
-				curHeight = 1;
-			}
-			if (curWidth == 0) {
-				curWidth = 1;
-			}
-			result[i] = ImageUtils.getScaledInstance(result[(i - 1)], curWidth, curHeight,
-					RenderingHints.VALUE_INTERPOLATION_BICUBIC, true);
-		}
-		return result;
-	}
-
-	/**
 	 * Scales an Image
 	 *
 	 * @param img
@@ -128,24 +94,6 @@ public class ImageUtils {
 		noAlphaSmall.getAlphaRaster().setRect(0, 0, tmp.getAlphaRaster());
 
 		return noAlphaSmall;
-	}
-
-	/**
-	 * An alternative way to convert an image to type_byte_indexed (paletted) that
-	 * avoids dithering.
-	 *
-	 * @param src
-	 * @return
-	 */
-	public static BufferedImage antiDitherConvert(final BufferedImage src) {
-		final BufferedImage convertedImage = new BufferedImage(src.getWidth(), src.getHeight(),
-				BufferedImage.TYPE_BYTE_INDEXED);
-		for (int x = 0; x < src.getWidth(); x++) {
-			for (int y = 0; y < src.getHeight(); y++) {
-				convertedImage.setRGB(x, y, src.getRGB(x, y));
-			}
-		}
-		return convertedImage;
 	}
 
 	public static BufferedImage changeImageType(final BufferedImage src, final int type) {

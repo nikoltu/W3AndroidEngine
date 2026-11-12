@@ -34,6 +34,8 @@ public class StringFrame extends AbstractRenderableFrame {
 	private final SimpleFrame internalFramesContainer;
 	private float predictedViewportHeight;
 	private float predictedViewportWidth;
+	/** Distance between lines when it is not the font's own height. */
+	private float lineSpacing;
 
 	// Made on first use: a renderer made with the class would hold a mesh and a shader of the GL context that
 	// first loaded it, for every later game activity too.
@@ -255,7 +257,7 @@ public class StringFrame extends AbstractRenderableFrame {
 		}
 		this.internalFramesContainer.setWidth(usedWidthMax);
 		this.internalFramesContainer.setHeight(usedHeight);
-		this.predictedViewportHeight = (usedHeight - this.frameFont.getCapHeight()) + this.frameFont.getLineHeight();
+		this.predictedViewportHeight = (usedHeight - this.frameFont.getCapHeight()) + getLineSpacing();
 		this.predictedViewportWidth = usedWidthMax;
 
 		this.internalFramesContainer.clearFramePointAssignments();
@@ -390,7 +392,7 @@ public class StringFrame extends AbstractRenderableFrame {
 		}
 
 		private void newLine() {
-			this.lineTop += StringFrame.this.frameFont.getLineHeight();
+			this.lineTop += getLineSpacing();
 			this.pen.newLine();
 			this.lineEmpty = true;
 		}
@@ -400,7 +402,7 @@ public class StringFrame extends AbstractRenderableFrame {
 			this.usedWidthMax = Math.max(this.usedWidthMax, x + width);
 			final SingleStringFrame frame = new SingleStringFrame(text, StringFrame.this.internalFramesContainer,
 					this.runColor, TextJustify.LEFT, TextJustify.TOP, StringFrame.this.frameFont);
-			frame.setHeight(StringFrame.this.frameFont.getLineHeight());
+			frame.setHeight(getLineSpacing());
 			frame.setWidth(width);
 			frame.setAlpha(StringFrame.this.alpha);
 			frame.setFontShadowColor(StringFrame.this.fontShadowColor);
@@ -432,6 +434,14 @@ public class StringFrame extends AbstractRenderableFrame {
 
 	public float getPredictedViewportWidth() {
 		return this.predictedViewportWidth;
+	}
+
+	public float getLineSpacing() {
+		return this.lineSpacing > 0 ? this.lineSpacing : this.frameFont.getLineHeight();
+	}
+
+	public void setLineSpacing(final float lineSpacing) {
+		this.lineSpacing = lineSpacing;
 	}
 
 	public BitmapFont getFrameFont() {

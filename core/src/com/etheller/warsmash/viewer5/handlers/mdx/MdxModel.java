@@ -60,8 +60,6 @@ public class MdxModel extends com.etheller.warsmash.viewer5.Model<MdxHandler> {
 	public List<Camera> cameras = new ArrayList<>();
 	public List<EventObjectEmitterObject> eventObjects = new ArrayList<>();
 	public List<CollisionShape> collisionShapes = new ArrayList<>();
-	public boolean hasLayerAnims = false;
-	public boolean hasGeosetAnims = false;
 	public List<Batch> batches = new ArrayList<>();
 	public List<GenericObject> genericObjects = new ArrayList<>();
 	public List<GenericObject> sortedGenericObjects = new ArrayList<>();
@@ -149,6 +147,12 @@ public class MdxModel extends com.etheller.warsmash.viewer5.Model<MdxHandler> {
 
 			for (final MdlxLayer layer : material.getLayers()) {
 				final Layer vLayer = new Layer(this, layer, layerId++, material.getPriorityPlane());
+				// The original draws team colour at full strength day and night, whatever the layer's flags.
+				if ("".equals(material.shader) && (layer.getTextureId() >= 0)
+						&& (layer.getTextureId() < parser.getTextures().size())
+						&& (parser.getTextures().get(layer.getTextureId()).getReplaceableId() == 1)) {
+					vLayer.unshaded = 1;
+				}
 
 				layers.add(vLayer);
 
@@ -201,7 +205,10 @@ public class MdxModel extends com.etheller.warsmash.viewer5.Model<MdxHandler> {
 				}
 			}
 
-			if ((texture.reforged || reforged) && !path.endsWith(".dds")) {
+			if ("".equals(path)) {
+				path = "Textures\\white.blp";
+			}
+			else if ((texture.reforged || reforged) && !path.endsWith(".dds")) {
 				final String ddsPath = path.substring(0, path.length() - 4) + ".dds";
 				// The .dds is taken only when no later data source has the path as written: an override folder may
 				// hold the older format.
@@ -210,9 +217,6 @@ public class MdxModel extends com.etheller.warsmash.viewer5.Model<MdxHandler> {
 				if ((found != null) && !found.equals(path)) {
 					path = ddsPath;
 				}
-			}
-			else if ("".equals(path)) {
-				path = "Textures\\white.blp";
 			}
 
 			final Texture viewerTexture = (Texture) viewer.load(path, pathSolver, solverParams);

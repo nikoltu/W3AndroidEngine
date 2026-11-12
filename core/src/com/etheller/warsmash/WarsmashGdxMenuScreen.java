@@ -197,12 +197,9 @@ public class WarsmashGdxMenuScreen implements InputProcessor, Screen, SingleMode
 
 	/** The loading screen frame the menu has so far, drawn as the built menu draws its frames. */
 	private void renderPreview() {
-		Gdx.gl30.glEnable(GL30.GL_SCISSOR_TEST);
-		Gdx.gl30.glBindVertexArray(WarsmashGdxGame.VAO);
+		WarsmashGdxGame.enterViewerState();
 		this.viewer.updateAndRender();
-		Gdx.gl30.glDisable(GL30.GL_SCISSOR_TEST);
-		Gdx.gl30.glDisable(GL30.GL_CULL_FACE);
-		this.viewer.webGL.useShaderProgram(null);
+		WarsmashGdxGame.leaveViewerState(this.viewer.webGL);
 		Gdx.gl30.glActiveTexture(GL30.GL_TEXTURE0);
 	}
 
@@ -296,32 +293,7 @@ public class WarsmashGdxMenuScreen implements InputProcessor, Screen, SingleMode
 		this.cameraManager = new CameraManager();
 		this.cameraManager.setupCamera(this.scene);
 
-//		this.mainModel = (MdxModel) this.viewer.load("Doodads\\Cinematic\\ArthasIllidanFight\\ArthasIllidanFight.mdx",
-//		this.mainModel = (MdxModel) this.viewer.load("UI\\Glues\\SinglePlayer\\NightElf_Exp\\NightElf_Exp.mdx",
-//		this.mainModel = (MdxModel) this.viewer.load("Abilities\\Spells\\Orc\\FeralSpirit\\feralspirittarget.mdx",
-//				new PathSolver() {
-//					@Override
-//					public SolvedPath solve(final String src, final Object solverParams) {
-//						return new SolvedPath(src, src.substring(src.lastIndexOf('.')), true);
-//					}
-//				}, null);
-
-//		final EventObjectEmitterObject evt = this.mainModel.getEventObjects().get(1);
-//		for (final Sequence seq : this.mainModel.getSequences()) {
-//			System.out.println(seq.getName() + ": " + Arrays.toString(seq.getInterval()));
-//		}
-//		System.out.println(Arrays.toString(evt.keyFrames));
-//		System.out.println(evt.name);
-
 //		this.mainInstance = (MdxComplexInstance) this.mainModel.addInstance(0);
-
-//		this.mainInstance.setScene(scene);
-//
-//		final int animIndex = 0;
-//		this.modelCamera = this.mainModel.cameras.get(animIndex);
-//		this.mainInstance.setSequence(animIndex);
-//
-//		this.mainInstance.setSequenceLoopMode(SequenceLoopMode.LOOP_TO_NEXT_ANIMATION);
 
 //		acolytesHarvestingSceneJoke2(scene);
 
@@ -356,9 +328,8 @@ public class WarsmashGdxMenuScreen implements InputProcessor, Screen, SingleMode
 				}, new GamingNetworkConnectionImpl(server), mapDownloadDir);
 		this.menuUI.setWaitForTap(this.waitForTap);
 		this.menuUI.setLauncherMode(this.launcherMode);
-		if (this.gameData != null) {
-			this.menuUI.setGameData(this.codebase);
-		}
+		// The maps read the data the menu has open; the menu closes it, a finished map's close leaves it.
+		this.menuUI.setGameData(new BorrowedDataSource(this.codebase));
 		this.menuUI.setStartupProfile(this.startupProfile);
 		this.menuUI.setMapLoadFailureListener(this::mapLoadFailed);
 		this.menuUI.setReforgedLoadingScreens(this.reforgedLoadingScreens);
@@ -493,12 +464,6 @@ public class WarsmashGdxMenuScreen implements InputProcessor, Screen, SingleMode
 			this.scene.fogSettings.density = fogSettings.density;
 			this.scene.fogSettings.start = fogSettings.start;
 			this.scene.fogSettings.end = fogSettings.end;
-//			if (this.modelCamera != null) {
-//				this.scene.fogSettings.start = (fogSettings.start - this.modelCamera.nearClippingPlane)
-//						/ (this.modelCamera.farClippingPlane - this.modelCamera.nearClippingPlane);
-//				this.scene.fogSettings.end = (fogSettings.end - this.modelCamera.nearClippingPlane)
-//						/ (this.modelCamera.farClippingPlane - this.modelCamera.nearClippingPlane);
-//			}
 		}
 
 	}
@@ -729,11 +694,7 @@ public class WarsmashGdxMenuScreen implements InputProcessor, Screen, SingleMode
 		}
 		this.viewer.updateAndRender();
 
-		Gdx.gl30.glDisable(GL30.GL_SCISSOR_TEST);
-
-		Gdx.gl30.glDisable(GL30.GL_CULL_FACE);
-
-		this.viewer.webGL.useShaderProgram(null);
+		WarsmashGdxGame.leaveViewerState(this.viewer.webGL);
 
 		Gdx.gl30.glActiveTexture(GL30.GL_TEXTURE0);
 		GammaOverlay.render(this.batch);
@@ -897,14 +858,6 @@ public class WarsmashGdxMenuScreen implements InputProcessor, Screen, SingleMode
 
 				this.position.set(WarsmashGdxMenuScreen.this.modelCamera.position);
 				this.target.set(WarsmashGdxMenuScreen.this.modelCamera.targetPosition);
-//				this.vecHeap2.set(this.target);
-//				this.vecHeap2.sub(this.position);
-//				this.vecHeap.set(this.vecHeap2);
-//				this.vecHeap.crs(this.worldUp);
-//				this.vecHeap.crs(this.vecHeap2);
-//				this.vecHeap.nor();
-//				this.vecHeap.scl(this.camera.rect.height / 2f);
-//				this.position.add(this.vecHeap);
 
 				this.position.add(WarsmashGdxMenuScreen.this.cameraPositionTemp[0],
 						WarsmashGdxMenuScreen.this.cameraPositionTemp[1],
@@ -923,13 +876,14 @@ public class WarsmashGdxMenuScreen implements InputProcessor, Screen, SingleMode
 			this.camera.moveToAndFace(this.position, this.target, this.worldUp);
 		}
 
-//	private void cameraUpdate() {
-//
-//	}
 	}
 
 	public DataSource getCodebase() {
 		return this.codebase;
+	}
+
+	public boolean isLoadingScreenShown() {
+		return (this.menuUI != null) && this.menuUI.isLoadingScreenShown();
 	}
 
 	/** Game data already open, read by the menu and its maps and left open when they end; set before it is shown. */
@@ -1009,11 +963,7 @@ public class WarsmashGdxMenuScreen implements InputProcessor, Screen, SingleMode
 	private void renderLibGDXContent() {
 
 		Gdx.gl30.glClear(GL30.GL_DEPTH_BUFFER_BIT);
-		Gdx.gl30.glDisable(GL30.GL_SCISSOR_TEST);
-
-		Gdx.gl30.glDisable(GL30.GL_CULL_FACE);
-
-		this.viewer.webGL.useShaderProgram(null);
+		WarsmashGdxGame.leaveViewerState(this.viewer.webGL);
 
 		Gdx.gl30.glActiveTexture(GL30.GL_TEXTURE0);
 
@@ -1023,8 +973,7 @@ public class WarsmashGdxMenuScreen implements InputProcessor, Screen, SingleMode
 		this.menuUI.render(this.batch, this.glyphLayout);
 		this.batch.end();
 
-		Gdx.gl30.glEnable(GL30.GL_SCISSOR_TEST);
-		Gdx.gl30.glBindVertexArray(WarsmashGdxGame.VAO);
+		WarsmashGdxGame.enterViewerState();
 	}
 
 	private class LibGDXContentLayerModelInstance extends ModelInstance {
@@ -1168,8 +1117,13 @@ public class WarsmashGdxMenuScreen implements InputProcessor, Screen, SingleMode
 
 	/** Plays a replay file once the menu is built. */
 	public void startReplay(final FileHandle file) {
+		startReplay(file, 0, false);
+	}
+
+	/** See {@link MenuUI#startReplay(FileHandle, int, boolean)}. */
+	public void startReplay(final FileHandle file, final int startTick, final boolean forced) {
 		whenLoaded(menu -> {
-			if (!menu.startReplay(file)) {
+			if (!menu.startReplay(file, startTick, forced)) {
 				menu.showMapLoadError();
 			}
 		});
@@ -1223,9 +1177,20 @@ public class WarsmashGdxMenuScreen implements InputProcessor, Screen, SingleMode
 		return this.endsAtCampaignVictory && (this.menuUI != null) && this.menuUI.isStartedCampaignMission(nextLevel);
 	}
 
+	/** See {@link MenuUI#recordVictory(String)}. */
+	public void recordVictory(final String mapFile) {
+		if (this.menuUI != null) {
+			this.menuUI.recordVictory(mapFile);
+		}
+	}
+
 	/** See {@link MenuUI#setReforgedLoadingScreens(boolean)}; must be set before the menu is built. */
 	public void setReforgedLoadingScreens(final boolean reforgedLoadingScreens) {
 		this.reforgedLoadingScreens = reforgedLoadingScreens;
+	}
+
+	public boolean isReforgedLoadingScreens() {
+		return this.reforgedLoadingScreens;
 	}
 
 	/** See {@link MenuUI#setReforgedPortrait(int)}; must be set before the menu is built. */

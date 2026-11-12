@@ -38,6 +38,11 @@ final class HeroBarIcon extends MultiSelectionIcon {
 		this.pointsGlow = pointsGlow;
 	}
 
+	/** The idle worker button shows its count on the same number overlay. */
+	void setCount(final int count) {
+		setSkillPoints(count, false);
+	}
+
 	/** The glow is a model of the interface scene, so it is hidden here when the bar or the button is. */
 	void setSkillPoints(final int points, final boolean barShown) {
 		final boolean show = points > 0;

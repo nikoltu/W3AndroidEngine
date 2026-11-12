@@ -53,6 +53,8 @@ import java.util.Map;
  * changes the game.
  */
 public class War3MapRenderController implements SimulationRenderController {
+	/** The game draws the text it makes for a unit this far below a script tag put at the same point. */
+	private static final float UNIT_TEXT_TAG_DROP = 19f;
 	private final War3MapViewer viewer;
 	private final Map<String, UnitSound> keyToCombatSound = new HashMap<>();
 
@@ -230,7 +232,8 @@ public class War3MapRenderController implements SimulationRenderController {
 			final String armorType) {
 		final RenderWidget damagedWidget = this.viewer
 				.getRenderPeer(damagedDestructable);
-		if (damagedWidget == null) {
+		if ((damagedWidget == null)
+				|| !this.viewer.isSoundHeardAt(damagedDestructable.getX(), damagedDestructable.getY())) {
 			return;
 		}
 		final String key = weaponSound + armorType;
@@ -249,7 +252,8 @@ public class War3MapRenderController implements SimulationRenderController {
 			final CUnit constructedStructure) {
 		final UnitSound constructingBuilding = this.viewer.uiSounds
 				.getSound(this.viewer.gameUI.getSkinField("ConstructingBuilding"));
-		if (constructingBuilding != null) {
+		if ((constructingBuilding != null)
+				&& this.viewer.isSoundHeardAt(constructedStructure.getX(), constructedStructure.getY())) {
 			constructingBuilding.playUnitResponse(this.viewer.worldScene.audioContext,
 					this.viewer.unitToRenderPeer.get(constructedStructure));
 		}
@@ -357,13 +361,23 @@ public class War3MapRenderController implements SimulationRenderController {
 	@Override
 	public CUnit createUnit(final CSimulation simulation, final War3ID typeId,
 			final int playerIndex, final float x, final float y, final float facing) {
-		return (CUnit) this.viewer.createNewUnit(this.viewer.allObjectData, typeId, x, y,
+		final CUnit unit = (CUnit) this.viewer.createNewUnit(this.viewer.allObjectData, typeId, x, y,
 				playerIndex, playerIndex, (float) Math.toRadians(facing));
+		// The minimap's creep camps start from the creeps the map placed in its first tick, also those that the melee
+		// setup then removes around the start locations.
+		if ((unit != null) && (simulation.getGameTurnTick() <= 1) && simulation.isNeutralAggressive(playerIndex)
+				&& !unit.isBuilding()) {
+			this.viewer.addInitialCreep(x, y, unit.getUnitType().getLevel());
+		}
+		return unit;
 	}
 
 	@Override
-	public CDestructable createDestructable(final War3ID typeId, final float x, final float y,
+	public CDestructable createDestructable(final War3ID typeId, final float requestedX, final float requestedY,
 			final float facing, final float scale, final int variation) {
+		final GameObject row = this.viewer.allObjectData.getDestructibles().get(typeId);
+		final float x = row == null ? requestedX : this.viewer.snapRunTimeDestructableX(row, requestedX, facing);
+		final float y = row == null ? requestedY : this.viewer.snapRunTimeDestructableY(row, requestedY, facing);
 		return createDestructableZ(typeId, x, y,
 				Math.max(this.viewer.getWalkableRenderHeight(x, y),
 						this.viewer.terrain.getGroundHeight(x, y)),
@@ -371,13 +385,15 @@ public class War3MapRenderController implements SimulationRenderController {
 	}
 
 	@Override
-	public CDestructable createDestructableZ(final War3ID typeId, final float x, final float y,
+	public CDestructable createDestructableZ(final War3ID typeId, final float requestedX, final float requestedY,
 			final float z, final float facing, final float scale, final int variation) {
 		final GameObject row = this.viewer.allObjectData.getDestructibles().get(typeId);
 		if (row == null) {
-			throw new NullPointerException("createDestructableZ called on: " + typeId + "," + x
-					+ "," + y + "," + z + "," + facing + "," + scale + "," + variation);
+			throw new NullPointerException("createDestructableZ called on: " + typeId + "," + requestedX
+					+ "," + requestedY + "," + z + "," + facing + "," + scale + "," + variation);
 		}
+		final float x = this.viewer.snapRunTimeDestructableX(row, requestedX, facing);
+		final float y = this.viewer.snapRunTimeDestructableY(row, requestedY, facing);
 		final float[] location3d = { x, y, z };
 		final float[] scale3d = { scale, scale, scale };
 		final RenderDestructable newDestructable = this.viewer.createNewDestructable(typeId, row, variation,
@@ -688,8 +704,10 @@ public class War3MapRenderController implements SimulationRenderController {
 		case MISS_TEXT:
 			text = "miss!";
 			break;
-		default:
 		case MANA_BURN:
+			text = "-" + displayAmount;
+			break;
+		default:
 		case CRITICAL_STRIKE:
 		case SHADOW_STRIKE:
 		case BASH: {
@@ -715,11 +733,13 @@ public class War3MapRenderController implements SimulationRenderController {
 		} else {
 			unitPosition = new Vector3(0, 0, 0);
 		}
+		unitPosition.z -= UNIT_TEXT_TAG_DROP;
 		final TextTag textTag = new TextTag(unitPosition,
 				new Vector2(textTagConfig.getVelocity()[0], textTagConfig.getVelocity()[1]),
 				message, textTagConfig.getColor(), textTagConfig.getLifetime(),
 				textTagConfig.getFadeStart(), textTagConfig.getHeight(),
 				War3MapViewer.BUILTIN_TEXT_TAG_REPORTED_HANDLE_ID);
+		textTag.setCenteredOnPoint(true);
 		this.viewer.textTags.add(textTag);
 		return textTag;
 	}
@@ -766,12 +786,13 @@ public class War3MapRenderController implements SimulationRenderController {
 		final RenderUnit renderPeer = this.viewer.unitToRenderPeer.get(caster);
 		final AbilityUI abilityUi = this.viewer.abilityDataUI.getUI(alias);
 		if ((renderPeer == null) || (abilityUi == null)
-				|| (abilityUi.getEffectSound() == null)) {
+				|| (abilityUi.getEffectSound() == null) || (!isLoopingSound(abilityUi.getEffectSound())
+						&& !this.viewer.isSoundHeardAt(caster.getX(), caster.getY()))) {
 			return SimulationRenderComponent.DO_NOTHING;
 		}
 		final long soundId = this.viewer.uiSounds.getSound(abilityUi.getEffectSound())
-				.play(this.viewer.worldScene.audioContext, renderPeer.getX(),
-						renderPeer.getY(), renderPeer.getZ());
+				.playFollowing(this.viewer.worldScene.audioContext, renderPeer.getX(), renderPeer.getY(),
+						renderPeer.getZ(), null, renderPeer.location);
 		if (soundId == -1) {
 			return SimulationRenderComponent.DO_NOTHING;
 		}
@@ -783,6 +804,11 @@ public class War3MapRenderController implements SimulationRenderController {
 				;
 			}
 		};
+	}
+
+	private boolean isLoopingSound(final String soundName) {
+		final UnitSound sound = this.viewer.uiSounds.getSound(soundName);
+		return (sound != null) && sound.isLooping();
 	}
 
 	@Override
@@ -802,9 +828,11 @@ public class War3MapRenderController implements SimulationRenderController {
 		if ((renderPeer == null) || (loopedSound == null) || loopedSound.isEmpty()) {
 			return SimulationRenderComponent.DO_NOTHING;
 		}
-		final long soundId = this.viewer.uiSounds.getSound(loopedSound).play(
-				this.viewer.worldScene.audioContext, renderPeer.getX(),
-				renderPeer.getY(), renderPeer.getZ(), true);
+		// The loop follows the unit and the player's sight, so it starts whether or not the unit is seen now.
+		final UnitSound loopSound = this.viewer.uiSounds.getSound(loopedSound);
+		final long soundId = loopSound == null ? -1
+				: loopSound.playFollowing(this.viewer.worldScene.audioContext, renderPeer.getX(), renderPeer.getY(),
+						renderPeer.getZ(), true, renderPeer.location);
 		if (soundId == -1) {
 			return SimulationRenderComponent.DO_NOTHING;
 		}
@@ -832,7 +860,8 @@ public class War3MapRenderController implements SimulationRenderController {
 		final AbilityUI abilityUi = this.viewer.abilityDataUI.getUI(alias);
 		final String soundName = looping ? abilityUi.getEffectSoundLooped()
 				: abilityUi.getEffectSound();
-		if ((abilityUi == null) || (soundName == null)) {
+		if ((abilityUi == null) || (soundName == null)
+				|| (!isLoopingSound(soundName) && !this.viewer.isSoundHeardAt(x, y))) {
 			return SimulationRenderComponent.DO_NOTHING;
 		}
 		final long soundId = this.viewer.uiSounds.getSound(soundName).play(
@@ -884,6 +913,11 @@ public class War3MapRenderController implements SimulationRenderController {
 	public void setTerrainDeformation(final int column, final int row, final int width,
 			final int height, final float[] offsets) {
 		this.viewer.terrain.setDeformation(column, row, width, height, offsets);
+	}
+
+	@Override
+	public void setTerrainTypes(final int[] cells) {
+		this.viewer.terrain.setGroundTypes(cells);
 	}
 
 	@Override

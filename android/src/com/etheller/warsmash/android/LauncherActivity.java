@@ -147,6 +147,7 @@ public class LauncherActivity extends AndroidApplication {
 	@Override
 	protected void onCreate(final Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
+		BackCallbacks.register(this, this::goBack);
 		if (AndroidLauncher.showRunningGame(this)) {
 			finish();
 			return;
@@ -269,6 +270,11 @@ public class LauncherActivity extends AndroidApplication {
 			this.profiles.record(result.profile, result.result, played);
 		}
 		final SharedPreferences.Editor editor = this.preferences.edit().remove(KEY_LAUNCHED);
+		if (CampaignResult.shows(this.returned) && (this.returned.campaign >= 0)
+				&& (this.preferences.getInt(KEY_CAMPAIGN, -1) != this.returned.campaign)) {
+			// The result is of the campaign the game played, which a save loaded in the game may have changed.
+			editor.putInt(KEY_CAMPAIGN, this.returned.campaign).remove(KEY_MISSION);
+		}
 		if ((this.returned != null) && "victory".equals(this.returned.result)
 				&& LaunchRequest.SOURCE_CAMPAIGN.equals(this.returned.source)) {
 			// The mission the victory opened is the one shown chosen.
@@ -426,6 +432,10 @@ public class LauncherActivity extends AndroidApplication {
 	@Override
 	@SuppressWarnings("deprecation")
 	public void onBackPressed() {
+		goBack();
+	}
+
+	private void goBack() {
 		if (this.launching) {
 			return;
 		}
@@ -450,7 +460,7 @@ public class LauncherActivity extends AndroidApplication {
 			this.dialogs.showExit();
 		}
 		else {
-			super.onBackPressed();
+			finishAfterTransition();
 		}
 	}
 

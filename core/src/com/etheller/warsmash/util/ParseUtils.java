@@ -89,16 +89,10 @@ public class ParseUtils {
 	}
 
 	public static War3ID readWar3ID(final LittleEndianDataInputStream stream) throws IOException {
-//		final int value = stream.readInt();
-//		return new War3ID(((value & 0xFF000000) >>> 24) | ((value & 0x00FF0000) >>> 8) | ((value & 0x0000FF00) << 8)
-//				| ((value & 0x000000FF) << 24));
 		return new War3ID(Integer.reverseBytes(stream.readInt()));
 	}
 
 	public static void writeWar3ID(final LittleEndianDataOutputStream stream, final War3ID id) throws IOException {
-//		final int value = id.getValue();
-//		stream.writeInt(((value & 0xFF000000) >>> 24) | ((value & 0x00FF0000) >>> 8) | ((value & 0x0000FF00) << 8)
-//				| ((value & 0x000000FF) << 24));
 		stream.writeInt(Integer.reverseBytes(id.getValue()));
 	}
 
@@ -174,13 +168,6 @@ public class ParseUtils {
 		final byte[] nameBytes = name.getBytes(ParseUtils.UTF8);
 		stream.write(nameBytes);
 		stream.write(0);
-	}
-
-	public static float[] flipRGB(final float[] color) {
-		final float r = color[0];
-		color[0] = color[2];
-		color[2] = r;
-		return color;
 	}
 
 	public static float[] newFlippedRGB(final float[] color) {

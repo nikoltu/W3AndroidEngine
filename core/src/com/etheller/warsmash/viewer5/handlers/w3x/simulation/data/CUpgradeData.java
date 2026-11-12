@@ -1,6 +1,7 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.data;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -100,6 +101,17 @@ public class CUpgradeData {
 			this.raceToTotalLevels.put(race, total);
 		}
 		return total;
+	}
+
+	/** Every upgrade id of the data, in a fixed order. */
+	public List<War3ID> getTypeIds() {
+		final List<String> ids = new ArrayList<>(this.upgradeData.keySet());
+		Collections.sort(ids);
+		final List<War3ID> typeIds = new ArrayList<>(ids.size());
+		for (final String id : ids) {
+			typeIds.add(War3ID.fromString(id));
+		}
+		return typeIds;
 	}
 
 	public boolean isOutOfMapVersion(final War3ID typeId) {

@@ -21,12 +21,12 @@ import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CDestructable;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CItem;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CPlayerStateListener;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CReleaseCheats;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CPlayerStateListener.CPlayerStateNotifier;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit.QueueItemType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnitType;
-import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.data.CUnitRace;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUpgradeType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CWidget;
@@ -57,6 +57,8 @@ public class CPlayer extends CBasePlayer {
 	private final Map<War3ID, Integer> rawcodeToTechtreeInProgress = new HashMap<>();
 	private final Map<War3ID, Integer> rawcodeToTechtreeMaxAllowed = new HashMap<>();
 	private final List<CUnit> heroes = new ArrayList<>();
+	private List<CUnit> cachedHeroes;
+	private List<Integer> cachedHeroLevels;
 	private final List<CFogModifier> fogModifiers = new ArrayList<>();
 	private final List<CFogModifier> fogModifiersAfterUnits = new ArrayList<>();
 	private final EnumMap<JassGameEventsWar3, List<CPlayerEvent>> eventTypeToEvents = new EnumMap<>(
@@ -81,6 +83,7 @@ public class CPlayer extends CBasePlayer {
 	private int researchedLevels;
 	private int experienceGained;
 	private boolean noCreepSleep;
+	private int cheats;
 
 	private final Set<War3ID> disabledAbilities = new HashSet<>();
 
@@ -181,7 +184,22 @@ public class CPlayer extends CBasePlayer {
 	 * The food a player may use: the food cap state itself stays above the ceiling, as GetPlayerState shows it.
 	 */
 	public int getFoodCapLimit() {
+		if (hasCheat(CReleaseCheats.NO_FOOD_LIMIT)) {
+			return Integer.MAX_VALUE / 2;
+		}
 		return Math.min(this.foodCap, this.foodCapCeiling);
+	}
+
+	/** A single player chat cheat in force for this player; see CReleaseCheats for the flags. */
+	public boolean hasCheat(final int cheat) {
+		return (this.cheats & cheat) != 0;
+	}
+
+	public void setCheat(final int cheat, final boolean on) {
+		this.cheats = on ? (this.cheats | cheat) : (this.cheats & ~cheat);
+		if (on && (cheat == CReleaseCheats.NO_FOOD_LIMIT)) {
+			retryFoodWaiters();
+		}
 	}
 
 	public float[] getStartLocation() {
@@ -273,7 +291,7 @@ public class CPlayer extends CBasePlayer {
 	}
 
 	private void retryFoodWaiters() {
-		if (!this.foodWaiters.isEmpty()) {
+		if ((this.foodWaiters != null) && !this.foodWaiters.isEmpty()) {
 			for (final Runnable retry : new ArrayList<>(this.foodWaiters.values())) {
 				retry.run();
 			}
@@ -320,7 +338,7 @@ public class CPlayer extends CBasePlayer {
 		if (this.race == null) {
 			return;
 		}
-		final CRaceManagerEntry raceEntry = WarsmashConstants.RACE_MANAGER.tryGet(this.race);
+		final CRaceManagerEntry raceEntry = simulation.getGameData().getRaceManager().tryGet(this.race);
 		if ((levels == 0) || (raceEntry == null)
 				|| (upgradeType.getUnitRace() != CUnitRace.parseRace(raceEntry.getKey()))) {
 			return;
@@ -365,6 +383,11 @@ public class CPlayer extends CBasePlayer {
 			return 0;
 		}
 		return techtreeUnlocked;
+	}
+
+	/** Whether a requirement of this level is met; synergy lifts every requirement. */
+	public boolean isRequirementMet(final War3ID rawcode, final int requiredLevel) {
+		return hasCheat(CReleaseCheats.NO_TECH_REQUIREMENTS) || (getTechtreeUnlocked(rawcode) >= requiredLevel);
 	}
 
 	public int getTechtreeInProgress(final War3ID rawcode) {
@@ -593,6 +616,33 @@ public class CPlayer extends CBasePlayer {
 		}
 	}
 
+	/**
+	 * CachePlayerHeroData: the heroes the player owns now and their levels, kept for the score screen's Heroes tab,
+	 * since a defeat then gives the units to Neutral Passive.
+	 */
+	public void cacheHeroData(final CSimulation game) {
+		final List<CUnit> units = new ArrayList<>(game.getUnits());
+		units.sort(java.util.Comparator.comparingInt(CUnit::getHandleId));
+		this.cachedHeroes = new ArrayList<>();
+		this.cachedHeroLevels = new ArrayList<>();
+		for (final CUnit unit : units) {
+			if ((unit.getPlayerIndex() == getId()) && unit.isHero() && (unit.getHeroData() != null)
+					&& !unit.isIllusion()) {
+				this.cachedHeroes.add(unit);
+				this.cachedHeroLevels.add(unit.getHeroData().getHeroLevel());
+			}
+		}
+	}
+
+	/** The heroes of the last CachePlayerHeroData, or null when it was not called for the player. */
+	public List<CUnit> getCachedHeroes() {
+		return this.cachedHeroes;
+	}
+
+	public int getCachedHeroLevel(final int index) {
+		return this.cachedHeroLevels.get(index);
+	}
+
 	public List<CUnit> getHeroes() {
 		return this.heroes;
 	}
@@ -654,6 +704,16 @@ public class CPlayer extends CBasePlayer {
 			for (final CPlayerEvent event : eventList) {
 				event.fire(dyingUnit, CommonTriggerExecutionScope.unitDeathScope(
 						JassGameEventsWar3.EVENT_PLAYER_UNIT_DEATH, event.getTrigger(), dyingUnit, killingUnit, this));
+			}
+		}
+	}
+
+	public void fireUnitDecayEvents(final CUnit decayingUnit) {
+		final List<CPlayerEvent> eventList = getEventList(JassGameEventsWar3.EVENT_PLAYER_UNIT_DECAY);
+		if (eventList != null) {
+			for (final CPlayerEvent event : new ArrayList<>(eventList)) {
+				event.fire(decayingUnit, CommonTriggerExecutionScope.unitDecayScope(
+						JassGameEventsWar3.EVENT_PLAYER_UNIT_DECAY, event.getTrigger(), decayingUnit, this));
 			}
 		}
 	}
@@ -730,7 +790,9 @@ public class CPlayer extends CBasePlayer {
 		final List<CPlayerEvent> eventList = getEventList(JassGameEventsWar3.EVENT_PLAYER_UNIT_TRAIN_FINISH);
 		if (eventList != null) {
 			for (final CPlayerEvent event : eventList) {
-				event.fire(unit, CommonTriggerExecutionScope.unitTrainFinishScope(
+				// Measured: the filter of a train-finish event sees the trained unit, which is how the melee script
+				// recognises a trained hero and hands it its Scroll of Town Portal.
+				event.fire(trainedUnit, CommonTriggerExecutionScope.unitTrainFinishScope(
 						JassGameEventsWar3.EVENT_PLAYER_UNIT_TRAIN_FINISH, event.getTrigger(), unit, trainedUnit, this));
 			}
 		}
@@ -835,8 +897,8 @@ public class CPlayer extends CBasePlayer {
 			for (final CPlayerEvent event : new ArrayList<>(eventList)) {
 				final CPlayerStateEvent stateEvent = (CPlayerStateEvent) event;
 				if ((stateEvent.getState() == whichPlayerState) && stateEvent.isCrossed(before, after)) {
-					event.fire(this, CommonTriggerExecutionScope.triggerPlayerScope(
-							JassGameEventsWar3.EVENT_PLAYER_STATE_LIMIT, event.getTrigger(), this));
+					event.fire(this, CommonTriggerExecutionScope.playerStateLimitScope(event.getTrigger(), this,
+							whichPlayerState));
 				}
 			}
 		}
@@ -1113,6 +1175,12 @@ public class CPlayer extends CBasePlayer {
 			setTechToLevel(simulation, techIdRawcodeId, setToLevel);
 		}
 		fireRequirementUpdateForAbilities(simulation, false);
+	}
+
+	public void decTechResearched(final CSimulation simulation, final War3ID techIdRawcodeId, final int levels) {
+		if (levels > 0) {
+			setTechResearched(simulation, techIdRawcodeId, Math.max(0, getTechtreeUnlocked(techIdRawcodeId) - levels));
+		}
 	}
 
 	public void setTechResearched(final CSimulation simulation, final War3ID techIdRawcodeId, final int setToLevel) {

@@ -7,6 +7,9 @@ public final class LauncherKeys {
 	public static final String KEY_MUSIC = "music";
 	public static final String KEY_SKIN = "skin";
 	public static final String KEY_ANIMATED = "animatedBackground";
+	/** Whether the launcher looks for a newer engine release when it starts (on by default), and the one skipped. */
+	public static final String KEY_UPDATE_CHECK = "updateCheck";
+	public static final String KEY_UPDATE_SKIPPED = "updateSkipped";
 	/** The desktop's in-game graphics and texture size limit; Android keeps them in the engine configuration. */
 	public static final String KEY_GRAPHICS = "graphics";
 	public static final String KEY_TEXTURE_SIZE = "textureSize";

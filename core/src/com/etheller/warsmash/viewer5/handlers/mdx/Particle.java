@@ -12,7 +12,6 @@ import com.etheller.warsmash.viewer5.Scene;
 public class Particle extends EmittedObject<MdxComplexInstance, ParticleEmitter> {
 	private static final Quaternion rotationHeap = new Quaternion();
 	private static final Quaternion rotationHeap2 = new Quaternion();
-	private static final Vector3 velocityHeap = new Vector3();
 	private static final float[] latitudeHeap = new float[1];
 //	private static final float[] longitudeHeap = new float[1];
 	private static final float[] lifeSpanHeap = new float[1];

@@ -33,7 +33,6 @@ import com.etheller.warsmash.parsers.jass.JassAIEnvironment;
 import com.etheller.warsmash.parsers.jass.ai.AIController;
 import com.etheller.warsmash.util.Log;
 import com.etheller.warsmash.util.War3ID;
-import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.viewer5.handlers.w3x.War3MapViewer;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CDestructable;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CDestructableType;
@@ -94,7 +93,7 @@ final class SavedGameRules implements SavedObjectGraph.Rules {
 		name(this.simulation.getPathingGrid(), "pathing");
 		name(this.simulation.getSimulationRenderController(), "renderController");
 		name(this.simulation.getQuestLog(), "questLog");
-		for (int i = 0; i < WarsmashConstants.MAX_PLAYERS; i++) {
+		for (int i = 0; i < this.simulation.getGameData().getMaxPlayers(); i++) {
 			name(this.simulation.getPlayer(i), "player:" + i);
 			name(this.simulation.getPlayer(i).getFogOfWar(), "fog:" + i);
 		}

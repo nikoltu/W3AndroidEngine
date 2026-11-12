@@ -6,6 +6,7 @@ import java.util.Comparator;
 import java.util.List;
 
 import com.etheller.warsmash.viewer5.handlers.EmitterObject;
+import com.etheller.warsmash.viewer5.handlers.AbstractMdxModelViewer;
 import com.etheller.warsmash.viewer5.handlers.mdx.MdxHandler.ShaderEnvironmentType;
 
 public class SetupGroups {
@@ -48,9 +49,9 @@ public class SetupGroups {
 		return object.layer.filterMode;
 	}
 
-	public static float getBackup2Prio(final Batch object) {
+	public static float getBackup2Prio(final Batch object, final boolean menu) {
 		final float result = object.geoset.centerZ;
-		if (MdxHandler.CURRENT_SHADER_TYPE == ShaderEnvironmentType.MENU) {
+		if (menu) {
 			return -result;
 		}
 		return result;
@@ -79,9 +80,9 @@ public class SetupGroups {
 		}
 	}
 
-	public static float getBackup2Prio(final Object object) {
+	public static float getBackup2Prio(final Object object, final boolean menu) {
 		if (object instanceof Batch) {
-			return getBackup2Prio((Batch) object);
+			return getBackup2Prio((Batch) object, menu);
 		}
 		else if (object instanceof RibbonEmitterObject) {
 			return getBackup2Prio((RibbonEmitterObject) object);
@@ -152,6 +153,8 @@ public class SetupGroups {
 		sorted.addAll(translucentBatches);
 		sorted.addAll(model.particleEmitters2);
 		sorted.addAll(model.ribbonEmitters);
+		final boolean menu = (model.viewer instanceof AbstractMdxModelViewer)
+				&& (((AbstractMdxModelViewer) model.viewer).shaderEnvironmentType == ShaderEnvironmentType.MENU);
 		Collections.sort(sorted, new Comparator<Object>() {
 			@Override
 			public int compare(final Object o1, final Object o2) {
@@ -159,7 +162,7 @@ public class SetupGroups {
 				if (priorityDifference == 0) {
 					final int backupPriorityDifference = getBackupPrio(o1) - getBackupPrio(o2);
 					if (backupPriorityDifference == 0) {
-						final int backup2 = Float.compare(getBackup2Prio(o1), getBackup2Prio(o2));
+						final int backup2 = Float.compare(getBackup2Prio(o1, menu), getBackup2Prio(o2, menu));
 						return backup2;
 					}
 					return backupPriorityDifference;

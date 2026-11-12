@@ -3,6 +3,7 @@ package com.etheller.warsmash.viewer5.handlers.w3x.simulation.timers;
 import com.etheller.interpreter.ast.scope.GlobalScope;
 import com.etheller.interpreter.ast.scope.TriggerExecutionScope;
 import com.etheller.interpreter.ast.scope.trigger.Trigger;
+import com.etheller.warsmash.parsers.jass.scope.CommonTriggerExecutionScope;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 
 public class CTimerNativeEvent extends CTimer {
@@ -16,7 +17,7 @@ public class CTimerNativeEvent extends CTimer {
 
 	@Override
 	public void onFire(final CSimulation simulation) {
-		final TriggerExecutionScope triggerScope = new TriggerExecutionScope(this.trigger);
+		final TriggerExecutionScope triggerScope = CommonTriggerExecutionScope.timerEventScope(this.trigger);
 		this.jassGlobalScope.queueTrigger(null, null, this.trigger, triggerScope, triggerScope);
 	}
 

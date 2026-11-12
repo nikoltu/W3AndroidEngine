@@ -16,7 +16,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.DynamicShadowManager;
 import com.etheller.warsmash.viewer5.handlers.w3x.W3xSceneLightManager;
 
 public class BatchGroup extends GenericGroup {
-	private static float[] tempFloat3Array = new float[3];
+	private static final float[] tempFloat3Array = new float[3];
 
 	private final MdxModel model;
 	public final SkinningType skinningType;

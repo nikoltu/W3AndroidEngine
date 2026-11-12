@@ -9,9 +9,13 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.timers.CTimer;
 
 public class CBehaviorAttackMove implements CRangedBehavior {
 
+	/** Measured (1.29): on an attack-move or a patrol a unit looks for targets at the order, then every half second. */
+	public static final int SCAN_TICKS = CTimer.wholeSteps(0.5f);
+
 	private final CUnit unit;
 	private AbilityPointTarget target;
 	private boolean justAutoAttacked = false;
+	private int nextScanTick = Integer.MIN_VALUE;
 	private boolean endedMove = false;
 	private boolean continueMove = false;
 	/** Game time of the order until the first look for targets; negative after it. */
@@ -29,6 +33,7 @@ public class CBehaviorAttackMove implements CRangedBehavior {
 
 	public CBehavior reset(final AbilityPointTarget target) {
 		this.orderTime = -1;
+		this.nextScanTick = Integer.MIN_VALUE;
 		// Measured on 1.29: an attack-move given again to the same point walks on along its way, as a repeated move
 		// does; starting the path search over at every repeat left the unit walking straight into the nearest pocket.
 		final CBehaviorMove moveBehavior = this.unit.getMoveBehavior();
@@ -53,7 +58,12 @@ public class CBehaviorAttackMove implements CRangedBehavior {
 			attackBehavior.setFirstSwingOrigin(this.orderTime);
 		}
 		this.orderTime = -1;
-		this.justAutoAttacked = this.unit.autoAcquireAttackTargets(simulation, false);
+		final int tick = simulation.getGameTurnTick();
+		this.justAutoAttacked = false;
+		if (tick >= this.nextScanTick) {
+			this.nextScanTick = tick + SCAN_TICKS;
+			this.justAutoAttacked = this.unit.autoAcquireAttackTargets(simulation, false);
+		}
 		if (attackBehavior != null) {
 			attackBehavior.setFirstSwingOrigin(-1);
 		}
@@ -65,7 +75,9 @@ public class CBehaviorAttackMove implements CRangedBehavior {
 	}
 
 	private boolean innerIsWithinRange() {
-		return this.unit.distance(this.target.x, this.target.y) <= 16f;
+		// Measured on 1.29: an attack-move to a point walks on to the point as a move does, whatever the unit's size.
+		return (this.unit.distance(this.target.x, this.target.y)
+				+ this.unit.getUnitType().getCollisionSize()) <= CBehaviorMove.MOVE_END_DISTANCE;
 	}
 
 	@Override

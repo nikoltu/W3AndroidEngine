@@ -7,7 +7,7 @@ public enum CStartLocPrio implements CHandle {
 	HIGH,
 	NOT;
 
-	public static CStartLocPrio[] VALUES = values();
+	public static final CStartLocPrio[] VALUES = values();
 
 	@Override
 	public int getHandleId() {

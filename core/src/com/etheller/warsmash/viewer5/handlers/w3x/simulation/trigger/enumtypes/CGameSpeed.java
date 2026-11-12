@@ -9,7 +9,7 @@ public enum CGameSpeed implements CHandle {
 	FAST,
 	FASTEST;
 
-	public static CGameSpeed[] VALUES = values();
+	public static final CGameSpeed[] VALUES = values();
 
 	@Override
 	public int getHandleId() {

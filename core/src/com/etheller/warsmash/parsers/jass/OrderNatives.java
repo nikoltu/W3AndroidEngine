@@ -9,16 +9,19 @@ import com.etheller.interpreter.ast.value.visitor.ObjectJassValueVisitor;
 import com.etheller.interpreter.ast.value.visitor.RealJassValueVisitor;
 import com.etheller.interpreter.ast.value.visitor.StringJassValueVisitor;
 import com.etheller.warsmash.parsers.jass.Jass2.CommonEnvironment;
+import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CItem;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnitType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CWidget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbility;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.inventory.CAbilityInventory;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.queue.CAbilityReviveHero;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.CAbilitySpell;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.orc.blademaster.CAbilityMirrorImage;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityPointTarget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityTargetVisitor;
-import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.test.CAbilityCarrionSwarmDummy;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.undead.dreadlord.CAbilityCarrionSwarmDummy;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.ability.AbilityBuilderActiveAbility;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.CGroupMove;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.orders.OrderIdUtils;
@@ -65,6 +68,9 @@ final class OrderNatives extends CommonNatives {
 					int abilityHandleId = 0;
 					AbilityPointTarget targetAsPoint = new AbilityPointTarget(whichLocation.x, whichLocation.y);
 					for (final CAbility ability : whichUnit.getAbilities()) {
+						if (isHeldItemAbility(whichUnit, ability)) {
+							continue;
+						}
 						ability.checkCanUse(this.simulation, whichUnit,
 								whichUnit.getPlayerIndex(), orderId, false, activationReceiver.reset());
 						if (activationReceiver.isOk()) {
@@ -86,10 +92,13 @@ final class OrderNatives extends CommonNatives {
 				});
 		final JassFunction issuePointOrderById = (arguments, globalScope, triggerScope) -> {
 			final CUnit whichUnit = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
-			return BooleanJassValue.of((whichUnit != null) && issuePointOrder(whichUnit.getPlayerIndex(), whichUnit,
-					arguments.get(1).visit(IntegerJassValueVisitor.getInstance()),
-					arguments.get(2).visit(RealJassValueVisitor.getInstance()).floatValue(),
-					arguments.get(3).visit(RealJassValueVisitor.getInstance()).floatValue()));
+			final int orderId = arguments.get(1).visit(IntegerJassValueVisitor.getInstance());
+			final boolean issued = (whichUnit != null) && issuePointOrder(whichUnit.getPlayerIndex(), whichUnit,
+					orderId, arguments.get(2).visit(RealJassValueVisitor.getInstance()).floatValue(),
+					arguments.get(3).visit(RealJassValueVisitor.getInstance()).floatValue());
+			// Measured on 1.29: a worker given a building's id as a point order starts to build it, but the native
+			// reports false; IssueBuildOrderById reports true.
+			return BooleanJassValue.of(issued && !isUnitTypeId(orderId));
 		};
 		jassProgramVisitor.getJassNativeManager().createNative("IssuePointOrderById", issuePointOrderById);
 		jassProgramVisitor.getJassNativeManager().createNative("IssuePointOrder",
@@ -110,9 +119,21 @@ final class OrderNatives extends CommonNatives {
 							new RealJassValue(whichLocation.x), new RealJassValue(whichLocation.y)), globalScope,
 							triggerScope);
 				});
-		// TODO if BuildOrderById is actually different from PointOrderById then this
-		// needs to be fixed:
-		jassProgramVisitor.getJassNativeManager().createNative("IssueBuildOrderById", issuePointOrderById);
+		jassProgramVisitor.getJassNativeManager().createNative("IssueBuildOrderById",
+				(arguments, globalScope, triggerScope) -> {
+					final CUnit whichUnit = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
+					final int unitId = arguments.get(1).visit(IntegerJassValueVisitor.getInstance());
+					if (whichUnit == null) {
+						return BooleanJassValue.FALSE;
+					}
+					// Measured on 1.29: an id that is not a unit type (such as an order id) gives true and no order.
+					if (!isUnitTypeId(unitId)) {
+						return BooleanJassValue.TRUE;
+					}
+					return BooleanJassValue.of(issuePointOrder(whichUnit.getPlayerIndex(), whichUnit, unitId,
+							arguments.get(2).visit(RealJassValueVisitor.getInstance()).floatValue(),
+							arguments.get(3).visit(RealJassValueVisitor.getInstance()).floatValue()));
+				});
 		jassProgramVisitor.getJassNativeManager().createNative("IssueTargetOrder",
 				(arguments, globalScope, triggerScope) -> {
 					final CUnit whichUnit = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
@@ -130,8 +151,17 @@ final class OrderNatives extends CommonNatives {
 		jassProgramVisitor.getJassNativeManager().createNative("IssueImmediateOrder",
 				(arguments, globalScope, triggerScope) -> {
 					final CUnit whichUnit = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
-					return BooleanJassValue.of((whichUnit != null) && issueImmediateOrder(whichUnit.getPlayerIndex(), whichUnit,
-							OrderIdUtils.getOrderId(arguments.get(1).visit(StringJassValueVisitor.getInstance()))));
+					final String orderString = arguments.get(1).visit(StringJassValueVisitor.getInstance());
+					int orderId = OrderIdUtils.getOrderId(orderString);
+					if ((orderId == 0) && (orderString != null) && !orderString.isEmpty()) {
+						// Measured on 1.29: the name of a unit type trains it, as its id does.
+						final CUnitType trainType = this.simulation.getUnitData().getUnitTypeByJassLegacyName(orderString);
+						if (trainType != null) {
+							orderId = trainType.getTypeId().getValue();
+						}
+					}
+					return BooleanJassValue.of((whichUnit != null)
+							&& issueImmediateOrder(whichUnit.getPlayerIndex(), whichUnit, orderId));
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("IssueImmediateOrderById",
 				(arguments, globalScope, triggerScope) -> {
@@ -146,9 +176,11 @@ final class OrderNatives extends CommonNatives {
 					if (buildType == null) {
 						return BooleanJassValue.FALSE;
 					}
-					return issuePointOrderById.call(Arrays.asList(arguments.get(0),
-							IntegerJassValue.of(buildType.getTypeId().getValue()), arguments.get(2), arguments.get(3)),
-							globalScope, triggerScope);
+					final CUnit whichUnit = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
+					return BooleanJassValue.of((whichUnit != null) && issuePointOrder(whichUnit.getPlayerIndex(),
+							whichUnit, buildType.getTypeId().getValue(),
+							arguments.get(2).visit(RealJassValueVisitor.getInstance()).floatValue(),
+							arguments.get(3).visit(RealJassValueVisitor.getInstance()).floatValue()));
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("IssueInstantPointOrder",
 				(arguments, globalScope, triggerScope) -> {
@@ -270,10 +302,14 @@ final class OrderNatives extends CommonNatives {
 					final int orderId = OrderIdUtils.getOrderId(
 							"itemuse" + String.format("%02d", item.getContainedInventory().getSlot(item)));
 					int abilityHandleId = 0;
+					boolean itemUsable = false;
 					for (final CAbility ability : whichUnit.getAbilities()) {
 						ability.checkCanUse(this.simulation, whichUnit, whichUnit.getPlayerIndex(), orderId, false,
 								activationReceiver.reset());
 						if (activationReceiver.isOk()) {
+							// Measured on 1.29: an item whose ability needs a target is accepted (true) but nothing
+							// is used or spent.
+							itemUsable |= ability instanceof CAbilityInventory;
 							final BooleanAbilityTargetCheckReceiver<Void> targetReceiver = BooleanAbilityTargetCheckReceiver
 									.<Void>getInstance();
 							ability.checkCanTargetNoTarget(this.simulation, whichUnit, whichUnit.getPlayerIndex(), orderId,
@@ -283,9 +319,11 @@ final class OrderNatives extends CommonNatives {
 							}
 						}
 					}
-					defaultPlayerUnitOrderExecutor.issueImmediateOrder(whichUnit.getHandleId(), abilityHandleId,
-							orderId, false);
-					return BooleanJassValue.of(abilityHandleId != 0);
+					if (abilityHandleId != 0) {
+						defaultPlayerUnitOrderExecutor.issueImmediateOrder(whichUnit.getHandleId(), abilityHandleId,
+								orderId, false);
+					}
+					return BooleanJassValue.of(itemUsable);
 				});
 		final JassFunction unitUseItemTarget = (arguments, globalScope, triggerScope) -> {
 			final CUnit whichUnit = arguments.get(0).visit(ObjectJassValueVisitor.getInstance());
@@ -446,12 +484,29 @@ final class OrderNatives extends CommonNatives {
 				(unit, slotX, slotY) -> unit.order(this.simulation, orderId, new AbilityPointTarget(slotX, slotY)));
 	}
 
+	private boolean isUnitTypeId(final int id) {
+		return this.simulation.getUnitData().getUnitType(new War3ID(id)) != null;
+	}
+
+	// Measured (1.29): a held item's ability (Dagger of Escape) does not take a script order by its own order
+	// string; the item is used through the item-use orders.
+	private static boolean isHeldItemAbility(final CUnit unit, final CAbility ability) {
+		final CAbilityInventory inventory = unit.getFirstAbilityOfType(CAbilityInventory.class);
+		return (inventory != null) && (ability != inventory) && inventory.isHeldItemAbility(ability);
+	}
+
 	private boolean issuePointOrder(final int orderingPlayerIndex, final CUnit whichUnit, final int orderId,
 			final float x, final float y) {
+		if (CAbilityMirrorImage.isHidingCaster(whichUnit)) {
+			return false;
+		}
 		final BooleanAbilityActivationReceiver activationReceiver = BooleanAbilityActivationReceiver.INSTANCE;
 		int abilityHandleId = 0;
 		AbilityPointTarget targetAsPoint = new AbilityPointTarget(x, y);
 		for (final CAbility ability : whichUnit.getAbilities()) {
+			if (isHeldItemAbility(whichUnit, ability)) {
+				continue;
+			}
 			ability.checkCanUse(this.simulation, whichUnit, orderingPlayerIndex, orderId, false, 
 					activationReceiver.reset());
 			if (activationReceiver.isOk()) {
@@ -473,7 +528,8 @@ final class OrderNatives extends CommonNatives {
 
 	private boolean issueTargetOrder(final int orderingPlayerIndex, final CUnit whichUnit, final int orderId,
 			CWidget whichTarget) {
-		if ((whichTarget == null) || (this.simulation.getWidget(whichTarget.getHandleId()) == null)) {
+		if ((whichTarget == null) || (this.simulation.getWidget(whichTarget.getHandleId()) == null)
+				|| CAbilityMirrorImage.isHidingCaster(whichUnit)) {
 			return false;
 		}
 		int abilityHandleId = 0;
@@ -552,6 +608,9 @@ final class OrderNatives extends CommonNatives {
 	}
 
 	private boolean issueImmediateOrder(final int orderingPlayerIndex, final CUnit whichUnit, final int orderId) {
+		if (CAbilityMirrorImage.isHidingCaster(whichUnit)) {
+			return orderId == OrderIds.stop;
+		}
 		final BooleanAbilityActivationReceiver activationReceiver = BooleanAbilityActivationReceiver.INSTANCE;
 		int abilityHandleId = 0;
 		for (final CAbility ability : whichUnit.getAbilities()) {

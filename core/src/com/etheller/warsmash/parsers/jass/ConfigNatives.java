@@ -35,6 +35,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CStartLocPr
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.CGameSpeed;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.CGameType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.CMapDensity;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.campaign.CCampaignProgress;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.CMapDifficulty;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.CPlayerSlotState;
 import java.util.HashMap;
@@ -48,6 +49,10 @@ import static com.etheller.warsmash.parsers.jass.CommonNatives.nullable;
  * Natives of the map configuration phase (start locations, players, teams, game settings), shared by the configuration and the game environments.
  */
 final class ConfigNatives {
+	private static boolean isNeutralSlot(final CPlayerJass player) {
+		return player.getId() >= (WarsmashConstants.MAX_PLAYERS - 4);
+	}
+
 	private ConfigNatives() {
 	}
 
@@ -235,9 +240,21 @@ final class ConfigNatives {
 				(arguments, globalScope, triggerScope) -> {
 					return new HandleJassValue(gamedifficultyType, mapConfig.getGameDifficulty());
 				});
+		// Measured: the default difficulty is its own setting, until a script sets it the game's one.
 		jassProgramVisitor.getJassNativeManager().createNative("GetDefaultDifficulty",
 				(arguments, globalScope, triggerScope) -> {
-					return new HandleJassValue(gamedifficultyType, mapConfig.getGameDifficulty());
+					final int stored = CCampaignProgress.getDefaultDifficulty();
+					return new HandleJassValue(gamedifficultyType,
+							((stored >= 0) && (stored < CMapDifficulty.VALUES.length)) ? CMapDifficulty.VALUES[stored]
+									: mapConfig.getGameDifficulty());
+				});
+		jassProgramVisitor.getJassNativeManager().createNative("SetDefaultDifficulty",
+				(arguments, globalScope, triggerScope) -> {
+					final CMapDifficulty difficulty = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
+					if (difficulty != null) {
+						CCampaignProgress.setDefaultDifficulty(difficulty.ordinal());
+					}
+					return null;
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("GetResourceDensity",
 				(arguments, globalScope, triggerScope) -> {
@@ -445,7 +462,14 @@ final class ConfigNatives {
 				(arguments, globalScope, triggerScope) -> {
 					final CPlayerJass player = arguments.get(0)
 							.visit(ObjectJassValueVisitor.<CPlayerJass>getInstance());
-					return IntegerJassValue.of(player == null ? 0 : player.getTeam());
+					if (player == null) {
+						return IntegerJassValue.ZERO;
+					}
+					// An empty slot is in no team (the neutral slots always read playing, so keep their own team).
+					if (!isNeutralSlot(player) && (player.getSlotState() == CPlayerSlotState.EMPTY)) {
+						return IntegerJassValue.of(-1);
+					}
+					return IntegerJassValue.of(player.getTeam());
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("GetPlayerStartLocation",
 				(arguments, globalScope, triggerScope) -> {
@@ -477,14 +501,18 @@ final class ConfigNatives {
 					if (player == null) {
 						return new HandleJassValue(mapcontrolType, CMapControl.NONE);
 					}
+					// Measured: the four neutral slots read as playing creep slots.
+					if (isNeutralSlot(player)) {
+						return new HandleJassValue(mapcontrolType, CMapControl.CREEP);
+					}
 					return new HandleJassValue(mapcontrolType, player.getController());
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("GetPlayerSlotState",
 				(arguments, globalScope, triggerScope) -> {
 					final CPlayerJass player = arguments.get(0)
 							.visit(ObjectJassValueVisitor.<CPlayerJass>getInstance());
-					return new HandleJassValue(playerslotstateType,
-							player == null ? CPlayerSlotState.EMPTY : player.getSlotState());
+					return new HandleJassValue(playerslotstateType, player == null ? CPlayerSlotState.EMPTY
+							: isNeutralSlot(player) ? CPlayerSlotState.PLAYING : player.getSlotState());
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("GetPlayerTaxRate",
 				(arguments, globalScope, triggerScope) -> {

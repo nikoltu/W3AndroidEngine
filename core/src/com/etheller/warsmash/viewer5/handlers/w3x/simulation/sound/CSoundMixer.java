@@ -115,6 +115,14 @@ public final class CSoundMixer {
 		this.playingLoops.addLast(new PlayingLoop(sound, id, volume, channel));
 	}
 
+	/** The game's looping sounds (ambience, movement) end, as when its screen is replaced by a movie. */
+	public void stopLoops() {
+		for (final PlayingLoop loop : this.playingLoops) {
+			loop.sound.stop(loop.id);
+		}
+		this.playingLoops.clear();
+	}
+
 	private static float optionScale(final CSoundVolumeGroup group) {
 		switch (group) {
 		case MUSIC:

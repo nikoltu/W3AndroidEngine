@@ -36,6 +36,18 @@ public class AbilityUI {
 		this.effectSoundLooped = effectSoundLooped;
 	}
 
+	public int getLevelCount() {
+		return this.onIconUIs.size();
+	}
+
+	public List<IconUI> getOnIconUIs() {
+		return this.onIconUIs;
+	}
+
+	public List<IconUI> getOffIconUIs() {
+		return this.offIconUIs;
+	}
+
 	public IconUI getLearnIconUI() {
 		return this.learnIconUI;
 	}

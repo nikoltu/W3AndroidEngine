@@ -2,6 +2,7 @@ package com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.beh
 
 import java.util.Map;
 
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CReleaseCheats;
 import com.etheller.warsmash.parsers.jass.JassTextGenerator;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
@@ -51,7 +52,7 @@ public class ABActionAbilityAttemptToApplyEffect implements ABSingleAction {
 								localStore.get(ABLocalStoreKeys.combineKey(ABLocalStoreKeys.ISAUTOCAST, castId))),
 						theTarget, booleanTargetReceiver);
 				if (booleanTargetReceiver.isTargetable()) {
-					if (theCaster.chargeMana(active.getChargedManaCost())) {
+					if (theCaster.chargeMana(CReleaseCheats.manaCost(game, theCaster, active.getChargedManaCost()))) {
 						active.internalBegin(game, theCaster, theOrderingPlayerIndex, orderId, false, theTarget);
 						active.startCooldown(game, theCaster);
 						active.runEndCastingActions(game, theCaster, orderId);

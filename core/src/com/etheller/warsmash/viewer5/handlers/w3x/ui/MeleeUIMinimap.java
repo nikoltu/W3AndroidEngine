@@ -191,7 +191,7 @@ public class MeleeUIMinimap {
 			final CUnit simUnit = unit.getSimulationUnit();
 			final boolean unitVisible = this.observerView || simUnit.isVisible(game, player.getId());
 			if (!(simUnit.isHidden() || simUnit.isHideMinimapIcon() || simUnit.isDead())
-					&& (unitVisible || (!unit.hasFogGhost() && isExploredLandmark(game, simUnit, pathingGrid,
+					&& (unitVisible || (!unit.hasShownFogGhost() && isExploredLandmark(game, simUnit, pathingGrid,
 							fogOfWar, this.maskedAreasPartiallyVisible)))) {
 				addUnitIcon(game, simUnit, simUnit.getFakePlayerIndex(), unit.location[0], unit.location[1], player,
 						1f);
@@ -199,7 +199,7 @@ public class MeleeUIMinimap {
 		}
 		for (int i = 0, n = fogGhosts.size(); i < n; i++) {
 			final RenderFogGhost ghost = fogGhosts.get(i);
-			if (!ghost.isMinimapIconHidden()) {
+			if (!ghost.isMinimapIconHidden() && ghost.isShown()) {
 				addUnitIcon(game, ghost.getUnit(), ghost.getFakePlayerIndex(), ghost.getX(), ghost.getY(), player,
 						FOGGED_ICON_SHADE);
 			}

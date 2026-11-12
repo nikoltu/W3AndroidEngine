@@ -108,16 +108,4 @@ public class CAbilityCreateCorpse extends CAbilityPassiveSpellBase {
 	public void onDeath(final CSimulation game, final CUnit unit) {
 		removeGravestones();
 	}
-
-	public int getCorpseCount() {
-		int count = 0;
-		if (this.corpses != null) {
-			for (final CUnit corpse : this.corpses) {
-				if ((corpse != null) && corpse.isDead() && !corpse.isHidden()) {
-					count++;
-				}
-			}
-		}
-		return count;
-	}
 }

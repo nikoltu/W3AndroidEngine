@@ -335,8 +335,8 @@ public abstract class AbstractFlacLowLevelInput implements FlacLowLevelInput {
 	
 	// For CRC calculations
 	
-	private static byte[] CRC8_TABLE  = new byte[256];
-	private static char[] CRC16_TABLE = new char[256];
+	private static final byte[] CRC8_TABLE  = new byte[256];
+	private static final char[] CRC16_TABLE = new char[256];
 	
 	static {
 		for (int i = 0; i < CRC8_TABLE.length; i++) {

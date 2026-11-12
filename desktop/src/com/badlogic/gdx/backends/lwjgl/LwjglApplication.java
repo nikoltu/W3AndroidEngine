@@ -359,7 +359,8 @@ public class LwjglApplication implements Application {
 		try {
 			this.mainLoopThread.join();
 		}
-		catch (final Exception ex) {
+		catch (final InterruptedException ex) {
+			// Stopping: the loop thread ends on its own.
 		}
 	}
 

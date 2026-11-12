@@ -32,7 +32,7 @@ public abstract class Hex {
 	 */
 	public static final String HEX_PREFIX = "0x";
 
-	private static int NIBBLE_MASK = 0b1111;
+	private static final int NIBBLE_MASK = 0b1111;
 
 	public static byte decodeNibble(final int codePoint) {
 		if (codePoint > CHAR_VALUES.length) {

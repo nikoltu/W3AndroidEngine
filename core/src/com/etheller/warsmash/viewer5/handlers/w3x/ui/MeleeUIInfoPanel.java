@@ -26,6 +26,7 @@ import com.etheller.warsmash.parsers.fdf.frames.SimpleStatusBarFrame;
 import com.etheller.warsmash.parsers.fdf.frames.StringFrame;
 import com.etheller.warsmash.parsers.fdf.frames.TextureFrame;
 import com.etheller.warsmash.parsers.fdf.frames.UIFrame;
+import com.etheller.warsmash.units.GameObject;
 import com.etheller.warsmash.util.FastNumberFormat;
 import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.util.WarsmashConstants;
@@ -83,6 +84,11 @@ import com.hiveworkshop.rms.parsers.mdlx.MdlxLayer.FilterMode;
  * build queue, cargo and the icons of a multiple selection.
  */
 final class MeleeUIInfoPanel {
+	/** A caster unit type's rank names, rank icons and spell lists, one per rank. */
+	static final String CASTER_RANK_NAMES = "Casterupgradename";
+	static final String CASTER_RANK_ART = "Casterupgradeart";
+	static final String CASTER_RANK_SPELLS = "Casterupgradetip";
+
 	private final Vector2 projectionTemp1 = new Vector2();
 	private final Vector2 projectionTemp2 = new Vector2();
 	private StringFrame simpleBuildingDescriptionValue;
@@ -107,6 +113,10 @@ final class MeleeUIInfoPanel {
 	private StringFrame agilityValue;
 	private StringFrame intelligenceValue;
 	private SimpleFrame smashHeroInfoPanelWrapper;
+	private TextureFrame rankIconBackdrop;
+	private StringFrame rankInfoPanelIconValue;
+	private StringFrame rankInfoPanelIconLevel;
+	private StringFrame foodInfoPanelIconValue;
 
 	private final StringBuilder recycleStringBuilder = new StringBuilder();
 	private MultiSelectionIconListener multiSelectClickListener;
@@ -545,6 +555,63 @@ final class MeleeUIInfoPanel {
 		this.strengthValue = (StringFrame) this.ui.rootFrame.getFrameByName("InfoPanelIconHeroStrengthValue", 0);
 		this.agilityValue = (StringFrame) this.ui.rootFrame.getFrameByName("InfoPanelIconHeroAgilityValue", 0);
 		this.intelligenceValue = (StringFrame) this.ui.rootFrame.getFrameByName("InfoPanelIconHeroIntellectValue", 0);
+
+		// A caster's rank and a building's food take the second attack's place (1.29).
+		final SimpleFrame rankWrapper = createRightColumnWrapper("SmashSimpleInfoPanelIconRank");
+		this.ui.rankIcon = this.ui.rootFrame.createSimpleFrame("SimpleInfoPanelIconRank", rankWrapper, 0);
+		this.rankIconBackdrop = (TextureFrame) this.ui.rootFrame.getFrameByName("InfoPanelIconBackdrop", 0);
+		this.rankInfoPanelIconValue = (StringFrame) this.ui.rootFrame.getFrameByName("InfoPanelIconValue", 0);
+		this.rankInfoPanelIconLevel = (StringFrame) this.ui.rootFrame.getFrameByName("InfoPanelIconLevel", 0);
+		final SimpleFrame foodWrapper = createRightColumnWrapper("SmashSimpleInfoPanelIconFood");
+		this.ui.foodIcon = this.ui.rootFrame.createSimpleFrame("SimpleInfoPanelIconFood", foodWrapper, 0);
+		this.foodInfoPanelIconValue = (StringFrame) this.ui.rootFrame.getFrameByName("InfoPanelIconValue", 0);
+		((StringFrame) this.ui.rootFrame.getFrameByName("InfoPanelIconLevel", 0)).setVisible(false);
+		this.ui.rankIcon.setVisible(false);
+		this.ui.foodIcon.setVisible(false);
+	}
+
+	private SimpleFrame createRightColumnWrapper(final String name) {
+		final SimpleFrame wrapper = (SimpleFrame) this.ui.rootFrame.createSimpleFrame(name,
+				this.ui.simpleInfoPanelUnitDetail, 0);
+		wrapper.addSetPoint(new SetPoint(FramePoint.TOPLEFT, this.ui.simpleInfoPanelUnitDetail, FramePoint.TOPLEFT,
+				GameUI.convertX(this.ui.uiViewport, 0.1f), GameUI.convertY(this.ui.uiViewport, -0.03925f)));
+		wrapper.setWidth(GameUI.convertX(this.ui.uiViewport, 0.1f));
+		wrapper.setHeight(GameUI.convertY(this.ui.uiViewport, 0.030125f));
+		return wrapper;
+	}
+
+	private void updateRankAndFoodIcons(final CUnit unit) {
+		final int rank = MeleeUITooltips.casterRank(this.ui.war3MapViewer.simulation, unit);
+		final String rankName = casterField(unit, CASTER_RANK_NAMES, rank);
+		if (rankName != null) {
+			this.ui.rankIcon.setVisible(true);
+			final String art = casterField(unit, CASTER_RANK_ART, rank);
+			if (art != null) {
+				this.rankIconBackdrop.setTexture(art, this.ui.rootFrame);
+			}
+			this.ui.rootFrame.setText(this.rankInfoPanelIconValue, rankName);
+			this.ui.rootFrame.setText(this.rankInfoPanelIconLevel, Integer.toString(rank));
+			return;
+		}
+		final int foodMade = unit.getUnitType().getFoodMade();
+		if (foodMade > 0) {
+			this.ui.foodIcon.setVisible(true);
+			this.ui.rootFrame.setText(this.foodInfoPanelIconValue, Integer.toString(foodMade));
+		}
+	}
+
+	/** The caster rank data of the unit's type for this rank (the last one past the end); null when it has none. */
+	String casterField(final CUnit unit, final String field, final int rank) {
+		final GameObject row = this.ui.war3MapViewer.getAllObjectData().getUnits().get(unit.getTypeId());
+		if (row == null) {
+			return null;
+		}
+		final List<String> values = row.getFieldAsList(field);
+		if ((values == null) || values.isEmpty()) {
+			return null;
+		}
+		final String value = values.get(Math.min(rank, values.size() - 1));
+		return value.isEmpty() ? null : value;
 	}
 
 	void updateBuildTimeIndicators() {
@@ -825,6 +892,8 @@ final class MeleeUIInfoPanel {
 			this.cargoBackdrop[i].setVisible(false);
 		}
 		this.ui.simpleProgressIndicator.setVisible(false);
+		this.ui.rankIcon.setVisible(false);
+		this.ui.foodIcon.setVisible(false);
 		if ((simulationUnit.getBuildQueue()[0] != null)
 				&& (simulationUnit.getPlayerIndex() == this.ui.war3MapViewer.getLocalPlayerIndex()) && !multiSelect) {
 			for (int i = 0; i < this.ui.queueIconFrames.length; i++) {
@@ -1141,6 +1210,9 @@ final class MeleeUIInfoPanel {
 				}
 
 				localArmorIcon.setVisible(!constructing);
+				if (!constructing && !hero && !this.ui.attack2Icon.isVisible()) {
+					updateRankAndFoodIcons(simulationUnit);
+				}
 				this.ui.simpleBuildTimeIndicator.setVisible(constructing);
 				this.ui.simpleBuildingBuildTimeIndicator.setVisible(false);
 				if (constructing) {
@@ -1207,13 +1279,13 @@ final class MeleeUIInfoPanel {
 			}
 		}
 		this.ui.inventoryCover.setVisible(inventory == null);
+		this.ui.inventoryBarFrame.setVisible(inventory != null);
 		this.activationReceiverPreviewCallback.setup(this.ui.war3MapViewer.simulation.getUnitData(),
 				this.ui.war3MapViewer.simulation.getUpgradeData(), this.ui.rootFrame.getTemplates());
 		if (inventory != null) {
-			this.ui.inventoryBarFrame.setVisible(true);
 			int index = 0;
 			for (int i = 0; i < MeleeUI.INVENTORY_HEIGHT; i++) {
-				for (int j = 0; j < MeleeUI.INVENTORY_WIDTH; j++) {
+				for (int j = 0; j < this.ui.inventoryWidth; j++) {
 					final CommandCardIcon inventoryIcon = this.ui.inventoryIcons[i][j];
 					final CItem item = inventory.getItemInSlot(index);
 					if (item != null) {
@@ -1239,11 +1311,11 @@ final class MeleeUIInfoPanel {
 						}
 						inventory.checkCanUse(this.ui.war3MapViewer.simulation,
 								this.ui.selectedUnit.getSimulationUnit(), this.ui.localPlayer.getId(),
-								OrderIds.itemuse00 + index, false, this.activationReceiverPreviewCallback.reset());
+								OrderIds.itemUseFirst(this.ui.war3MapViewer.getGameData().isUseNineItemInventory()) + index, false, this.activationReceiverPreviewCallback.reset());
 						this.recycleStringBuilder.append(uberTip);
 						inventoryIcon.setCommandButtonData(
 								inventoryEnabled ? iconUI.getIcon() : iconUI.getIconDisabled(), 0,
-								activelyUsed ? OrderIds.itemuse00 + index : 0, index + 1, activelyUsed, false, false,
+								activelyUsed ? OrderIds.itemUseFirst(this.ui.war3MapViewer.getGameData().isUseNineItemInventory()) + index : 0, index + 1, activelyUsed, false, false,
 								itemUI.getName(), this.recycleStringBuilder.toString(), '\0',
 								this.ui.war3MapViewer.simulation.getGameplayConstants()
 										.getPawnItemValue(itemType.getGoldCost()),

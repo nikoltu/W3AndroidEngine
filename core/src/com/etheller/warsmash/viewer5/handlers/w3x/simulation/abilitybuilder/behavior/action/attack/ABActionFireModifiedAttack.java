@@ -66,7 +66,7 @@ public class ABActionFireModifiedAttack implements ABAction {
 			show = showMissOnFailure.callback(game, caster, localStore, castId);
 		}
 		if (show) {
-			game.spawnTextTag(theUnit, theUnit.getPlayerIndex(), TextTagConfigType.CRITICAL_STRIKE, "miss");
+			game.spawnTextTag(theUnit, theUnit.getPlayerIndex(), TextTagConfigType.MISS_TEXT, "miss");
 		}
 	}
 }

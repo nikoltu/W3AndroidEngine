@@ -2,6 +2,7 @@ package com.etheller.warsmash.viewer5.handlers.w3x.simulation;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.Set;
 import java.util.List;
 
 import com.badlogic.gdx.math.Rectangle;
@@ -54,6 +55,17 @@ public class CDestructable extends CWidget {
 	@Override
 	public float getImpactZ() {
 		return 0; // TODO maybe from DestructableType
+	}
+
+	/** The facing its pathing map was laid into the grid with (the type's fixed rotation, e.g. 0 for a vertical gate). */
+	public int getPathingRotation() {
+		if (this.pathingInstance != null) {
+			return this.pathingInstance.getRotationInput();
+		}
+		if (this.pathingInstanceDeath != null) {
+			return this.pathingInstanceDeath.getRotationInput();
+		}
+		return 270;
 	}
 
 	public Rectangle getOrCreateRegisteredEnumRectangle() {
@@ -140,7 +152,7 @@ public class CDestructable extends CWidget {
 
 	@Override
 	public boolean canBeTargetedBy(final CSimulation simulation, final CUnit source,
-			final EnumSet<CTargetType> targetsAllowed, final AbilityTargetCheckReceiver<CWidget> receiver) {
+			final Set<CTargetType> targetsAllowed, final AbilityTargetCheckReceiver<CWidget> receiver) {
 		if (targetsAllowed.containsAll(this.destType.getTargetedAs())) {
 			if (isDead()) {
 				if (targetsAllowed.contains(CTargetType.DEAD)) {

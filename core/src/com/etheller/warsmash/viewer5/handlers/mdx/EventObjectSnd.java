@@ -33,9 +33,12 @@ public class EventObjectSnd extends EmittedObject<MdxComplexInstance, EventObjec
 			if (decodedBuffers.isEmpty()) {
 				return;
 			}
+			final Vector3 location = node.worldLocation;
+			if ((audioContext.visibility != null) && !audioContext.visibility.isHeardAt(location.x, location.y)) {
+				return;
+			}
 			final AudioPanner panner = audioContext.createPanner();
 			final AudioBufferSource source = audioContext.createBufferSource();
-			final Vector3 location = node.worldLocation;
 
 			// Panner settings
 			panner.setPosition(location.x, location.y, location.z);

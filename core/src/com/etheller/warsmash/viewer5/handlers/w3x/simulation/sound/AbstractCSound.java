@@ -13,6 +13,7 @@ public abstract class AbstractCSound extends AllocatedHandle implements CSound {
 	private float duration = -1;
 	private float fileDuration;
 	private int startTick;
+	private float playPosition;
 	private boolean started;
 	private boolean stopped;
 	private boolean killWhenDone;
@@ -67,7 +68,17 @@ public abstract class AbstractCSound extends AllocatedHandle implements CSound {
 	}
 
 	private float getElapsed(final int gameTurnTick) {
-		return (gameTurnTick - this.startTick) * WarsmashConstants.SIMULATION_STEP_TIME;
+		return ((gameTurnTick - this.startTick) * WarsmashConstants.SIMULATION_STEP_TIME) + this.playPosition;
+	}
+
+	@Override
+	public void setPlayPosition(final int millisecs) {
+		this.playPosition = Math.max(0, millisecs) / 1000f;
+	}
+
+	/** Where a start begins, in seconds; the audio is played from its start when the platform cannot seek. */
+	protected final float getPlayPosition() {
+		return this.playPosition;
 	}
 
 	@Override

@@ -18,7 +18,7 @@ public enum CCameraField implements CHandle {
 	DEPTH_OF_FIELD_SCALE,
 	ZABSOLUTE;
 
-	public static CCameraField[] VALUES = values();
+	public static final CCameraField[] VALUES = values();
 
 	@Override
 	public int getHandleId() {

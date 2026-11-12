@@ -17,6 +17,7 @@ public class RenderAttackInstant implements RenderEffect {
 	public RenderAttackInstant(final MdxComplexInstance modelInstance, final War3MapViewer war3MapViewer,
 			final float yaw) {
 		this.modelInstance = modelInstance;
+		modelInstance.hiddenInFog = true;
 		final MdxModel model = (MdxModel) this.modelInstance.model;
 		final List<Sequence> sequences = model.getSequences();
 		final IndexedSequence sequence = SequenceUtils.selectSequence(PrimaryTag.DEATH, SequenceUtils.EMPTY, sequences,

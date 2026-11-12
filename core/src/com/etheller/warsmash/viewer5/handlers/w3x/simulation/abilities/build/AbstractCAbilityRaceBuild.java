@@ -1,0 +1,76 @@
+package com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.build;
+
+import java.util.List;
+
+import com.etheller.warsmash.util.War3ID;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnitType;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CWidget;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbilityCategory;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityPointTarget;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.CBehavior;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.build.AbstractCBehaviorBuild;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayer;
+
+/**
+ * The build ability of a race: the worker pays for the structure when it starts the order, and its build behavior
+ * walks to the point and raises it.
+ */
+public abstract class AbstractCAbilityRaceBuild extends AbstractCAbilityBuild {
+	public AbstractCAbilityRaceBuild(final int handleId, final War3ID code, final List<War3ID> structuresBuilt) {
+		super(handleId, code, structuresBuilt);
+	}
+
+	protected abstract AbstractCBehaviorBuild buildBehavior();
+
+	@Override
+	public void onRemove(final CSimulation game, final CUnit unit) {
+	}
+
+	@Override
+	public CBehavior begin(final CSimulation game, final CUnit caster, final int playerIndex, final int orderId,
+			final boolean autoOrder, final CWidget target) {
+		return caster.pollNextOrderBehavior(game);
+	}
+
+	@Override
+	public CBehavior begin(final CSimulation game, final CUnit caster, final int playerIndex, final int orderId,
+			final boolean autoOrder, final AbilityPointTarget point) {
+		final War3ID orderIdAsRawtype = new War3ID(orderId);
+		final CUnitType unitType = game.getUnitData().getUnitType(orderIdAsRawtype);
+		roundTargetPoint(point, unitType);
+		final CPlayer player = game.getPlayer(caster.getPlayerIndex());
+		player.chargeFor(unitType);
+		if (unitType.getFoodUsed() != 0) {
+			player.setFoodUsed(player.getFoodUsed() + unitType.getFoodUsed());
+		}
+		return buildBehavior().reset(game, point, orderId, getBaseOrderId());
+	}
+
+	@Override
+	public CBehavior beginNoTarget(final CSimulation game, final CUnit caster, final int playerIndex, final int orderId,
+			final boolean autoOrder) {
+		return caster.pollNextOrderBehavior(game);
+	}
+
+	@Override
+	public boolean isPhysical() {
+		return true;
+	}
+
+	@Override
+	public boolean isMagic() {
+		return false;
+	}
+
+	@Override
+	public boolean isUniversal() {
+		return false;
+	}
+
+	@Override
+	public CAbilityCategory getAbilityCategory() {
+		return CAbilityCategory.CORE;
+	}
+}

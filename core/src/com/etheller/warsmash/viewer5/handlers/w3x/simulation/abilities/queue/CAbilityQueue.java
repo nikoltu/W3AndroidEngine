@@ -56,7 +56,7 @@ public final class CAbilityQueue extends AbstractCAbility {
 						&& (!isHeroType || player.isHeroCountAllowedByMax(game));
 				boolean requirementsMet = techtreeAllowedByMax;
 				for (final CUnitTypeRequirement requirement : requirements) {
-					if (player.getTechtreeUnlocked(requirement.getRequirement()) < requirement.getRequiredLevel()) {
+					if (!player.isRequirementMet(requirement.getRequirement(), requirement.getRequiredLevel())) {
 						requirementsMet = false;
 					}
 				}
@@ -64,7 +64,7 @@ public final class CAbilityQueue extends AbstractCAbility {
 					final int heroCount = player.getHeroCount(game, true);
 					final List<CUnitTypeRequirement> requirementsTier = unitType.getRequirementsTier(heroCount);
 					for (final CUnitTypeRequirement requirement : requirementsTier) {
-						if (player.getTechtreeUnlocked(requirement.getRequirement()) < requirement.getRequiredLevel()) {
+						if (!player.isRequirementMet(requirement.getRequirement(), requirement.getRequiredLevel())) {
 							requirementsMet = false;
 						}
 					}
@@ -98,8 +98,8 @@ public final class CAbilityQueue extends AbstractCAbility {
 							final int heroCount = player.getHeroCount(game, true);
 							final List<CUnitTypeRequirement> requirementsTier = unitType.getRequirementsTier(heroCount);
 							for (final CUnitTypeRequirement requirement : requirementsTier) {
-								if (player.getTechtreeUnlocked(requirement.getRequirement()) < requirement
-										.getRequiredLevel()) {
+								if (!player.isRequirementMet(requirement.getRequirement(),
+										requirement.getRequiredLevel())) {
 									receiver.missingRequirement(requirement.getRequirement(),
 											requirement.getRequiredLevel());
 								}
@@ -127,8 +127,8 @@ public final class CAbilityQueue extends AbstractCAbility {
 							final boolean techtreeAllowedByMax = player.isTechtreeAllowedByMax(orderIdAsRawtype);
 							boolean requirementsMet = techtreeAllowedByMax;
 							for (final CUnitTypeRequirement requirement : requirements) {
-								if (player.getTechtreeUnlocked(requirement.getRequirement()) < requirement
-										.getRequiredLevel()) {
+								if (!player.isRequirementMet(requirement.getRequirement(),
+										requirement.getRequiredLevel())) {
 									requirementsMet = false;
 								}
 							}

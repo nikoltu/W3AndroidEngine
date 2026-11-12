@@ -4,6 +4,22 @@
 		"type": "HIDDEN",
 		"onAddDisabledAbility": [{
 				"type": "createStateModBuff",
+				"buffType": "MAGIC_IMMUNE"
+			},{
+				"type": "storeValueLocally",
+				"key": {
+					"type": "rawString",
+					"value": "magimm"
+				},
+				"instanceValue": {
+					"type": "rawBoolean",
+					"value": "false"
+				},
+				"valueToStore": {
+					"type": "getLastCreatedStateModBuff"
+				}
+			},{
+				"type": "createStateModBuff",
 				"buffType": "INVULNERABLE"
 			},{
 				"type": "storeValueLocally",
@@ -134,6 +150,22 @@
 					"type": "getStoredStateModBuffByKey",
 					"key": {
 						"type": "rawString",
+						"value": "magimm"
+					},
+					"instanceValue": {
+						"type": "rawBoolean",
+						"value": "false"
+					}
+				}
+			},{
+				"type": "addStateModBuff",
+				"targetUnit": {
+					"type": "getCastingUnit"
+				},
+				"buff": {
+					"type": "getStoredStateModBuffByKey",
+					"key": {
+						"type": "rawString",
 						"value": "invuln"
 					},
 					"instanceValue": {
@@ -199,6 +231,22 @@
 				}
 		}],
 		"onRemoveAbility": [{
+				"type": "removeStateModBuff",
+				"targetUnit": {
+					"type": "getCastingUnit"
+				},
+				"buff": {
+					"type": "getStoredStateModBuffByKey",
+					"key": {
+						"type": "rawString",
+						"value": "magimm"
+					},
+					"instanceValue": {
+						"type": "rawBoolean",
+						"value": "false"
+					}
+				}
+			},{
 				"type": "removeStateModBuff",
 				"targetUnit": {
 					"type": "getCastingUnit"

@@ -3,6 +3,7 @@ package com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.beh
 import java.util.EnumSet;
 import java.util.Map;
 
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CReleaseCheats;
 import com.etheller.warsmash.viewer5.handlers.w3x.SequenceUtils;
 import com.etheller.warsmash.viewer5.handlers.w3x.AnimationTokens.PrimaryTag;
 import com.etheller.warsmash.viewer5.handlers.w3x.AnimationTokens.SecondaryTag;
@@ -144,7 +145,7 @@ public class CBehaviorAbilityBuilderNoTarget implements ABBehavior {
 		if (instant) {
 			if (!this.doneCastTime) {
 				// should have already checked castable above, as no time delay
-				if (!this.unit.chargeMana(this.ability.getChargedManaCost())) {
+				if (!this.unit.chargeMana(CReleaseCheats.manaCost(game, this.unit, this.ability.getChargedManaCost()))) {
 					cleanupInputs();
 					return this.unit.pollNextOrderBehavior(game);
 				}
@@ -276,7 +277,7 @@ public class CBehaviorAbilityBuilderNoTarget implements ABBehavior {
 			// Instant casts paid already; others pay mana and start the cooldown at the effect, so a cast stopped
 			// before it costs nothing (1.29).
 			if (!this.instant) {
-				if (!this.unit.chargeMana(this.ability.getChargedManaCost())) {
+				if (!this.unit.chargeMana(CReleaseCheats.manaCost(game, this.unit, this.ability.getChargedManaCost()))) {
 					this.doneEffect = true;
 					return this.unit.pollNextOrderBehavior(game);
 				}
@@ -307,7 +308,7 @@ public class CBehaviorAbilityBuilderNoTarget implements ABBehavior {
 			// This is for runes/glyphs that use on pickup. We will never see an update loop
 			// for these
 
-			if (!this.unit.chargeMana(this.ability.getChargedManaCost())) {
+			if (!this.unit.chargeMana(CReleaseCheats.manaCost(game, this.unit, this.ability.getChargedManaCost()))) {
 				cleanupInputs();
 				this.unit.beginBehavior(game, this.unit.pollNextOrderBehavior(game));
 				return;

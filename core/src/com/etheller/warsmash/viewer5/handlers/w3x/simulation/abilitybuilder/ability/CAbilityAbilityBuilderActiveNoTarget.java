@@ -3,6 +3,7 @@ package com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.abi
 import java.util.List;
 import java.util.Map;
 
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CReleaseCheats;
 import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
@@ -70,16 +71,12 @@ public class CAbilityAbilityBuilderActiveNoTarget extends CAbilityAbilityBuilder
 			final AbilityTarget target) {
 		this.localStore.put(ABLocalStoreKeys.combineKey(ABLocalStoreKeys.ISAUTOCAST, castId), autoOrder);
 
-//		System.err.println("Checking queue notarg level: " + active + " orderID : " + orderId + " offID: " + this.getOffOrderId());
 		if (castless && orderId == this.getBaseOrderId()) {
-//			System.err.println("Castless");
-			if (!caster.chargeMana(this.getChargedManaCost())) {
+			if (!caster.chargeMana(CReleaseCheats.manaCost(game, caster, this.getChargedManaCost()))) {
 				game.getCommandErrorListener().showInterfaceError(caster.getPlayerIndex(),
 						CommandStringErrorKeys.NOT_ENOUGH_MANA);
-//				System.err.println("NoMana");
 				return false;
 			}
-//			System.err.println("Had mana?");
 			this.startCooldown(game, caster);
 			this.runBeginCastingActions(game, caster, orderId);
 			this.runEndCastingActions(game, caster, orderId);

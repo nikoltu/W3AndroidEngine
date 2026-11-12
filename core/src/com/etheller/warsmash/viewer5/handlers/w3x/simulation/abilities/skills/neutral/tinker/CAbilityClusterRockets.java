@@ -1,5 +1,6 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.neutral.tinker;
 
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.CAreaTargetVisibility;
 import com.etheller.warsmash.util.RandomBounds;
 import java.util.ArrayList;
 import java.util.List;
@@ -134,8 +135,8 @@ public class CAbilityClusterRockets extends CAbilityPointTargetSpellBase {
 								@Override
 								public boolean call(final CUnit possibleTarget) {
 									if (possibleTarget.canReach(target, CAbilityClusterRockets.this.areaOfEffect)
-											&& possibleTarget.canBeTargetedBy(simulation, unit, false,
-													getTargetsAllowed(),
+											&& possibleTarget.canBeAreaTargetedBy(simulation, unit,
+													CAreaTargetVisibility.NOT_INVISIBLE, getTargetsAllowed(),
 													BooleanAbilityTargetCheckReceiver.<CWidget>getInstance().reset())) {
 										damageTargets.add(possibleTarget);
 									}

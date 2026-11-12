@@ -1,6 +1,5 @@
 package com.etheller.warsmash.parsers.jass;
 
-import com.etheller.interpreter.ast.execution.JassThread;
 import com.etheller.interpreter.ast.scope.GlobalScope;
 import com.etheller.interpreter.ast.scope.trigger.RemovableTriggerEvent;
 import com.etheller.interpreter.ast.scope.trigger.Trigger;
@@ -280,12 +279,8 @@ final class TriggerNatives extends CommonNatives {
 				(arguments, globalScope, triggerScope) -> {
 					final Trigger whichTrigger = arguments.get(0).visit(ObjectJassValueVisitor.getInstance());
 					if (whichTrigger != null) {
-						final JassThread caller = globalScope.getCurrentThread();
-						final JassThread triggerThread = whichTrigger.execute(globalScope,
-								new CommonTriggerExecutionScope(whichTrigger, triggerScope));
-						if ((triggerThread != null) && (caller != null) && !caller.isSleepEndsThread()) {
-							Trigger.wakeWhenDone(triggerThread, caller);
-						}
+						// The original returns to the caller as soon as the trigger sleeps, like TriggerExecute.
+						whichTrigger.execute(globalScope, new CommonTriggerExecutionScope(whichTrigger, triggerScope));
 					}
 					return null;
 				});
@@ -307,6 +302,9 @@ final class TriggerNatives extends CommonNatives {
 					return newEvent(eventType,
 							whichWidget.addEvent(globalScope, whichTrigger, whichPlayerEvent));
 				});
+		// Measured on 1.29: it returns no event and registers nothing, the trigger never runs.
+		jassProgramVisitor.getJassNativeManager().createNative("TriggerRegisterFilterUnitEvent",
+				(arguments, globalScope, triggerScope) -> eventType.getNullValue());
 		jassProgramVisitor.getJassNativeManager().createNative("TriggerSleepAction",
 				(arguments, globalScope, triggerScope) -> {
 					final Trigger triggeringTrigger = triggerScope.getTriggeringTrigger();
@@ -401,6 +399,11 @@ final class TriggerNatives extends CommonNatives {
 				(arguments, globalScope, triggerScope) -> {
 					return new HandleJassValue(unitstateType,
 							((CommonTriggerExecutionScope) triggerScope).getEventUnitState());
+				});
+		jassProgramVisitor.getJassNativeManager().createNative("GetEventPlayerState",
+				(arguments, globalScope, triggerScope) -> {
+					return new HandleJassValue(type("playerstate"), triggerScope instanceof CommonTriggerExecutionScope
+							? ((CommonTriggerExecutionScope) triggerScope).getEventPlayerState() : null);
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("GetEventGameState",
 				(arguments, globalScope, triggerScope) -> {
@@ -575,6 +578,35 @@ final class TriggerNatives extends CommonNatives {
 					return new HandleJassValue(unitType,
 							((CommonTriggerExecutionScope) triggerScope).getSpellTargetUnit());
 				});
+		jassProgramVisitor.getJassNativeManager().createNative("GetSpellAbility",
+				(arguments, globalScope, triggerScope) -> {
+					return new HandleJassValue(type("ability"), triggerScope instanceof CommonTriggerExecutionScope
+							? ((CommonTriggerExecutionScope) triggerScope).getSpellAbility() : null);
+				});
+		jassProgramVisitor.getJassNativeManager().createNative("GetSpellTargetItem",
+				(arguments, globalScope, triggerScope) -> {
+					return new HandleJassValue(type("item"), triggerScope instanceof CommonTriggerExecutionScope
+							? ((CommonTriggerExecutionScope) triggerScope).getSpellTargetItem() : null);
+				});
+		jassProgramVisitor.getJassNativeManager().createNative("GetSpellTargetDestructable",
+				(arguments, globalScope, triggerScope) -> {
+					return new HandleJassValue(type("destructable"),
+							triggerScope instanceof CommonTriggerExecutionScope
+									? ((CommonTriggerExecutionScope) triggerScope).getSpellTargetDestructable() : null);
+				});
+		jassProgramVisitor.getJassNativeManager().createNative("GetDecayingUnit",
+				(arguments, globalScope, triggerScope) -> {
+					return new HandleJassValue(unitType, triggerScope instanceof CommonTriggerExecutionScope
+							? ((CommonTriggerExecutionScope) triggerScope).getDecayingUnit() : null);
+				});
+		jassProgramVisitor.getJassNativeManager().createNative("GetDetectedUnit",
+				(arguments, globalScope, triggerScope) -> {
+					return new HandleJassValue(unitType, triggerScope instanceof CommonTriggerExecutionScope
+							? ((CommonTriggerExecutionScope) triggerScope).getDetectedUnit() : null);
+				});
+		// 1.29 never fires the detection events, so no scope carries a detecting player
+		jassProgramVisitor.getJassNativeManager().createNative("GetEventDetectingPlayer",
+				(arguments, globalScope, triggerScope) -> new HandleJassValue(playerType, null));
 		jassProgramVisitor.getJassNativeManager().createNative("GetSpellTargetPoint",
 				(arguments, globalScope, triggerScope) -> {
 					final AbilityPointTarget spellTargetPoint = spellTargetPoint(
@@ -801,8 +833,8 @@ final class TriggerNatives extends CommonNatives {
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("GetTriggerEventId",
 				(arguments, globalScope, triggerScope) -> {
-					return new HandleJassValue(eventidType,
-							((CommonTriggerExecutionScope) triggerScope).getTriggerEventId());
+					return new HandleJassValue(eventidType, (triggerScope instanceof CommonTriggerExecutionScope)
+							? ((CommonTriggerExecutionScope) triggerScope).getTriggerEventId() : null);
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("GetTriggerEvalCount",
 				(arguments, globalScope, triggerScope) -> {

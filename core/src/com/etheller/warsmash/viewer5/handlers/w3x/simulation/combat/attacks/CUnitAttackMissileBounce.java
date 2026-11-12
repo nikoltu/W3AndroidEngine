@@ -3,6 +3,7 @@ package com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.attacks;
 import java.util.EnumSet;
 
 import com.badlogic.gdx.math.Rectangle;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.CAreaTargetVisibility;
 import com.etheller.warsmash.viewer5.handlers.w3x.AnimationTokens.SecondaryTag;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
@@ -136,7 +137,8 @@ public class CUnitAttackMissileBounce extends CUnitAttackMissile {
 			if (enumUnit == this.target) {
 				return false;
 			}
-			if (enumUnit.canBeTargetedBy(this.simulation, this.source, this.attack.areaOfEffectTargets)
+			if (enumUnit.canBeAreaTargetedBy(this.simulation, this.source, CAreaTargetVisibility.NOT_INVISIBLE,
+					this.attack.areaOfEffectTargets)
 					&& !CAbilityBouncingMissileFilter.isBounceFiltered(this.simulation, this.source, enumUnit)) {
 				if (this.launched) {
 					throw new IllegalStateException("already launched");

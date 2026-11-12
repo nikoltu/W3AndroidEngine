@@ -36,7 +36,7 @@ public enum CMapFlag implements CHandle {
 		this.id = id;
 	}
 
-	public static CMapFlag[] VALUES = values();
+	public static final CMapFlag[] VALUES = values();
 
 	public static CMapFlag getById(final int id) {
 		for (final CMapFlag type : VALUES) {

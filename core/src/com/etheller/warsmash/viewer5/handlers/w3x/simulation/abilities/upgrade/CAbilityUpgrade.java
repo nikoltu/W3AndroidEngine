@@ -50,7 +50,7 @@ public final class CAbilityUpgrade extends AbstractCAbility {
 				final boolean techtreeAllowedByMax = player.isTechtreeAllowedByMax(orderIdAsRawtype);
 				boolean requirementsMet = techtreeAllowedByMax;
 				for (final CUnitTypeRequirement requirement : requirements) {
-					if (player.getTechtreeUnlocked(requirement.getRequirement()) < requirement.getRequiredLevel()) {
+					if (!player.isRequirementMet(requirement.getRequirement(), requirement.getRequiredLevel())) {
 						requirementsMet = false;
 					}
 				}

@@ -8,9 +8,12 @@ import java.util.Iterator;
 import java.util.List;
 
 import com.etheller.warsmash.util.War3ID;
+import com.etheller.warsmash.viewer5.handlers.w3x.environment.PathingGrid.MovementType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnitClassification;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityPointTarget;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityTargetVisitor;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.CBehavior;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.CBehaviorAttack;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.CBehaviorMove;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.orders.OrderIds;
@@ -177,6 +180,10 @@ final class AIAttack {
 
 	static boolean isCaptainAtGoal(final AIController ai) {
 		pruneMembers(ai);
+		// Measured: a captain whose group has been wiped out reports itself at its goal.
+		if (ai.attackCaptain.getMembers().isEmpty()) {
+			return true;
+		}
 		if (!ai.attackCaptain.hasGoal()) {
 			return isCaptainHome(ai);
 		}
@@ -240,12 +247,20 @@ final class AIAttack {
 			retreat(ai);
 			return;
 		}
+		if (isAcrossWater(ai, target.getX(), target.getY())) {
+			captainGoHome(ai);
+			return;
+		}
 		ai.attackCaptain.setGoal(target, target.getX(), target.getY());
 		ai.attackCaptain.setRetreating(false);
 		driveAttackCaptain(ai);
 	}
 
 	static void attackMoveXY(final AIController ai, final float x, final float y) {
+		if (isAcrossWater(ai, x, y)) {
+			captainGoHome(ai);
+			return;
+		}
 		ai.attackCaptain.setGoal(null, x, y);
 		ai.attackCaptain.setRetreating(false);
 		driveAttackCaptain(ai);
@@ -386,6 +401,9 @@ final class AIAttack {
 		}
 		if (attack.hasGoal()) {
 			ai.gatherOrdered.clear();
+			if (ai.targetHeroes) {
+				targetHeroes(ai);
+			}
 		}
 		for (final CUnit unit : ai.injured) {
 			if (isIdle(unit) && (distance(unit.getX(), unit.getY(), home.x, home.y) > HOME_RADIUS)) {
@@ -468,6 +486,9 @@ final class AIAttack {
 		final AbilityPointTarget goal = viaStage ? new AbilityPointTarget(ai.stageX, ai.stageY)
 				: new AbilityPointTarget(attack.getGoalX(), attack.getGoalY());
 		ai.orderedTargets.keySet().retainAll(attack.getMembers());
+		final boolean footReachable = ai.simulation.getPathingGrid().isPathable(goal.x, goal.y,
+				MovementType.FOOT);
+		final AbilityPointTarget home = new AbilityPointTarget(attack.getHomeX(), attack.getHomeY());
 		for (final CUnit unit : attack.getMembers()) {
 			if (isAboard(ai, unit)) {
 				continue;
@@ -488,11 +509,54 @@ final class AIAttack {
 				continue;
 			}
 			ai.orderedTargets.remove(unit);
+			if (!ai.amphibious && !footReachable && isAmphibious(unit)) {
+				if (unit.order(ai.simulation, OrderIds.move, home)) {
+					attack.markOrdered(unit);
+				}
+				continue;
+			}
 			if (unit.order(ai.simulation, OrderIds.attack, goal)) {
 				attack.markOrdered(unit);
 			}
 			else if (unit.order(ai.simulation, OrderIds.move, goal)) {
 				attack.markOrdered(unit);
+			}
+		}
+	}
+
+	/**
+	 * Measured: members still closing in on their target switch to an enemy hero within their acquisition range;
+	 * those already striking finish their target first.
+	 */
+	private static void targetHeroes(final AIController ai) {
+		for (final CUnit unit : ai.attackCaptain.getMembers()) {
+			if (isAboard(ai, unit) || unit.getUnitType().getAttacks().isEmpty()) {
+				continue;
+			}
+			final CBehavior behavior = unit.getCurrentBehavior();
+			final CUnit current = behavior instanceof CBehaviorAttack
+					? ((CBehaviorAttack) behavior).getTarget().visit(AbilityTargetVisitor.UNIT)
+					: null;
+			if ((current == null) || (current.getHeroData() != null)
+					|| ((CBehaviorAttack) behavior).isWithinRange(ai.simulation)) {
+				continue;
+			}
+			final CUnit[] hero = new CUnit[1];
+			final float[] best = { Float.MAX_VALUE };
+			ai.simulation.getWorldCollision().enumUnitsInRange(unit.getX(), unit.getY(),
+					unit.getAcquisitionRange(), (other) -> {
+						if ((other.getHeroData() != null) && ai.isEnemy(other)
+								&& other.isVisible(ai.simulation, ai.playerIndex)) {
+							final float d = distance(unit.getX(), unit.getY(), other.getX(), other.getY());
+							if (d < best[0]) {
+								best[0] = d;
+								hero[0] = other;
+							}
+						}
+						return false;
+					});
+			if ((hero[0] != null) && unit.order(ai.simulation, OrderIds.attack, hero[0])) {
+				ai.attackCaptain.markOrdered(unit);
 			}
 		}
 	}
@@ -519,6 +583,35 @@ final class AIAttack {
 			}
 		}
 		return true;
+	}
+
+	/**
+	 * Measured: without SetAmphibious a group with amphibious units plans over land only, water as shallow as a ford
+	 * included; a target on land it cannot reach that way sends the whole group home at once.
+	 */
+	private static boolean isAcrossWater(final AIController ai, final float x, final float y) {
+		if (ai.amphibious) {
+			return false;
+		}
+		pruneMembers(ai);
+		boolean amphibious = false;
+		for (final CUnit unit : ai.attackCaptain.getMembers()) {
+			amphibious |= isAmphibious(unit);
+		}
+		if (!amphibious) {
+			return false;
+		}
+		final AILand land = AILand.of(ai);
+		final int goalMass = land.massNear(x, y, 64f);
+		if (goalMass == -1) {
+			return false;
+		}
+		final int groupMass = land.massNear(ai.attackCaptain.getCenterX(), ai.attackCaptain.getCenterY(), 400f);
+		return (groupMass != -1) && (groupMass != goalMass);
+	}
+
+	private static boolean isAmphibious(final CUnit unit) {
+		return unit.getUnitType().getMovementType() == MovementType.AMPHIBIOUS;
 	}
 
 	private static boolean isStuck(final AIController ai, final CUnit unit) {

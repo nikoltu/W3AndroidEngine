@@ -318,7 +318,7 @@ public class LwjglCanvas implements Application {
 	}
 
 	protected void exception(final Throwable ex) {
-		ex.printStackTrace();
+		com.etheller.warsmash.util.Log.error(ex);
 		stop();
 	}
 
@@ -361,6 +361,7 @@ public class LwjglCanvas implements Application {
 					}
 				}
 				catch (final Throwable ignored) {
+					// Shutting down: a failed device release changes nothing.
 				}
 			}
 		});

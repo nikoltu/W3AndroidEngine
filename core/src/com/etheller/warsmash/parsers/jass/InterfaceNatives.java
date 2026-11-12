@@ -272,8 +272,11 @@ final class InterfaceNatives extends CommonNatives {
 				return null;
 			}
 		});
+		// Measured on 1.29: PreloadStart and PreloadEnd drop the lines collected for PreloadGenEnd so far;
+		// PreloadRefresh and PreloadEndEx keep them.
 		jassProgramVisitor.getJassNativeManager().createNative("PreloadStart",
 				(arguments, globalScope, triggerScope) -> {
+					clearPreloadGenLines();
 					return null;
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("PreloadGenStart",
@@ -302,11 +305,20 @@ final class InterfaceNatives extends CommonNatives {
 					meleeUI.endGame(arguments.get(0).visit(BooleanJassValueVisitor.getInstance()));
 					return null;
 				});
+		jassProgramVisitor.getJassNativeManager().createNative("RestartGame",
+				(arguments, globalScope, triggerScope) -> {
+					final boolean showScoreScreen = arguments.get(0).visit(BooleanJassValueVisitor.getInstance());
+					war3MapViewer.runAfterPendingSave(() -> {
+						war3MapViewer.setRestartAsNextLevel();
+						meleeUI.endGame(showScoreScreen);
+					});
+					return null;
+				});
 		jassProgramVisitor.getJassNativeManager().createNative("PreloadEnd", new JassFunction() {
 			@Override
 			public JassValue call(final List<JassValue> arguments, final GlobalScope globalScope,
 					final TriggerExecutionScope triggerScope) {
-				final float timeout = arguments.get(0).visit(RealJassValueVisitor.getInstance()).floatValue();
+				clearPreloadGenLines();
 				return null;
 			}
 		});
@@ -338,8 +350,7 @@ final class InterfaceNatives extends CommonNatives {
 					final String message = this.gameUI
 							.getTrigStr(arguments.get(4).visit(StringJassValueVisitor.getInstance()));
 					Log.warn("DisplayTimedTextToPlayer: " + message.replace("\\n", "\n"));
-					if (whichPlayer == this.simulation
-							.getPlayer(war3MapViewer.getLocalPlayerIndex())) {
+					if ((whichPlayer != null) && war3MapViewer.isViewedPlayer(whichPlayer.getId())) {
 						meleeUI.displayTimedText(x, y, duration, message);
 					}
 					return null;
@@ -464,6 +475,12 @@ final class InterfaceNatives extends CommonNatives {
 	/**
 	 * Same layout as the original game's preload files (CustomMapData), which maps read back as save codes.
 	 */
+	private void clearPreloadGenLines() {
+		if (this.preloadGenLines != null) {
+			this.preloadGenLines.clear();
+		}
+	}
+
 	private static void writePreloadFile(final String filename, final List<String> lines) {
 		final StringBuilder text = new StringBuilder();
 		text.append("function PreloadFiles takes nothing returns nothing\r\n\r\n\tcall PreloadStart()\r\n");

@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CReleaseCheats;
 import com.etheller.warsmash.units.GameObject;
 import com.etheller.warsmash.util.Log;
 import com.etheller.warsmash.util.War3ID;
@@ -396,6 +397,19 @@ public abstract class CAbilityAbilityBuilderGenericActive extends AbstractGeneri
 		}
 		localStore.put(ABLocalStoreKeys.ISABILITYMAGIC, this.magic);
 		localStore.put(ABLocalStoreKeys.ISABILITYPHYSICAL, this.physical);
+		refreshCostOverrides();
+	}
+
+	@Override
+	protected void refreshCostOverrides() {
+		final Integer manaCostOverride = getManaCostOverride(getLevel());
+		if (manaCostOverride != null) {
+			this.manaCost = manaCostOverride;
+		}
+		final Float cooldownOverride = getCooldownOverride(getLevel());
+		if (cooldownOverride != null) {
+			this.cooldown = Math.max(0f, cooldownOverride);
+		}
 	}
 
 	@Override
@@ -717,7 +731,7 @@ public abstract class CAbilityAbilityBuilderGenericActive extends AbstractGeneri
 						* WarsmashConstants.SIMULATION_STEP_TIME;
 				receiver.cooldownNotYetReady(cooldownRemaining * WarsmashConstants.SIMULATION_STEP_TIME,
 						cooldownLengthDisplay);
-			} else if (unit.getMana() < (this.manaCost + this.bufferMana)) {
+			} else if (unit.getMana() < (CReleaseCheats.manaCost(game, unit, this.manaCost) + this.bufferMana)) {
 				receiver.activationCheckFailed(CommandStringErrorKeys.NOT_ENOUGH_MANA);
 			} else {
 				CPlayer p = game.getPlayer(unit.getPlayerIndex());
@@ -1180,7 +1194,6 @@ public abstract class CAbilityAbilityBuilderGenericActive extends AbstractGeneri
 			Log.error("Failed to cast!");
 			return;
 		}
-//		System.err.println("Activating!");
 		this.active = true;
 		if (this.manaDrain != null) {
 			this.timer.start(game);
@@ -1200,7 +1213,6 @@ public abstract class CAbilityAbilityBuilderGenericActive extends AbstractGeneri
 			Log.error("Failed to cast!");
 			return;
 		}
-//		System.err.println("Deactivating!");
 		this.active = false;
 		if (this.manaDrain != null) {
 			timer.pause(game);
@@ -1217,7 +1229,6 @@ public abstract class CAbilityAbilityBuilderGenericActive extends AbstractGeneri
 	public boolean checkBeforeQueue(final CSimulation game, final CUnit caster, int playerIndex, final int orderId, boolean autoOrder,
 			final AbilityTarget target) {
 		this.localStore.put(ABLocalStoreKeys.combineKey(ABLocalStoreKeys.ISAUTOCAST, castId), autoOrder);
-//		System.err.println("Checking queue top level: " + active + " orderID : " + orderId + " offID: " + this.getOffOrderId());
 		if (this.allowCastlessDeactivate && this.toggleable && this.active && orderId == this.getOffOrderId()) {
 			this.deactivate(game, caster);
 			return false;
@@ -1246,10 +1257,7 @@ public abstract class CAbilityAbilityBuilderGenericActive extends AbstractGeneri
 		CPlayer player = game.getPlayer(unit.getPlayerIndex());
 		if (reqs != null) {
 			for (final CUnitTypeRequirement requirement : reqs) {
-//				System.err.println("Checking reqs for " + this.getAlias() + ": looking for "
-//						+ requirement.getRequirement() + " at amount " + requirement.getRequiredLevel() + " and found "
-//						+ player.getTechtreeUnlocked(requirement.getRequirement()));
-				if (player.getTechtreeUnlocked(requirement.getRequirement()) < requirement.getRequiredLevel()) {
+				if (!player.isRequirementMet(requirement.getRequirement(), requirement.getRequiredLevel())) {
 					receiver.missingRequirement(requirement.getRequirement(), requirement.getRequiredLevel());
 				}
 			}
@@ -1263,15 +1271,11 @@ public abstract class CAbilityAbilityBuilderGenericActive extends AbstractGeneri
 		boolean requirementsMet = player.isTechtreeAllowedByMax(this.getAlias());
 		if (reqs != null) {
 			for (final CUnitTypeRequirement requirement : reqs) {
-//				System.err.println("Checking reqs for " + this.getAlias() + ": looking for "
-//						+ requirement.getRequirement() + " at amount " + requirement.getRequiredLevel() + " and found "
-//						+ player.getTechtreeUnlocked(requirement.getRequirement()));
-				if (player.getTechtreeUnlocked(requirement.getRequirement()) < requirement.getRequiredLevel()) {
+				if (!player.isRequirementMet(requirement.getRequirement(), requirement.getRequiredLevel())) {
 					requirementsMet = false;
 				}
 			}
 		}
-//		System.err.println("Returning "+requirementsMet+" for " + this.getAlias());
 		return requirementsMet;
 	}
 

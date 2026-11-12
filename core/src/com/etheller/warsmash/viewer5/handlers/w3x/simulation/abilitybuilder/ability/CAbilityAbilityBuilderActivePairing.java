@@ -129,30 +129,24 @@ public class CAbilityAbilityBuilderActivePairing extends CAbilityAbilityBuilderG
 	@Override
 	protected boolean innerCheckCanUseSpell(final CSimulation game, final CUnit unit, final int orderId,
 			final AbilityActivationReceiver receiver) {
-//		System.err.println(unit.getUnitType().getName() + " Checking can use order: " + orderId + " (Base: "
-//				+ this.getBaseOrderId() + ", Internal: " + this.getPairOrderId(game, unit) + ")");
 		if (checkNoTargetOrderId(game, unit, orderId)) {
 			final Set<CUnit> partners = this.findPairUnits(game, unit);
 			if ((partners == null) || partners.isEmpty()) {
 				final boolean isOffId = (orderId == this.getOffOrderId())
 						|| (orderId == this.getPairOffOrderId(game, unit));
 				if (!isOffId && (this.config.getSpecialFields().getCantPairError() != null)) {
-//					System.out.println("Use check failed: no parter, special message");
 					receiver.activationCheckFailed(this.config.getSpecialFields().getCantPairError().getKey());
 					return false;
 				}
 				else if (isOffId && (this.config.getSpecialFields().getCantPairOffError() != null)) {
-//					System.out.println("Use check failed: no parter, special message");
 					receiver.activationCheckFailed(this.config.getSpecialFields().getCantPairOffError().getKey());
 					return false;
 				}
 				else {
-//					System.out.println("Use check failed: no parter");
 					receiver.activationCheckFailed(CommandStringErrorKeysEnum.UNABLE_TO_FIND_COUPLE_TARGET.getKey());
 					return false;
 				}
 			}
-//			System.err.println("Check use: Partner found");
 		}
 		return true;
 	}
@@ -199,7 +193,6 @@ public class CAbilityAbilityBuilderActivePairing extends CAbilityAbilityBuilderG
 		if (checkNoTargetOrderId(game, caster, orderId)) {
 			this.localStore.put(ABLocalStoreKeys.combineKey(ABLocalStoreKeys.ISAUTOCAST, castId), autoOrder);
 
-//			System.err.println(caster.getUnitType().getName() + " Beginning NoTarget: " + orderId);
 			final boolean isOffId = orderId == this.getOffOrderId();
 			if (isOffId) {
 				stopPartnersOnTheirWay(game, caster);
@@ -207,28 +200,19 @@ public class CAbilityAbilityBuilderActivePairing extends CAbilityAbilityBuilderG
 			final Set<CUnit> partners = this.findPairUnits(game, caster);
 			CUnit finalPartner = null;
 			if (partners != null) {
-//				System.err.println(caster.getUnitType().getName() + " Found Partners");
 				final int sendOrderId = isOffId ? this.orderPairedUnitOffOrderId(game, caster)
 						: this.orderPairedUnitOrderId(game, caster);
-//				System.err.println(caster.getUnitType().getName() + " isOffId = " + isOffId + " so picking between " + this.orderPairedUnitOrderId(game, caster) + " and " + this.orderPairedUnitOffOrderId(game, caster));
 				boolean ordered = sendOrderId < 0;
 				for (final CUnit partner : partners) {
 					if (sendOrderId >= 0) {
 						ordered |= partner.order(game, sendOrderId, caster);
-//						System.err.println(caster.getUnitType().getName() + " Sending order to " + partner.getUnitType().getName() + " (" + sendOrderId + ")");
 					}
 					if ((isOffId ? this.getPairOffOrderId(game, caster) : this.getPairOrderId(game, caster)) >= 0) {
-//						System.err.println(caster.getUnitType().getName() + " Saved last partner for self-order: "
-//								+ partner.getUnitType().getName());
 						finalPartner = partner;
 					}
 				}
 				if (!ordered) {
 					// Failed to order any partners despite wanting to
-//					System.err.println(
-//							caster.getUnitType().getName() + " Attempted to order parter(s) but failed to order any: "
-//									+ (isOffId ? this.orderPairedUnitOffOrderId(game, caster)
-//											: this.orderPairedUnitOrderId(game, caster)));
 					if (!isOffId && (this.config.getSpecialFields().getCantPairError() != null)) {
 						game.getCommandErrorListener().showInterfaceError(caster.getPlayerIndex(),
 								this.config.getSpecialFields().getCantPairError().getKey());
@@ -246,7 +230,6 @@ public class CAbilityAbilityBuilderActivePairing extends CAbilityAbilityBuilderG
 			}
 			if ((finalPartner != null)
 					&& ((isOffId ? this.getPairOffOrderId(game, caster) : this.getPairOrderId(game, caster)) >= 0)) {
-//				System.err.println(caster.getUnitType().getName() + " Have final partner, issuing self order behavior");
 				if (isOffId) {
 					return new CBehaviorSendOrder(caster, this, caster.getPlayerIndex(),
 							this.getPairOffOrderId(game, caster), this.getBaseOrderId(), finalPartner);
@@ -313,12 +296,9 @@ public class CAbilityAbilityBuilderActivePairing extends CAbilityAbilityBuilderG
 	public CBehavior begin(CSimulation game, CUnit caster, int playerIndex, int orderId, boolean autoOrder, CWidget target) {
 		this.castId++;
 		this.localStore.put(ABLocalStoreKeys.combineKey(ABLocalStoreKeys.ISAUTOCAST, castId), autoOrder);
-//		System.err.println(caster.getUnitType().getName() + " Received pair target order: " + orderId + " (Base: "
-//				+ this.getBaseOrderId() + ", Internal: " + this.getPairOrderId(game, caster) + ")");
 		if (checkTargetPrimeOrderId(game, caster, orderId)) {
 			final CUnit targetUnit = target.visit(AbilityTargetVisitor.UNIT);
 			if (this.orderPairedUnit(game, caster) && (this.orderPairedUnitOrderId(game, caster) != null)) {
-//				System.err.println(caster.getUnitType().getName() + " Sending internal order to paired unit");
 				final boolean ordered = targetUnit.order(game, this.orderPairedUnitOrderId(game, caster), caster);
 				if (!ordered) {
 					if ((this.config.getSpecialFields() != null)
@@ -336,18 +316,15 @@ public class CAbilityAbilityBuilderActivePairing extends CAbilityAbilityBuilderG
 			this.localStore.put(ABLocalStoreKeys.ABILITYTARGETEDUNIT + castId, targetUnit);
 			this.localStore.put(ABLocalStoreKeys.ABILITYPAIREDUNIT + castId, targetUnit);
 			this.localStore.put(ABLocalStoreKeys.PREVIOUSBEHAVIOR, caster.getCurrentBehavior());
-//			System.out.println("Starting targeted behavior");
 
 			this.runOnOrderIssuedActions(game, caster, orderId);
 			this.behavior.setCastId(castId);
 			return this.behavior.reset(game, target, autoOrder);
 		} else if (checkTargetInternalOrderId(game, caster, orderId)) {
-//			System.err.println(caster.getUnitType().getName() + " Got internal order");
 			final CUnit targetUnit = target.visit(AbilityTargetVisitor.UNIT);
 			this.localStore.put(ABLocalStoreKeys.ABILITYTARGETEDUNIT + castId, targetUnit);
 			this.localStore.put(ABLocalStoreKeys.ABILITYPAIREDUNIT + castId, targetUnit);
 			this.localStore.put(ABLocalStoreKeys.PREVIOUSBEHAVIOR, caster.getCurrentBehavior());
-//			System.out.println("Starting internal targeted behavior with target: " + targetUnit);
 
 			this.runOnOrderIssuedActions(game, caster, orderId);
 			this.behavior.setCastId(castId);
@@ -360,8 +337,6 @@ public class CAbilityAbilityBuilderActivePairing extends CAbilityAbilityBuilderG
 	@Override
 	protected boolean innerCheckCanTargetSpell(final CSimulation game, final CUnit unit, final int orderId,
 			final CWidget target, final AbilityTargetCheckReceiver<CWidget> receiver) {
-//		System.err.println(unit.getUnitType().getName() + " Checking can pair target order: " + orderId + " (Base: "
-//				+ this.getBaseOrderId() + ", Internal: " + this.getPairOrderId(game, unit) + ")");
 		if (checkTargetPrimeOrderId(game, unit, orderId) || checkTargetInternalOrderId(game, unit, orderId)) {
 			final CUnit targetUnit = target.visit(AbilityTargetVisitor.UNIT);
 
@@ -398,13 +373,9 @@ public class CAbilityAbilityBuilderActivePairing extends CAbilityAbilityBuilderG
 	// Method to search out partner unit
 	private boolean canPairWith(final CSimulation game, final CUnit caster, final CUnit target) {
 		if (caster.isPaused() || target.isPaused() || (caster.getPlayerIndex() != target.getPlayerIndex())) {
-//			System.err.println(
-//					caster.getUnitType().getName() + " Couldn't pair: unit is owned by different player, or is paused");
 			return false;
 		}
 		if ((getPairUnitID(game, caster) != null) && !target.getTypeId().equals(getPairUnitID(game, caster))) {
-//			System.err.println(caster.getUnitType().getName() + " Couldn't pair: wrong unit id (Want:"
-//					+ getPairUnitID(game, caster) + ", Got:" + target.getTypeId() + ")");
 			return false;
 		}
 		if (getPairAbilityCode(game, caster) != null) {
@@ -414,8 +385,6 @@ public class CAbilityAbilityBuilderActivePairing extends CAbilityAbilityBuilderG
 					return true;
 				}
 			}
-//			System.err.println(caster.getUnitType().getName() + " Couldn't pair: No matching ability (Want:"
-//					+ getPairAbilityCode(game, caster) + ")");
 		}
 		return false;
 	}

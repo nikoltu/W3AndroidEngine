@@ -1,5 +1,6 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.camera;
 
+import java.util.List;
 import java.util.function.IntSupplier;
 
 import com.badlogic.gdx.Gdx;
@@ -8,6 +9,8 @@ import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
 import com.etheller.warsmash.util.WarsmashConstants;
+import com.etheller.warsmash.viewer5.handlers.mdx.MdxModel;
+import com.etheller.warsmash.viewer5.handlers.mdx.Sequence;
 import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.RenderUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.CCameraField;
 import com.etheller.warsmash.viewer5.handlers.w3x.ui.GameOptions;
@@ -36,6 +39,7 @@ public final class GameCameraManager extends CameraManager {
 	private Rectangle cameraBounds;
 	private int currentPreset = 0;
 	private float fov;
+	private float projectionHeightScale = 1;
 	private boolean started;
 	private float targetZOffset = 0.0f;
 	private RenderUnit targetControllerUnit;
@@ -66,6 +70,13 @@ public final class GameCameraManager extends CameraManager {
 	private final Vector3 viewRight = new Vector3();
 	private final Vector3 viewTemp = new Vector3();
 	private final Vector3 viewLookAt = new Vector3();
+	private com.etheller.warsmash.viewer5.handlers.mdx.Camera cinematicCamera;
+	private MdxModel cinematicModel;
+	private float cinematicTime;
+	private float cinematicYaw;
+	private boolean cinematicOnTarget;
+	private float cinematicRoll;
+	private final float[] cinematicTemp = new float[3];
 
 	public GameCameraManager(final CameraPreset[] presets, final CameraRates cameraRates) {
 		this.presets = presets;
@@ -175,6 +186,9 @@ public final class GameCameraManager extends CameraManager {
 		moveFields(setup, cameraRate, deltaTime);
 		this.sourceNoise.advance(deltaTime);
 		this.targetNoise.advance(deltaTime);
+		if (this.cinematicCamera != null) {
+			this.cinematicTime += deltaTime;
+		}
 		updateView();
 	}
 
@@ -242,11 +256,98 @@ public final class GameCameraManager extends CameraManager {
 		this.noisyTarget.set(this.target);
 		this.sourceNoise.apply(this.noisyEye);
 		this.targetNoise.apply(this.noisyTarget);
+		if (this.cinematicCamera != null) {
+			placeCinematicCamera();
+		}
+	}
+
+	/**
+	 * SetCinematicCamera: the first camera of the model, playing its first sequence from the call on. Measured on
+	 * 1.29: the model's camera stands on the game camera's target, which it follows, turned about the vertical by the
+	 * sum of the game camera's rotations at every call so far (the turns add up from call to call, also across a
+	 * reset); a call while a model camera already runs puts it at height 0 instead of the target's height. In the
+	 * call itself the camera natives read the model's own coordinates. The camera fields keep reading the game
+	 * camera's.
+	 */
+	public void setCinematicCamera(final com.etheller.warsmash.viewer5.handlers.mdx.Camera modelCamera,
+			final MdxModel model) {
+		syncToGameStep();
+		this.cinematicOnTarget = this.cinematicCamera == null;
+		this.cinematicCamera = modelCamera;
+		this.cinematicModel = model;
+		this.cinematicYaw = normalizeDegrees(this.cinematicYaw + currentRotationDegrees());
+		this.cinematicTime = 0;
+		this.noisyEye.set(modelCamera.position[0], modelCamera.position[1], modelCamera.position[2]);
+		this.noisyTarget.set(modelCamera.targetPosition[0], modelCamera.targetPosition[1],
+				modelCamera.targetPosition[2]);
+	}
+
+	public boolean isCinematicCamera() {
+		return this.cinematicCamera != null;
+	}
+
+	private void placeCinematicCamera() {
+		final com.etheller.warsmash.viewer5.handlers.mdx.Camera modelCamera = this.cinematicCamera;
+		final int counter = (int) (this.cinematicTime * 1000);
+		final List<Sequence> sequences = this.cinematicModel.getSequences();
+		int sequence = -1;
+		int frame = 0;
+		if (!sequences.isEmpty()) {
+			sequence = 0;
+			final long[] interval = sequences.get(0).getInterval();
+			final long length = interval[1] - interval[0];
+			if (length <= 0) {
+				frame = (int) interval[0];
+			}
+			else if (sequences.get(0).getFlags() == 0) {
+				frame = (int) (interval[0] + (counter % length));
+			}
+			else {
+				frame = (int) Math.min(interval[1], interval[0] + counter);
+			}
+		}
+		modelCamera.getPositionTranslation(this.cinematicTemp, sequence, frame, counter);
+		cinematicToWorld(this.noisyEye, modelCamera.position);
+		modelCamera.getTargetTranslation(this.cinematicTemp, sequence, frame, counter);
+		cinematicToWorld(this.noisyTarget, modelCamera.targetPosition);
+		modelCamera.getRotation(this.cinematicTemp, sequence, frame, counter);
+		this.cinematicRoll = this.cinematicTemp[0];
+	}
+
+	private void cinematicToWorld(final Vector3 out, final float[] modelPoint) {
+		final double x = modelPoint[0] + this.cinematicTemp[0];
+		final double y = modelPoint[1] + this.cinematicTemp[1];
+		final double yaw = Math.toRadians(this.cinematicYaw);
+		final double cos = StrictMath.cos(yaw);
+		final double sin = StrictMath.sin(yaw);
+		out.set(this.target.x + (float) ((x * cos) - (y * sin)), this.target.y + (float) ((x * sin) + (y * cos)),
+				(this.cinematicOnTarget ? this.target.z : 0) + modelPoint[2] + this.cinematicTemp[2]);
 	}
 
 	private void placeCamera(final Vector3 eye, final Vector3 lookAt) {
+		if (this.cinematicCamera != null) {
+			// The model's own view, as the unit portraits show a model's camera.
+			this.camera.perspective(this.cinematicCamera.fieldOfView * 0.75f, this.camera.getAspect(),
+					Math.max(1f, this.cinematicCamera.nearClippingPlane),
+					Math.max(this.cinematicCamera.nearClippingPlane + 1f, this.cinematicCamera.farClippingPlane));
+			if (this.cinematicRoll == 0) {
+				this.camera.moveToAndFace(eye, lookAt, this.worldUp);
+				return;
+			}
+			final Vector3 forward = this.viewForward.set(lookAt).sub(eye).nor();
+			final Vector3 right = this.viewRight.set(forward).crs(this.worldUp);
+			if (right.len2() < 1e-8f) {
+				right.set(1, 0, 0);
+			}
+			right.nor();
+			final Vector3 up = this.viewUp.set(right).crs(forward).nor();
+			rotateTowards(up, right, this.cinematicRoll);
+			this.camera.moveToAndFace(eye, lookAt, up);
+			return;
+		}
 		final CameraSetup setup = getCurrentSetup();
-		this.camera.perspective(this.fov, this.camera.getAspect(), Math.max(MIN_NEAR_Z, setup.getNearZ()),
+		this.camera.perspective(this.projectionHeightScale == 1 ? this.fov
+				: 2 * (float) StrictMath.atan(StrictMath.tan(this.fov / 2) * this.projectionHeightScale), this.camera.getAspect(), Math.max(MIN_NEAR_Z, setup.getNearZ()),
 				Math.max(MIN_FAR_Z, setup.getFarZ()));
 		if ((this.roll == 0) && (this.localPitch == 0) && (this.localYaw == 0) && (this.localRoll == 0)) {
 			this.camera.moveToAndFace(eye, lookAt, this.worldUp);
@@ -340,6 +441,11 @@ public final class GameCameraManager extends CameraManager {
 		return this.noisyTarget.y;
 	}
 
+	public float getNoisyTargetZ() {
+		syncToGameStep();
+		return this.noisyTarget.z;
+	}
+
 	public float getEyeX() {
 		syncToGameStep();
 		return this.noisyEye.x;
@@ -422,6 +528,8 @@ public final class GameCameraManager extends CameraManager {
 		private final Vector3 noisyEye = new Vector3();
 		private final Vector3 noisyTarget = new Vector3();
 		private boolean started;
+		private float cinematicTime;
+		private float cinematicRoll;
 
 		private void save(final GameCameraManager camera) {
 			this.saved = true;
@@ -444,6 +552,8 @@ public final class GameCameraManager extends CameraManager {
 			this.noisyEye.set(camera.noisyEye);
 			this.noisyTarget.set(camera.noisyTarget);
 			this.started = camera.started;
+			this.cinematicTime = camera.cinematicTime;
+			this.cinematicRoll = camera.cinematicRoll;
 		}
 
 		private void restore(final GameCameraManager camera) {
@@ -466,6 +576,8 @@ public final class GameCameraManager extends CameraManager {
 			camera.noisyEye.set(this.noisyEye);
 			camera.noisyTarget.set(this.noisyTarget);
 			camera.started = this.started;
+			camera.cinematicTime = this.cinematicTime;
+			camera.cinematicRoll = this.cinematicRoll;
 			this.saved = false;
 		}
 	}
@@ -510,6 +622,14 @@ public final class GameCameraManager extends CameraManager {
 
 	public void resize(final Rectangle viewport) {
 		this.camera.viewport(viewport);
+	}
+
+	/**
+	 * The picture's centre and scale come from a smaller area than the viewport that is drawn into (the classic top
+	 * bar shows the world in its corners): the field of view spans this much less than the viewport's height.
+	 */
+	public void setProjectionHeightScale(final float scale) {
+		this.projectionHeightScale = scale;
 	}
 
 	public void applyVelocity(final float deltaTime, boolean up, boolean down, boolean left, boolean right) {
@@ -918,6 +1038,12 @@ public final class GameCameraManager extends CameraManager {
 
 	public void resetToGameCamera(final float duration) {
 		syncToGameStep();
+		if (this.cinematicCamera != null) {
+			// Measured on 1.29: the game camera comes back looking at the point the model's camera looked at.
+			setTarget(this.noisyTarget.x, this.noisyTarget.y);
+			this.cinematicCamera = null;
+			this.cinematicModel = null;
+		}
 		clearCustomSetup();
 		setTargetZOffset(0, duration);
 		if (duration == 0) {

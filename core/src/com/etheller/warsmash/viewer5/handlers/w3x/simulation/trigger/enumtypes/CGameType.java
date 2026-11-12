@@ -12,7 +12,7 @@ public enum CGameType implements CHandle {
 	THREE_TEAM_PLAY,
 	FOUR_TEAM_PLAY;
 
-	public static CGameType[] VALUES = values();
+	public static final CGameType[] VALUES = values();
 
 	public static CGameType getById(final int id) {
 		for (final CGameType type : VALUES) {

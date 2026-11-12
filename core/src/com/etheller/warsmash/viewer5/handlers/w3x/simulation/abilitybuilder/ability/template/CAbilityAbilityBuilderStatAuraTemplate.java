@@ -275,6 +275,10 @@ public class CAbilityAbilityBuilderStatAuraTemplate extends AbstractCAbilityAbil
 
 	@Override
 	protected boolean canJoin(final CUnit enumUnit) {
+		// Measured: an aura for melee and ranged alike also reaches units without an attack (Shade, Devotion Aura).
+		if (targetMelee && targetRange) {
+			return true;
+		}
 		return (targetMelee && enumUnit.isUnitType(CUnitTypeJass.MELEE_ATTACKER))
 				|| (targetRange && enumUnit.isUnitType(CUnitTypeJass.RANGED_ATTACKER));
 	}

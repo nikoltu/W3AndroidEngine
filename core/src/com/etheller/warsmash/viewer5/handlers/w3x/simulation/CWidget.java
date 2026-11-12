@@ -2,7 +2,7 @@ package com.etheller.warsmash.viewer5.handlers.w3x.simulation;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
-import java.util.EnumSet;
+import java.util.Set;
 import java.util.List;
 
 import com.badlogic.gdx.math.Rectangle;
@@ -167,10 +167,10 @@ public abstract class CWidget extends CExtensibleHandleAbstract implements Abili
 	}
 
 	public abstract boolean canBeTargetedBy(CSimulation simulation, CUnit source,
-			final EnumSet<CTargetType> targetsAllowed, AbilityTargetCheckReceiver<CWidget> receiver);
+			final Set<CTargetType> targetsAllowed, AbilityTargetCheckReceiver<CWidget> receiver);
 
 	public boolean canBeTargetedBy(final CSimulation simulation, final CUnit source,
-			final EnumSet<CTargetType> targetsAllowed) {
+			final Set<CTargetType> targetsAllowed) {
 		return canBeTargetedBy(simulation, source, targetsAllowed,
 				BooleanAbilityTargetCheckReceiver.<CWidget>getInstance().reset());
 	}

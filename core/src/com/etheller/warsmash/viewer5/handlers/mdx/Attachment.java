@@ -23,7 +23,13 @@ public class Attachment extends GenericObject {
 
 		// Second condition is against custom resources using arbitrary paths
 		if (!path.equals("") && (path.indexOf(".mdx") != -1)) {
-			this.internalModel = (MdxModel) model.viewer.load(path, model.pathSolver, model.solverParams);
+			final MdxModel internalModel = (MdxModel) model.viewer.load(path, model.pathSolver,
+					model.solverParams);
+			// Some DE birth models name themselves by their source path; an instance of such a model would
+			// attach itself without end.
+			if (internalModel != model) {
+				this.internalModel = internalModel;
+			}
 		}
 	}
 

@@ -3,13 +3,15 @@ package com.etheller.warsmash.viewer5.handlers.w3x.simulation.campaign;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
 
 import com.etheller.interpreter.ast.util.AllocatedHandle;
+import com.etheller.warsmash.viewer5.handlers.w3x.save.SavedAddedFields;
 
 /**
  * Leaderboard contents. LeaderboardGetPlayerIndex and the sort natives are measured against 1.29.
  */
-public final class CLeaderboard extends AllocatedHandle {
+public final class CLeaderboard extends AllocatedHandle implements SavedAddedFields {
 	private final List<Item> items = new ArrayList<>();
 	private String label = "";
 	private boolean displayed;
@@ -19,6 +21,9 @@ public final class CLeaderboard extends AllocatedHandle {
 	private boolean showIcons = true;
 	private int labelColor = -1;
 	private int valueColor = -1;
+	// Opaque white is -1 too, so whether a color was set is kept apart from the color.
+	private boolean labelColorSet;
+	private boolean valueColorSet;
 	private int sizeByItemCount;
 	private Runnable changeListener;
 
@@ -131,6 +136,7 @@ public final class CLeaderboard extends AllocatedHandle {
 	public void setItemLabelColor(final int index, final int color) {
 		if ((index >= 0) && (index < this.items.size())) {
 			this.items.get(index).labelColor = color;
+			this.items.get(index).labelColorSet = true;
 			changed();
 		}
 	}
@@ -138,6 +144,7 @@ public final class CLeaderboard extends AllocatedHandle {
 	public void setItemValueColor(final int index, final int color) {
 		if ((index >= 0) && (index < this.items.size())) {
 			this.items.get(index).valueColor = color;
+			this.items.get(index).valueColorSet = true;
 			changed();
 		}
 	}
@@ -187,6 +194,7 @@ public final class CLeaderboard extends AllocatedHandle {
 
 	public void setLabelColor(final int color) {
 		this.labelColor = color;
+		this.labelColorSet = true;
 		changed();
 	}
 
@@ -194,13 +202,22 @@ public final class CLeaderboard extends AllocatedHandle {
 		return this.labelColor;
 	}
 
+	public boolean isLabelColorSet() {
+		return this.labelColorSet;
+	}
+
 	public void setValueColor(final int color) {
 		this.valueColor = color;
+		this.valueColorSet = true;
 		changed();
 	}
 
 	public int getValueColor() {
 		return this.valueColor;
+	}
+
+	public boolean isValueColorSet() {
+		return this.valueColorSet;
 	}
 
 	public void setSizeByItemCount(final int count) {
@@ -212,7 +229,13 @@ public final class CLeaderboard extends AllocatedHandle {
 		return this.sizeByItemCount;
 	}
 
-	public static final class Item {
+	@Override
+	public void initAddedFields(final Set<String> fieldNames) {
+		this.labelColorSet = this.labelColor != -1;
+		this.valueColorSet = this.valueColor != -1;
+	}
+
+	public static final class Item implements SavedAddedFields {
 		public String label;
 		public int value;
 		public int playerIndex;
@@ -221,5 +244,13 @@ public final class CLeaderboard extends AllocatedHandle {
 		public boolean showIcon = true;
 		public int labelColor = -1;
 		public int valueColor = -1;
+		public boolean labelColorSet;
+		public boolean valueColorSet;
+
+		@Override
+		public void initAddedFields(final Set<String> fieldNames) {
+			this.labelColorSet = this.labelColor != -1;
+			this.valueColorSet = this.valueColor != -1;
+		}
 	}
 }

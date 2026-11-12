@@ -16,6 +16,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.camera.CustomCameraSetup;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.CBlendMode;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.CCameraField;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.CTexMapFlags;
 
 /**
  * Camera, camera setup and cinematic filter natives.
@@ -338,7 +339,12 @@ final class CameraNatives extends CommonNatives {
 					return null;
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("SetCineFilterTexMapFlags",
-				(arguments, globalScope, triggerScope) -> null);
+				(arguments, globalScope, triggerScope) -> {
+					final Object flags = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
+					meleeUI.getCineFilter()
+							.setTexMapFlags(flags instanceof CTexMapFlags ? ((CTexMapFlags) flags).ordinal() : 0);
+					return null;
+				});
 		jassProgramVisitor.getJassNativeManager().createNative("SetCineFilterStartUV",
 				(arguments, globalScope, triggerScope) -> {
 					meleeUI.getCineFilter().setStartUV(realArg(arguments, 0), realArg(arguments, 1),

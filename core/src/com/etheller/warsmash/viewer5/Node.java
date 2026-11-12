@@ -26,10 +26,6 @@ public abstract class Node extends GenericNode {
 		this.inverseWorldRotation = new Quaternion();
 		this.inverseWorldScale = new Vector3();
 		this.localMatrix = new Matrix4();
-//		this.localMatrix.val[0] = 1;
-//		this.localMatrix.val[5] = 1;
-//		this.localMatrix.val[10] = 1;
-//		this.localMatrix.val[15] = 1;
 		this.worldMatrix = new Matrix4();
 		this.parent = null;
 		this.children = new ArrayList<>();
@@ -40,12 +36,6 @@ public abstract class Node extends GenericNode {
 		this.visible = true;
 		this.wasDirty = false;
 		this.dirty = true;
-	}
-
-	public Node setPivot(final float[] pivot) {
-		this.pivot.set(pivot);
-		this.dirty = true;
-		return this;
 	}
 
 	public Node setLocation(final float x, final float y, final float z) {
@@ -94,24 +84,6 @@ public abstract class Node extends GenericNode {
 		return this;
 	}
 
-	public Node resetTransformation() {
-		this.pivot.set(Vector3.Zero);
-		this.localLocation.set(Vector3.Zero);
-		this.localRotation.set(RenderMathUtils.QUAT_DEFAULT);
-		this.localScale.set(RenderMathUtils.VEC3_ONE);
-
-		this.dirty = true;
-		return this;
-	}
-
-	public Node movePivot(final float[] offset) {
-		this.pivot.add(offset[0], offset[1], offset[2]);
-
-		this.dirty = true;
-
-		return this;
-	}
-
 	public Node move(final float[] offset) {
 		this.localLocation.add(offset[0], offset[1], offset[2]);
 
@@ -138,14 +110,6 @@ public abstract class Node extends GenericNode {
 
 	public Node setLocalRotation(final Quaternion rotation) {
 		this.localRotation.set(rotation);
-
-		this.dirty = true;
-
-		return this;
-	}
-
-	public Node rotateLocal(final Quaternion rotation) {
-		this.localRotation.mulLeft(rotation);
 
 		this.dirty = true;
 

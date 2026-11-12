@@ -158,9 +158,6 @@ public class MeleeToggleUI implements WarsmashUI {
 		this.lastWidth = width;
 		this.lastHeight = height;
 		this.currentUI.resize(width, height);
-//		for (final WarsmashBaseUI ui : this.allUIs) {
-//			ui.resize(width, height);
-//		}
 	}
 
 	@Override

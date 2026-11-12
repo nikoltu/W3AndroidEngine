@@ -1,5 +1,6 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors;
 
+import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.List;
 
@@ -45,6 +46,15 @@ public class CBehaviorMove implements CBehavior {
 	private static final float MAX_DETOUR_AROUND_UNITS = 320f;
 	private static final float GIVE_UP_NEAR_TARGET = 384f;
 	private static final int START_TICKS = 4;
+	/**
+	 * Measured on 1.29: a unit of an attack-moving crowd blocked next to the point keeps its order for a while (the
+	 * crowd packs round the point over a few seconds) before it stops there.
+	 */
+	private static final int BLOCKED_NEAR_TARGET_TICKS = 50;
+	// Measured on 1.29: a move to a point ends once the unit is within this distance of it, after a whole step of
+	// 0.03 s of walking.
+	static final float MOVE_END_DISTANCE = 14.5f;
+	private static final float MOVE_END_STEP_TIME = 0.03f;
 	private static final int APPROACH_SEARCH_CELLS = 65536;
 
 	private static final Rectangle tempRect = new Rectangle();
@@ -65,6 +75,7 @@ public class CBehaviorMove implements CBehavior {
 	private CUnit followUnit;
 	private CRangedBehavior rangedBehavior;
 	private boolean firstUpdate = true;
+	private double movedDistance;
 	private boolean disableCollision = false;
 	private boolean pathfindingActive = false;
 	private boolean firstPathfindJob = false;
@@ -81,6 +92,7 @@ public class CBehaviorMove implements CBehavior {
 	private CDestructable approachTarget;
 	private int resetCount;
 	private boolean takenOver;
+	private int blockedNearTargetTicks;
 
 	public CBehaviorMove reset(final int highlightOrderId, final AbilityTarget target) {
 		if (!continuesSameMove(highlightOrderId, target)) {
@@ -175,10 +187,12 @@ public class CBehaviorMove implements CBehavior {
 		this.searchCycles = 0;
 		this.followUnit = null;
 		this.firstUpdate = true;
+		this.movedDistance = 0;
 		this.pathfindingFailedGiveUp = false;
 		this.giveUpUntilTurnTick = 0;
 		this.followSearch = false;
 		this.waitForWalkersTicks = 0;
+		this.blockedNearTargetTicks = 0;
 		this.searchAfterBlock = false;
 		this.approachTarget = null;
 	}
@@ -194,10 +208,12 @@ public class CBehaviorMove implements CBehavior {
 		this.searchCycles = 0;
 		this.followUnit = followUnit;
 		this.firstUpdate = true;
+		this.movedDistance = 0;
 		this.pathfindingFailedGiveUp = false;
 		this.giveUpUntilTurnTick = 0;
 		this.followSearch = false;
 		this.waitForWalkersTicks = 0;
+		this.blockedNearTargetTicks = 0;
 		this.searchAfterBlock = false;
 		this.approachTarget = null;
 	}
@@ -256,12 +272,20 @@ public class CBehaviorMove implements CBehavior {
 		final float startFloatingY = prevY;
 		if (this.approachTarget != null) {
 			if ((this.rangedBehavior instanceof CBehaviorAttack) && (this.path == null) && !this.pathfindingActive) {
-				aimAtApproachCell(pathingGrid, movementType, collisionSize);
+				aimAtApproachCell(simulation, this.approachTarget, pathingGrid, movementType, collisionSize);
 			}
 			this.approachTarget = null;
 		}
+		final boolean walkThrough = this.unit.isPathingDisabled() && (this.followUnit == null);
 		if (this.path == null) {
-			if (!this.pathfindingActive) {
+			if (walkThrough) {
+				// Measured on 1.29: a unit with its pathing turned off walks the straight line, through buildings and
+				// off a blocked start.
+				this.path = new ArrayList<>();
+				this.path.add(new CPathPoint(this.target.x, this.target.y));
+				this.pathReachesGoal = true;
+			}
+			else if (!this.pathfindingActive) {
 				if (this.followUnit != null) {
 					this.target.x = this.followUnit.getX();
 					this.target.y = this.followUnit.getY();
@@ -366,11 +390,29 @@ public class CBehaviorMove implements CBehavior {
 			float walkY = prevY;
 			do {
 				boolean done;
+				boolean endsShort = false;
 				float nextX, nextY;
 				deltaX = currentTargetX - walkX;
 				deltaY = currentTargetY - walkY;
 				final double travelDistance = Math.sqrt((deltaX * deltaX) + (deltaY * deltaY));
-				if (travelDistance <= continueDistance) {
+				if ((this.path == null ? !walkThrough : ((this.path.size() == 1) && this.pathReachesGoal))
+						&& (this.followUnit == null)
+						&& ((this.rangedBehavior == null) || (this.rangedBehavior instanceof CBehaviorAttackMove))
+						&& (this.group == null) && (travelDistance > 0)
+						&& (travelDistance <= (continueDistance + MOVE_END_DISTANCE))) {
+					final double stepDistance = speed * MOVE_END_STEP_TIME;
+					final double wholeWay = this.movedDistance + travelDistance;
+					final double walked = (travelDistance > MOVE_END_DISTANCE) && (stepDistance > 0)
+							? Math.max(0, Math.min(travelDistance, (Math.ceil((wholeWay - MOVE_END_DISTANCE) / stepDistance)
+									* stepDistance) - this.movedDistance))
+							: 0;
+					nextX = walkX + (float) ((deltaX / travelDistance) * walked);
+					nextY = walkY + (float) ((deltaY / travelDistance) * walked);
+					continueDistance = 0;
+					done = true;
+					endsShort = true;
+				}
+				else if (travelDistance <= continueDistance) {
 					nextX = currentTargetX;
 					nextY = currentTargetY;
 					continueDistance = continueDistance - travelDistance;
@@ -393,14 +435,24 @@ public class CBehaviorMove implements CBehavior {
 					tempRect.set(nextX, nextY, 0, 0);
 				}
 				tempRect.setCenter(nextX, nextY);
-				if ((movementType == null) || (pathingGrid.isPathableFrom(walkX, walkY, nextX, nextY, movementType,
+				if (walkThrough || (movementType == null) || (pathingGrid.isPathableFrom(walkX, walkY, nextX, nextY, movementType,
 						collisionSize)
 						&& !worldCollision.intersectsAnythingOtherThan(tempRect, this.unit, movementType, false))) {
+					this.movedDistance += StrictMath.hypot(nextX - walkX, nextY - walkY);
 					this.unit.setPoint(nextX, nextY, worldCollision, simulation.getRegionManager());
 					this.unit.markWalked(simulation.getGameTurnTick());
 					this.waitForWalkersTicks = 0;
+					this.blockedNearTargetTicks = 0;
 					walkX = nextX;
 					walkY = nextY;
+					if (endsShort) {
+						if (this.pathfindingActive) {
+							simulation.removeFromPathfindingQueue(this);
+							this.pathfindingActive = false;
+						}
+						onMoveGiveUp(simulation);
+						return this.unit.pollNextOrderBehavior(simulation);
+					}
 					if (done) {
 						// if we're making headway along the path then it's OK to start thinking fast
 						// again
@@ -507,10 +559,19 @@ public class CBehaviorMove implements CBehavior {
 					// the unit searches a path every tick and starves the pathfinding queue of other units.
 					else if (((this.rangedBehavior == null) || (this.rangedBehavior instanceof CBehaviorAttackMove))
 							&& (this.unit.distance(this.target.x, this.target.y) <= Math.max(128f, collisionSize * 4))) {
+						if ((this.rangedBehavior != null) && (this.blockedNearTargetTicks < BLOCKED_NEAR_TARGET_TICKS)) {
+							this.blockedNearTargetTicks++;
+							break;
+						}
 						onMoveGiveUp(simulation);
 						return this.unit.pollNextOrderBehavior(simulation);
 					}
 					if (!this.pathfindingActive) {
+						if ((this.followUnit == null) && (this.rangedBehavior instanceof CBehaviorAttack)
+								&& (this.rangedBehavior.getTarget() instanceof CDestructable)) {
+							aimAtApproachCell(simulation, (CDestructable) this.rangedBehavior.getTarget(), pathingGrid,
+									movementType, collisionSize);
+						}
 						simulation.findNaiveSlowPath(this.unit, this.followUnit, startFloatingX, startFloatingY,
 								this.target, movementType, collisionSize, this.searchCycles < 4, this);
 						this.pathfindingActive = true;
@@ -577,11 +638,11 @@ public class CBehaviorMove implements CBehavior {
 	 * Measured on 1.29: a unit ordered to attack a destructable whose middle cannot be reached (a gate standing in a
 	 * forest) walks to the free spot next to the destructable that is nearest by its way there, and attacks from
 	 * there; it does not walk to the free spot nearest the middle and give up. The footprint is the destructable's
-	 * pathing map as the attack range check sees it.
+	 * pathing map as the attack range check sees it. A group spreads along the destructable: a spot where another
+	 * unit already stands is passed over, and a unit stopped by the others on its way picks the next free spot.
 	 */
-	private void aimAtApproachCell(final PathingGrid pathingGrid, final MovementType movementType,
-			final float collisionSize) {
-		final CDestructable dest = this.approachTarget;
+	private void aimAtApproachCell(final CSimulation simulation, final CDestructable dest,
+			final PathingGrid pathingGrid, final MovementType movementType, final float collisionSize) {
 		if (pathingGrid.isPathable(dest.getX(), dest.getY(), movementType, collisionSize)) {
 			return;
 		}
@@ -590,8 +651,9 @@ public class CBehaviorMove implements CBehavior {
 		if (pathingMap == null) {
 			return;
 		}
-		final float halfWidth = pathingMap.getWidth() * 16f;
-		final float halfHeight = pathingMap.getHeight() * 16f;
+		final boolean turned = (((dest.getPathingRotation() + 450) % 360) % 180) != 0;
+		final float halfWidth = (turned ? pathingMap.getHeight() : pathingMap.getWidth()) * 16f;
+		final float halfHeight = (turned ? pathingMap.getWidth() : pathingMap.getHeight()) * 16f;
 		final float reach = collisionSize + 32f;
 		final int width = pathingGrid.getWidth();
 		final int height = pathingGrid.getHeight();
@@ -614,7 +676,8 @@ public class CBehaviorMove implements CBehavior {
 			final float worldY = pathingGrid.getWorldY(cellY);
 			final float outX = Math.max(0f, Math.abs(worldX - dest.getX()) - halfWidth);
 			final float outY = Math.max(0f, Math.abs(worldY - dest.getY()) - halfHeight);
-			if (((outX * outX) + (outY * outY)) <= (reach * reach)) {
+			if ((((outX * outX) + (outY * outY)) <= (reach * reach))
+					&& !isSpotTaken(simulation, worldX, worldY, movementType, collisionSize)) {
 				this.target = new CPathPoint(worldX, worldY);
 				return;
 			}
@@ -635,6 +698,13 @@ public class CBehaviorMove implements CBehavior {
 				}
 			}
 		}
+	}
+
+	private boolean isSpotTaken(final CSimulation simulation, final float x, final float y,
+			final MovementType movementType, final float collisionSize) {
+		tempRect.set(x - collisionSize, y - collisionSize, collisionSize * 2, collisionSize * 2);
+		return simulation.getWorldCollision().intersectsStandingUnitOtherThan(tempRect, this.unit, null, movementType,
+				simulation.getGameTurnTick());
 	}
 
 	private void onMoveGiveUp(final CSimulation simulation) {

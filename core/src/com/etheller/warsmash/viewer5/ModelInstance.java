@@ -24,6 +24,13 @@ public abstract class ModelInstance extends Node {
 	public TextureMapper textureMapper;
 	public boolean paused;
 	public boolean rendered;
+	/**
+	 * An effect (spell art, missile, special effect) that the viewer only sees where it has vision; the scene asks its
+	 * fog filter before drawing it.
+	 */
+	public boolean hiddenInFog;
+	/** An effect that is also not drawn on ground the viewer has never explored (the black mask). */
+	public boolean hiddenInMask;
 
 	public Scene scene;
 

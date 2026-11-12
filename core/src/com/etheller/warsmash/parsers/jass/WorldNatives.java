@@ -179,14 +179,13 @@ final class WorldNatives extends CommonNatives {
 					}
 					return null;
 				});
+		// Measured on 1.29: only the chat cheats itvexesme and strengthandhonor turn these on, not Cheat().
 		jassProgramVisitor.getJassNativeManager().createNative("IsNoVictoryCheat",
-				(arguments, globalScope, triggerScope) -> {
-					return BooleanJassValue.FALSE;
-				});
+				(arguments, globalScope, triggerScope) -> BooleanJassValue
+						.of(com.etheller.warsmash.viewer5.handlers.w3x.simulation.CReleaseCheats.isNoVictory(simulation)));
 		jassProgramVisitor.getJassNativeManager().createNative("IsNoDefeatCheat",
-				(arguments, globalScope, triggerScope) -> {
-					return BooleanJassValue.FALSE;
-				});
+				(arguments, globalScope, triggerScope) -> BooleanJassValue
+						.of(com.etheller.warsmash.viewer5.handlers.w3x.simulation.CReleaseCheats.isNoDefeat(simulation)));
 		// Measured on 1.29: the release chat cheats work from a script and affect every
 		// player; the developer cheats campaign AI scripts call (showmap, av, dg, vision N, gold N, ...) do
 		// nothing.
@@ -265,7 +264,7 @@ final class WorldNatives extends CommonNatives {
 					}
 					final PathingGrid pathingGrid = this.simulation.getPathingGrid();
 					if (sharedVision) {
-						for (int playerIndex = 0; playerIndex < WarsmashConstants.MAX_PLAYERS; playerIndex++) {
+						for (int playerIndex = 0; playerIndex < this.simulation.getGameData().getMaxPlayers(); playerIndex++) {
 							if (player.hasAlliance(playerIndex, CAllianceType.SHARED_VISION)
 									|| player.hasAlliance(playerIndex, CAllianceType.SHARED_VISION_FORCED)) {
 								final CPlayer alliedPlayer = this.simulation.getPlayer(playerIndex);
@@ -293,7 +292,7 @@ final class WorldNatives extends CommonNatives {
 					}
 					final PathingGrid pathingGrid = this.simulation.getPathingGrid();
 					if (sharedVision) {
-						for (int playerIndex = 0; playerIndex < WarsmashConstants.MAX_PLAYERS; playerIndex++) {
+						for (int playerIndex = 0; playerIndex < this.simulation.getGameData().getMaxPlayers(); playerIndex++) {
 							if (player.hasAlliance(playerIndex, CAllianceType.SHARED_VISION)
 									|| player.hasAlliance(playerIndex, CAllianceType.SHARED_VISION_FORCED)) {
 								final CPlayer alliedPlayer = this.simulation.getPlayer(playerIndex);
@@ -323,7 +322,7 @@ final class WorldNatives extends CommonNatives {
 					final float centerY = center.y;
 					final PathingGrid pathingGrid = this.simulation.getPathingGrid();
 					if (sharedVision) {
-						for (int playerIndex = 0; playerIndex < WarsmashConstants.MAX_PLAYERS; playerIndex++) {
+						for (int playerIndex = 0; playerIndex < this.simulation.getGameData().getMaxPlayers(); playerIndex++) {
 							if (player.hasAlliance(playerIndex, CAllianceType.SHARED_VISION)
 									|| player.hasAlliance(playerIndex, CAllianceType.SHARED_VISION_FORCED)) {
 								final CPlayer alliedPlayer = this.simulation.getPlayer(playerIndex);
@@ -349,7 +348,7 @@ final class WorldNatives extends CommonNatives {
 					final boolean enable = arguments.get(0).visit(BooleanJassValueVisitor.getInstance());
 					if (enable && !this.simulation.isFogEnabled()) {
 						// Measured on 1.29: turning fog back on fogs what was seen until the next fog update.
-						for (int i = 0; i < WarsmashConstants.MAX_PLAYERS; i++) {
+						for (int i = 0; i < this.simulation.getGameData().getMaxPlayers(); i++) {
 							this.simulation.getPlayer(i).getFogOfWar().convertVisibleToFogged();
 						}
 					}
@@ -389,7 +388,7 @@ final class WorldNatives extends CommonNatives {
 					fogModifier.setEnabled(false);
 					if (sharedVision) {
 						final List<CFogModifierJass> modifiers = new ArrayList<>();
-						for (int playerIndex = 0; playerIndex < WarsmashConstants.MAX_PLAYERS; playerIndex++) {
+						for (int playerIndex = 0; playerIndex < this.simulation.getGameData().getMaxPlayers(); playerIndex++) {
 							if (player.hasAlliance(playerIndex, CAllianceType.SHARED_VISION)
 									|| player.hasAlliance(playerIndex, CAllianceType.SHARED_VISION_FORCED)) {
 								final CPlayer alliedPlayer = this.simulation.getPlayer(playerIndex);
@@ -429,7 +428,7 @@ final class WorldNatives extends CommonNatives {
 					fogModifier.setEnabled(false);
 					if (sharedVision) {
 						final List<CFogModifierJass> modifiers = new ArrayList<>();
-						for (int playerIndex = 0; playerIndex < WarsmashConstants.MAX_PLAYERS; playerIndex++) {
+						for (int playerIndex = 0; playerIndex < this.simulation.getGameData().getMaxPlayers(); playerIndex++) {
 							if (player.hasAlliance(playerIndex, CAllianceType.SHARED_VISION)
 									|| player.hasAlliance(playerIndex, CAllianceType.SHARED_VISION_FORCED)) {
 								final CPlayer alliedPlayer = this.simulation.getPlayer(playerIndex);
@@ -474,7 +473,7 @@ final class WorldNatives extends CommonNatives {
 					fogModifier.setEnabled(false);
 					if (sharedVision) {
 						final List<CFogModifierJass> modifiers = new ArrayList<>();
-						for (int playerIndex = 0; playerIndex < WarsmashConstants.MAX_PLAYERS; playerIndex++) {
+						for (int playerIndex = 0; playerIndex < this.simulation.getGameData().getMaxPlayers(); playerIndex++) {
 							if (player.hasAlliance(playerIndex, CAllianceType.SHARED_VISION)
 									|| player.hasAlliance(playerIndex, CAllianceType.SHARED_VISION_FORCED)) {
 								final CPlayer alliedPlayer = this.simulation.getPlayer(playerIndex);

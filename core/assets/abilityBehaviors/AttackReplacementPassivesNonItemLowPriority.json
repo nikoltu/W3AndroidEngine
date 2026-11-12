@@ -937,14 +937,23 @@
 			"onHit": [{
 					"type": "createTimedBuff",
 					"buffId": {
-						"type": "getStoredIDByKey",
-						"key": {
-							"type": "rawString",
-							"value": "buffId"
+						"type": "inlineConditionID",
+						"condition": {
+							"type": "isAttackRanged"
 						},
-						"instanceValue": {
-							"type": "rawBoolean",
-							"value": "false"
+						"pass": {
+							"type": "getStoredIDByKey",
+							"key": {
+								"type": "rawString",
+								"value": "buffId"
+							},
+							"instanceValue": {
+								"type": "rawBoolean",
+								"value": "false"
+							}
+						},
+						"fail": {
+							"type": "getSecondBuffId"
 						}
 					},
 					"visibilityGroup": {
@@ -1013,14 +1022,23 @@
 				},{
 					"type": "createTimedTickingBuff",
 					"buffId": {
-						"type": "getStoredIDByKey",
-						"key": {
-							"type": "rawString",
-							"value": "buffId"
+						"type": "inlineConditionID",
+						"condition": {
+							"type": "isAttackRanged"
 						},
-						"instanceValue": {
-							"type": "rawBoolean",
-							"value": "false"
+						"pass": {
+							"type": "getStoredIDByKey",
+							"key": {
+								"type": "rawString",
+								"value": "buffId"
+							},
+							"instanceValue": {
+								"type": "rawBoolean",
+								"value": "false"
+							}
+						},
+						"fail": {
+							"type": "getSecondBuffId"
 						}
 					},
 					"showIcon": {

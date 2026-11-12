@@ -18,16 +18,12 @@ import com.badlogic.gdx.math.collision.Ray;
 public enum RenderMathUtils {
 	;
 	public static final float[] EMPTY_FLOAT_ARRAY = new float[0];
-	public static final long[] EMPTY_LONG_ARRAY = new long[0];
-	public static final Quaternion QUAT_DEFAULT = new Quaternion(0, 0, 0, 1);
-	public static final Vector3 VEC3_ONE = new Vector3(1, 1, 1);
 	public static final Vector3 VEC3_UNIT_X = new Vector3(1, 0, 0);
 	public static final Vector3 VEC3_UNIT_Y = new Vector3(0, 1, 0);
 	public static final Vector3 VEC3_UNIT_Z = new Vector3(0, 0, 1);
 	public static final float[] FLOAT_VEC3_ZERO = new float[] { 0, 0, 0 };
 	public static final float[] FLOAT_QUAT_DEFAULT = new float[] { 0, 0, 0, 1 };
 	public static final float[] FLOAT_VEC3_ONE = new float[] { 1, 1, 1 };
-	public static final float HALF_PI = (float) (Math.PI / 2.0);
 
 	// copied from ghostwolf and
 	// https://www.blend4web.com/api_doc/libs_gl-matrix2.js.html
@@ -149,19 +145,6 @@ public enum RenderMathUtils {
 		out.y = (ay * bw) + (aw * by);
 		out.z = (az * bw) + (ax * by);
 		out.w = (aw * bw) - (ay * by);
-		return out;
-	}
-
-	public static Quaternion rotateZ(final Quaternion out, final Quaternion a, float rad) {
-		rad *= 0.5;
-
-		final float ax = a.x, ay = a.y, az = a.z, aw = a.w;
-		final float bz = (float) Math.sin(rad), bw = (float) Math.cos(rad);
-
-		out.x = (ax * bw) + (ay * bz);
-		out.y = (ay * bw) - (ax * bz);
-		out.z = (az * bw) + (aw * bz);
-		out.w = (aw * bw) - (az * bz);
 		return out;
 	}
 
@@ -480,11 +463,11 @@ public enum RenderMathUtils {
 		return out;
 	}
 
-	static Vector3 best = new Vector3();
-	static Vector3 tmp = new Vector3();
-	static Vector3 tmp1 = new Vector3();
-	static Vector3 tmp2 = new Vector3();
-	static Vector3 tmp3 = new Vector3();
+	static final Vector3 best = new Vector3();
+	static final Vector3 tmp = new Vector3();
+	static final Vector3 tmp1 = new Vector3();
+	static final Vector3 tmp2 = new Vector3();
+	static final Vector3 tmp3 = new Vector3();
 
 	/**
 	 * Intersects the given ray with list of triangles. Returns the nearest

@@ -92,6 +92,7 @@ public final class GdxMoviePlayer implements Movies.Player {
 	private final MovieTexture picture = new MovieTexture();
 	private BitmapFont font;
 	private File fontFile;
+	private File captionFont;
 	private int fontSize;
 	private String fontCharacters;
 	private MovieCaptions fontCaptions;
@@ -180,7 +181,9 @@ public final class GdxMoviePlayer implements Movies.Player {
 				return null;
 			}
 			Log.info("Movie " + movie.getName() + " " + reader.getWidth() + "x" + reader.getHeight());
-			return new Playback(movie, reader, decoder, MovieCaptions.read(movie.getCaptions()), openSound(movie));
+			// The subtitles setting is read as each movie starts, so a change between two movies counts.
+			final File captions = GameOptions.get().isSubtitles() ? movie.getCaptions() : null;
+			return new Playback(movie, reader, decoder, MovieCaptions.read(captions), openSound(movie));
 		}
 		catch (final IOException | RuntimeException | LinkageError e) {
 			Log.error("Unable to play the movie " + movie + ": " + e);
@@ -272,7 +275,7 @@ public final class GdxMoviePlayer implements Movies.Player {
 		}
 		final String caption = playback.captionAt(now);
 		if (caption != null) {
-			drawCaption(caption, playback.captions, playback.movie.getCaptionFont(), width, height);
+			drawCaption(caption, playback.captions, playback.movie, width, height);
 		}
 		if (depthTest) {
 			gl.glEnable(GL20.GL_DEPTH_TEST);
@@ -304,9 +307,9 @@ public final class GdxMoviePlayer implements Movies.Player {
 		batch.enableBlending();
 	}
 
-	private void drawCaption(final String caption, final MovieCaptions captions, final File fontFile,
-			final int width, final int height) {
-		final BitmapFont font = font(captions, fontFile, height);
+	private void drawCaption(final String caption, final MovieCaptions captions, final Movie movie, final int width,
+			final int height) {
+		final BitmapFont font = font(captions, movie, height);
 		final float lineWidth = width * 0.9f;
 		final SpriteBatch batch = this.batch;
 		batch.begin();
@@ -315,17 +318,19 @@ public final class GdxMoviePlayer implements Movies.Player {
 		batch.end();
 	}
 
-	/** The game's font at a twenty-fourth of the window's height, as the device player sizes its captions. */
-	private BitmapFont font(final MovieCaptions captions, final File fontFile, final int height) {
+	/**
+	 * A font that has every letter of the captions (the game's own for the Latin ones, one of the language's or the
+	 * computer's for the rest) at a twenty-fourth of the window's height, as the device player sizes its captions.
+	 */
+	private BitmapFont font(final MovieCaptions captions, final Movie movie, final int height) {
 		final int size = Math.max(12, Math.round(height / 24f));
 		if (captions != this.fontCaptions) {
 			this.fontCaptions = captions;
-			final String characters = characters(captions);
-			if (!characters.equals(this.fontCharacters)) {
-				this.fontCharacters = characters;
-				disposeFont();
-			}
+			this.fontCharacters = characters(captions);
+			this.captionFont = chooseFont(movie.getCaptionFonts(), captions);
+			disposeFont();
 		}
+		final File fontFile = this.captionFont;
 		if ((this.font != null) && (size == this.fontSize) && sameFile(fontFile, this.fontFile)) {
 			return this.font;
 		}
@@ -363,6 +368,51 @@ public final class GdxMoviePlayer implements Movies.Player {
 		return this.font;
 	}
 
+	/** @return the first font with every letter of the captions, else the one with the most; null when none loads */
+	private static File chooseFont(final List<File> fonts, final MovieCaptions captions) {
+		final Set<Character> letters = new LinkedHashSet<>();
+		for (final String text : captions.getTexts()) {
+			for (final char c : text.toCharArray()) {
+				if (c > ' ') {
+					letters.add(c);
+				}
+			}
+		}
+		File best = null;
+		int fewestMissing = Integer.MAX_VALUE;
+		for (final File file : fonts) {
+			FreeTypeFontGenerator generator = null;
+			try {
+				generator = new FreeTypeFontGenerator(Gdx.files.absolute(file.getAbsolutePath()));
+				int missing = 0;
+				for (final Character letter : letters) {
+					if (!generator.hasGlyph(letter)) {
+						missing++;
+					}
+				}
+				if (missing < fewestMissing) {
+					fewestMissing = missing;
+					best = file;
+				}
+				if (missing == 0) {
+					break;
+				}
+			}
+			catch (final GdxRuntimeException e) {
+				Log.warn("Unable to read the caption font " + file + ": " + e);
+			}
+			finally {
+				if (generator != null) {
+					generator.dispose();
+				}
+			}
+		}
+		if ((best != null) && (fewestMissing > 0)) {
+			Log.warn("No caption font has all the letters of the captions; " + best + " lacks " + fewestMissing);
+		}
+		return best;
+	}
+
 	private static String characters(final MovieCaptions captions) {
 		final Set<Character> set = new LinkedHashSet<>();
 		for (final char c : FreeTypeFontGenerator.DEFAULT_CHARS.toCharArray()) {
@@ -397,6 +447,7 @@ public final class GdxMoviePlayer implements Movies.Player {
 		this.picture.dispose();
 		disposeFont();
 		this.fontFile = null;
+		this.captionFont = null;
 		this.fontCharacters = null;
 		this.fontCaptions = null;
 		if (this.batch != null) {

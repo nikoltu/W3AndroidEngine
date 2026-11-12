@@ -59,8 +59,6 @@ public interface RenderWidget {
 				.noneOf(AnimationTokens.SecondaryTag.class);
 		private final EnumSet<AnimationTokens.SecondaryTag> recycleSet = EnumSet
 				.noneOf(AnimationTokens.SecondaryTag.class);
-		private final EnumSet<AnimationTokens.SecondaryTag> recycleWalkFastSet = EnumSet
-				.noneOf(AnimationTokens.SecondaryTag.class);
 		private PrimaryTag currentAnimation;
 		private EnumSet<SecondaryTag> currentAnimationSecondaryTags = SequenceUtils.EMPTY;
 		private float currentSpeedRatio;
@@ -286,52 +284,6 @@ public interface RenderWidget {
 			}
 			applyLock(this.turretBone, this.turretFacingLock);
 			applyLock(this.headBone, this.headFacingLock);
-		}
-
-		private static void applyLockAbilityTarget(final MdxNode turretBone, final AbilityTarget turretFacingLock) {
-			if (turretBone != null) {
-				if (turretFacingLock == null) {
-					if (turretBone.overrideWorldRotation != null) {
-						turretBone.setOverrideWorldRotation(null);
-					}
-				}
-				else {
-					final float ang = (float) Math.atan2(turretFacingLock.getY() - turretBone.worldLocation.y,
-							turretFacingLock.getX() - turretBone.worldLocation.x);
-					if (turretBone.overrideWorldRotation == null) {
-						turretBone.setOverrideWorldRotation(new Quaternion());
-					}
-					turretBone.overrideWorldRotation.setFromAxisRad(0, 0, 1, ang);
-				}
-			}
-		}
-
-		private static void applyLockGenericNode(final MdxNode turretBone, final GenericNode turretFacingLock) {
-			if (turretBone != null) {
-				if (turretFacingLock == null) {
-					if (turretBone.overrideWorldRotation != null) {
-						turretBone.setOverrideWorldRotation(null);
-					}
-				}
-				else {
-					final float dx = turretFacingLock.worldLocation.x - turretBone.worldLocation.x;
-					final float dy = turretFacingLock.worldLocation.y - turretBone.worldLocation.y;
-					final float dz = turretFacingLock.worldLocation.z - turretBone.worldLocation.z;
-					final float ang = (float) Math.atan2(dy, dx);
-					final double groundDistance = Math.sqrt((dx * dx) + (dy * dy));
-					final float angZ = (float) Math.atan2(dz, groundDistance);
-					if (turretBone.overrideWorldRotation == null) {
-						turretBone.setOverrideWorldRotation(new Quaternion());
-					}
-					turretBone.overrideWorldRotation.setFromAxisRad(0, 0, 1, ang);
-					final float x = turretBone.overrideWorldRotation.x;
-					final float y = turretBone.overrideWorldRotation.y;
-					final float z = turretBone.overrideWorldRotation.z;
-					final float w = turretBone.overrideWorldRotation.w;
-					turretBone.overrideWorldRotation.setFromAxisRad(0, 1, 0, angZ);
-					turretBone.overrideWorldRotation.mulLeft(x, y, z, w);
-				}
-			}
 		}
 
 		private static void applyLock(final MdxNode turretBone, final LockTarget turretFacingLock) {

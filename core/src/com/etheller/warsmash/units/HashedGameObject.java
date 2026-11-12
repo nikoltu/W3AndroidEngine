@@ -159,6 +159,16 @@ public abstract class HashedGameObject implements GameObject {
 		return this.fields.containsKey(new StringKey(field));
 	}
 
+	/**
+	 * Reforged tables mark a cell that takes the default with "_" where earlier data leave it empty or "-".
+	 *
+	 * @return whether the field holds a value rather than that placeholder
+	 */
+	public boolean hasFieldValue(final String field) {
+		final String value = getField(field).trim();
+		return !value.isEmpty() && !"_".equals(value) && !"-".equals(value);
+	}
+
 	@Override
 	public int getFieldValue(final String field) {
 		int i = 0;
@@ -404,14 +414,6 @@ public abstract class HashedGameObject implements GameObject {
 			name += suf;
 		}
 		return name;
-	}
-
-	public void addToList(final String parentId, final String list) {
-		String parentField = getField(list);
-		if (!parentField.contains(parentId)) {
-			parentField = parentField + "," + parentId;
-			setField(list, parentField);
-		}
 	}
 
 	@Override

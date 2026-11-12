@@ -12,7 +12,6 @@ import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.glutils.ShaderProgram;
 import com.etheller.warsmash.util.Log;
 import com.etheller.warsmash.viewer5.Texture;
-import com.etheller.warsmash.viewer5.deprecated.ShaderUnitDeprecated;
 
 /**
  * This needs a rename. Just a ripoff of ghostwolf's wrapper utility class, it's
@@ -25,7 +24,6 @@ public class WebGL {
 	private static final String ES3_SAMPLER_PRECISION = "precision highp sampler2DArray;\nprecision highp usampler2D;\n"
 			+ "precision highp isampler2D;\nprecision highp sampler2DShadow;\n#define texture2D texture\n";
 	public GL20 gl;
-	public Map<Integer, ShaderUnitDeprecated> shaderUnits;
 	public Map<Integer, ShaderProgram> shaderPrograms;
 	public ShaderProgram currentShaderProgram;
 	public String floatPrecision;
@@ -39,8 +37,6 @@ public class WebGL {
 		// TODO here ghostwolf throws exceptions for unsupported versions of opengl
 
 		this.gl = gl;
-
-		this.shaderUnits = new HashMap<>();
 
 		this.shaderPrograms = new HashMap<>();
 
@@ -64,14 +60,6 @@ public class WebGL {
 		this.shaderPrograms.clear();
 		this.currentShaderProgram = null;
 		this.emptyTexture.dispose();
-	}
-
-	public ShaderUnitDeprecated createShaderUnit(final String src, final int type) {
-		final int hash = stringHash(src); // TODO: why on earth are we doing this, what about hash collisions?
-		if (!this.shaderUnits.containsKey(hash)) {
-			this.shaderUnits.put(hash, new ShaderUnitDeprecated(this.gl, src, type));
-		}
-		return this.shaderUnits.get(hash);
 	}
 
 	public ShaderProgram createShaderProgram(String vertexSrc, String fragmentSrc) {
@@ -191,17 +179,6 @@ public class WebGL {
 		else {
 			this.emptyTexture.bind();
 		}
-	}
-
-	public void setTextureMode(final int wrapS, final int wrapT, final int magFilter, final int minFilter) {
-		final GL20 gl = this.gl;
-
-		// TODO make sure we dont assign this parameter doubly if we're already using
-		// libgdx texture, which does do some wrapS and wrapT stuff already
-		gl.glTexParameteri(GL20.GL_TEXTURE_2D, GL20.GL_TEXTURE_WRAP_S, wrapS);
-		gl.glTexParameteri(GL20.GL_TEXTURE_2D, GL20.GL_TEXTURE_WRAP_T, wrapT);
-		gl.glTexParameteri(GL20.GL_TEXTURE_2D, GL20.GL_TEXTURE_MAG_FILTER, magFilter);
-		gl.glTexParameteri(GL20.GL_TEXTURE_2D, GL20.GL_TEXTURE_MIN_FILTER, minFilter);
 	}
 
 	private int stringHash(final String src) {

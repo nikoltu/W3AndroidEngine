@@ -74,24 +74,8 @@ public class Element extends HashedGameObject {
 		return getField("Name");
 	}
 
-	public int getTechTier() {
-		final String tier = getField("Custom Field: TechTier");
-		if (tier == null) {
-			return -1;
-		}
-		return Integer.parseInt(tier);
-	}
-
 	public void setTechTier(final int i) {
 		setField("Custom Field: TechTier", i + "");
-	}
-
-	public int getTechDepth() {
-		final String tier = getField("Custom Field: TechDepth");
-		if (tier == null) {
-			return -1;
-		}
-		return Integer.parseInt(tier);
 	}
 
 	public void setTechDepth(final int i) {
@@ -188,35 +172,11 @@ public class Element extends HashedGameObject {
 		return null;
 	}
 
-	public void addParent(final String parentId) {
-		String parentField = getField("Parents");
-		if (!parentField.contains(parentId)) {
-			parentField = parentField + "," + parentId;
-			setField("Parents", parentField);
-		}
-	}
-
 	public void addChild(final String parentId) {
 		String parentField = getField("Children");
 		if (!parentField.contains(parentId)) {
 			parentField = parentField + "," + parentId;
 			setField("Children", parentField);
-		}
-	}
-
-	public void addRequiredBy(final String parentId) {
-		String parentField = getField("RequiredBy");
-		if (!parentField.contains(parentId)) {
-			parentField = parentField + "," + parentId;
-			setField("RequiredBy", parentField);
-		}
-	}
-
-	public void addResearches(final String parentId) {
-		String parentField = getField("Researches");
-		if (!parentField.contains(parentId)) {
-			parentField = parentField + "," + parentId;
-			setField("Researches", parentField);
 		}
 	}
 }

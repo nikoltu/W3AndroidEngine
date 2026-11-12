@@ -368,7 +368,7 @@ public final class SavedGame {
 
 	private static SavedScriptPositions.Program runningAiProgram(final CSimulation simulation, final AiEntry entry) {
 		JassAIEnvironment match = null;
-		for (int i = 0; i < WarsmashConstants.MAX_PLAYERS; i++) {
+		for (int i = 0; i < simulation.getGameData().getMaxPlayers(); i++) {
 			final JassAIEnvironment ai = simulation.getPlayer(i).getAiScript();
 			if ((ai != null) && entry.scriptFile.equals(ai.getScriptFile())) {
 				if ((match == null) || (i == entry.playerIndex)) {
@@ -399,7 +399,7 @@ public final class SavedGame {
 		header.campaign = viewer.getCampaign();
 		header.reforgedCampaignMaps = viewer.isReforgedCampaignMaps();
 		header.difficulty = viewer.getMapConfig() == null ? null : viewer.getMapConfig().getGameDifficulty();
-		for (int i = 0; i < WarsmashConstants.MAX_PLAYERS; i++) {
+		for (int i = 0; i < simulation.getGameData().getMaxPlayers(); i++) {
 			final CPlayer player = simulation.getPlayer(i);
 			final JassAIEnvironment aiScript = player.getAiScript();
 			if (aiScript != null) {
@@ -648,6 +648,7 @@ public final class SavedGame {
 			viewer.showTrackable(trackable);
 		}
 		simulation.getTerrainDeformations().restore(simulation);
+		simulation.getTerrainTypeChanges().restore(simulation);
 		viewer.setGamePaused(War3MapViewer.PauseSource.SCRIPT, root.scriptPaused);
 		viewer.setGamePaused(War3MapViewer.PauseSource.PLAYER, root.playerPaused);
 		viewer.restoreInterfaceState(root.interfaceState);

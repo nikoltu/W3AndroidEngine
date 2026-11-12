@@ -6,7 +6,6 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CWidget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.hero.CAbilityHero;
-import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.CAbilitySpellBase;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityPointTarget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityTarget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.definitions.impl.AbilityFields;
@@ -16,7 +15,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.C
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.AbilityActivationReceiver;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.AbilityTargetCheckReceiver;
 
-public class CAbilityItemLevelGain extends CAbilitySpellBase {
+public class CAbilityItemLevelGain extends AbstractCAbilityItemInstantUse {
 	private int levelsToGain;
 
 	public CAbilityItemLevelGain(final int handleId, final War3ID alias) {
@@ -26,10 +25,6 @@ public class CAbilityItemLevelGain extends CAbilitySpellBase {
 	@Override
 	public void populateData(final GameObject worldEditorAbility, final int level) {
 		this.levelsToGain = worldEditorAbility.getFieldAsInteger(AbilityFields.DATA_A + level, 0);
-	}
-
-	@Override
-	public void onAdd(final CSimulation game, final CUnit unit) {
 	}
 
 	@Override
@@ -44,74 +39,6 @@ public class CAbilityItemLevelGain extends CAbilitySpellBase {
 		else {
 			return true;
 		}
-	}
-
-	@Override
-	public boolean doEffect(final CSimulation simulation, final CUnit unit, final AbilityTarget target) {
-		return false; // handled in "checkBeforeQueue"
-	}
-
-	@Override
-	public void onRemove(final CSimulation game, final CUnit unit) {
-	}
-
-	@Override
-	public void onTick(final CSimulation game, final CUnit unit) {
-	}
-
-	@Override
-	public CBehavior begin(final CSimulation game, final CUnit caster, final int playerIndex, final int orderId,
-			final boolean autoOrder, final CWidget target) {
-		return null;
-	}
-
-	@Override
-	public CBehavior begin(final CSimulation game, final CUnit caster, final int playerIndex, final int orderId,
-			final boolean autoOrder, final AbilityPointTarget point) {
-		return null;
-	}
-
-	@Override
-	public CBehavior beginNoTarget(final CSimulation game, final CUnit caster, final int playerIndex, final int orderId,
-			final boolean autoOrder) {
-		return null;
-	}
-
-	@Override
-	protected void innerCheckCanTarget(final CSimulation game, final CUnit unit, final int orderId,
-			final CWidget target, final AbilityTargetCheckReceiver<CWidget> receiver) {
-		receiver.orderIdNotAccepted();
-	}
-
-	@Override
-	protected void innerCheckCanTarget(final CSimulation game, final CUnit unit, final int orderId,
-			final AbilityPointTarget target, final AbilityTargetCheckReceiver<AbilityPointTarget> receiver) {
-		receiver.orderIdNotAccepted();
-	}
-
-	@Override
-	protected void innerCheckCanTargetNoTarget(final CSimulation game, final CUnit unit, final int orderId,
-			final AbilityTargetCheckReceiver<Void> receiver) {
-		if (orderId == getBaseOrderId()) {
-			receiver.targetOk(null);
-		}
-		else {
-			receiver.orderIdNotAccepted();
-		}
-	}
-
-	@Override
-	protected void innerCheckCanUse(final CSimulation game, final CUnit unit, final int playerIndex, final int orderId,
-			final AbilityActivationReceiver receiver) {
-		receiver.useOk();
-	}
-
-	@Override
-	public void onCancelFromQueue(final CSimulation game, final CUnit unit, final int playerIndex, final int orderId) {
-	}
-
-	@Override
-	public void onDeath(final CSimulation game, final CUnit cUnit) {
 	}
 
 	@Override

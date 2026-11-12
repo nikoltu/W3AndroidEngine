@@ -68,6 +68,9 @@ public class CBehaviorReturnResources extends CAbstractRangedBehavior implements
 					final CPlayer player = this.simulation.getPlayer(this.unit.getPlayerIndex());
 					CWidget nextTarget = null;
 					int received = this.abilityHarvest.getCarriedResourceAmount();
+					if (player.getAiScript() != null) {
+						received = player.getAiScript().getController().scaleHarvestedAmount(received);
+					}
 					switch (this.abilityHarvest.getCarriedResourceType()) {
 					case FOOD:
 						throw new IllegalStateException("Unit used Harvest skill to carry FOOD resource!");

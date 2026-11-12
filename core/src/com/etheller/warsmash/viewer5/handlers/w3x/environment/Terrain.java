@@ -69,8 +69,6 @@ public class Terrain {
 	public static final float CELL_SIZE = 128f;
 	private static final String[] colorTags = { "R", "G", "B", "A" };
 	private static final float[] sizeHeap = new float[2];
-	private static final Vector3 normalHeap1 = new Vector3();
-	private static final Vector3 normalHeap2 = new Vector3();
 	private static final float[] fourComponentHeap = new float[4];
 	private static final Matrix4 tempMatrix = new Matrix4();
 	public static boolean WIREFRAME_TERRAIN = false;
@@ -88,6 +86,12 @@ public class Terrain {
 	public int columns;
 	public int rows;
 	public int blightTextureIndex = -1;
+	// Blight as the viewer last saw it, per corner: a change shows only once the viewer sees the place (measured on
+	// 1.29: blight spread under the black mask or in the fog is not drawn until seen).
+	private boolean[] shownBlight;
+	private boolean[] blightPending;
+	private int[] pendingBlight = new int[64];
+	private int pendingBlightCount;
 	public float[] maxDeepColor = new float[4];
 	public float[] minDeepColor = new float[4];
 	public float[] maxShallowColor = new float[4];
@@ -105,6 +109,10 @@ public class Terrain {
 	private final List<CliffMesh> cliffMeshes = new ArrayList<>();
 	private final Map<String, Integer> pathToCliff = new HashMap<>();
 	private final Map<String, Integer> groundTextureToId = new HashMap<>();
+	/** The tile type of each ground texture, in the order the corners index them. */
+	private final List<Integer> groundTileIds = new ArrayList<>();
+	/** The ground shader samples one texture array per texture unit it has; the blight tile is one of them. */
+	private static final int MAX_GROUND_TEXTURES = 16;
 	private final List<Integer> cliffToGroundTexture = new ArrayList<>();
 	private final List<IVec3> cliffs = new ArrayList<>();
 	private final DataSource dataSource;
@@ -155,6 +163,9 @@ public class Terrain {
 	private final int quadIndexBuffer;
 	private final int testElementBuffer;
 	private boolean initShadowsFinished = false;
+	// The shadow map is filled again once a frame at most: the shadows of many buildings can go away together, as
+	// when a whole base goes out of sight.
+	private boolean shadowsChanged;
 	private byte[] staticShadowData;
 	private byte[] shadowData;
 	private ByteBuffer shadowDataBuffer;
@@ -262,6 +273,7 @@ public class Terrain {
 					.add(new GroundTexture(dir + "\\" + file + texturesExt, terrainTileInfo, dataSource, Gdx.gl30,
 							textureSizeLimit));
 			this.groundTextureToId.put(groundTile.asStringValue(), this.groundTextures.size() - 1);
+			this.groundTileIds.add(groundTile.getValue());
 		}
 
 		final Element tilesets = worldEditData.get("TileSets");
@@ -310,6 +322,13 @@ public class Terrain {
 		this.waterHeights = new float[width * height];
 		this.waterExistsData = new byte[width * height];
 
+		this.shownBlight = new boolean[width * height];
+		this.blightPending = new boolean[width * height];
+		for (int i = 0; i < width; i++) {
+			for (int j = 0; j < height; j++) {
+				this.shownBlight[(j * width) + i] = this.corners[i][j].getBlight() != 0;
+			}
+		}
 		updateGroundTextures(new Rectangle(0, 0, width - 1, height - 1));
 		for (int i = 0; i < width; i++) {
 			for (int j = 0; j < height; j++) {
@@ -467,9 +486,6 @@ public class Terrain {
 		this.testElementBuffer = gl.glGenBuffer();
 		this.quadVertexBuffer = Shapes.INSTANCE.createQuadVertexBuffer(gl);
 		this.quadIndexBuffer = Shapes.INSTANCE.createQuadIndexBuffer(gl);
-//		gl.glBindBuffer(GL30.GL_ELEMENT_ARRAY_BUFFER, this.testElementBuffer);
-//		gl.glBufferData(GL30.GL_ELEMENT_ARRAY_BUFFER, this.softwareGroundMesh.indices.length,
-//				RenderMathUtils.wrap(this.softwareGroundMesh.indices), GL30.GL_STATIC_DRAW);
 
 		this.waveBuilder = new WaveBuilder(this.mapSize, this.waterTable, viewer, this.corners, this.centerOffset,
 				this.waterHeightOffset, w3eFile, w3iFile);
@@ -565,53 +581,6 @@ public class Terrain {
 		updateGroundHeights(tempRect.set(column, row, width, height));
 	}
 
-	/**
-	 * calculateRamps() is copied from Riv whereas a lot of the rest of the terrain
-	 * was copied from HiveWE
-	 */
-	private void calculateRamps() {
-		final int columns = this.mapSize[0];
-		final int rows = this.mapSize[1];
-
-		final String[] ramps = { "AAHL", "AALH", "ABHL", "AHLA", "ALHA", "ALHB", "BALH", "BHLA", "HAAL", "HBAL", "HLAA",
-				"HLAB", "LAAH", "LABH", "LHAA", "LHBA" };
-
-		// Adjust terrain height inside ramps (set rampAdjust)
-		for (int y = 1; y < (rows - 1); ++y) {
-			for (int x = 1; x < (columns - 1); ++x) {
-				final RenderCorner o = this.corners[x][y];
-				if (!o.isRamp()) {
-					continue;
-				}
-				final RenderCorner a = this.corners[x - 1][y - 1];
-				final RenderCorner b = this.corners[x - 1][y];
-				final RenderCorner c = this.corners[x - 1][y + 1];
-				final RenderCorner d = this.corners[x][y + 1];
-				final RenderCorner e = this.corners[x + 1][y + 1];
-				final RenderCorner f = this.corners[x + 1][y];
-				final RenderCorner g = this.corners[x + 1][y - 1];
-				final RenderCorner h = this.corners[x][y - 1];
-				final int base = o.getLayerHeight();
-				if ((b.isRamp() && f.isRamp()) || (d.isRamp() && h.isRamp())) {
-					float adjust = 0;
-					if (b.isRamp() && f.isRamp()) {
-						adjust = Math.max(adjust, ((b.getLayerHeight() + f.getLayerHeight()) / 2) - base);
-					}
-					if (d.isRamp() && h.isRamp()) {
-						adjust = Math.max(adjust, ((d.getLayerHeight() + h.getLayerHeight()) / 2) - base);
-					}
-					if (a.isRamp() && e.isRamp()) {
-						adjust = Math.max(adjust, (((a.getLayerHeight() + e.getLayerHeight()) / 2) - base) / 2);
-					}
-					if (c.isRamp() && g.isRamp()) {
-						adjust = Math.max(adjust, (((c.getLayerHeight() + g.getLayerHeight()) / 2) - base) / 2);
-					}
-					o.rampAdjust = adjust;
-				}
-			}
-		}
-	}
-
 	/// Updates the cliff and ramp meshes for an area
 	private void updateCliffMeshes(final Rectangle area) throws IOException {
 		// Remove all existing cliff meshes in area
@@ -684,10 +653,72 @@ public class Terrain {
 		}
 	};
 
-	public void logRomp(final int x, final int y) {
-		Log.info("romp: " + this.corners[x][y].romp);
-		Log.info("ramp: " + this.corners[x][y].isRamp());
-		Log.info("cliff: " + this.corners[x][y].cliff);
+	/**
+	 * Sets the ground type and variation of corners; {@code cells} holds a column, row, tile type and variation for
+	 * each. A type the map does not use yet is loaded, if there is room for its texture.
+	 */
+	public void setGroundTypes(final int[] cells) {
+		int minX = Integer.MAX_VALUE;
+		int minY = Integer.MAX_VALUE;
+		int maxX = Integer.MIN_VALUE;
+		int maxY = Integer.MIN_VALUE;
+		boolean textureAdded = false;
+		for (int k = 0; (k + 3) < cells.length; k += 4) {
+			final int column = cells[k];
+			final int row = cells[k + 1];
+			if ((column < 0) || (column >= this.columns) || (row < 0) || (row >= this.rows)) {
+				continue;
+			}
+			final int known = this.groundTextures.size();
+			final int index = groundTileIndex(cells[k + 2]);
+			if (index < 0) {
+				continue;
+			}
+			textureAdded |= this.groundTextures.size() != known;
+			this.corners[column][row].setGroundTexture(index);
+			this.corners[column][row].setGroundVariation(cells[k + 3]);
+			minX = Math.min(minX, column);
+			minY = Math.min(minY, row);
+			maxX = Math.max(maxX, column);
+			maxY = Math.max(maxY, row);
+		}
+		if (minX > maxX) {
+			return;
+		}
+		if (textureAdded) {
+			// The blight tile moved to the next slot, so every cell that shows it changes.
+			updateGroundTextures(new Rectangle(0, 0, this.columns - 1, this.rows - 1));
+		}
+		else {
+			updateGroundTextures(new Rectangle(minX, minY, maxX - minX, maxY - minY));
+		}
+	}
+
+	private int groundTileIndex(final int tileType) {
+		final int known = this.groundTileIds.indexOf(tileType);
+		if (known >= 0) {
+			return known;
+		}
+		if (this.groundTextures.size() >= MAX_GROUND_TEXTURES) {
+			return -1;
+		}
+		final String id = new War3ID(tileType).asStringValue();
+		final Element tileInfo = this.terrainTable.get(id);
+		if (tileInfo == null) {
+			return -1;
+		}
+		try {
+			final GroundTexture texture = new GroundTexture(tileInfo.getField("dir") + "\\" + tileInfo.getField("file")
+					+ ".blp", tileInfo, this.dataSource, Gdx.gl30, this.viewer.getTextureSizeLimit());
+			this.groundTextures.add(this.blightTextureIndex, texture);
+		}
+		catch (final IOException e) {
+			return -1;
+		}
+		final int index = this.blightTextureIndex++;
+		this.groundTileIds.add(tileType);
+		this.groundTextureToId.put(id, index);
+		return index;
 	}
 
 	public void updateGroundTextures(final Rectangle area) {
@@ -733,14 +764,95 @@ public class Terrain {
 				GL30.GL_RGBA_INTEGER, GL30.GL_UNSIGNED_SHORT, buffer);
 	}
 
-	public void removeTerrainCell(final int i, final int j) {
-		this.groundTextureList[(((j * (this.columns - 1)) + i) * 4) + 3] |= 0b1000000000000000;
-		this.corners[i][j].hideCliff = true;
-		uploadGroundTexture();
-		try {
-			updateCliffMeshes(new Rectangle(i - 1, j - 1, 1, 1)); // TODO does this work?
-		} catch (final IOException e) {
-			throw new RuntimeException(e);
+	/** The blight of the corner at the point changed; it is drawn once the viewer sees it. */
+	public void blightChanged(final float x, final float y) {
+		final int cellX = (int) ((x - this.centerOffset[0]) / 128.0f);
+		final int cellY = (int) ((y - this.centerOffset[1]) / 128.0f);
+		if ((cellX < 0) || (cellX >= this.columns) || (cellY < 0) || (cellY >= this.rows)) {
+			return;
+		}
+		final int index = (cellY * this.columns) + cellX;
+		if (!this.blightPending[index]) {
+			this.blightPending[index] = true;
+			if (this.pendingBlightCount == this.pendingBlight.length) {
+				this.pendingBlight = Arrays.copyOf(this.pendingBlight, this.pendingBlight.length * 2);
+			}
+			this.pendingBlight[this.pendingBlightCount++] = index;
+		}
+	}
+
+	/** The blight of every corner (the ground itself, or as the viewer last saw it) as bits in corner order. */
+	public byte[] captureBlight(final boolean asSeen) {
+		final byte[] bits = new byte[((this.columns * this.rows) + 7) / 8];
+		for (int j = 0; j < this.rows; j++) {
+			for (int i = 0; i < this.columns; i++) {
+				final int index = (j * this.columns) + i;
+				if (asSeen ? this.shownBlight[index] : (this.corners[i][j].getBlight() != 0)) {
+					bits[index >> 3] |= 1 << (index & 7);
+				}
+			}
+		}
+		return bits;
+	}
+
+	/**
+	 * A loaded game starts from the map's own blight: puts back the ground's blight and what the viewer had seen of
+	 * it. The corners that differ are drawn once the viewer sees them again.
+	 */
+	public void restoreBlight(final byte[] ground, final byte[] seen) {
+		final int count = this.columns * this.rows;
+		if ((ground == null) || (seen == null) || (ground.length * 8 < count) || (seen.length * 8 < count)) {
+			return;
+		}
+		Arrays.fill(this.blightPending, false);
+		this.pendingBlightCount = 0;
+		for (int j = 0; j < this.rows; j++) {
+			for (int i = 0; i < this.columns; i++) {
+				final int index = (j * this.columns) + i;
+				final boolean blighted = (ground[index >> 3] & (1 << (index & 7))) != 0;
+				this.corners[i][j].setBlight(blighted);
+				this.shownBlight[index] = (seen[index >> 3] & (1 << (index & 7))) != 0;
+				if (blighted != this.shownBlight[index]) {
+					this.blightPending[index] = true;
+					if (this.pendingBlightCount == this.pendingBlight.length) {
+						this.pendingBlight = Arrays.copyOf(this.pendingBlight, this.pendingBlight.length * 2);
+					}
+					this.pendingBlight[this.pendingBlightCount++] = index;
+				}
+			}
+		}
+		updateGroundTextures(new Rectangle(0, 0, this.columns - 1, this.rows - 1));
+	}
+
+	/** Draws the blight changes at the corners the viewer now sees. */
+	public void updateShownBlight() {
+		int minX = Integer.MAX_VALUE;
+		int minY = Integer.MAX_VALUE;
+		int maxX = Integer.MIN_VALUE;
+		int maxY = Integer.MIN_VALUE;
+		int kept = 0;
+		for (int k = 0; k < this.pendingBlightCount; k++) {
+			final int index = this.pendingBlight[k];
+			final int x = index % this.columns;
+			final int y = index / this.columns;
+			final boolean blighted = this.corners[x][y].getBlight() != 0;
+			if (blighted != this.shownBlight[index]) {
+				if (!this.viewer.isPointShownToViewer(this.centerOffset[0] + (x * 128f),
+						this.centerOffset[1] + (y * 128f))) {
+					this.pendingBlight[kept++] = index;
+					continue;
+				}
+				this.shownBlight[index] = blighted;
+				minX = Math.min(minX, x);
+				minY = Math.min(minY, y);
+				maxX = Math.max(maxX, x);
+				maxY = Math.max(maxY, y);
+			}
+			this.blightPending[index] = false;
+		}
+		this.pendingBlightCount = kept;
+		if (minX <= maxX) {
+			updateGroundTextures(new Rectangle(minX, minY, maxX - minX, maxY - minY));
 		}
 	}
 
@@ -831,7 +943,7 @@ public class Terrain {
 			}
 		}
 
-		if (this.corners[x][y].getBlight() != 0) {
+		if ((this.shownBlight != null) ? this.shownBlight[(y * this.columns) + x] : (this.corners[x][y].getBlight() != 0)) {
 			return this.blightTextureIndex;
 		}
 
@@ -871,6 +983,12 @@ public class Terrain {
 	}
 
 	public void update(final float deltaTime) {
+		if (this.shadowsChanged) {
+			this.shadowsChanged = false;
+			if (this.initShadowsFinished) {
+				reloadShadowDataToGPU();
+			}
+		}
 		this.waterIndex += this.waterIncreasePerFrame * deltaTime;
 
 		if (this.waterIndex >= this.waterTextureCount) {
@@ -1187,14 +1305,14 @@ public class Terrain {
 			@Override
 			public void remove() {
 				shadowList.remove(shadowPositionArray);
-				reloadShadowDataToGPU();
+				Terrain.this.shadowsChanged = true;
 			}
 
 			@Override
 			public void move(final float x, final float y) {
 				shadowPositionArray[0] = x;
 				shadowPositionArray[1] = y;
-				reloadShadowDataToGPU();
+				Terrain.this.shadowsChanged = true;
 			}
 		};
 	}
@@ -1328,46 +1446,6 @@ public class Terrain {
 		}
 		return mask;
 	}
-
-//	public Vector3 groundNormal(final Vector3 out, int x, int y) {
-//		final float[] centerOffset = this.centerOffset;
-//		final int[] mapSize = this.mapSize;
-//
-//		x = (int) ((x - centerOffset[0]) / 128);
-//		y = (int) ((y - centerOffset[1]) / 128);
-//
-//		final int cellX = x;
-//		final int cellY = y;
-//
-//		// See if this coordinate is in the map
-//
-//		if ((cellX >= 0) && (cellX < (mapSize[0] - 1)) && (cellY >= 0) && (cellY < (mapSize[1] - 1))) {
-//			// See http://gamedev.stackexchange.com/a/24574
-//			final Corner[][] corners = this.corners;
-//			final float bottomLeft = corners[cellY][cellX].getGroundHeight();
-//			final float bottomRight = corners[cellY][cellX + 1].getGroundHeight();
-//			final float topLeft = corners[cellY + 1][cellX].getGroundHeight();
-//			final float topRight = corners[cellY + 1][cellX + 1].getGroundHeight();
-//			final int sqX = x - cellX;
-//			final int sqY = y - cellY;
-//
-//			if ((sqX + sqY) < 1) {
-//				normalHeap1.set(1, 0, bottomRight - bottomLeft);
-//				normalHeap2.set(0, 1, topLeft - bottomLeft);
-//			}
-//			else {
-//				normalHeap1.set(-1, 0, topRight - topLeft);
-//				normalHeap2.set(0, 1, topRight - bottomRight);
-//			}
-//
-//			out.set(normalHeap1.crs(normalHeap2)).nor();
-//		}
-//		else {
-//			out.set(0, 0, 1);
-//		}
-//
-//		return out;
-//	}
 
 	private final WaveBuilder waveBuilder;
 	public PathingGrid pathingGrid;
@@ -1811,7 +1889,7 @@ public class Terrain {
 		}
 	}
 
-	private static Rectangle tempRect = new Rectangle();
+	private static final Rectangle tempRect = new Rectangle();
 
 	public void updateGroundBuffer(float x, float y, float i) {
 		int nodeX = get128CellX(x);

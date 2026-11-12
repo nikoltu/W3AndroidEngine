@@ -10,7 +10,7 @@ public enum CBlendMode implements CHandle {
 	MODULATE,
 	MODULATE_2X;
 
-	public static CBlendMode[] VALUES = values();
+	public static final CBlendMode[] VALUES = values();
 
 	@Override
 	public int getHandleId() {

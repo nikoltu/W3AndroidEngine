@@ -25,9 +25,8 @@ import com.etheller.warsmash.parsers.fdf.frames.SimpleFrame;
 import com.etheller.warsmash.parsers.fdf.frames.StringFrame;
 import com.etheller.warsmash.parsers.fdf.frames.TextAreaFrame;
 import com.etheller.warsmash.parsers.fdf.frames.UIFrame;
-import com.etheller.warsmash.util.WarsmashConstants;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CReleaseCheats;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
-import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CAllianceType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayer;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CMapControl;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.CPlayerSlotState;
@@ -64,6 +63,14 @@ public final class MeleeChat {
 		void dialogClosed();
 
 		void sendChatMessage(int recipient, int recipientPlayerIndex, String message);
+
+		/** A single player game that is not a replay, where the chat line takes the release cheats. */
+		boolean isCheatGame();
+
+		void sendCheat(String cheat);
+
+		/** motherland: leaves for a campaign mission, named by its campaign race and number. */
+		void playCampaignMission(String race, int mission);
 	}
 
 	private static final float ENTRY_BOTTOM = 0.155f;
@@ -197,13 +204,19 @@ public final class MeleeChat {
 		return isDialogVisible() && ((AbstractRenderableFrame) this.dialog).getRenderBounds().contains(uiX, uiY);
 	}
 
-	/** Opens the line; a recipient of null takes the player's default from the Chat dialog. */
+	/**
+	 * Opens the line; a recipient of null takes the player's default from the Chat dialog. Measured on 1.29: with no
+	 * other human in the game the line is just "Message:" and everything is sent to all, allies or not.
+	 */
 	void openEntry(final Recipient override) {
-		this.entryRecipient = override != null ? override : this.preference;
+		final boolean alone = !hasOtherHumans();
+		this.entryRecipient = alone ? Recipient.ALL : override != null ? override : this.preference;
 		if ((this.entryRecipient == Recipient.PLAYER) && (this.privatePlayer == null)) {
 			this.entryRecipient = Recipient.ALLIES;
 		}
-		this.rootFrame.setText(this.entryLabel, prompt(this.entryRecipient, this.privatePlayer));
+		this.rootFrame.setText(this.entryLabel, alone
+				? this.rootFrame.getTemplates().getDecoratedString("COLON_MESSAGE_SINGLEPLAYER")
+				: prompt(this.entryRecipient, this.privatePlayer));
 		this.entryBox.setText("", this.rootFrame, this.uiViewport);
 		this.entryHolder.setVisible(true);
 		this.entryHolder.positionBounds(this.rootFrame, this.uiViewport);
@@ -277,11 +290,19 @@ public final class MeleeChat {
 		return true;
 	}
 
+	/** A line another player sent, as it reaches this one: in the history and on the screen. */
+	void showReceived(final CPlayer sender, final Recipient recipient, final String message) {
+		final String line = this.rootFrame.getTemplates().getDecoratedString(recipient.tagKey) + " "
+				+ coloredName(sender) + ": " + message;
+		this.history.add(line);
+		this.host.showChatMessage(line);
+	}
+
 	private void send() {
 		final String message = this.entryBox.getText() == null ? "" : this.entryBox.getText();
 		final Recipient recipient = this.entryRecipient;
 		closeEntry();
-		if (message.trim().isEmpty()) {
+		if (message.trim().isEmpty() || sendCheat(message)) {
 			return;
 		}
 		final String line = this.rootFrame.getTemplates().getDecoratedString(recipient.tagKey) + " "
@@ -291,6 +312,38 @@ public final class MeleeChat {
 		this.host.sendChatMessage(recipient.ordinal(),
 				(recipient == Recipient.PLAYER) && (this.privatePlayer != null) ? this.privatePlayer.getId() : -1,
 				message);
+	}
+
+	/**
+	 * A cheat goes to the game instead of the chat and its triggers; measured on 1.29, its confirmation stands in for
+	 * the chat line, without a recipient tag.
+	 */
+	private boolean sendCheat(final String message) {
+		if (!this.host.isCheatGame() || hasOtherHumans()) {
+			return false;
+		}
+		final CReleaseCheats.Parsed cheat = CReleaseCheats.parse(message);
+		if (cheat == null) {
+			return false;
+		}
+		final CReleaseCheats.Result result = CReleaseCheats.preview(this.simulation, this.localPlayer.getId(),
+				message);
+		if (result.getMessageKey() != null) {
+			final String line = coloredName(this.localPlayer) + ": "
+					+ this.rootFrame.getTemplates().getDecoratedString(result.getMessageKey());
+			this.history.add(line);
+			this.host.showChatMessage(line);
+		}
+		if (result != CReleaseCheats.Result.IGNORED) {
+			if (cheat.getCode() == CReleaseCheats.Code.MOTHERLAND) {
+				final String[] mission = cheat.motherland();
+				this.host.playCampaignMission(mission[0], Integer.parseInt(mission[1]));
+			}
+			else {
+				this.host.sendCheat(message);
+			}
+		}
+		return true;
 	}
 
 	private String prompt(final Recipient recipient, final CPlayer player) {
@@ -321,7 +374,7 @@ public final class MeleeChat {
 		this.menuPlayers.clear();
 		final MenuFrame menu = (MenuFrame) this.playerMenu.getPopupMenuFrame();
 		final List<MenuItem> items = new ArrayList<>();
-		for (int i = 0; i < WarsmashConstants.MAX_PLAYERS; i++) {
+		for (int i = 0; i < this.simulation.getGameData().getMaxPlayers(); i++) {
 			final CPlayer other = this.simulation.getPlayer(i);
 			if ((other != this.localPlayer) && (other.getSlotState() == CPlayerSlotState.PLAYING)
 					&& (other.getController() == CMapControl.USER)) {
@@ -364,7 +417,7 @@ public final class MeleeChat {
 	}
 
 	private boolean hasObservers() {
-		for (int i = 0; i < WarsmashConstants.MAX_PLAYERS; i++) {
+		for (int i = 0; i < this.simulation.getGameData().getMaxPlayers(); i++) {
 			final CPlayer other = this.simulation.getPlayer(i);
 			if ((other.getSlotState() == CPlayerSlotState.PLAYING) && other.isObserver()) {
 				return true;
@@ -394,12 +447,11 @@ public final class MeleeChat {
 		hideDialog();
 	}
 
-	/** Whether the local player has an ally among the players, which decides who an allies message reaches. */
-	boolean hasAllies() {
-		for (int i = 0; i < WarsmashConstants.MAX_PLAYERS; i++) {
+	private boolean hasOtherHumans() {
+		for (int i = 0; i < this.simulation.getGameData().getMaxPlayers(); i++) {
 			final CPlayer other = this.simulation.getPlayer(i);
 			if ((other != this.localPlayer) && (other.getSlotState() == CPlayerSlotState.PLAYING)
-					&& this.localPlayer.hasAlliance(i, CAllianceType.PASSIVE)) {
+					&& (other.getController() == CMapControl.USER)) {
 				return true;
 			}
 		}

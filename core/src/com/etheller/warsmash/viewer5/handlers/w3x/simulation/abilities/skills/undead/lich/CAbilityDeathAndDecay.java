@@ -1,5 +1,6 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.undead.lich;
 
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.CAreaTargetVisibility;
 import com.etheller.warsmash.units.GameObject;
 import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
@@ -68,7 +69,8 @@ public class CAbilityDeathAndDecay extends CAbilityPointTargetSpellBase {
 			this.nextPulseTick = tick + ticks(INTERVAL);
 			simulation.getWorldCollision().enumUnitsInRange(target.getX(), target.getY(), this.areaOfEffect,
 					(enumUnit) -> {
-						if (enumUnit.canBeTargetedBy(simulation, caster, false, getTargetsAllowed(),
+						if (enumUnit.canBeAreaTargetedBy(simulation, caster, CAreaTargetVisibility.ANY,
+								getTargetsAllowed(),
 								BooleanAbilityTargetCheckReceiver.<CWidget>getInstance().reset())) {
 							enumUnit.damage(simulation, caster, DAMAGE_FLAGS, CAttackType.SPELLS,
 									CDamageType.UNIVERSAL, CWeaponSoundTypeJass.WHOKNOWS.name(),

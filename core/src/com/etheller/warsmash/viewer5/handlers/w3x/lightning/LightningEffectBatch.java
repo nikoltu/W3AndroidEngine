@@ -209,7 +209,7 @@ public class LightningEffectBatch extends RenderBatch {
 			final GL20 gl = viewer.gl;
 			final WebGL webGL = viewer.webGL;
 			final ANGLEInstancedArrays instancedArrays = webGL.instancedArrays;
-			final ShaderProgram shader = LightningEffectModelHandler.Shaders.simple;
+			final ShaderProgram shader = model.handler.simple;
 			final int position = shader.getAttributeLocation("a_position");
 			final int uv = shader.getAttributeLocation("a_uv");
 			final int outwardHeight = shader.getAttributeLocation("a_outwardHeight");
@@ -239,12 +239,6 @@ public class LightningEffectBatch extends RenderBatch {
 
 			shader.setUniformi("u_texture", 0);
 			viewer.webGL.bindTexture(texture, 0);
-
-//			shader.setUniformf("u_avgSegLen", model.getAvgSegLen());
-//			shader.setUniform4fv("u_color", model.getColor(), 0, 4);
-//			shader.setUniformf("u_noiseScale", model.getNoiseScale());
-//			shader.setUniformf("u_texCoordScale", model.getTexCoordScale());
-//			shader.setUniformf("u_duration", model.getDuration());
 
 			gl.glEnable(GL20.GL_BLEND);
 			gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE);

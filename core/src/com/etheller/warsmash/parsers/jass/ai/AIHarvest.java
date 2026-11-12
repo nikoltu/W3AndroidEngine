@@ -9,10 +9,9 @@ import static com.etheller.warsmash.parsers.jass.ai.AIUnits.isWorkerType;
 import static com.etheller.warsmash.parsers.jass.ai.AIUnits.minesFromOverlay;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CDestructable;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
@@ -20,6 +19,8 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnitClassification
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CWidget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.harvest.CAbilityHarvest;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.harvest.CAbilityWispHarvest;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.harvest.CBehaviorHarvest;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.harvest.CBehaviorReturnResources;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.CTargetType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.orders.OrderIdUtils;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.orders.OrderIds;
@@ -32,11 +33,14 @@ final class AIHarvest {
 	static final int GOLD = 0;
 	static final int WOOD = 1;
 	private static final int TREE_CACHE_TICKS = CTimer.wholeSteps(20);
+	private static final int SETTLE_TICKS = 5;
 
 	private AIHarvest() {
 	}
 
 	static void harvest(final AIController ai, final int resource, final int town, final int peons) {
+		ai.harvestPassPending = true;
+		ai.harvestCallTick = ai.ticks;
 		if (peons > 0) {
 			ai.harvestRequests.add(new int[] { resource, town, peons });
 		}
@@ -59,6 +63,13 @@ final class AIHarvest {
 		return aiTown.getOverlay() == null;
 	}
 
+	/**
+	 * Measured: the jobs are dealt out only when the script changes its requests. A lowered request takes the job
+	 * from the last workers who got it, but they go on with their work. A request still short takes idle workers
+	 * first, then free workers already at that resource, then free workers at the other one; of those, one carrying
+	 * a load stops and waits for the next change of requests, which sends it off. Workers inside a
+	 * mine are passed over. Idle workers left without a job then mine gold.
+	 */
 	static void assignHarvesters(final AIController ai) {
 		final List<CUnit> workers = new ArrayList<>();
 		for (final CUnit unit : ai.simulation.getUnits()) {
@@ -68,90 +79,148 @@ final class AIHarvest {
 			}
 		}
 		ai.harvestJobs.keySet().retainAll(workers);
-		final List<int[]> slots = new ArrayList<>();
-		for (final int[] request : ai.harvestRequests) {
-			for (int i = 0; i < request[2]; i++) {
-				slots.add(new int[] { request[0], request[1] });
+		ai.harvestUnsent.retainAll(ai.harvestJobs.keySet());
+		// A script sets its requests over several calls that may run in different ticks; they are dealt once it is
+		// done.
+		if (ai.harvestPassPending && ((ai.ticks - ai.harvestCallTick) >= SETTLE_TICKS)) {
+			ai.harvestPassPending = false;
+			dealJobs(ai, workers);
+			for (final CUnit worker : workers) {
+				if (!ai.harvestJobs.containsKey(worker) && !worker.isHidden() && isFree(worker)
+						&& isWorkerType(worker)) {
+					final int town = canDo(ai, worker, GOLD, 0) ? 0 : Math.max(AITowns.townWithMine(ai), 0);
+					if (canDo(ai, worker, GOLD, town)) {
+						orderHarvest(ai, worker, GOLD, town);
+					}
+				}
 			}
 		}
-		// Slots are filled in the order the script asked for them, so with few workers the first requests (gold)
-		// win over later ones even when the workers already hold a job for a later one.
-		final Set<CUnit> claimed = new HashSet<>();
-		final CUnit[] slotWorkers = new CUnit[slots.size()];
-		for (int s = 0; s < slots.size(); s++) {
-			final int[] slot = slots.get(s);
-			for (final CUnit worker : workers) {
+		// Orders the town cannot carry out yet (no trees or mine known) are given again until the worker sets off.
+		for (final Iterator<CUnit> iterator = ai.harvestUnsent.iterator(); iterator.hasNext();) {
+			final CUnit worker = iterator.next();
+			if (!isIdle(worker)) {
+				iterator.remove();
+			}
+			else if (!worker.isHidden()) {
 				final int[] job = ai.harvestJobs.get(worker);
-				if (!claimed.contains(worker) && (job != null) && (job[0] == slot[0]) && (job[1] == slot[1])) {
-					claimed.add(worker);
-					slotWorkers[s] = worker;
-					break;
-				}
-			}
-			if (slotWorkers[s] != null) {
-				continue;
-			}
-			final AITown town = AITowns.getTown(ai, slot[1]);
-			if (town == null) {
-				continue;
-			}
-			CUnit best = null;
-			float bestScore = Float.MAX_VALUE;
-			for (final CUnit worker : workers) {
-				if (claimed.contains(worker) || worker.isHidden() || isBuilding(worker)
-						|| !canDo(ai, worker, slot[0], slot[1])) {
-					continue;
-				}
-				float score = distance(worker.getX(), worker.getY(), town.getCenterX(), town.getCenterY());
-				if (ai.harvestJobs.containsKey(worker)) {
-					score += 5000;
-				}
-				if (!isWorkerType(worker) && !isIdle(worker)) {
-					score += 10000;
-				}
-				if (score < bestScore) {
-					bestScore = score;
-					best = worker;
-				}
-			}
-			if (best != null) {
-				claimed.add(best);
-				slotWorkers[s] = best;
-				ai.harvestJobs.put(best, slot);
-				orderHarvest(ai, best, slot[0], slot[1]);
-			}
-		}
-		for (int s = 0; s < slots.size(); s++) {
-			final CUnit worker = slotWorkers[s];
-			if ((worker != null) && !worker.isHidden() && isIdle(worker)) {
-				orderHarvest(ai, worker, slots.get(s)[0], slots.get(s)[1]);
-			}
-		}
-		for (final CUnit worker : workers) {
-			if (claimed.contains(worker)) {
-				continue;
-			}
-			if (!isWorkerType(worker)) {
-				ai.harvestJobs.remove(worker);
-			}
-			else if (!worker.isHidden() && isIdle(worker)) {
-				// Measured: with no harvest request at all (StopGathering included) idle workers still mine gold.
-				final int[] job;
-				if (ai.harvestRequests.isEmpty()) {
-					job = new int[] { GOLD, canDo(ai, worker, GOLD, 0) ? 0 : Math.max(AITowns.townWithMine(ai), 0) };
-				}
-				else {
-					job = canDo(ai, worker, WOOD, 0) ? new int[] { WOOD, 0 } : new int[] { GOLD, 0 };
-				}
-				if (canDo(ai, worker, job[0], job[1])) {
-					ai.harvestJobs.put(worker, job);
-					orderHarvest(ai, worker, job[0], job[1]);
-				}
+				orderHarvest(ai, worker, job[0], job[1]);
 			}
 		}
 		if (ai.peonsRepair) {
 			assignRepairs(ai, workers);
 		}
+	}
+
+	private static void dealJobs(final AIController ai, final List<CUnit> workers) {
+		final List<int[]> requests = new ArrayList<>();
+		for (final int[] request : ai.harvestRequests) {
+			int[] merged = null;
+			for (final int[] existing : requests) {
+				if ((existing[0] == request[0]) && (existing[1] == request[1])) {
+					merged = existing;
+				}
+			}
+			if (merged == null) {
+				requests.add(new int[] { request[0], request[1], request[2] });
+			}
+			else {
+				merged[2] += request[2];
+			}
+		}
+		final List<CUnit> holders = new ArrayList<>(ai.harvestJobs.keySet());
+		for (int i = holders.size() - 1; i >= 0; i--) {
+			final CUnit worker = holders.get(i);
+			final int[] job = ai.harvestJobs.get(worker);
+			int wanted = 0;
+			for (final int[] request : requests) {
+				if ((request[0] == job[0]) && (request[1] == job[1])) {
+					wanted = request[2];
+				}
+			}
+			if (countJobs(ai, job[0], job[1]) > wanted) {
+				ai.harvestJobs.remove(worker);
+			}
+		}
+		for (final Map.Entry<CUnit, int[]> entry : ai.harvestJobs.entrySet()) {
+			final CUnit worker = entry.getKey();
+			if (!worker.isHidden() && isFree(worker)) {
+				ai.harvestUnsent.add(worker);
+				orderHarvest(ai, worker, entry.getValue()[0], entry.getValue()[1]);
+			}
+		}
+		for (final int[] request : requests) {
+			final int resource = request[0];
+			final int town = request[1];
+			for (int stage = 0; stage < 3; stage++) {
+				for (final CUnit worker : workers) {
+					if (countJobs(ai, resource, town) >= request[2]) {
+						break;
+					}
+					if (ai.harvestJobs.containsKey(worker) || worker.isHidden() || isBuilding(worker)
+							|| !canDo(ai, worker, resource, town)) {
+						continue;
+					}
+					final boolean idle = isFree(worker);
+					if (stage == 0) {
+						if (idle) {
+							ai.harvestJobs.put(worker, new int[] { resource, town });
+							ai.harvestUnsent.add(worker);
+							orderHarvest(ai, worker, resource, town);
+						}
+						continue;
+					}
+					if (idle) {
+						continue;
+					}
+					final int doing = currentResource(worker);
+					if ((stage == 1) && (doing == resource)) {
+						ai.harvestJobs.put(worker, new int[] { resource, town });
+					}
+					else if ((stage == 2) && (doing != -1) && (doing != resource)) {
+						ai.harvestJobs.put(worker, new int[] { resource, town });
+						final CAbilityHarvest harvest = worker.getFirstAbilityOfType(CAbilityHarvest.class);
+						if (harvest.getCarriedResourceAmount() > 0) {
+							worker.order(ai.simulation, OrderIds.stop, null);
+						}
+						else {
+							ai.harvestUnsent.add(worker);
+							orderHarvest(ai, worker, resource, town);
+						}
+					}
+				}
+			}
+		}
+	}
+
+	/**
+	 * Idle, or a worker busy with something other than gathering, like the walk of a freshly made one.
+	 */
+	private static boolean isFree(final CUnit worker) {
+		return isIdle(worker) || (isWorkerType(worker) && (currentResource(worker) == -1) && !isBuilding(worker)
+				&& !(worker.getCurrentBehavior() instanceof CBehaviorHarvest)
+				&& !(worker.getCurrentBehavior() instanceof CBehaviorReturnResources));
+	}
+
+	private static int countJobs(final AIController ai, final int resource, final int town) {
+		int count = 0;
+		for (final int[] job : ai.harvestJobs.values()) {
+			if ((job[0] == resource) && (job[1] == town)) {
+				count++;
+			}
+		}
+		return count;
+	}
+
+	private static int currentResource(final CUnit worker) {
+		final CAbilityHarvest harvest = worker.getFirstAbilityOfType(CAbilityHarvest.class);
+		if (harvest == null) {
+			return -1;
+		}
+		final CWidget target = harvest.getLastHarvestTarget();
+		if (target instanceof CDestructable) {
+			return WOOD;
+		}
+		return target instanceof CUnit ? GOLD : -1;
 	}
 
 	private static void orderHarvest(final AIController ai, final CUnit worker, final int resource,

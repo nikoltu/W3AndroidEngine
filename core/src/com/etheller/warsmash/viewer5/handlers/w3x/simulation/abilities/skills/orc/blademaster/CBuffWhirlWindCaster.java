@@ -1,6 +1,7 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.orc.blademaster;
 
 import com.badlogic.gdx.math.Rectangle;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.CAreaTargetVisibility;
 import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.viewer5.handlers.w3x.AnimationTokens.SecondaryTag;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
@@ -28,7 +29,7 @@ public class CBuffWhirlWindCaster extends CBuffTimed {
 	private int nextDamageTick;
 	private boolean pulsed;
 	private final Rectangle recycleRect = new Rectangle();
-	private StateModBuff disableAttack;
+	private StateModBuff disableSpells;
 
 	public CBuffWhirlWindCaster(final int handleId, final War3ID alias, final CAbilityWhirlWind abilityImmolation,
 			final float duration) {
@@ -41,8 +42,10 @@ public class CBuffWhirlWindCaster extends CBuffTimed {
 		unit.getUnitAnimationListener().addSecondaryTag(SecondaryTag.SPIN);
 		unit.getUnitAnimationListener().forceResetCurrentAnimation();
 		unit.addUnitType(game, CUnitTypeJass.MAGIC_IMMUNE);
-		this.disableAttack = new StateModBuff(StateModBuffType.DISABLE_ATTACK, 1);
-		unit.addStateModBuff(this.disableAttack);
+		// Measured: a spell ordered during Bladestorm is refused, with no mana spent and Bladestorm going on.
+		this.disableSpells = new StateModBuff(StateModBuffType.DISABLE_SPELLS, 1);
+		unit.addStateModBuff(this.disableSpells);
+		unit.computeUnitState(game, StateModBuffType.DISABLE_SPELLS);
 		// Measured: the first pulse lands one interval after the order; the effect itself runs a tick after it.
 		this.nextDamageTick = (game.getGameTurnTick()
 				+ CTimer.wholeSteps(this.abilityImmolation.getDamageInterval())) - 1;
@@ -53,7 +56,11 @@ public class CBuffWhirlWindCaster extends CBuffTimed {
 		unit.getUnitAnimationListener().removeSecondaryTag(SecondaryTag.SPIN);
 		unit.getUnitAnimationListener().forceResetCurrentAnimation();
 		unit.removeUnitType(game, CUnitTypeJass.MAGIC_IMMUNE);
-		unit.removeStateModBuff(this.disableAttack);
+		unit.removeStateModBuff(this.disableSpells);
+		unit.computeUnitState(game, StateModBuffType.DISABLE_SPELLS);
+		if ((unit.getHeroData() != null) && game.castsSpellsByItself(unit.getPlayerIndex())) {
+			unit.markBladestormEnded();
+		}
 	}
 
 	@Override
@@ -73,7 +80,7 @@ public class CBuffWhirlWindCaster extends CBuffTimed {
 				@Override
 				public boolean call(final CUnit enumUnit) {
 					if (caster.canReach(enumUnit, areaOfEffect) && (firstPulse || !enumUnit.isPaused())
-							&& enumUnit.canBeTargetedBy(game, caster,
+							&& enumUnit.canBeAreaTargetedBy(game, caster, CAreaTargetVisibility.ANY,
 							CBuffWhirlWindCaster.this.abilityImmolation.getTargetsAllowed())) {
 						enumUnit.damage(game, caster, DAMAGE_FLAGS, CAttackType.SPELLS, CDamageType.UNIVERSAL,
 								CWeaponSoundTypeJass.WHOKNOWS.name(),

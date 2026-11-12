@@ -1,6 +1,7 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.ui;
 
 import java.io.IOException;
+import java.util.Locale;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
@@ -20,7 +21,6 @@ import com.etheller.warsmash.parsers.fdf.frames.StringFrame;
 import com.etheller.warsmash.parsers.fdf.frames.UIFrame;
 import com.etheller.warsmash.units.Element;
 import com.etheller.warsmash.util.Log;
-import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.viewer5.handlers.w3x.War3MapViewer;
 import com.etheller.warsmash.viewer5.handlers.w3x.save.SavedGame;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
@@ -114,6 +114,29 @@ final class MeleeUIMenus {
 							final String message) {
 						MeleeUIMenus.this.ui.unitOrderListener.chatMessage(recipient, recipientPlayerIndex, message);
 					}
+
+					@Override
+					public boolean isCheatGame() {
+						return MeleeUIMenus.this.ui.isSinglePlayerGame()
+								&& !MeleeUIMenus.this.ui.war3MapViewer.isReplayPlayback();
+					}
+
+					@Override
+					public void sendCheat(final String cheat) {
+						MeleeUIMenus.this.ui.unitOrderListener.cheat(cheat);
+					}
+
+					@Override
+					public void playCampaignMission(final String race, final int mission) {
+						final String level = campaignMissionFile(race, mission);
+						if (level != null) {
+							final War3MapViewer viewer = MeleeUIMenus.this.ui.war3MapViewer;
+							viewer.runAfterPendingSave(() -> {
+								viewer.getGameExit().setNextLevel(level, null);
+								MeleeUIMenus.this.ui.endGame(false);
+							});
+						}
+					}
 				});
 		this.ui.messageLog = new MeleeMessageLog(this.ui.rootFrame, this.ui.uiViewport);
 		if (this.ui.isSinglePlayerGame() && TouchInputRouter.isActive() && !this.ui.war3MapViewer.isReplayPlayback()) {
@@ -144,8 +167,7 @@ final class MeleeUIMenus {
 
 	void createEscMenu() {
 		this.ui.smashEscMenu = (SimpleFrame) this.ui.rootFrame.createSimpleFrame("SmashEscMenu", this.ui.rootFrame, 0);
-		this.ui.smashEscMenu.addAnchor(new AnchorDefinition(FramePoint.TOP, 0,
-				GameUI.convertY(this.ui.uiViewport, -0.05f)));
+		this.ui.smashEscMenu.addAnchor(new AnchorDefinition(FramePoint.TOP, 0, escMenuTop()));
 		final UIFrame escMenuBackdrop = this.ui.rootFrame.createFrame("EscMenuBackdrop", this.ui.smashEscMenu, 0, 0);
 		escMenuBackdrop.setVisible(false);
 		final UIFrame escMenuMainPanel = this.ui.rootFrame.createFrame("EscMenuMainPanel", this.ui.smashEscMenu, 0, 0);
@@ -239,7 +261,7 @@ final class MeleeUIMenus {
 					@Override
 					public void closed() {
 					}
-				}, () -> this.ui.musicPlayer.optionsChanged());
+				}, () -> this.ui.musicPlayer.optionsChanged(), this.ui.war3MapViewer.getGameData());
 		this.ui.openMenuAction = () -> this.menuButton.onClick(Input.Buttons.LEFT);
 		this.closeMenuAction = () -> returnButton.onClick(Input.Buttons.LEFT);
 		this.escMenuButtons = new GlueTextButtonFrame[] { pauseButton, saveGameButton, loadGameButton,
@@ -482,8 +504,21 @@ final class MeleeUIMenus {
 		return true;
 	}
 
+	private float escMenuTop() {
+		return GameUI.convertY(this.ui.uiViewport, -0.05f);
+	}
+
+	void followKeyboard() {
+		this.ui.gameMenu.followKeyboard(escMenuTop());
+	}
+
 	void setMenuFocus(final FocusableFrame frame) {
 		if (frame == this.ui.menuFocus) {
+			// A panel opened on a touch screen holds its text box without the keyboard; tapping the box brings it up,
+			// also again after Back put the keyboard away.
+			if ((frame != null) && this.ui.menuFocusFromTouch) {
+				frame.onFocusGained();
+			}
 			return;
 		}
 		if (this.ui.menuFocus != null) {
@@ -493,6 +528,14 @@ final class MeleeUIMenus {
 		if ((frame != null) && !(TouchInputRouter.isActive() && !this.ui.menuFocusFromTouch)) {
 			frame.onFocusGained();
 		}
+	}
+
+	void displayLoadDialog() {
+		if (this.ui.openMenuAction == null) {
+			return;
+		}
+		this.ui.openMenuAction.run();
+		this.ui.gameMenu.showLoadDialog();
 	}
 
 	private void saveFromMenu(final String name) {
@@ -515,17 +558,7 @@ final class MeleeUIMenus {
 	}
 
 	private void restartMission() {
-		final StringBuilder computerSlots = new StringBuilder();
-		final CSimulation simulation = this.ui.war3MapViewer.simulation;
-		for (int i = 0; i < WarsmashConstants.MAX_PLAYERS; i++) {
-			final CPlayer player = simulation.getPlayer(i);
-			if ((player.getController() == CMapControl.COMPUTER)
-					&& (player.getSlotState() == CPlayerSlotState.PLAYING)) {
-				computerSlots.append(computerSlots.length() == 0 ? "" : ",").append(i);
-			}
-		}
-		this.ui.war3MapViewer.getGameExit().setNextLevel(this.ui.war3MapViewer.getMapFileName(),
-				computerSlots.length() == 0 ? null : computerSlots.toString());
+		this.ui.war3MapViewer.setRestartAsNextLevel();
 		this.ui.war3MapViewer.setGamePaused(War3MapViewer.PauseSource.MENU, false);
 		this.ui.quitMission();
 	}
@@ -614,6 +647,28 @@ final class MeleeUIMenus {
 		if (frame != null) {
 			frame.onFocusGained();
 		}
+	}
+
+	/**
+	 * The map of motherland's campaign mission: human, orc, undead or nightelf for Reign of Chaos, the same with an x
+	 * for The Frozen Throne, in whichever layout the game data have.
+	 */
+	private String campaignMissionFile(final String race, final int mission) {
+		final boolean frozenThrone = race.endsWith("x");
+		final String raceName = race.substring(0, frozenThrone ? race.length() - 1 : race.length());
+		final String name = (raceName.equals("nightelf") ? "NightElf"
+				: Character.toUpperCase(raceName.charAt(0)) + raceName.substring(1))
+				+ (frozenThrone ? "X" : "") + String.format(Locale.US, "%02d", mission);
+		final String[] candidates = frozenThrone
+				? new String[] { "Maps\\Campaign\\Classic\\" + name + ".w3x",
+						"Maps\\FrozenThrone\\Campaign\\" + name + ".w3x" }
+				: new String[] { "Maps\\Campaign\\Classic\\" + name + ".w3m", "Maps\\Campaign\\" + name + ".w3m" };
+		for (final String candidate : candidates) {
+			if (this.ui.war3MapViewer.dataSource.has(candidate)) {
+				return candidate;
+			}
+		}
+		return null;
 	}
 
 	private void showChatLine(final String line) {

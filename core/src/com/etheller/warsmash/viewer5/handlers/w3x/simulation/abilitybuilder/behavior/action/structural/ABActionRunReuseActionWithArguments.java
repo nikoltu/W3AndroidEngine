@@ -37,10 +37,8 @@ public class ABActionRunReuseActionWithArguments implements ABSingleAction {
 					action.runAction(game, caster, localStore, castId);
 				}
 			} else {
-//				System.err.println("Trying to run ReuseAction with args, but key is missing or empty: " + keyS);
 			}
 		} else {
-//			System.err.println("Trying to run ReuseAction with args (\"+keyS+\"), but none defined");
 		}
 	}
 

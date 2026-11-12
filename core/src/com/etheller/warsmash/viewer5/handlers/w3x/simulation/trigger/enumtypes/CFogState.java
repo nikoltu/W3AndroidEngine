@@ -13,7 +13,7 @@ public enum CFogState implements CHandle {
 		this.mask = mask;
 	}
 
-	public static CFogState[] VALUES = values();
+	public static final CFogState[] VALUES = values();
 
 	public static CFogState getById(final int id) {
 		for (final CFogState type : VALUES) {

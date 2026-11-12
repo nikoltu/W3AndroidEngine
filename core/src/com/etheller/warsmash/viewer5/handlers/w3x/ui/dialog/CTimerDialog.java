@@ -18,6 +18,11 @@ public class CTimerDialog extends AllocatedHandle {
 	private boolean visible;
 	private Integer titleColor;
 	private Integer timeColor;
+	/** Set by TimerDialogSetRealTimeRemaining: a dialog without a timer counts this down itself. */
+	private boolean realTime;
+	private float realTimeBase;
+	private double realTimeStart;
+	private float speed = 1f;
 
 	public CTimerDialog(final GameUI rootFrame, final CTimer timer, final UIFrame timerDialogFrame,
 			final StringFrame valueFrame, final StringFrame titleFrame) {
@@ -87,9 +92,39 @@ public class CTimerDialog extends AllocatedHandle {
 		return this.timerDialogFrame.isVisible();
 	}
 
+	/** Sets the time the dialog shows and counts down from now, at the speed set for it. */
+	public void setRealTimeRemaining(final CSimulation simulation, final float seconds) {
+		this.realTime = true;
+		this.realTimeBase = seconds;
+		this.realTimeStart = CTimer.currentTime(simulation);
+	}
+
+	/** Scales how fast the shown time runs down; the time shown right now is kept. */
+	public void setSpeed(final CSimulation simulation, final float speed) {
+		if (this.realTime) {
+			this.realTimeBase = getRealTimeRemaining(simulation);
+			this.realTimeStart = CTimer.currentTime(simulation);
+		}
+		this.speed = speed;
+	}
+
+	private float getRealTimeRemaining(final CSimulation simulation) {
+		final double elapsed = CTimer.currentTime(simulation) - this.realTimeStart;
+		return (float) Math.max(0, this.realTimeBase - (elapsed * this.speed));
+	}
+
 	public void update(final GameUI rootFrame, final CSimulation simulation) {
-		if (this.timerDialogFrame.isVisible() && (this.timer != null)) {
-			final float remaining = this.timer.getRemaining(simulation);
+		if (this.timerDialogFrame.isVisible()) {
+			final float remaining;
+			if (this.timer != null) {
+				remaining = this.timer.getRemaining(simulation);
+			}
+			else if (this.realTime) {
+				remaining = getRealTimeRemaining(simulation);
+			}
+			else {
+				return;
+			}
 			final int secondsRemaining = (int) remaining;
 			final int minutes = secondsRemaining / 60;
 			final int seconds = secondsRemaining % 60;

@@ -49,6 +49,8 @@ public class Storage implements AutoCloseable {
 	 */
 	private static final int CONTAINER_HEADER_SIZE = 30;
 
+	private static final int READ_CHUNK = 1 << 16;
+
 	/**
 	 * File extension used by storage index files.
 	 */
@@ -364,6 +366,21 @@ public class Storage implements AutoCloseable {
 	}
 
 	/**
+	 * Reads into the buffer until it is full or the file ends. A channel reads a heap buffer through a direct buffer as
+	 * big as the read and keeps that on the reading thread for its later reads; Android counts those on the Java heap,
+	 * so each read is kept small.
+	 */
+	private static void readFully(final FileChannel channel, final ByteBuffer buffer, final long offset)
+			throws IOException {
+		final int capacity = buffer.capacity();
+		do {
+			buffer.limit(Math.min(capacity, buffer.position() + READ_CHUNK));
+		}
+		while (buffer.hasRemaining() && (channel.read(buffer, offset + buffer.position()) != -1));
+		buffer.limit(capacity);
+	}
+
+	/**
 	 * Fetch a buffer from storage.
 	 *
 	 * @param index  Data file index.
@@ -385,10 +402,7 @@ public class Storage implements AutoCloseable {
 			storageBuffer = mappedBuffer;
 		} else {
 			storageBuffer = ByteBuffer.allocate((int) length);
-			while (storageBuffer.hasRemaining()
-					&& (fileChannel.read(storageBuffer, offset + storageBuffer.position()) != -1)) {
-				;
-			}
+			readFully(fileChannel, storageBuffer, offset);
 
 			if (storageBuffer.hasRemaining()) {
 				throw new EOFException("unexpected end of file");
@@ -420,9 +434,7 @@ public class Storage implements AutoCloseable {
 				fileBuffer = mappedBuffer;
 			} else {
 				fileBuffer = ByteBuffer.allocate((int) fileLength);
-				while (fileBuffer.hasRemaining() && (channel.read(fileBuffer, fileBuffer.position()) != -1)) {
-					;
-				}
+				readFully(channel, fileBuffer, 0);
 
 				if (fileBuffer.hasRemaining()) {
 					throw new EOFException("unexpected end of file");

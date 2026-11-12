@@ -6,7 +6,7 @@ public enum CSoundType implements CHandle {
 	EFFECT,
 	EFFECT_LOOPED;
 
-	public static CSoundType[] VALUES = values();
+	public static final CSoundType[] VALUES = values();
 
 	@Override
 	public int getHandleId() {

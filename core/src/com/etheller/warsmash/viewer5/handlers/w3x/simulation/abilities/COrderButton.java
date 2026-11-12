@@ -137,6 +137,6 @@ public class COrderButton extends CExtensibleHandleAbstract {
 		PASSIVE,
 		MENU;
 
-		public static JassOrderButtonType[] VALUES = values();
+		public static final JassOrderButtonType[] VALUES = values();
 	}
 }

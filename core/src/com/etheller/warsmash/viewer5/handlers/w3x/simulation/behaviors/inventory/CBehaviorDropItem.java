@@ -10,10 +10,16 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.CAbstract
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.CBehavior;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.CBehaviorCategory;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.orders.OrderIds;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.timers.CExactExpiry;
 
 public class CBehaviorDropItem extends CAbstractRangedBehavior {
+	/** Measured on 1.29: the item leaves the unit this long after it stands within the drop range. */
+	private static final double DROP_DELAY = 0.12;
+
 	private final CAbilityInventory inventory;
 	private CItem targetItem;
+	private final CExactExpiry dropTime = new CExactExpiry();
+	private boolean dropPending;
 
 	public CBehaviorDropItem(final CUnit unit, final CAbilityInventory inventory) {
 		super(unit);
@@ -22,12 +28,18 @@ public class CBehaviorDropItem extends CAbstractRangedBehavior {
 
 	public CBehavior reset(CSimulation game, final CItem targetItem, final AbilityPointTarget targetPoint) {
 		this.targetItem = targetItem;
+		this.dropTime.cancel(game);
+		this.dropPending = false;
 		return innerReset(game, targetPoint);
 	}
 
 	@Override
 	public boolean isWithinRange(final CSimulation simulation) {
-		return this.unit.canReach(this.target, simulation.getGameplayConstants().getDropItemRange());
+		// Measured on 1.29: the range counts from the unit's center, without its collision size.
+		final double dx = this.target.getX() - this.unit.getX();
+		final double dy = this.target.getY() - this.unit.getY();
+		final float range = simulation.getGameplayConstants().getDropItemRange();
+		return StrictMath.sqrt((dx * dx) + (dy * dy)) <= range;
 	}
 
 	@Override
@@ -40,6 +52,8 @@ public class CBehaviorDropItem extends CAbstractRangedBehavior {
 
 	@Override
 	public void end(final CSimulation game, final boolean interrupted) {
+		this.dropTime.cancel(game);
+		this.dropPending = false;
 	}
 
 	@Override
@@ -49,8 +63,27 @@ public class CBehaviorDropItem extends CAbstractRangedBehavior {
 
 	@Override
 	protected CBehavior update(final CSimulation simulation, final boolean withinFacingWindow) {
+		if (!this.dropPending) {
+			this.dropPending = true;
+			this.dropTime.start(simulation, DROP_DELAY);
+		}
+		if (this.dropTime.check(simulation, this::dropInStep)) {
+			return drop(simulation);
+		}
+		return this;
+	}
+
+	private CBehavior drop(final CSimulation simulation) {
+		this.dropPending = false;
 		this.inventory.dropItem(simulation, this.unit, this.targetItem, this.target.getX(), this.target.getY(), true);
 		return this.unit.pollNextOrderBehavior(simulation);
+	}
+
+	private void dropInStep(final CSimulation simulation) {
+		if (!this.dropPending || (this.unit.getCurrentBehavior() != this) || this.unit.isDead()) {
+			return;
+		}
+		this.unit.beginBehavior(simulation, drop(simulation));
 	}
 
 	@Override
@@ -65,7 +98,8 @@ public class CBehaviorDropItem extends CAbstractRangedBehavior {
 
 	@Override
 	protected void resetBeforeMoving(final CSimulation simulation) {
-
+		this.dropTime.cancel(simulation);
+		this.dropPending = false;
 	}
 
 	@Override

@@ -199,12 +199,13 @@ public class EventObjectEmitterObject extends GenericObject implements EmitterOb
 	}
 
 	private float getFloat(final MappedDataRow row, final String name) {
-		final Float x = (Float) row.get(name);
-		if (x == null) {
+		// Reforged tables put "_" in a cell that takes the default.
+		final Object x = row.get(name);
+		if (!(x instanceof Number)) {
 			return Float.NaN;
 		}
 		else {
-			return x.floatValue();
+			return ((Number) x).floatValue();
 		}
 	}
 
@@ -213,12 +214,12 @@ public class EventObjectEmitterObject extends GenericObject implements EmitterOb
 	}
 
 	private int getInt(final MappedDataRow row, final String name, final int defaultValue) {
-		final Number x = (Number) row.get(name);
-		if (x == null) {
+		final Object x = row.get(name);
+		if (!(x instanceof Number)) {
 			return defaultValue;
 		}
 		else {
-			return x.intValue();
+			return ((Number) x).intValue();
 		}
 	}
 
@@ -303,20 +304,24 @@ public class EventObjectEmitterObject extends GenericObject implements EmitterOb
 					}
 
 					if (animSoundsRow != null) {
-						this.distanceCutoff = getFloat(animSoundsRow, "DistanceCutoff");
 						this.maxDistance = getFloat(animSoundsRow, "MaxDistance");
+						final float cutoff = getFloat(animSoundsRow, "DistanceCutoff");
+						this.distanceCutoff = Float.isNaN(cutoff) ? this.maxDistance : cutoff;
 						this.minDistance = getFloat(animSoundsRow, "MinDistance");
 						this.pitch = getFloat(animSoundsRow, "Pitch");
 						this.pitchVariance = getFloat(animSoundsRow, "PitchVariance");
 						this.volume = getFloat(animSoundsRow, "Volume") / 127f;
 						this.channel = (int) getFloat(animSoundsRow, "Channel");
 
-						final String[] fileNames = ((String) animSoundsRow.get("FileNames")).split(",");
+						// Some Reforged rows have no file at all.
+						final Object fileNamesValue = animSoundsRow.get("FileNames");
+						final String[] fileNames = (fileNamesValue instanceof String)
+								&& !"_".equals(fileNamesValue) ? ((String) fileNamesValue).split(",") : new String[0];
 						final GenericResource[] resources = new GenericResource[fileNames.length];
 						for (int i = 0; i < fileNames.length; i++) {
 							final String directoryBase = (String) animSoundsRow.get("DirectoryBase");
 							String path;
-							if (directoryBase != null) {
+							if ((directoryBase != null) && !"_".equals(directoryBase)) {
 								path = (directoryBase) + fileNames[i];
 							}
 							else {
@@ -357,14 +362,15 @@ public class EventObjectEmitterObject extends GenericObject implements EmitterOb
 				Log.warn("Unknown event object type: " + this.type + this.id);
 			}
 		}
-		else if (!("SPN".equals(this.type) && isSplatCode(tables))) {
+		else if (!("SPN".equals(this.type) && (isSplatCode(tables) || this.model.reforged))) {
 			Log.warn("Unknown event object ID: " + this.type + this.id);
 		}
 	}
 
 	/**
 	 * Blizzard's own models name a few splat codes as spawns (the Dryad's SPNxEBL0); the spawn table has no such row in
-	 * any version, so nothing is spawned for them, as in the original.
+	 * any version, so nothing is spawned for them, as in the original. The 2.0 models (the HD and DE packages) name some
+	 * eighty more, such as the undead buildings' SPNxUDBO, that the tables of the installed game lack as well.
 	 */
 	private boolean isSplatCode(final List<GenericResource> tables) {
 		final MappedData splats = tables.size() > 1 ? (MappedData) tables.get(1).data : null;

@@ -253,6 +253,12 @@ public class CAbilityHero extends AbstractCAbility {
 		this.skillPoints++;
 	}
 
+	/** BlzDeleteHeroAbility: the skill goes without giving its skill points back. */
+	public void deleteAbility(final CSimulation game, final CUnit unit, final CAbility ability) {
+		this.learnedAbilities.remove(ability);
+		unit.remove(game, ability);
+	}
+
 	public List<CAbility> getLearnedHeroAbilities() {
 		return this.learnedAbilities;
 	}
@@ -573,6 +579,7 @@ public class CAbilityHero extends AbstractCAbility {
 				+ (gameplayConstants.getAgiDefenseBonus() * currentAgilityBase);
 		unit.setAgilityDefensePermanentBonus(agilityDefenseBonus);
 		unit.setAgilityDefenseTemporaryBonus(gameplayConstants.getAgiDefenseBonus() * currentAgilityBonus);
+		unit.setAgilityMoveBonus(gameplayConstants.getAgiMoveBonus() * currentAgility);
 		unit.setLifeRegenStrengthBonus(currentStrength * gameplayConstants.getStrRegenBonus());
 		unit.setManaRegenIntelligenceBonus(currentIntelligence * gameplayConstants.getIntRegenBonus());
 	}
@@ -620,6 +627,7 @@ public class CAbilityHero extends AbstractCAbility {
 				+ (gameplayConstants.getAgiDefenseBonus() * currentAgilityBase);
 		unit.setAgilityDefensePermanentBonus(agilityDefenseBonus);
 		unit.setAgilityDefenseTemporaryBonus(gameplayConstants.getAgiDefenseBonus() * currentAgilityBonus);
+		unit.setAgilityMoveBonus(gameplayConstants.getAgiMoveBonus() * currentAgility);
 		unit.setLifeRegenStrengthBonus(currentStrength * gameplayConstants.getStrRegenBonus());
 		unit.setManaRegenIntelligenceBonus(currentIntelligence * gameplayConstants.getIntRegenBonus());
 	}

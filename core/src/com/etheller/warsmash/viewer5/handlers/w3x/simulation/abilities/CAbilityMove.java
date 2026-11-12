@@ -1,6 +1,7 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities;
 
 import com.etheller.warsmash.util.War3ID;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CItem;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CWidget;
@@ -48,6 +49,10 @@ public class CAbilityMove extends AbstractCAbility {
 				break;
 			}
 			if ((target instanceof CUnit) && (target != unit)) {
+				receiver.targetOk(target);
+			}
+			else if ((orderId == OrderIds.move) && (target instanceof CItem)) {
+				// Measured on 1.29: a move order on an item walks to where it lies and picks nothing up.
 				receiver.targetOk(target);
 			}
 			else {
@@ -186,13 +191,19 @@ public class CAbilityMove extends AbstractCAbility {
 					&& (CAbilityWayGate.getWayGateAbility(game, caster, targetUnit, true, false) != null)) {
 				behavior = new CBehaviorMoveThroughWayGate(caster).reset(game, targetUnit);
 			}
+			if ((behavior == null) && targetUnit.isBuilding()) {
+				// Measured on 1.29: a structure is walked up to, as far as it lets the unit, not followed; any other
+				// unit is followed, an enemy too (without attacking it or anything else on the way).
+				behavior = caster.getMoveBehavior().reset(OrderIds.move,
+						new AbilityPointTarget(targetUnit.getX(), targetUnit.getY()));
+			}
 			if (behavior == null) {
-				behavior = caster.getFollowBehavior().reset(game, smart ? OrderIds.move : orderId, targetUnit);
+				behavior = caster.getFollowBehavior().reset(game, smart ? OrderIds.move : orderId, targetUnit, smart);
 				caster.setDefaultBehavior(behavior);
 			}
 			return behavior;
 		}
-		if (orderId == OrderIds.attack) {
+		if ((orderId == OrderIds.attack) || ((orderId == OrderIds.move) && (target instanceof CItem))) {
 			return caster.getMoveBehavior().reset(OrderIds.move, new AbilityPointTarget(target.getX(), target.getY()));
 		}
 		// NOTE: shouldn't happen, target is always unit for this ability

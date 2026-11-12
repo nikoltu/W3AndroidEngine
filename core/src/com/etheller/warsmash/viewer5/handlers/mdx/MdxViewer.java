@@ -18,14 +18,14 @@ public class MdxViewer extends AbstractMdxModelViewer {
 
 	public MdxViewer(final DataSource dataSource, final CanvasProvider canvas) {
 		super(dataSource, canvas);
-		MdxHandler.CURRENT_SHADER_TYPE = DEFAULT_SHADER_ENV;
+		this.shaderEnvironmentType = DEFAULT_SHADER_ENV;
 		this.defaultLighting = null;
 		this.worldEditStrings = new WorldEditStrings(this.dataSource);
 	}
 
 	public MdxViewer(final DataSource dataSource, final CanvasProvider canvas, final Vector3 defaultLighting) {
 		super(dataSource, canvas);
-		MdxHandler.CURRENT_SHADER_TYPE = DEFAULT_SHADER_ENV;
+		this.shaderEnvironmentType = DEFAULT_SHADER_ENV;
 		this.defaultLighting = defaultLighting;
 		this.worldEditStrings = new WorldEditStrings(this.dataSource);
 	}

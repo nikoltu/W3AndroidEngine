@@ -31,8 +31,6 @@ public class Vector4 implements Serializable, Vector<Vector4> {
 	public final static Vector4 W = new Vector4(0, 0, 0, 1);
 	public final static Vector4 Zero = new Vector4(0, 0, 0, 0);
 
-	private final static Matrix4 tmpMat = new Matrix4();
-
 	/** Constructs a vector at (0,0,0,0) */
 	public Vector4() {
 	}

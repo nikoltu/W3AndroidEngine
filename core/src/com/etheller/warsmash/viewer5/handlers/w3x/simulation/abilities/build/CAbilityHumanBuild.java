@@ -11,16 +11,22 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbilityC
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbilityVisitor;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityPointTarget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.CBehavior;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.build.AbstractCBehaviorBuild;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.build.CBehaviorHumanBuild;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.orders.OrderIds;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayer;
 
-public class CAbilityHumanBuild extends AbstractCAbilityBuild {
+public class CAbilityHumanBuild extends AbstractCAbilityRaceBuild {
 
 	private CBehaviorHumanBuild buildBehavior;
 
 	public CAbilityHumanBuild(final int handleId, final List<War3ID> structuresBuilt) {
 		super(handleId, War3ID.fromString("AHbu"), structuresBuilt);
+	}
+
+	@Override
+	protected AbstractCBehaviorBuild buildBehavior() {
+		return this.buildBehavior;
 	}
 
 	@Override
@@ -34,58 +40,8 @@ public class CAbilityHumanBuild extends AbstractCAbilityBuild {
 	}
 
 	@Override
-	public void onRemove(final CSimulation game, final CUnit unit) {
-	}
-
-	@Override
-	public CBehavior begin(final CSimulation game, final CUnit caster, final int playerIndex, final int orderId,
-			final boolean autoOrder, final CWidget target) {
-		return caster.pollNextOrderBehavior(game);
-	}
-
-	@Override
-	public CBehavior begin(final CSimulation game, final CUnit caster, final int playerIndex, final int orderId,
-			final boolean autoOrder, final AbilityPointTarget point) {
-		final War3ID orderIdAsRawtype = new War3ID(orderId);
-		final CUnitType unitType = game.getUnitData().getUnitType(orderIdAsRawtype);
-		roundTargetPoint(point, unitType);
-		final CPlayer player = game.getPlayer(caster.getPlayerIndex());
-		player.chargeFor(unitType);
-		if (unitType.getFoodUsed() != 0) {
-			player.setFoodUsed(player.getFoodUsed() + unitType.getFoodUsed());
-		}
-		return this.buildBehavior.reset(game, point, orderId, getBaseOrderId());
-	}
-
-	@Override
-	public CBehavior beginNoTarget(final CSimulation game, final CUnit caster, final int playerIndex, final int orderId,
-			final boolean autoOrder) {
-		return caster.pollNextOrderBehavior(game);
-	}
-
-	@Override
 	public <T> T visit(final CAbilityVisitor<T> visitor) {
 		return visitor.accept(this);
-	}
-
-	@Override
-	public boolean isPhysical() {
-		return true;
-	}
-
-	@Override
-	public boolean isMagic() {
-		return false;
-	}
-
-	@Override
-	public boolean isUniversal() {
-		return false;
-	}
-
-	@Override
-	public CAbilityCategory getAbilityCategory() {
-		return CAbilityCategory.CORE;
 	}
 
 }

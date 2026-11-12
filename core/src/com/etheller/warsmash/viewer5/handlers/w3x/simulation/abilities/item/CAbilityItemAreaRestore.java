@@ -7,7 +7,6 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CWidget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbilityCategory;
-import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.CAbilitySpellBase;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityPointTarget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityTarget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.definitions.impl.AbilityFields;
@@ -22,7 +21,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.BooleanAbility
  * Data B) for the user and the friendly units around it, at once when used or picked up. The cooldown is kept under
  * the ability code, which is the items' cooldown group.
  */
-public class CAbilityItemAreaRestore extends CAbilitySpellBase {
+public class CAbilityItemAreaRestore extends AbstractCAbilityItemInstantUse {
 	private final int orderId;
 	private final boolean restoresLife;
 	private final boolean restoresMana;
@@ -53,10 +52,6 @@ public class CAbilityItemAreaRestore extends CAbilitySpellBase {
 	}
 
 	@Override
-	public void onAdd(final CSimulation game, final CUnit unit) {
-	}
-
-	@Override
 	public boolean checkBeforeQueue(final CSimulation game, final CUnit caster, final int playerIndex,
 			final int orderId, final boolean autoOrder, final AbilityTarget target) {
 		if (orderId != this.orderId) {
@@ -81,60 +76,6 @@ public class CAbilityItemAreaRestore extends CAbilitySpellBase {
 	}
 
 	@Override
-	public boolean doEffect(final CSimulation simulation, final CUnit unit, final AbilityTarget target) {
-		return false;
-	}
-
-	@Override
-	public void onRemove(final CSimulation game, final CUnit unit) {
-	}
-
-	@Override
-	public void onTick(final CSimulation game, final CUnit unit) {
-	}
-
-	@Override
-	public CBehavior begin(final CSimulation game, final CUnit caster, final int playerIndex, final int orderId,
-			final boolean autoOrder, final CWidget target) {
-		return null;
-	}
-
-	@Override
-	public CBehavior begin(final CSimulation game, final CUnit caster, final int playerIndex, final int orderId,
-			final boolean autoOrder, final AbilityPointTarget point) {
-		return null;
-	}
-
-	@Override
-	public CBehavior beginNoTarget(final CSimulation game, final CUnit caster, final int playerIndex, final int orderId,
-			final boolean autoOrder) {
-		return null;
-	}
-
-	@Override
-	protected void innerCheckCanTarget(final CSimulation game, final CUnit unit, final int orderId,
-			final CWidget target, final AbilityTargetCheckReceiver<CWidget> receiver) {
-		receiver.orderIdNotAccepted();
-	}
-
-	@Override
-	protected void innerCheckCanTarget(final CSimulation game, final CUnit unit, final int orderId,
-			final AbilityPointTarget target, final AbilityTargetCheckReceiver<AbilityPointTarget> receiver) {
-		receiver.orderIdNotAccepted();
-	}
-
-	@Override
-	protected void innerCheckCanTargetNoTarget(final CSimulation game, final CUnit unit, final int orderId,
-			final AbilityTargetCheckReceiver<Void> receiver) {
-		if (orderId == this.orderId) {
-			receiver.targetOk(null);
-		}
-		else {
-			receiver.orderIdNotAccepted();
-		}
-	}
-
-	@Override
 	protected void innerCheckCanUse(final CSimulation game, final CUnit unit, final int playerIndex, final int orderId,
 			final AbilityActivationReceiver receiver) {
 		final float cooldownRemaining = getCooldownRemaining(game, unit);
@@ -145,14 +86,6 @@ public class CAbilityItemAreaRestore extends CAbilitySpellBase {
 		else {
 			receiver.useOk();
 		}
-	}
-
-	@Override
-	public void onCancelFromQueue(final CSimulation game, final CUnit unit, final int playerIndex, final int orderId) {
-	}
-
-	@Override
-	public void onDeath(final CSimulation game, final CUnit cUnit) {
 	}
 
 	@Override

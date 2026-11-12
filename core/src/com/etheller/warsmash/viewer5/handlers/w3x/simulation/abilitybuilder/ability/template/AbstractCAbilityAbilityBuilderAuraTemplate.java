@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Set;
 
 import com.badlogic.gdx.math.Rectangle;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.CAreaTargetVisibility;
 import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
@@ -125,14 +126,16 @@ public abstract class AbstractCAbilityAbilityBuilderAuraTemplate extends Ability
 		if ((this.loopTick % LEAVE_GROUP_TICKS) == 0) {
 			if (tracksLevelChanges() && (this.lastSeenLevel != getLevel())) {
 				for (final CUnit iter : new ArrayList<>(this.auraGroup)) {
-					if (!(iter.canBeTargetedBy(game, unit, this.targetsAllowed) && unit.canReach(iter, this.range))) {
+					if (!(iter.canBeAreaTargetedBy(game, unit, CAreaTargetVisibility.ANY, this.targetsAllowed)
+							&& unit.canReach(iter, this.range))) {
 						updateLevelOfAura(game, iter, this.lastSeenLevel, getLevel());
 					}
 				}
 				this.lastSeenLevel = getLevel();
 			}
 			for (final CUnit iter : new ArrayList<>(this.auraGroup)) {
-				if (!(iter.canBeTargetedBy(game, unit, this.targetsAllowed) && unit.canReach(iter, this.range))) {
+				if (!(iter.canBeAreaTargetedBy(game, unit, CAreaTargetVisibility.ANY, this.targetsAllowed)
+						&& unit.canReach(iter, this.range))) {
 					removeUnitFromAura(game, iter);
 				}
 			}
@@ -143,7 +146,7 @@ public abstract class AbstractCAbilityAbilityBuilderAuraTemplate extends Ability
 				@Override
 				public boolean call(final CUnit enumUnit) {
 					if (unit.canReach(enumUnit, AbstractCAbilityAbilityBuilderAuraTemplate.this.range)
-							&& enumUnit.canBeTargetedBy(game, unit,
+							&& enumUnit.canBeAreaTargetedBy(game, unit, CAreaTargetVisibility.ANY,
 									AbstractCAbilityAbilityBuilderAuraTemplate.this.targetsAllowed)
 							&& !AbstractCAbilityAbilityBuilderAuraTemplate.this.auraGroup.contains(enumUnit)
 							&& canJoin(enumUnit)) {

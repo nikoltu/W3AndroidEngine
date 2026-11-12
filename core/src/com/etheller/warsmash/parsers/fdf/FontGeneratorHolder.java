@@ -19,7 +19,10 @@ public class FontGeneratorHolder {
 		if (font == null) {
 			parameter.incremental = true; //enable incremental to support non-ascii characters like chinese when free-type fonts contains the char.
 			font = this.generator.generateFont(parameter);
+			// Warcraft III puts lines one font height apart, closer than the font's own ascent and descent.
+			font.getData().setLineHeight(parameter.size);
 			this.sizeToFont.put(parameter.size, font);
+
 		}
 		return font;
 	}

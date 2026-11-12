@@ -46,7 +46,12 @@ public class MappedData implements Iterable<Map.Entry<String, MappedDataRow>> {
 			for (int i = 1, l = rows.size(); i < l; i++) {
 				final List<Object> row = rows.get(i);
 				if (row != null) {
-					String name = (String) row.get(keyColumn);
+					Object rowKey = row.get(keyColumn);
+					// Reforged sound rows without an event code hold "_" there; their own name stays reachable.
+					if ("_".equals(rowKey) && (keyColumn != 0)) {
+						rowKey = row.get(0);
+					}
+					String name = (String) rowKey;
 
 					if (name != null) {
 						name = name.toLowerCase();

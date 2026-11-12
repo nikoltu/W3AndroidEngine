@@ -69,6 +69,9 @@ final class PlayerNatives extends CommonNatives {
 		// ============================================================================
 		// Force API
 		//
+		// Measured on 1.29: neither the units' owners nor the players' food change.
+		jassProgramVisitor.getJassNativeManager().createNative("SetPlayerUnitsOwner",
+				(arguments, globalScope, triggerScope) -> null);
 		jassProgramVisitor.getJassNativeManager().createNative("CreateForce",
 				(arguments, globalScope, triggerScope) -> {
 					return newHandle(forceType, new CForce());
@@ -118,7 +121,7 @@ final class PlayerNatives extends CommonNatives {
 							.visit(ObjectJassValueVisitor.<List<CPlayerJass>>getInstance());
 					final TriggerBooleanExpression filter = nullable(arguments, 1,
 							ObjectJassValueVisitor.<TriggerBooleanExpression>getInstance());
-					for (int i = 0; i < WarsmashConstants.MAX_PLAYERS; i++) {
+					for (int i = 0; i < this.simulation.getGameData().getMaxPlayers(); i++) {
 						final CPlayerJass jassPlayer = this.simulation.getPlayer(i);
 						// 1.29 skips empty slots (also the neutral players) but keeps players who left.
 						if (jassPlayer.getSlotState() == CPlayerSlotState.EMPTY) {
@@ -139,7 +142,7 @@ final class PlayerNatives extends CommonNatives {
 							ObjectJassValueVisitor.<TriggerBooleanExpression>getInstance());
 					final Integer countLimit = arguments.get(2).visit(IntegerJassValueVisitor.getInstance());
 					int count = 0;
-					for (int i = 0; (i < WarsmashConstants.MAX_PLAYERS) && (count < countLimit); i++) {
+					for (int i = 0; (i < this.simulation.getGameData().getMaxPlayers()) && (count < countLimit); i++) {
 						final CPlayerJass jassPlayer = this.simulation.getPlayer(i);
 						if (jassPlayer.getSlotState() == CPlayerSlotState.EMPTY) {
 							continue;
@@ -165,7 +168,7 @@ final class PlayerNatives extends CommonNatives {
 					}
 					// 1.29 runs the filter for every used slot (players who left too) and then keeps the players
 					// whose own alliance toward the given player matches.
-					for (int i = 0; i < WarsmashConstants.MAX_PLAYERS; i++) {
+					for (int i = 0; i < this.simulation.getGameData().getMaxPlayers(); i++) {
 						final CPlayerJass jassPlayer = this.simulation.getPlayer(i);
 						if (jassPlayer.getSlotState() == CPlayerSlotState.EMPTY) {
 							continue;
@@ -191,7 +194,7 @@ final class PlayerNatives extends CommonNatives {
 					}
 					// 1.29 runs the filter for every used slot (players who left too) and then keeps the players
 					// whose own alliance toward the given player matches.
-					for (int i = 0; i < WarsmashConstants.MAX_PLAYERS; i++) {
+					for (int i = 0; i < this.simulation.getGameData().getMaxPlayers(); i++) {
 						final CPlayerJass jassPlayer = this.simulation.getPlayer(i);
 						if (jassPlayer.getSlotState() == CPlayerSlotState.EMPTY) {
 							continue;
@@ -300,8 +303,17 @@ final class PlayerNatives extends CommonNatives {
 					player.setRemovedResult(result);
 					player.setSlotState(CPlayerSlotState.LEFT);
 					if (player.getId() != war3MapViewer.getLocalPlayerIndex()) {
-						player.firePlayerEvents(CommonTriggerExecutionScope::triggerPlayerScope,
-								JassGameEventsWar3.EVENT_PLAYER_LEAVE);
+						final JassGameEventsWar3 event;
+						if (result == CPlayerGameResult.DEFEAT) {
+							event = JassGameEventsWar3.EVENT_PLAYER_DEFEAT;
+						}
+						else if (result == CPlayerGameResult.VICTORY) {
+							event = JassGameEventsWar3.EVENT_PLAYER_VICTORY;
+						}
+						else {
+							event = JassGameEventsWar3.EVENT_PLAYER_LEAVE;
+						}
+						player.firePlayerEvents(CommonTriggerExecutionScope::triggerPlayerScope, event);
 					}
 					else if ((result == CPlayerGameResult.DEFEAT)
 							&& war3MapViewer.getMapConfig().isMapFlagSet(CMapFlag.MAP_OBSERVERS_ON_DEATH)) {
@@ -447,7 +459,7 @@ final class PlayerNatives extends CommonNatives {
 					final CPlayer whichPlayer = arguments.get(0).visit(ObjectJassValueVisitor.getInstance());
 					// 1.29 reads RACE_HUMAN for a null player.
 					if (whichPlayer == null) {
-						return new HandleJassValue(raceType, WarsmashConstants.RACE_MANAGER.getRace(1));
+						return new HandleJassValue(raceType, this.war3MapViewer.getGameData().getRaceManager().getRace(1));
 					}
 					return new HandleJassValue(raceType, whichPlayer.getRace());
 				});
@@ -545,7 +557,7 @@ final class PlayerNatives extends CommonNatives {
 	private void crippleExpose(final int crippledIndex, final List<CPlayerJass> toWhichPlayers,
 			final boolean flag) {
 		if (!flag && ((toWhichPlayers == null) || toWhichPlayers.isEmpty())) {
-			for (int i = 0; i < WarsmashConstants.MAX_PLAYERS; i++) {
+			for (int i = 0; i < this.simulation.getGameData().getMaxPlayers(); i++) {
 				setCrippleExposed(crippledIndex, i, false);
 			}
 			return;

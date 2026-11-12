@@ -3,24 +3,18 @@ package com.etheller.warsmash.parsers.w3x.objectdata;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 
 import com.etheller.warsmash.datasources.DataSource;
 import com.etheller.warsmash.units.DataTable;
 import com.etheller.warsmash.units.StandardObjectData;
 import com.etheller.warsmash.units.StandardObjectData.WarcraftData;
-import com.etheller.warsmash.units.custom.ObjectDataChangeEntry;
 import com.etheller.warsmash.units.custom.WTS;
 import com.etheller.warsmash.units.custom.WTSFile;
-import com.etheller.warsmash.units.custom.War3ObjectDataChangeset;
 import com.etheller.warsmash.units.manager.MutableObjectData;
 import com.etheller.warsmash.units.manager.MutableObjectData.WorldEditorDataType;
-import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.util.WorldEditStrings;
-import com.google.common.io.LittleEndianDataInputStream;
 
 public final class Warcraft3MapObjectData {
 	private final MutableObjectData units;
@@ -149,139 +143,25 @@ public final class Warcraft3MapObjectData {
 		final DataTable standardUpgradeMeta = standardObjectData.getStandardUpgradeMeta();
 		final DataTable standardUpgradeEffectMeta = standardObjectData.getStandardUpgradeEffectMeta();
 
-		final War3ObjectDataChangeset unitChangeset = new War3ObjectDataChangeset('u');
-		final War3ObjectDataChangeset itemChangeset = new War3ObjectDataChangeset('t');
-		final War3ObjectDataChangeset doodadChangeset = new War3ObjectDataChangeset('d');
-		final War3ObjectDataChangeset destructableChangeset = new War3ObjectDataChangeset('b');
-		final War3ObjectDataChangeset abilityChangeset = new War3ObjectDataChangeset('a');
-		final War3ObjectDataChangeset buffChangeset = new War3ObjectDataChangeset('h');
-		final War3ObjectDataChangeset upgradeChangeset = new War3ObjectDataChangeset('q');
-
-		if (dataSource.has("war3map.w3u")) {
-			unitChangeset.load(new LittleEndianDataInputStream(dataSource.getResourceAsStream("war3map.w3u")), wts,
-					inlineWTS);
-			// push unit changes to items.... as a Reign of Chaos support...
-			Iterator<Entry<War3ID, ObjectDataChangeEntry>> entryIterator = unitChangeset.getOriginal().iterator();
-			while (entryIterator.hasNext()) {
-				final Entry<War3ID, ObjectDataChangeEntry> entry = entryIterator.next();
-				final String rawcodeString = entry.toString();
-				final String oldIdString = entry.getValue().getOldId().toString();
-				if ((standardUnits.get(oldIdString) == null) && (standardItems.get(oldIdString) != null)) {
-					itemChangeset.getOriginal().put(entry.getKey(), entry.getValue());
-					entryIterator.remove();
-				}
-			}
-			entryIterator = unitChangeset.getCustom().iterator();
-			while (entryIterator.hasNext()) {
-				final Entry<War3ID, ObjectDataChangeEntry> entry = entryIterator.next();
-				final String rawcodeString = entry.toString();
-				final String oldIdString = entry.getValue().getOldId().toString();
-				if ((standardUnits.get(oldIdString) == null) && (standardItems.get(oldIdString) != null)) {
-					itemChangeset.getCustom().put(entry.getKey(), entry.getValue());
-					entryIterator.remove();
-				}
-			}
-		}
-		if (dataSource.has("war3mapSkin.w3u")) {
-			unitChangeset.load(new LittleEndianDataInputStream(dataSource.getResourceAsStream("war3mapSkin.w3u")), wts,
-					inlineWTS);
-		}
-		if (dataSource.has("war3campaign.w3u")) {
-			unitChangeset.load(new LittleEndianDataInputStream(dataSource.getResourceAsStream("war3campaign.w3u")),
-					campaignWTS, inlineWTS);
-		}
-		// ================== REMOVE LATER =====================
-		if (dataSource.has("war3mod.w3u")) {
-			unitChangeset.load(new LittleEndianDataInputStream(dataSource.getResourceAsStream("war3mod.w3u")), wts,
-					inlineWTS);
-		}
-		// =====================================================
-		if (dataSource.has("war3map.w3t")) {
-			itemChangeset.load(new LittleEndianDataInputStream(dataSource.getResourceAsStream("war3map.w3t")), wts,
-					inlineWTS);
-		}
-		if (dataSource.has("war3mapSkin.w3t")) {
-			itemChangeset.load(new LittleEndianDataInputStream(dataSource.getResourceAsStream("war3mapSkin.w3t")), wts,
-					inlineWTS);
-		}
-		if (dataSource.has("war3campaign.w3t")) {
-			itemChangeset.load(new LittleEndianDataInputStream(dataSource.getResourceAsStream("war3campaign.w3t")),
-					campaignWTS, inlineWTS);
-		}
-		if (dataSource.has("war3map.w3d")) {
-			doodadChangeset.load(new LittleEndianDataInputStream(dataSource.getResourceAsStream("war3map.w3d")), wts,
-					inlineWTS);
-		}
-		if (dataSource.has("war3campaign.w3d")) {
-			doodadChangeset.load(new LittleEndianDataInputStream(dataSource.getResourceAsStream("war3campaign.w3d")),
-					campaignWTS, inlineWTS);
-		}
-		if (dataSource.has("war3map.w3b")) {
-			destructableChangeset.load(new LittleEndianDataInputStream(dataSource.getResourceAsStream("war3map.w3b")),
-					wts, inlineWTS);
-		}
-		if (dataSource.has("war3mapSkin.w3b")) {
-			destructableChangeset.load(
-					new LittleEndianDataInputStream(dataSource.getResourceAsStream("war3mapSkin.w3b")), wts, inlineWTS);
-		}
-		if (dataSource.has("war3campaign.w3b")) {
-			destructableChangeset.load(
-					new LittleEndianDataInputStream(dataSource.getResourceAsStream("war3campaign.w3b")), campaignWTS,
-					inlineWTS);
-		}
-		if (dataSource.has("war3map.w3a")) {
-			abilityChangeset.load(new LittleEndianDataInputStream(dataSource.getResourceAsStream("war3map.w3a")), wts,
-					inlineWTS);
-		}
-		if (dataSource.has("war3mapSkin.w3a")) {
-			abilityChangeset.load(new LittleEndianDataInputStream(dataSource.getResourceAsStream("war3mapSkin.w3a")),
-					wts, inlineWTS);
-		}
-		if (dataSource.has("war3campaign.w3a")) {
-			abilityChangeset.load(new LittleEndianDataInputStream(dataSource.getResourceAsStream("war3campaign.w3a")),
-					campaignWTS, inlineWTS);
-		}
-		if (dataSource.has("war3map.w3h")) {
-			buffChangeset.load(new LittleEndianDataInputStream(dataSource.getResourceAsStream("war3map.w3h")), wts,
-					inlineWTS);
-		}
-		if (dataSource.has("war3mapSkin.w3h")) {
-			buffChangeset.load(new LittleEndianDataInputStream(dataSource.getResourceAsStream("war3mapSkin.w3h")), wts,
-					inlineWTS);
-		}
-		if (dataSource.has("war3campaign.w3h")) {
-			buffChangeset.load(new LittleEndianDataInputStream(dataSource.getResourceAsStream("war3campaign.w3h")),
-					campaignWTS, inlineWTS);
-		}
-		if (dataSource.has("war3map.w3q")) {
-			upgradeChangeset.load(new LittleEndianDataInputStream(dataSource.getResourceAsStream("war3map.w3q")), wts,
-					inlineWTS);
-		}
-		if (dataSource.has("war3mapSkin.w3q")) {
-			upgradeChangeset.load(new LittleEndianDataInputStream(dataSource.getResourceAsStream("war3mapSkin.w3q")),
-					wts, inlineWTS);
-		}
-		if (dataSource.has("war3campaign.w3q")) {
-			upgradeChangeset.load(new LittleEndianDataInputStream(dataSource.getResourceAsStream("war3campaign.w3q")),
-					campaignWTS, inlineWTS);
-		}
+		final MapObjectChangesets changesets = MapObjectChangesets.read(dataSource, inlineWTS, wts, campaignWTS,
+				standardUnits, standardItems);
 
 		final WorldEditStrings worldEditStrings = standardObjectData.getWorldEditStrings();
 		final MutableObjectData unitData = new MutableObjectData(worldEditStrings, WorldEditorDataType.UNITS,
-				standardUnits, standardUnitMeta, unitChangeset);
+				standardUnits, standardUnitMeta, changesets.units);
 		final MutableObjectData itemData = new MutableObjectData(worldEditStrings, WorldEditorDataType.ITEM,
-				standardItems, standardUnitMeta, itemChangeset);
+				standardItems, standardUnitMeta, changesets.items);
 		final MutableObjectData doodadData = new MutableObjectData(worldEditStrings, WorldEditorDataType.DOODADS,
-				standardDoodads, standardDoodadMeta, doodadChangeset);
+				standardDoodads, standardDoodadMeta, changesets.doodads);
 		final MutableObjectData destructableData = new MutableObjectData(worldEditStrings,
 				WorldEditorDataType.DESTRUCTIBLES, standardDestructables, standardDestructableMeta,
-				destructableChangeset);
+				changesets.destructables);
 		final MutableObjectData abilityData = new MutableObjectData(worldEditStrings, WorldEditorDataType.ABILITIES,
-				abilities, abilityMeta, abilityChangeset);
+				abilities, abilityMeta, changesets.abilities);
 		final MutableObjectData buffData = new MutableObjectData(worldEditStrings, WorldEditorDataType.BUFFS_EFFECTS,
-				standardAbilityBuffs, standardAbilityBuffMeta, buffChangeset);
+				standardAbilityBuffs, standardAbilityBuffMeta, changesets.buffs);
 		final MutableObjectData upgradeData = new MutableObjectData(worldEditStrings, WorldEditorDataType.UPGRADES,
-				standardUpgrades, standardUpgradeMeta, upgradeChangeset);
+				standardUpgrades, standardUpgradeMeta, changesets.upgrades);
 
 		return new Warcraft3MapObjectData(unitData, itemData, destructableData, doodadData, abilityData, buffData,
 				upgradeData, standardUpgradeEffectMeta, wts);

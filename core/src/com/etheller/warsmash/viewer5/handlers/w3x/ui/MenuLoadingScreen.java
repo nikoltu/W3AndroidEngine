@@ -136,6 +136,11 @@ final class MenuLoadingScreen {
 		this.loadingMinimapTexture.setSetAllPoints(true);
 	}
 
+	/** Whether the loading screen of a map is up, from the preview until the game takes over. */
+	boolean isShown() {
+		return this.previewingLoading || ((this.loadingFrame != null) && this.loadingFrame.isVisible());
+	}
+
 	boolean isPreviewing() {
 		return this.previewingLoading;
 	}

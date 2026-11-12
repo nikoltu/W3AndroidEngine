@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.etheller.warsmash.parsers.fdf.GameUI;
 import com.etheller.warsmash.parsers.fdf.datamodel.AnchorDefinition;
 import com.etheller.warsmash.parsers.fdf.datamodel.FramePoint;
@@ -19,24 +21,28 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.campaign.CMultiboar
 /**
  * Draws the shown multiboard from the frames of Multiboard.fdf: the minimize button in the top right corner, the title
  * bar to its left and the grid under both. Each cell shows its icon and its value text, as its style says, in a column
- * as wide as the cell's width; a cell width is a fraction of the screen width. A minimized board shows only its title
+ * as wide as the cell's width; the text is one line, cut at the column's end. A minimized board shows only its title
  * bar. The button minimizes the board for the local player only; the script's MultiboardMinimize sets it again.
  */
 final class MeleeUIMultiboard {
 	private static final float BUTTON_SIZE = 0.024f;
-	private static final float TITLE_FONT_HEIGHT = 0.011f;
-	private static final float CELL_FONT_HEIGHT = 0.009f;
+	/** The original draws its title text this much wider than the title font of the frame file does. */
+	private static final float TITLE_TEXT_SCALE = 1.075f;
+	private static final float CELL_FONT_HEIGHT = 0.0115f;
 	private static final float TITLE_MIN_WIDTH = 0.06f;
-	private static final float TITLE_PADDING = 0.02f;
-	private static final float BODY_INSET_X = 0.008f;
-	private static final float BODY_INSET_TOP = 0.009f;
-	private static final float BODY_INSET_BOTTOM = 0.008f;
-	private static final float ROW_HEIGHT = 0.0125f;
-	private static final float ICON_SIZE = 0.0105f;
-	private static final float ICON_GAP = 0.002f;
+	private static final float TITLE_PADDING = 0.0303f;
+	private static final float BODY_INSET_X = 0.0111f;
+	private static final float BODY_INSET_TOP = 0.0052f;
+	private static final float BODY_INSET_BOTTOM = 0.0074f;
+	/** Widens the title bar and the board past the grid; the board edge is drawn inside its frame. */
+	private static final float BODY_INSET_RIGHT = 0.0204f;
+	private static final float ROW_HEIGHT = 0.014f;
+	private static final float ICON_SIZE = 0.0115f;
+	private static final float ICON_GAP = 0.0048f;
+	private static final float FIT_MARGIN = 1.08f;
 	private static final float TITLE_GAP = 0.0057f;
-	/** The 4:3 area all frame sizes are given in is 0.8 wide; cell widths are fractions of it. */
-	private static final float SCREEN_WIDTH = 0.8f;
+	/** Cell widths are measured in these frame units, not in fractions of the 0.8 wide 4:3 area. */
+	private static final float SCREEN_WIDTH = 1.0f;
 
 	private final MeleeUI ui;
 	private UIFrame boardFrame;
@@ -98,6 +104,21 @@ final class MeleeUIMultiboard {
 			this.boardFrame.addAnchor(new AnchorDefinition(FramePoint.TOPRIGHT, right, top));
 			positionAll();
 		}
+	}
+
+	/** The board drawn now, or null. */
+	CMultiboard getShownBoard() {
+		return isShowing() ? this.shownBoard : null;
+	}
+
+	float getAnchorRight() {
+		return this.anchorRight;
+	}
+
+	/** The bottom edge of the drawn board, in the root frame's coordinates. */
+	float getBottom() {
+		return this.bodyBackdrop.isVisible() ? this.bodyBackdrop.getFramePointY(FramePoint.BOTTOM)
+				: this.titleBackdrop.getFramePointY(FramePoint.BOTTOM);
 	}
 
 	void resetAnchor() {
@@ -173,8 +194,8 @@ final class MeleeUIMultiboard {
 		for (final float width : columnWidths) {
 			gridWidth += width;
 		}
-		final float titleWidth = Math.max(TITLE_MIN_WIDTH,
-				Math.max(gridWidth + (2 * BODY_INSET_X) - BUTTON_SIZE, measureTitle(board.getTitle()) + TITLE_PADDING));
+		final float titleWidth = Math.max(TITLE_MIN_WIDTH, Math.max(
+				gridWidth + BODY_INSET_X + BODY_INSET_RIGHT - BUTTON_SIZE, measureTitle(board.getTitle()) + TITLE_PADDING));
 		this.titleBackdrop.setWidth(GameUI.convertX(this.ui.uiViewport, titleWidth));
 
 		final boolean showGrid = !this.localMinimized && !rows.isEmpty() && (columnCount > 0);
@@ -218,8 +239,9 @@ final class MeleeUIMultiboard {
 		}
 		final StringFrame text = this.cellTexts.get(index);
 		final TextureFrame icon = this.cellIcons.get(index);
+		// The texture lookup finds the .dds names of the newer data too, which a plain file check does not.
 		final boolean iconShown = item.showIcon && (item.icon != null) && !item.icon.isEmpty()
-				&& this.ui.war3MapViewer.dataSource.has(item.icon);
+				&& (root.loadTexture(item.icon) != null);
 		float textLeft = x;
 		if (iconShown) {
 			icon.setTexture(item.icon, root);
@@ -231,21 +253,60 @@ final class MeleeUIMultiboard {
 		icon.setVisible(iconShown);
 		final boolean textShown = item.showValue && (item.value != null) && !item.value.isEmpty();
 		if (textShown) {
-			text.setWidth(GameUI.convertX(this.ui.uiViewport, Math.max(0.001f, (x + width) - textLeft)));
+			final float available = Math.max(0.001f, (x + width) - textLeft);
+			text.setWidth(GameUI.convertX(this.ui.uiViewport, available));
 			text.addSetPoint(new SetPoint(FramePoint.TOPLEFT, this.bodyBackdrop, FramePoint.TOPLEFT,
 					GameUI.convertX(this.ui.uiViewport, textLeft), GameUI.convertY(this.ui.uiViewport, -y)));
 			text.setColor(item.valueColor == -1 ? Color.WHITE : rgba(item.valueColor));
-			root.setText(text, item.value);
+			root.setText(text, fitToWidth(text, root, item.value, GameUI.convertX(this.ui.uiViewport, available)));
 		}
 		text.setVisible(textShown);
+	}
+
+	/**
+	 * A cell shows one line: what wraps or does not fit the column is cut, at a word when the line has one, else at a
+	 * letter.
+	 */
+	private static String fitToWidth(final StringFrame frame, final GameUI root, final String value,
+			final float columnWidth) {
+		// The original's digits are narrower and its letters wider than this font's, so a cut by this font's own
+		// widths falls a few letters off; the margin keeps the digit columns whole.
+		final float width = columnWidth * FIT_MARGIN;
+		final GlyphLayout layout = root.getGlyphLayout();
+		final BitmapFont font = frame.getFrameFont();
+		if (visibleWidth(layout, font, value) < width) {
+			return value;
+		}
+		int fit = 0;
+		for (int end = 1; end <= value.length(); end++) {
+			if (visibleWidth(layout, font, value.substring(0, end)) >= width) {
+				break;
+			}
+			fit = end;
+		}
+		if (fit == 0) {
+			return value.substring(0, Math.min(1, value.length()));
+		}
+		if ((fit < value.length()) && (value.charAt(fit) != ' ')) {
+			final int space = value.lastIndexOf(' ', fit);
+			if (space > 0) {
+				return value.substring(0, space);
+			}
+		}
+		return value.substring(0, fit).trim();
+	}
+
+	private static float visibleWidth(final GlyphLayout layout, final BitmapFont font, final String value) {
+		layout.setText(font, value.replaceAll("\\|[cC][0-9a-fA-F]{8}|\\|[rR]", ""));
+		return layout.width;
 	}
 
 	private float measureTitle(final String title) {
 		if ((title == null) || title.isEmpty()) {
 			return 0;
 		}
-		// Close enough for sizing the bar: the title font is about half as wide per letter as it is high.
-		return title.replaceAll("\\|c[0-9a-fA-F]{8}|\\|r", "").length() * TITLE_FONT_HEIGHT * 0.5f;
+		return (visibleWidth(this.ui.rootFrame.getGlyphLayout(), this.titleFrame.getFrameFont(), title)
+				/ GameUI.convertX(this.ui.uiViewport, 1f)) * TITLE_TEXT_SCALE;
 	}
 
 	private void positionAll() {

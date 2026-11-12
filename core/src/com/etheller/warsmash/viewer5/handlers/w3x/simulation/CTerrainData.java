@@ -4,7 +4,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 import com.badlogic.gdx.math.Rectangle;
 import com.etheller.warsmash.datasources.DataSource;
@@ -38,6 +41,10 @@ public final class CTerrainData {
 	private final float[] groundCornerHeights;
 	/** Script terrain deformations per corner, in terrain units. */
 	private float[] deformation;
+	/** The tile type of each ground texture the corners index, as raw codes. */
+	private final List<Integer> groundTileIds = new ArrayList<>();
+	/** Tile types the terrain data tables know, or null to take any. */
+	private Set<String> knownTileTypes;
 
 	/** A terrain with no ramp models and water at the map's own height, for tests. */
 	public CTerrainData(final War3MapW3e w3eFile, final char tileset) {
@@ -64,6 +71,9 @@ public final class CTerrainData {
 				this.corners[column][row] = new CTerrainCorner(mapCorners[row][column]);
 				this.waterHeights[(row * this.columns) + column] = mapCorners[row][column].getWaterHeight();
 			}
+		}
+		for (final War3ID groundTile : w3eFile.getGroundTiles()) {
+			this.groundTileIds.add(groundTile.getValue());
 		}
 		CCliffLayout.markCliffs(this.corners, this.columns, this.rows);
 		layOutCliffs(new Rectangle(0, 0, this.columns - 1, this.rows - 1));
@@ -109,9 +119,17 @@ public final class CTerrainData {
 			}
 			rampModelDirs.add(cliffInfo.getField("rampModelDir"));
 		}
+		final DataTable terrainTable = new DataTable(worldEditStrings);
+		try (InputStream stream = dataSource.getResourceAsStream("TerrainArt\\Terrain.slk")) {
+			terrainTable.readSLK(stream);
+		}
+		final Set<String> tileTypes = new HashSet<>();
+		for (final String id : terrainTable.keySet()) {
+			tileTypes.add(id.toLowerCase(Locale.ROOT));
+		}
 		final Element waterInfo = waterTable.get(w3eFile.getTileset() + "Sha");
 		final float waterHeightOffset = waterInfo != null ? waterInfo.getFieldFloatValue("height") : 0;
-		return new CTerrainData(w3eFile, tileset, new CCliffLayout.CliffTypes() {
+		final CTerrainData terrainData = new CTerrainData(w3eFile, tileset, new CCliffLayout.CliffTypes() {
 			@Override
 			public String getRampModelDir(final int cliffType) {
 				return rampModelDirs.get(cliffType);
@@ -122,6 +140,8 @@ public final class CTerrainData {
 				return dataSource.has(path);
 			}
 		}, waterHeightOffset);
+		terrainData.knownTileTypes = tileTypes;
+		return terrainData;
 	}
 
 	private void layOutCliffs(final Rectangle area) {
@@ -169,6 +189,24 @@ public final class CTerrainData {
 		return (int) ((y - this.centerOffsetY) / 128.0f);
 	}
 
+	/** The terrain corner nearest to the point, halves rounding up, as a ground type change picks its center. */
+	private CTerrainCorner nearestCorner(final float x, final float y) {
+		final int column = nearestColumn(x);
+		final int row = nearestRow(y);
+		if ((column < 0) || (column >= this.columns) || (row < 0) || (row >= this.rows)) {
+			return null;
+		}
+		return this.corners[column][row];
+	}
+
+	public int nearestColumn(final float x) {
+		return (int) Math.floor(getTerrainSpaceX(x) + 0.5f);
+	}
+
+	public int nearestRow(final float y) {
+		return (int) Math.floor(getTerrainSpaceY(y) + 0.5f);
+	}
+
 	/** The corner at the bottom left of the cell holding the point, or null outside the map. */
 	private CTerrainCorner cornerAt(final float x, final float y) {
 		final int cellX = cellX(x);
@@ -177,6 +215,44 @@ public final class CTerrainData {
 			return this.corners[cellX][cellY];
 		}
 		return null;
+	}
+
+	/** Ground tile types a ground type change can load: those the map already uses, and the data tables' while there is room. */
+	public static final int MAX_GROUND_TEXTURES = 15;
+
+	/** The ground type (a tile raw code) of the corner nearest to the point; 0 outside the map. */
+	public int getTerrainType(final float x, final float y) {
+		final CTerrainCorner corner = nearestCorner(x, y);
+		if (corner == null) {
+			return 0;
+		}
+		final int index = corner.getGroundTexture();
+		return index < this.groundTileIds.size() ? this.groundTileIds.get(index) : 0;
+	}
+
+	public int getTerrainVariation(final float x, final float y) {
+		final CTerrainCorner corner = nearestCorner(x, y);
+		return corner == null ? 0 : corner.getGroundVariation();
+	}
+
+	/** Whether the type is one a corner can take now: a tile of the map or one that can still be added. */
+	public boolean canTakeTerrainType(final int tileType) {
+		if (this.groundTileIds.contains(tileType)) {
+			return true;
+		}
+		return (this.groundTileIds.size() < MAX_GROUND_TEXTURES)
+				&& ((this.knownTileTypes == null) || this.knownTileTypes.contains(new War3ID(tileType).asStringValue().toLowerCase(Locale.ROOT)));
+	}
+
+	/** Sets the ground type and variation of a corner (column, row); the type must pass {@link #canTakeTerrainType}. */
+	public void setTerrainType(final int column, final int row, final int tileType, final int variation) {
+		int index = this.groundTileIds.indexOf(tileType);
+		if (index < 0) {
+			this.groundTileIds.add(tileType);
+			index = this.groundTileIds.size() - 1;
+		}
+		this.corners[column][row].setGroundTexture(index);
+		this.corners[column][row].setGroundVariation(variation);
 	}
 
 	public int getLayerHeight(final float x, final float y) {

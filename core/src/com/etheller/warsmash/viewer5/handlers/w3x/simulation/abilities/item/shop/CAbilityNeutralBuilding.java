@@ -1,8 +1,9 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.item.shop;
 
+import java.util.Arrays;
+
 import com.badlogic.gdx.math.Rectangle;
 import com.etheller.warsmash.util.War3ID;
-import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnitEnumFunction;
@@ -60,8 +61,9 @@ public class CAbilityNeutralBuilding extends AbstractGenericAliasedAbility {
 	private final boolean onlySelectAllies;
 
 	private int nextUpdateTick = 0;
-	private final CUnit[] selectedPlayerUnit = new CUnit[WarsmashConstants.MAX_PLAYERS];
-	private final SimulationRenderComponent[] selectedPlayerUnitFx = new SimulationRenderComponent[WarsmashConstants.MAX_PLAYERS];
+	// Sized by the game's player count on first use: the ability is created without a game at hand.
+	private CUnit[] selectedPlayerUnit = new CUnit[0];
+	private SimulationRenderComponent[] selectedPlayerUnitFx = new SimulationRenderComponent[0];
 	private final Rectangle recycleRect = new Rectangle();
 
 	public CAbilityNeutralBuilding(final int handleId, final War3ID code, final War3ID alias,
@@ -89,10 +91,11 @@ public class CAbilityNeutralBuilding extends AbstractGenericAliasedAbility {
 
 	@Override
 	public void onTick(final CSimulation game, final CUnit unit) {
+		ensurePlayerSlots(game);
 		final int gameTurnTick = game.getGameTurnTick();
 		if (gameTurnTick >= this.nextUpdateTick) {
 			boolean searchUnits = false;
-			final int maxMapPlayers = WarsmashConstants.MAX_PLAYERS - 4;
+			final int maxMapPlayers = game.getGameData().getMaxPlayers() - 4;
 			for (int i = 0; i < maxMapPlayers; i++) {
 				final CUnit selectedUnit = this.selectedPlayerUnit[i];
 				if (!canSelectUnit(game, unit, selectedUnit)) {
@@ -113,7 +116,18 @@ public class CAbilityNeutralBuilding extends AbstractGenericAliasedAbility {
 		}
 	}
 
+	private void ensurePlayerSlots(final CSimulation game) {
+		final int maxPlayers = game.getGameData().getMaxPlayers();
+		if (this.selectedPlayerUnit.length < maxPlayers) {
+			this.selectedPlayerUnit = Arrays.copyOf(this.selectedPlayerUnit, maxPlayers);
+			this.selectedPlayerUnitFx = Arrays.copyOf(this.selectedPlayerUnitFx, maxPlayers);
+		}
+	}
+
 	private void unselectUnit(final int i) {
+		if (i >= this.selectedPlayerUnit.length) {
+			return;
+		}
 		if (this.selectedPlayerUnit[i] != null) {
 			this.selectedPlayerUnit[i].notifyOrdersChanged();
 			this.selectedPlayerUnit[i] = null;
@@ -248,7 +262,7 @@ public class CAbilityNeutralBuilding extends AbstractGenericAliasedAbility {
 	}
 
 	public CUnit getSelectedPlayerUnit(final int playerIndex) {
-		return this.selectedPlayerUnit[playerIndex];
+		return (playerIndex < this.selectedPlayerUnit.length) ? this.selectedPlayerUnit[playerIndex] : null;
 	}
 
 	/**
@@ -264,6 +278,7 @@ public class CAbilityNeutralBuilding extends AbstractGenericAliasedAbility {
 	}
 
 	private void selectUnit(final CSimulation game, final CUnit enumUnit, final int playerIndex) {
+		ensurePlayerSlots(game);
 		this.selectedPlayerUnit[playerIndex] = enumUnit;
 		if (this.showUnitIndicator) {
 			this.selectedPlayerUnitFx[playerIndex] = game.createPersistentSpellEffectOnUnit(enumUnit, getAlias(),

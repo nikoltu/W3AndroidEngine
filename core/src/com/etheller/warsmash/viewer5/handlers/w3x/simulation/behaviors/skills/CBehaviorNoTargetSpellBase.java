@@ -1,5 +1,6 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.skills;
 
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CReleaseCheats;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.CAbilitySpellBase;
@@ -103,7 +104,7 @@ public class CBehaviorNoTargetSpellBase implements CBehavior {
 		boolean wasChanneling = this.channeling;
 		if (!wasEffectDone) {
 			this.doneEffect = true;
-			final int manaCost = this.ability.getManaCost();
+			final int manaCost = CReleaseCheats.manaCost(simulation, this.unit, this.ability.getManaCost());
 			if (this.unit.getMana() < manaCost) {
 				simulation.getCommandErrorListener().showInterfaceError(this.unit.getPlayerIndex(), CommandStringErrorKeys.NOT_ENOUGH_MANA);
 				return this.unit.pollNextOrderBehavior(simulation);
@@ -113,6 +114,9 @@ public class CBehaviorNoTargetSpellBase implements CBehavior {
 			this.unit.fireSpellEvents(simulation, JassGameEventsWar3.EVENT_UNIT_SPELL_EFFECT, this.ability, null);
 			this.unit.setMana(Math.max(0, this.unit.getMana() - manaCost));
 			this.channeling = this.ability.doEffect(simulation, this.unit, null);
+			if (this.unit.getInventoryData() != null) {
+				this.unit.getInventoryData().onItemAbilityEffect(simulation, this.unit, this.ability);
+			}
 			if (this.channeling) {
 				simulation.unitLoopSoundEffectEvent(this.unit, this.ability.getAlias());
 			} else {

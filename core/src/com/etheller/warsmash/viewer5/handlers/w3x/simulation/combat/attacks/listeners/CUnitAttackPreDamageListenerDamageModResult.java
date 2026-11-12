@@ -59,11 +59,6 @@ public class CUnitAttackPreDamageListenerDamageModResult {
 		}
 	}
 
-	public void lockBonus() {
-		unlockBonus = false;
-		unlockMultiplier = false;
-	}
-
 	public void lock() {
 		unlockBonus = false;
 		unlockMultiplier = false;

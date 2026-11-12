@@ -43,6 +43,8 @@ final class LaunchContract {
 	static final String EXTRA_SAVE_FILE = "savefile";
 	/** A replay of the Replay folder, by its full path. */
 	static final String EXTRA_REPLAY_FILE = "replayfile";
+	/** The replay is played although this engine would refuse it. */
+	static final String EXTRA_REPLAY_FORCED = "replayforced";
 	/** The map the game starts on, whose loading screen the engine shows from its first frame on. */
 	static final String EXTRA_MAP_FILE = "mapfile";
 	/** The launcher's skin: {@link #SKIN_REFORGED} shows the Reforged loading screens of maps. */
@@ -75,6 +77,9 @@ final class LaunchContract {
 		putString(intent, EXTRA_OPTIONS, request.options);
 		putString(intent, EXTRA_SAVE_FILE, request.saveFile);
 		putString(intent, EXTRA_REPLAY_FILE, request.replayFile);
+		if (request.replayForced) {
+			intent.putExtra(EXTRA_REPLAY_FORCED, true);
+		}
 		putString(intent, EXTRA_MAP_FILE, request.mapFile);
 		putString(intent, EXTRA_SKIN, request.skin);
 		if (request.portrait > 0) {
@@ -101,6 +106,7 @@ final class LaunchContract {
 		request.options = intent.getStringExtra(EXTRA_OPTIONS);
 		request.saveFile = intent.getStringExtra(EXTRA_SAVE_FILE);
 		request.replayFile = intent.getStringExtra(EXTRA_REPLAY_FILE);
+		request.replayForced = intent.getBooleanExtra(EXTRA_REPLAY_FORCED, false);
 		request.mapFile = intent.getStringExtra(EXTRA_MAP_FILE);
 		request.skin = intent.getStringExtra(EXTRA_SKIN);
 		request.portrait = intent.getIntExtra(EXTRA_PORTRAIT, 0);

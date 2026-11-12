@@ -89,9 +89,11 @@ abstract class CommonNatives {
 
 	/**
 	 * 1.29 resumes a TriggerSleepAction or TriggerWaitForSound 0.02-0.23 s after the time asked for (0.17 s on
-	 * average, a wait of 0 or less too), paced by real time; here a fixed number of steps, the same on every computer.
+	 * average), paced by real time; here a fixed number of steps, the same on every computer. A wait of under a tenth
+	 * of a second never resumes sooner than 0.2 s there (0.18-0.23 s measured for waits of 0 up to 0.1 s).
 	 */
 	static final int SCRIPT_WAIT_LATENCY_STEPS = 3;
+	static final int SCRIPT_WAIT_MIN_STEPS = 4;
 
 	/**
 	 * TriggerSleepAction and TriggerWaitForSound: the thread resumes on a whole simulation step.
@@ -105,8 +107,9 @@ abstract class CommonNatives {
 			currentThread.setSleeping(true);
 			final CTimerSleepAction timer = new CTimerSleepAction(currentThread);
 			timer.setRepeats(false);
-			final int steps = Math.round(Math.max(0, seconds) / WarsmashConstants.SIMULATION_STEP_TIME)
-					+ SCRIPT_WAIT_LATENCY_STEPS;
+			final int steps = Math.max(SCRIPT_WAIT_MIN_STEPS,
+					Math.round(Math.max(0, seconds) / WarsmashConstants.SIMULATION_STEP_TIME)
+							+ SCRIPT_WAIT_LATENCY_STEPS);
 			timer.setTimeoutTime(steps * WarsmashConstants.SIMULATION_STEP_TIME);
 			timer.start(simulation);
 		}

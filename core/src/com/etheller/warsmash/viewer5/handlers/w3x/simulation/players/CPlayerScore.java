@@ -29,7 +29,7 @@ public enum CPlayerScore implements CHandle {
 	RESOURCE_TOTAL,
 	TOTAL;
 
-	public static CPlayerScore[] VALUES = values();
+	public static final CPlayerScore[] VALUES = values();
 
 	@Override
 	public int getHandleId() {

@@ -108,7 +108,6 @@ public class BattleNetUI {
 	private final SimpleFrame welcomeQuitBattleNetButtonContainer;
 	private final SimpleFrame chatQuitBattleNetButtonContainer;
 	private long gamingNetworkSessionToken;
-	private String gamingNetworkMessageOfTheDay;
 	private final EditBoxFrame naAccountName;
 	private final EditBoxFrame naPassword;
 	private final EditBoxFrame naRepeatPassword;
@@ -741,11 +740,6 @@ public class BattleNetUI {
 
 	public void showCustomGameCreateMenu() {
 		this.battleNetCustomCreatePanel.setVisible(true);
-	}
-
-	public void hideWelcomeScreen() {
-		this.welcomePanel.setVisible(false);
-		this.quitBattleNetButton.setVisible(false);
 	}
 
 	public void hideCurrentScreen() {

@@ -21,6 +21,7 @@ import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -116,6 +117,7 @@ public class CascDataSource implements DataSource {
 	}
 
 	private static final int PARSED_ALIASES_KEPT = 4;
+	private static final int WRITE_CHUNK = 1 << 16;
 	private static final LinkedList<ParsedAliases> PARSED_ALIASES = new LinkedList<>();
 
 	private static final class ParsedAliases {
@@ -271,14 +273,24 @@ public class CascDataSource implements DataSource {
 					final File tempProduct = new File(Mount.EXTRACT_FOLDER,
 							tempFilepath.replace('\\', File.separatorChar));
 					tempProduct.delete();
-					tempProduct.getParentFile().mkdirs();
+					makeFolders(tempProduct.getParentFile());
 					try (final FileChannel fileChannel = FileChannel.open(tempProduct.toPath(),
 							StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.READ,
 							StandardOpenOption.TRUNCATE_EXISTING)) {
-						fileChannel.write(buffer);
+						// A channel writes a heap buffer through a direct buffer as big as the write and keeps that on
+						// the writing thread; Android counts those on the Java heap, so the file is written in parts.
+						final int end = buffer.limit();
+						while (buffer.position() < end) {
+							buffer.limit(Math.min(end, buffer.position() + WRITE_CHUNK));
+							fileChannel.write(buffer);
+						}
+						buffer.limit(end);
 					}
 					tempProduct.deleteOnExit();
 					this.mount.extractedFiles.put(tempFilepath, tempProduct);
+					this.mount.extractionOrder.add(tempFilepath);
+					this.mount.extractedBytes += tempProduct.length();
+					this.mount.trimExtracted(tempFilepath);
 					return tempProduct;
 				}
 			}
@@ -287,6 +299,17 @@ public class CascDataSource implements DataSource {
 			throw new RuntimeException("CASC parser error for: " + tempFilepath, e);
 		}
 		return null;
+	}
+
+	/** Folders are registered for deletion before the files in them, which exit deletes in reverse order. */
+	private static void makeFolders(final File folder) {
+		if ((folder == null) || folder.isDirectory()) {
+			return;
+		}
+		makeFolders(folder.getParentFile());
+		if (folder.mkdir()) {
+			folder.deleteOnExit();
+		}
 	}
 
 	@Override
@@ -381,6 +404,8 @@ public class CascDataSource implements DataSource {
 	 */
 	static final class Mount {
 		private static final String LISTFILE_FORMAT = "warsmash-casc-listfile 1";
+		/** Movies and fonts extracted to disk are a cache: the oldest are deleted past this size and extracted again. */
+		private static final long EXTRACT_LIMIT_BYTES = 768L << 20;
 		static final File EXTRACT_FOLDER = new File(System.getProperty("java.io.tmpdir"), "warsmash-casc");
 		private static final File INDEX_FOLDER = new File(System.getProperty("java.io.tmpdir"), "warsmash-casc-index");
 		private static final Map<String, Mount> MOUNTS = new HashMap<>();
@@ -394,7 +419,25 @@ public class CascDataSource implements DataSource {
 		final Set<String> paths;
 		final Map<String, Boolean> readableCache = new ConcurrentHashMap<>();
 		final Map<String, File> extractedFiles = new ConcurrentHashMap<>();
+		/** Paths of the extracted files, oldest first; guarded by this mount like the byte count. */
+		final ArrayDeque<String> extractionOrder = new ArrayDeque<>();
+		long extractedBytes;
 		private int users;
+
+		void trimExtracted(final String keep) {
+			while ((this.extractedBytes > EXTRACT_LIMIT_BYTES) && (this.extractionOrder.size() > 1)) {
+				final String oldest = this.extractionOrder.poll();
+				if (oldest.equals(keep)) {
+					this.extractionOrder.add(oldest);
+					continue;
+				}
+				final File file = this.extractedFiles.remove(oldest);
+				if (file != null) {
+					this.extractedBytes -= file.length();
+					file.delete();
+				}
+			}
+		}
 
 		private Mount(final String key, final byte[] buildInfo, final Path installPath, final String product,
 				final boolean old131Format) throws IOException {

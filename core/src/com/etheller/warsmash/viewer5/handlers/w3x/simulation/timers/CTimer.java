@@ -47,6 +47,10 @@ public abstract class CTimer {
 		return this.running;
 	}
 
+	public int getGeneration() {
+		return this.generation;
+	}
+
 	public float getTimeoutTime() {
 		return this.timeoutTime;
 	}

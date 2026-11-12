@@ -120,7 +120,15 @@ final class MenuCampaigns {
 		((MenuFrame) this.difficultySelect.getPopupMenuFrame()).setItems(uiViewport, difficultyItems);
 		final StringFrame difficultyTitle = (StringFrame) ((GlueTextButtonFrame) this.difficultySelect
 				.getPopupTitleFrame()).getButtonText();
-		rootFrame.setDecoratedText(difficultyTitle, CAMPAIGN_DIFFICULTY_KEYS[0]);
+		int startIndex = 0;
+		final int scriptDefault = CCampaignProgress.getDefaultDifficulty();
+		for (int i = 0; i < CAMPAIGN_DIFFICULTIES.length; i++) {
+			if (CAMPAIGN_DIFFICULTIES[i].ordinal() == scriptDefault) {
+				startIndex = i;
+				this.campaignDifficulty = CAMPAIGN_DIFFICULTIES[i];
+			}
+		}
+		rootFrame.setDecoratedText(difficultyTitle, CAMPAIGN_DIFFICULTY_KEYS[startIndex]);
 		this.difficultySelect.setMenuClickListener((button, menuItemIndex) -> {
 			if ((menuItemIndex >= 0) && (menuItemIndex < CAMPAIGN_DIFFICULTY_KEYS.length)) {
 				this.campaignDifficulty = CAMPAIGN_DIFFICULTIES[menuItemIndex];
@@ -321,12 +329,12 @@ final class MenuCampaigns {
 	/**
 	 * A saved game of a campaign's mission goes on as a mission of that campaign, as if the launcher had started it.
 	 *
-	 * @param campaignNumber by the number scripts know it by; -1 (not a campaign's game) leaves the campaign as it was
+	 * @param campaignNumber by the number scripts know it by; -1 for a game that is no campaign's
 	 */
 	void setStartedCampaign(final int campaignNumber) {
-		if ((campaignNumber >= 0) && (this.campaignCatalog != null)) {
-			this.startedEntry = this.campaignCatalog.getEntry(campaignNumber);
-		}
+		this.startedEntry = (campaignNumber >= 0) && (this.campaignCatalog != null)
+				? this.campaignCatalog.getEntry(campaignNumber)
+				: null;
 	}
 
 	/** The campaign a map is a mission of, by the number scripts know it by; -1 when none or more than one lists it. */
@@ -339,6 +347,21 @@ final class MenuCampaigns {
 	boolean isStartedCampaignMission(final String mapFile) {
 		return (this.startedEntry != null)
 				&& (CampaignResult.playedMission(this.campaignCatalog, this.startedEntry, mapFile) >= 0);
+	}
+
+	/**
+	 * A won map that is a mission of the campaign being played is recorded as won: the last missions of some campaigns
+	 * open nothing of their own campaign that would tell. A campaign's map won as a custom game is no mission won.
+	 */
+	void recordVictory(final String mapFile) {
+		final CampaignCatalog.Entry entry = this.startedEntry;
+		if (entry == null) {
+			return;
+		}
+		final int mission = CampaignResult.playedMission(this.campaignCatalog, entry, mapFile);
+		if (mission >= 0) {
+			CCampaignProgress.setMissionWon(entry.getNumber(), mission);
+		}
 	}
 
 	/**

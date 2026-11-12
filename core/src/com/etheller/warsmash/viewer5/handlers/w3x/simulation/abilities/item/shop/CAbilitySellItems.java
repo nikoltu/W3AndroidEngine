@@ -72,8 +72,8 @@ public final class CAbilitySellItems extends AbstractCAbility {
 					final List<CUnitTypeRequirement> requirements = itemType.getRequirements();
 					boolean requirementsMet = true;
 					for (final CUnitTypeRequirement requirement : requirements) {
-						if (requirementsPlayer.getTechtreeUnlocked(requirement.getRequirement()) < requirement
-								.getRequiredLevel()) {
+						if (!requirementsPlayer.isRequirementMet(requirement.getRequirement(),
+								requirement.getRequiredLevel())) {
 							requirementsMet = false;
 							receiver.missingRequirement(requirement.getRequirement(), requirement.getRequiredLevel());
 						}
@@ -175,8 +175,8 @@ public final class CAbilitySellItems extends AbstractCAbility {
 					final List<CUnitTypeRequirement> requirements = itemType.getRequirements();
 					boolean requirementsMet = true;
 					for (final CUnitTypeRequirement requirement : requirements) {
-						if (requirementsPlayer.getTechtreeUnlocked(requirement.getRequirement()) < requirement
-								.getRequiredLevel()) {
+						if (!requirementsPlayer.isRequirementMet(requirement.getRequirement(),
+								requirement.getRequiredLevel())) {
 							requirementsMet = false;
 						}
 					}

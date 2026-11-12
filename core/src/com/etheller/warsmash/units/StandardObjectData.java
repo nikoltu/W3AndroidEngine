@@ -371,17 +371,6 @@ public class StandardObjectData {
 		return unitMetaData;
 	}
 
-	public DataTable getUnitEditorData() {
-		final DataTable unitMetaData = new DataTable(this.worldEditStrings);
-		try {
-			unitMetaData.readTXT(this.source.getResourceAsStream("UI\\UnitEditorData.txt"), true);
-		}
-		catch (final IOException e) {
-			throw new RuntimeException(e);
-		}
-		return unitMetaData;
-	}
-
 	public DataTable getWorldEditData() {
 		final DataTable unitMetaData = new DataTable(this.worldEditStrings);
 		try {
@@ -674,10 +663,6 @@ public class StandardObjectData {
 			return null;
 		}
 
-		// @Override
-		// public String getName() {
-		// return dataSource.profile.get(id).getName();
-		// }
 		@Override
 		public String getName() {
 			String name = getField("Name");

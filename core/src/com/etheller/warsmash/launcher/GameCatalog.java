@@ -22,6 +22,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.zip.CRC32;
 
 import com.badlogic.gdx.files.FileHandle;
 import com.etheller.warsmash.WarsmashGdxMapScreen;
@@ -41,6 +42,7 @@ import com.etheller.warsmash.units.StandardObjectData;
 import com.etheller.warsmash.units.custom.WTS;
 import com.etheller.warsmash.util.ArgbImage;
 import com.etheller.warsmash.util.WarsmashConstants;
+import com.etheller.warsmash.viewer5.handlers.w3x.War3MapViewer;
 import com.etheller.warsmash.viewer5.handlers.w3x.replay.GameReplays;
 import com.etheller.warsmash.viewer5.handlers.w3x.replay.W3gReplay;
 import com.etheller.warsmash.viewer5.handlers.w3x.save.SavedGame;
@@ -61,7 +63,9 @@ import com.etheller.warsmash.viewer5.handlers.w3x.ui.menu.CampaignMission;
  */
 public class GameCatalog {
 	// 2: test maps are no longer listed, so lists kept by format 1 are made again.
-	private static final int MAP_LIST_FORMAT = 2;
+	// 3: the header also holds a fingerprint of the map files, so added, removed and changed maps are noticed.
+	private static final int MAP_LIST_FORMAT = 3;
+	private static final int MAP_FOLDER_DEPTH = 8;
 
 	/** The campaigns and how far the current profile got. */
 	public static final class Campaigns {
@@ -211,6 +215,8 @@ public class GameCatalog {
 		public String unplayable;
 		/** Recorded by another version of the engine. */
 		public boolean otherVersion;
+		/** Whether the map is a melee map, or null when the map cannot be read here. */
+		public Boolean melee;
 
 		ReplayEntry(final File file, final boolean warcraft) {
 			final String fileName = file.getName();
@@ -223,6 +229,14 @@ public class GameCatalog {
 
 		public boolean playable() {
 			return !this.damaged && (this.unplayable == null);
+		}
+
+		/**
+		 * An incompatible replay of this engine's own kind (another version, map or game data) can be tried anyway,
+		 * with the recorded checksums ignored; a Warcraft III replay cannot.
+		 */
+		public boolean canTryAnyway() {
+			return !this.damaged && !this.warcraft && (this.unplayable != null);
 		}
 
 		/** The map's file name without its folders and extension, or "" when the replay does not tell. */
@@ -434,10 +448,11 @@ public class GameCatalog {
 	public void maps(final Consumer<List<MapEntry>> done) {
 		run(() -> {
 			if (this.maps == null) {
-				this.maps = readMapList();
+				final String header = mapListHeader();
+				this.maps = readMapList(header);
 				if (this.maps == null) {
 					this.maps = scanMaps();
-					writeMapList(this.maps);
+					writeMapList(header, this.maps);
 				}
 				labelNamesakes(this.maps);
 			}
@@ -445,14 +460,81 @@ public class GameCatalog {
 		}, done);
 	}
 
-	private List<MapEntry> readMapList() {
+	private String mapListHeader() {
+		return MAP_LIST_FORMAT + "|" + this.dataKey + "|" + mapFingerprint(this.ini);
+	}
+
+	/**
+	 * Tells when the maps of the game data may have changed without opening the data: the map files of the folder
+	 * sources and the files the other sources are kept in, by name, size and time, and the folders that may hold maps
+	 * by time.
+	 */
+	static String mapFingerprint(final DataTable ini) {
+		final Element sources = ini.get("DataSources");
+		final StringBuilder facts = new StringBuilder();
+		for (int i = 0; (sources != null) && (i < sources.size()); i++) {
+			final String id = String.format(Locale.ROOT, "%02d", i);
+			final String path = sources.getField("Path" + id);
+			if ((path == null) || path.isEmpty()) {
+				continue;
+			}
+			final File root = new File(path);
+			facts.append('#').append(i).append('\n');
+			if ("Folder".equals(sources.getField("Type" + id))) {
+				addMapFacts(facts, root, "", 0, false);
+			}
+			else {
+				addFileFacts(facts, root, "");
+				// A CASC storage is updated through its build information.
+				addFileFacts(facts, new File(root, ".build.info"), ".build.info");
+			}
+		}
+		final CRC32 crc = new CRC32();
+		crc.update(facts.toString().getBytes(StandardCharsets.UTF_8));
+		return Long.toHexString(crc.getValue()) + "-" + facts.length();
+	}
+
+	private static void addFileFacts(final StringBuilder facts, final File file, final String name) {
+		facts.append(name).append('\t').append(file.length()).append('\t').append(file.lastModified()).append('\n');
+	}
+
+	/**
+	 * A folder source can hold maps in its root, in the folder of a game data layer and below Maps at any depth;
+	 * nothing else is looked into, since the data folders hold tens of thousands of files.
+	 */
+	private static void addMapFacts(final StringBuilder facts, final File folder, final String name, final int depth,
+			final boolean inMaps) {
+		final File[] children = folder.listFiles();
+		if (children == null) {
+			return;
+		}
+		Arrays.sort(children);
+		addFileFacts(facts, folder, name + "/");
+		for (final File child : children) {
+			final String childName = name + "/" + child.getName();
+			if (child.isDirectory()) {
+				final boolean maps = child.getName().equalsIgnoreCase("Maps");
+				if ((depth < MAP_FOLDER_DEPTH) && (inMaps || maps || (depth == 0))) {
+					addMapFacts(facts, child, childName, depth + 1, inMaps || maps);
+				}
+			}
+			else {
+				final String lower = child.getName().toLowerCase(Locale.ROOT);
+				if (lower.endsWith(".w3x") || lower.endsWith(".w3m")) {
+					addFileFacts(facts, child, childName);
+				}
+			}
+		}
+	}
+
+	private List<MapEntry> readMapList(final String header) {
 		final File file = this.mapList;
 		if (!file.isFile()) {
 			return null;
 		}
 		try {
 			final List<String> lines = Files.readAllLines(file.toPath(), StandardCharsets.UTF_8);
-			if (lines.isEmpty() || !lines.get(0).equals(MAP_LIST_FORMAT + "|" + this.dataKey)) {
+			if (lines.isEmpty() || !lines.get(0).equals(header)) {
 				return null;
 			}
 			final List<MapEntry> entries = new ArrayList<>();
@@ -469,9 +551,8 @@ public class GameCatalog {
 		}
 	}
 
-	private void writeMapList(final List<MapEntry> entries) {
-		final StringBuilder text = new StringBuilder().append(MAP_LIST_FORMAT).append('|').append(this.dataKey)
-				.append('\n');
+	private void writeMapList(final String header, final List<MapEntry> entries) {
+		final StringBuilder text = new StringBuilder().append(header).append('\n');
 		for (final MapEntry entry : entries) {
 			text.append(entry.path).append('\t').append(entry.players).append('\t')
 					.append(entry.name.replace('\t', ' ').replace('\n', ' ')).append('\t')
@@ -584,7 +665,8 @@ public class GameCatalog {
 	public void mapDetails(final String path, final Consumer<MapDetails> done) {
 		run(() -> {
 			final DataSource data = data();
-			final War3Map map = new War3Map(data, path);
+			// A replay's map can be one outside the game data, named by its file.
+			final War3Map map = War3MapViewer.beginLoadingMap(data, path);
 			final War3MapW3i info = map.readMapInformation();
 			final WTS wts = Warcraft3MapObjectData.loadWTS(map);
 			final MapDetails details = new MapDetails(path);
@@ -692,6 +774,7 @@ public class GameCatalog {
 			final List<ReplayEntry> replays = new ArrayList<>();
 			final File[] files = replayFolder().listFiles();
 			Integer dataChecksum = null;
+			final Map<String, Boolean> melee = new HashMap<>();
 			if (files != null) {
 				for (final File file : files) {
 					final String lower = file.getName().toLowerCase(Locale.ROOT);
@@ -711,6 +794,10 @@ public class GameCatalog {
 								dataChecksum = GameReplays.dataChecksum(data());
 							}
 							entry.unplayable = GameReplays.unplayableReason(header, data(), dataChecksum);
+							if (!melee.containsKey(entry.mapFile)) {
+								melee.put(entry.mapFile, isMelee(entry.mapFile));
+							}
+							entry.melee = melee.get(entry.mapFile);
 						}
 						else {
 							describe(entry, W3gReplay.read(in));
@@ -726,6 +813,16 @@ public class GameCatalog {
 					: Long.compare(b.modified, a.modified));
 			return replays;
 		}, done);
+	}
+
+	private Boolean isMelee(final String path) {
+		try {
+			final War3Map map = War3MapViewer.beginLoadingMap(data(), path);
+			return map.readMapInformation().hasFlag(War3MapW3iFlags.MELEE_MAP);
+		}
+		catch (final IOException | RuntimeException e) {
+			return null;
+		}
 	}
 
 	private static void describe(final ReplayEntry entry, final CReplayHeader header) {

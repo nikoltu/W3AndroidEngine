@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import com.badlogic.gdx.graphics.glutils.ShaderProgram;
 import com.etheller.warsmash.viewer5.HandlerResource;
 import com.etheller.warsmash.viewer5.ModelViewer;
+import com.etheller.warsmash.viewer5.handlers.AbstractMdxModelViewer;
 import com.etheller.warsmash.viewer5.handlers.ModelHandler;
 import com.etheller.warsmash.viewer5.handlers.ResourceHandlerConstructionParams;
 import com.etheller.warsmash.viewer5.handlers.blp.BlpHandler;
@@ -18,8 +19,6 @@ public class MdxHandler extends ModelHandler {
 		MENU,
 		GAME
 	};
-
-	public static ShaderEnvironmentType CURRENT_SHADER_TYPE;
 
 	public MdxHandler() {
 		this.extensions = new ArrayList<>();
@@ -44,7 +43,8 @@ public class MdxHandler extends ModelHandler {
 		this.shaders.particles = viewer.webGL.createShaderProgram(MdxShaders.vsParticles(), MdxShaders.fsParticles);
 		// Shaders.simple = viewer.webGL.createShaderProgram(MdxShaders.vsSimple,
 		// MdxShaders.fsSimple);
-		this.shaders.hd = viewer.webGL.createShaderProgram(MdxShaders.vsHd, MdxShaders.fsHd());
+		this.shaders.hd = viewer.webGL.createShaderProgram(MdxShaders.vsHd, MdxShaders.fsHd((viewer instanceof AbstractMdxModelViewer)
+				&& (((AbstractMdxModelViewer) viewer).shaderEnvironmentType == ShaderEnvironmentType.MENU)));
 		// TODO HD reforged
 
 		// If a shader failed to compile, don't allow the handler to be registered, and

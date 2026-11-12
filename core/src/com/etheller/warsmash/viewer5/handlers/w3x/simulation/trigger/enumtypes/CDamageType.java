@@ -43,7 +43,7 @@ public enum CDamageType implements CHandle {
 		this.oldMagic = oldMagic;
 	}
 
-	public static CDamageType[] VALUES = values();
+	public static final CDamageType[] VALUES = values();
 
 	@Override
 	public int getHandleId() {

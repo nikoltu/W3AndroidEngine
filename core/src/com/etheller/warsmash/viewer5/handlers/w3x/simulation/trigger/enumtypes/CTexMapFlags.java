@@ -8,7 +8,7 @@ public enum CTexMapFlags implements CHandle {
 	WRAP_V,
 	WRAP_UV;
 
-	public static CTexMapFlags[] VALUES = values();
+	public static final CTexMapFlags[] VALUES = values();
 
 	@Override
 	public int getHandleId() {

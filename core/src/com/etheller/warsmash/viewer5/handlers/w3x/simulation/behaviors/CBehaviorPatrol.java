@@ -24,6 +24,7 @@ public class CBehaviorPatrol implements CRangedBehavior {
 	private List<AbilityTarget> targets = new ArrayList<>();
 	private int iter = 1;
 	private boolean justAutoAttacked = false;
+	private int nextScanTick = Integer.MIN_VALUE;
 
 	public CBehaviorPatrol(final CUnit unit) {
 		this.unit = unit;
@@ -31,6 +32,7 @@ public class CBehaviorPatrol implements CRangedBehavior {
 
 	public CBehavior reset(final AbilityPointTarget target) {
 		targets.clear();
+		this.nextScanTick = Integer.MIN_VALUE;
 		this.target = target;
 		this.startPoint = new AbilityPointTarget(this.unit.getX(), this.unit.getY());
 		targets.add(this.startPoint);
@@ -60,7 +62,13 @@ public class CBehaviorPatrol implements CRangedBehavior {
 
 	@Override
 	public boolean isWithinRange(final CSimulation simulation) {
-		if (this.justAutoAttacked = this.unit.autoAcquireTargets(simulation, false)) {
+		final int tick = simulation.getGameTurnTick();
+		this.justAutoAttacked = false;
+		if (tick >= this.nextScanTick) {
+			this.nextScanTick = tick + CBehaviorAttackMove.SCAN_TICKS;
+			this.justAutoAttacked = this.unit.autoAcquireTargets(simulation, false);
+		}
+		if (this.justAutoAttacked) {
 			// kind of a hack
 			return true;
 		}

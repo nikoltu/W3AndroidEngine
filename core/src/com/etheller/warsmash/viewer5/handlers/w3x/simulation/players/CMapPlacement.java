@@ -8,7 +8,7 @@ public enum CMapPlacement implements CHandle {
 	USE_MAP_SETTINGS,
 	TEAMS_TOGETHER;
 
-	public static CMapPlacement[] VALUES = values();
+	public static final CMapPlacement[] VALUES = values();
 
 	@Override
 	public int getHandleId() {

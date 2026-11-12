@@ -20,7 +20,6 @@ import com.etheller.warsmash.parsers.fdf.frames.TextureFrame;
 import com.etheller.warsmash.parsers.fdf.frames.UIFrame;
 import com.etheller.warsmash.units.Element;
 import com.etheller.warsmash.util.War3ID;
-import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.viewer5.Bounds;
 import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.RenderDestructable;
 import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.RenderItem;
@@ -38,13 +37,10 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.mine.CAbi
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.mine.CAbilityOverlayedMine;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.CAttackType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.CDefenseType;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.CUpgradeClass;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.attacks.CUnitAttack;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CAllianceType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayer;
-import com.etheller.warsmash.viewer5.handlers.w3x.simulation.upgrade.CUpgradeEffect;
-import com.etheller.warsmash.viewer5.handlers.w3x.simulation.upgrade.CUpgradeEffectAttackDamage;
-import com.etheller.warsmash.viewer5.handlers.w3x.simulation.upgrade.CUpgradeEffectAttackDice;
-import com.etheller.warsmash.viewer5.handlers.w3x.simulation.upgrade.CUpgradeEffectDefenseUpgradeBonus;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.ResourceType;
 import com.etheller.warsmash.viewer5.handlers.w3x.ui.command.ClickableActionFrame;
 
@@ -73,6 +69,8 @@ final class MeleeUITooltips {
 	private static final int ATTACK_TWO = 6;
 	private static final int ARMOR = 7;
 	private static final int HERO_ATTRIBUTES = 8;
+	private static final int RANK = 9;
+	private static final int FOOD = 10;
 	private static final String GREEN = "|cff00ff00";
 	private static final String RED = "|cffff0000";
 	/** The gold key mark the game puts after a name, "(|cfffed312F8|r)". */
@@ -81,8 +79,35 @@ final class MeleeUITooltips {
 	/** The clock dial at the top middle of the console; the sprite frame itself has no size. */
 	private static final float CLOCK_WIDTH = 0.047f;
 	private static final float CLOCK_HEIGHT = 0.045f;
+	/*
+	 * The console tool tip as 1.29 draws it: a box of fixed width over the command card's right edge whose name,
+	 * never wrapped, widens it when longer; the costs follow the name, each after the number before it. The
+	 * border is drawn inside the frame, so the frame is a little larger than the box seen.
+	 */
+	private static final float TOOLTIP_WIDTH = 0.2204f;
+	private static final float TOOLTIP_BOTTOM = 0.1626f;
+	private static final float TOOLTIP_RIGHT = 0.0005f;
+	private static final float TOOLTIP_INSET = 0.0058f;
+	private static final float TEXT_WRAP_WIDTH = 0.210f;
+	private static final float TEXT_TOP = 0.0059f;
+	private static final float TEXT_BOTTOM = 0.0027f;
+	private static final float GAP_BELOW_NAME = 0.0050f;
+	private static final float GAP_BELOW_INFO = 0.0037f;
+	private static final float COSTS_ROW = 0.0131f;
+	private static final float COSTS_BELOW_NAME = 0.0076f;
+	private static final float COST_SPACING = 0.007f;
+	private static final float GAP_BELOW_COSTS = COSTS_ROW + GAP_BELOW_NAME;
+	/*
+	 * Without the enhanced tool tips 1.29 draws a box just around the name, the costs, the gray lines and the
+	 * requirements, right of the pointer and on the part pointed at; the resource bar then has none.
+	 */
+	private static final float SIMPLE_TIP_RIGHT_OF_POINTER = 0.021f;
+	private static final float SIMPLE_TIP_OVER_FRAME = 0.001f;
+	private static final float SIMPLE_TEXT_WRAP_WIDTH = 0.200f;
 
 	final MeleeUI ui;
+	/** Where the pointer was when the tool tip came up, for the box without the enhanced tool tips. */
+	private float pointerX;
 
 	MeleeUITooltips(final MeleeUI ui) {
 		this.ui = ui;
@@ -90,13 +115,11 @@ final class MeleeUITooltips {
 
 	void createTooltips() {
 		this.ui.tooltipFrame = this.ui.rootFrame.createFrame("SmashToolTip", this.ui.rootFrame, 0, 0);
-		this.ui.tooltipFrame.addAnchor(new AnchorDefinition(FramePoint.BOTTOMRIGHT,
-				GameUI.convertX(this.ui.uiViewport, 0.f), GameUI.convertY(this.ui.uiViewport, 0.176f)));
-		this.ui.tooltipFrame.setWidth(GameUI.convertX(this.ui.uiViewport, 0.280f));
+		this.ui.tooltipFrame.setWidth(GameUI.convertX(this.ui.uiViewport, TOOLTIP_WIDTH));
 		this.tooltipText = (StringFrame) this.ui.rootFrame.getFrameByName("SmashToolTipText", 0);
-		this.tooltipText.setWidth(GameUI.convertX(this.ui.uiViewport, 0.274f));
-		this.tooltipText.addAnchor(new AnchorDefinition(FramePoint.TOPLEFT, GameUI.convertX(this.ui.uiViewport, 0.003f),
-				GameUI.convertY(this.ui.uiViewport, -0.003f)));
+		// The name never wraps: a longer one widens the box instead.
+		this.tooltipText.addAnchor(new AnchorDefinition(FramePoint.TOPLEFT,
+				GameUI.convertX(this.ui.uiViewport, TOOLTIP_INSET), GameUI.convertY(this.ui.uiViewport, -TEXT_TOP)));
 		this.ui.tooltipFrame.setVisible(false);
 
 		this.ui.hovertipFrame = this.ui.rootFrame.createFrame("SmashHoverTip", this.ui.rootFrame, 0, 0);
@@ -107,18 +130,18 @@ final class MeleeUITooltips {
 		this.ui.hovertipFrame.setVisible(false);
 
 		this.tooltipUberTipText = (StringFrame) this.ui.rootFrame.getFrameByName("SmashUberTipText", 0);
-		this.tooltipUberTipText.setWidth(GameUI.convertX(this.ui.uiViewport, 0.274f));
+		this.tooltipUberTipText.setWidth(GameUI.convertX(this.ui.uiViewport, TEXT_WRAP_WIDTH));
 		this.uberTipNoResourcesSetPoint = new SetPoint(FramePoint.TOPLEFT, this.tooltipText, FramePoint.BOTTOMLEFT, 0,
-				GameUI.convertY(this.ui.uiViewport, -0.004f));
+				GameUI.convertY(this.ui.uiViewport, -GAP_BELOW_NAME));
 		this.uberTipWithResourcesSetPoint = new SetPoint(FramePoint.TOPLEFT, this.tooltipText, FramePoint.BOTTOMLEFT, 0,
-				GameUI.convertY(this.ui.uiViewport, -0.014f));
+				GameUI.convertY(this.ui.uiViewport, -GAP_BELOW_COSTS));
 		this.tooltipUberTipText.addSetPoint(this.uberTipNoResourcesSetPoint);
 		this.tooltipInfoText = (StringFrame) this.ui.rootFrame.getFrameByName("SmashToolTipInfoText", 0);
-		this.tooltipInfoText.setWidth(GameUI.convertX(this.ui.uiViewport, 0.274f));
+		this.tooltipInfoText.setWidth(GameUI.convertX(this.ui.uiViewport, TEXT_WRAP_WIDTH));
 		this.tooltipInfoText.addSetPoint(new SetPoint(FramePoint.TOPLEFT, this.tooltipText, FramePoint.BOTTOMLEFT, 0,
-				GameUI.convertY(this.ui.uiViewport, -0.004f)));
+				GameUI.convertY(this.ui.uiViewport, -GAP_BELOW_NAME)));
 		this.uberTipBelowInfoSetPoint = new SetPoint(FramePoint.TOPLEFT, this.tooltipInfoText, FramePoint.BOTTOMLEFT, 0,
-				GameUI.convertY(this.ui.uiViewport, -0.004f));
+				GameUI.convertY(this.ui.uiViewport, -GAP_BELOW_INFO));
 		this.tooltipResourceFrames = new UIFrame[ResourceType.VALUES.length];
 		this.tooltipResourceIconFrames = new TextureFrame[ResourceType.VALUES.length];
 		this.tooltipResourceTextFrames = new StringFrame[ResourceType.VALUES.length];
@@ -129,9 +152,16 @@ final class MeleeUITooltips {
 					.getFrameByName("SmashToolTipIconResourceBackdrop", i);
 			this.tooltipResourceTextFrames[i] = (StringFrame) this.ui.rootFrame
 					.getFrameByName("SmashToolTipIconResourceLabel", i);
-			this.tooltipResourceFrames[i].addSetPoint(new SetPoint(FramePoint.TOPLEFT, this.tooltipText,
-					FramePoint.BOTTOMLEFT, GameUI.convertX(this.ui.uiViewport, 0.004f + (0.032f * i)),
-					GameUI.convertY(this.ui.uiViewport, -0.001f)));
+			// Each cost follows the number before it, so a longer number pushes the next one along.
+			if (i == 0) {
+				this.tooltipResourceFrames[i].addSetPoint(new SetPoint(FramePoint.LEFT, this.tooltipText,
+						FramePoint.BOTTOMLEFT, 0, GameUI.convertY(this.ui.uiViewport, -COSTS_BELOW_NAME)));
+			}
+			else {
+				this.tooltipResourceFrames[i].addSetPoint(new SetPoint(FramePoint.LEFT,
+						this.tooltipResourceTextFrames[i - 1], FramePoint.RIGHT,
+						GameUI.convertX(this.ui.uiViewport, COST_SPACING), 0));
+			}
 			// have we really no better API than the below???
 			((AbstractUIFrame) this.ui.tooltipFrame).add(this.tooltipResourceFrames[i]);
 			this.ui.rootFrame.remove(this.tooltipResourceFrames[i]);
@@ -144,12 +174,12 @@ final class MeleeUITooltips {
 			final CUnit simulationUnit = renderUnit.getSimulationUnit();
 			final CAbilityHero heroData = simulationUnit.getHeroData();
 			final int simulationUnitPlayerIndex = simulationUnit.getFakePlayerIndex();
-			final boolean neutralHostile = simulationUnitPlayerIndex == (WarsmashConstants.MAX_PLAYERS - 4);
-			final boolean neutralPassive = simulationUnitPlayerIndex == (WarsmashConstants.MAX_PLAYERS - 1);
+			final boolean neutralHostile = simulationUnitPlayerIndex == (this.ui.war3MapViewer.getGameData().getMaxPlayers() - 4);
+			final boolean neutralPassive = simulationUnitPlayerIndex == (this.ui.war3MapViewer.getGameData().getMaxPlayers() - 1);
 			String returnValue = "";
 			if ((simulationUnitPlayerIndex != this.ui.localPlayer.getId())
 					&& (!this.ui.localPlayer.hasAlliance(simulationUnitPlayerIndex, CAllianceType.SHARED_CONTROL))
-					&& (simulationUnitPlayerIndex < (WarsmashConstants.MAX_PLAYERS - 4))) {
+					&& (simulationUnitPlayerIndex < (this.ui.war3MapViewer.getGameData().getMaxPlayers() - 4))) {
 				final CPlayer unitPlayer = game.getPlayer(simulationUnitPlayerIndex);
 				final String name = unitPlayer.getName();
 				if (name != null) {
@@ -304,10 +334,14 @@ final class MeleeUITooltips {
 		}
 	}
 
+	void setPointer(final float x) {
+		this.pointerX = x;
+	}
+
 	void loadTooltip(final ClickableActionFrame mousedUIFrame) {
 		showTooltip(mousedUIFrame.getToolTip(), mousedUIFrame.getInfoTip(), mousedUIFrame.getUberTip(),
 				mousedUIFrame.getToolTipGoldCost(), mousedUIFrame.getToolTipLumberCost(),
-				mousedUIFrame.getToolTipFoodCost(), mousedUIFrame.getToolTipManaCost());
+				mousedUIFrame.getToolTipFoodCost(), mousedUIFrame.getToolTipManaCost(), mousedUIFrame);
 	}
 
 	void loadFrameTooltip(final UIFrame frame) {
@@ -316,7 +350,7 @@ final class MeleeUITooltips {
 			this.ui.tooltipFrame.setVisible(false);
 			return;
 		}
-		showTooltip(decorated(keys[0]), null, decorated(keys[1]));
+		showTooltip(decorated(keys[0]), null, decorated(keys[1]), 0, 0, 0, 0, frame);
 	}
 
 	/**
@@ -358,6 +392,12 @@ final class MeleeUITooltips {
 		}
 		if (contains(this.ui.heroInfoPanel, x, y)) {
 			return HERO_ATTRIBUTES;
+		}
+		if (contains(this.ui.rankIcon, x, y)) {
+			return RANK;
+		}
+		if (contains(this.ui.foodIcon, x, y)) {
+			return FOOD;
 		}
 		return -1;
 	}
@@ -457,9 +497,9 @@ final class MeleeUITooltips {
 
 	private boolean loadUnitStatTip(final int tip) {
 		final UIFrame[] frames = { this.ui.attack1Icon, this.ui.attack2Icon, this.ui.armorIcon,
-				this.ui.heroInfoPanel };
+				this.ui.heroInfoPanel, this.ui.rankIcon, this.ui.foodIcon };
 		// The selection may have changed since the mouse came here, and its panel with it.
-		if ((this.ui.selectedUnit == null) || (tip < ATTACK_ONE) || (tip > HERO_ATTRIBUTES)
+		if ((this.ui.selectedUnit == null) || (tip < ATTACK_ONE) || (tip > FOOD)
 				|| (frames[tip - ATTACK_ONE] == null) || !frames[tip - ATTACK_ONE].isVisibleOnScreen()) {
 			return false;
 		}
@@ -471,17 +511,24 @@ final class MeleeUITooltips {
 			if (unit.getCurrentAttacks().size() <= index) {
 				return false;
 			}
-			loadAttackTip(unit, unit.getCurrentAttacks().get(index));
+			loadAttackTip(unit, unit.getCurrentAttacks().get(index), frames[tip - ATTACK_ONE]);
 			return true;
 		}
 		case ARMOR:
-			loadArmorTip(unit);
+			loadArmorTip(unit, frames[tip - ATTACK_ONE]);
 			return true;
 		case HERO_ATTRIBUTES:
 			if (unit.getHeroData() == null) {
 				return false;
 			}
-			loadHeroAttributesTip(unit);
+			loadHeroAttributesTip(unit, frames[tip - ATTACK_ONE]);
+			return true;
+		case RANK:
+			loadRankTip(unit, frames[tip - ATTACK_ONE]);
+			return true;
+		case FOOD:
+			showTooltip(decorated("COLON_FOOD"), null,
+					decorated("COLON_PROVIDED") + unit.getUnitType().getFoodMade(), frames[tip - ATTACK_ONE]);
 			return true;
 		default:
 			return false;
@@ -489,7 +536,7 @@ final class MeleeUITooltips {
 	}
 
 	/** Type, range and speed of the attack, the speed in the five steps the move speed is told in. */
-	private void loadAttackTip(final CUnit unit, final CUnitAttack attack) {
+	private void loadAttackTip(final CUnit unit, final CUnitAttack attack, final UIFrame frame) {
 		final String key = damageKey(attack.getAttackType());
 		final Element limits = this.ui.war3MapViewer.miscData.get("InfoPanel");
 		final int range = attack.getRange();
@@ -515,12 +562,12 @@ final class MeleeUITooltips {
 		final String info = decorated("DAMAGE_" + key) + "|n" + decorated("COLON_RANGE") + " " + rangeText + "|n"
 				+ decorated("COLON_SPEED") + " "
 				+ bonusColored(decorated(speed), attack.getTotalAttackSpeedPercent() - 1)
-				+ upgradeLine(unit, CUpgradeEffectAttackDice.class, CUpgradeEffectAttackDamage.class);
+				+ upgradeLine(unit, CUpgradeClass.MELEE, CUpgradeClass.RANGED, CUpgradeClass.ARTILLERY);
 		showTooltip(decorated("COLON_DAMAGE") + " " + MeleeUIInfoPanel.damageText(attack), info,
-				decorated("DAMAGETIP_" + key));
+				decorated("DAMAGETIP_" + key), frame);
 	}
 
-	private void loadArmorTip(final CUnit unit) {
+	private void loadArmorTip(final CUnit unit, final UIFrame frame) {
 		final String key = armorKey(unit.getDefenseType());
 		final float armor = unit.getDefense();
 		final float armorFactor = this.ui.war3MapViewer.simulation.getGameplayConstants().getDefenseArmor();
@@ -553,17 +600,18 @@ final class MeleeUITooltips {
 			info.append("|n").append(decorated("COLON_MOVE_SPEED")).append(' ')
 					.append(bonusColored(decorated(speedKey), unit.getSpeedBonus()));
 		}
-		info.append(upgradeLine(unit, CUpgradeEffectDefenseUpgradeBonus.class));
+		info.append(upgradeLine(unit, CUpgradeClass.ARMOR));
 		showTooltip(decorated("COLON_ARMOR") + " " + MeleeUIInfoPanel.defenseText(this.ui.rootFrame, unit),
-				info.toString(), decorated("ARMORTIP_" + key));
+				info.toString(), decorated("ARMORTIP_" + key), frame);
 	}
 
-	/** The line of the first upgrade of the unit with one of these effects, named as its first level before any. */
-	private String upgradeLine(final CUnit unit, final Class<?>... effects) {
+	/** The line of the unit's upgrade of the first of these classes it has, named as its first level before any. */
+	private String upgradeLine(final CUnit unit, final CUpgradeClass... classes) {
 		final CSimulation simulation = this.ui.war3MapViewer.simulation;
-		for (final War3ID upgradeId : unit.getUnitType().getUpgradesUsed()) {
-			final CUpgradeType upgrade = simulation.getUpgradeData().getType(upgradeId);
-			if ((upgrade == null) || !hasEffect(upgrade, effects)) {
+		for (final CUpgradeClass upgradeClass : classes) {
+			final War3ID upgradeId = unit.getUnitType().getUpgradeClassToType().get(upgradeClass);
+			final CUpgradeType upgrade = upgradeId == null ? null : simulation.getUpgradeData().getType(upgradeId);
+			if (upgrade == null) {
 				continue;
 			}
 			final int level = simulation.getPlayer(unit.getPlayerIndex()).getTechtreeUnlocked(upgradeId);
@@ -577,18 +625,23 @@ final class MeleeUITooltips {
 		return "";
 	}
 
-	private static boolean hasEffect(final CUpgradeType upgrade, final Class<?>[] effects) {
-		for (final CUpgradeEffect effect : upgrade.getUpgradeEffects()) {
-			for (final Class<?> effectClass : effects) {
-				if (effectClass.isInstance(effect)) {
-					return true;
-				}
-			}
-		}
-		return false;
+	/** The rank name, the training that raises it and the spells the caster has at this rank. */
+	private void loadRankTip(final CUnit unit, final UIFrame frame) {
+		final int rank = casterRank(this.ui.war3MapViewer.simulation, unit);
+		final String name = this.ui.infoPanel.casterField(unit, MeleeUIInfoPanel.CASTER_RANK_NAMES, rank);
+		final String spells = this.ui.infoPanel.casterField(unit, MeleeUIInfoPanel.CASTER_RANK_SPELLS, rank);
+		showTooltip(decorated("COLON_RANK"),
+				decorated("COLON_NAME") + " " + (name == null ? "" : name) + upgradeLine(unit, CUpgradeClass.CASTER),
+				spells == null ? "" : (decorated("COLON_SPELLS") + "|n" + spells), frame);
 	}
 
-	private void loadHeroAttributesTip(final CUnit unit) {
+	/** How many levels of its caster training the caster's owner has. */
+	static int casterRank(final CSimulation simulation, final CUnit unit) {
+		final War3ID training = unit.getUnitType().getUpgradeClassToType().get(CUpgradeClass.CASTER);
+		return training == null ? 0 : simulation.getPlayer(unit.getPlayerIndex()).getTechtreeUnlocked(training);
+	}
+
+	private void loadHeroAttributesTip(final CUnit unit, final UIFrame frame) {
 		final CGameplayConstants constants = this.ui.war3MapViewer.simulation.getGameplayConstants();
 		final CPrimaryAttribute primary = unit.getUnitType().getPrimaryAttribute();
 		final StringBuilder text = new StringBuilder();
@@ -613,7 +666,7 @@ final class MeleeUITooltips {
 		attribute(text, "COLON_INTELLECT", primary == CPrimaryAttribute.INTELLIGENCE, constants);
 		text.append("|n").append(String.format(decorated("BONUS_MANA"), Math.round(constants.getIntManaBonus())));
 		text.append("|n").append(decorated("BONUS_MANAREGEN"));
-		showTooltip(decorated("COLON_HERO_ATTRIBUTES"), null, text.toString());
+		showTooltip(decorated("COLON_HERO_ATTRIBUTES"), null, text.toString(), frame);
 	}
 
 	/** The attribute's name, and for the primary one its mark and the damage each point adds. */
@@ -677,72 +730,125 @@ final class MeleeUITooltips {
 	}
 
 	private void showTooltip(final String toolTip, final String info, final String uberTip) {
-		showTooltip(toolTip, info, uberTip, 0, 0, 0, 0);
+		showTooltip(toolTip, info, uberTip, 0, 0, 0, 0, null);
 	}
 
+	private void showTooltip(final String toolTip, final String info, final String uberTip, final UIFrame frame) {
+		showTooltip(toolTip, info, uberTip, 0, 0, 0, 0, frame);
+	}
+
+	/**
+	 * Shows the console tool tip. The frame is the part pointed at: without the enhanced tool tips the box goes on
+	 * it, and a tip with no frame then shows nothing.
+	 */
 	private void showTooltip(final String toolTip, final String info, final String uberTip, final int goldCost,
-			final int lumberCost, final int foodCost, final int manaCost) {
-		if ((toolTip == null) || (uberTip == null)) {
+			final int lumberCost, final int foodCost, final int manaCost, final UIFrame frame) {
+		final boolean enhanced = GameOptions.get().isEnhancedTooltips();
+		if ((toolTip == null) || (uberTip == null) || (!enhanced && !(frame instanceof AbstractRenderableFrame))) {
 			this.ui.tooltipFrame.setVisible(false);
+			return;
+		}
+		final String shownUberTip = enhanced ? uberTip : requirementLines(uberTip);
+		final float wrapWidth = GameUI.convertX(this.ui.uiViewport, enhanced ? TEXT_WRAP_WIDTH : SIMPLE_TEXT_WRAP_WIDTH);
+		this.tooltipInfoText.setWidth(wrapWidth);
+		this.tooltipUberTipText.setWidth(wrapWidth);
+		this.ui.rootFrame.setText(this.tooltipUberTipText, shownUberTip);
+		int resourceIndex = 0;
+		if (goldCost != 0) {
+			this.tooltipResourceFrames[resourceIndex].setVisible(true);
+			this.tooltipResourceIconFrames[resourceIndex].setTexture("ToolTipGoldIcon", this.ui.rootFrame);
+			this.ui.rootFrame.setText(this.tooltipResourceTextFrames[resourceIndex], Integer.toString(goldCost));
+			resourceIndex++;
+		}
+		if (lumberCost != 0) {
+			this.tooltipResourceFrames[resourceIndex].setVisible(true);
+			this.tooltipResourceIconFrames[resourceIndex].setTexture("ToolTipLumberIcon", this.ui.rootFrame);
+			this.ui.rootFrame.setText(this.tooltipResourceTextFrames[resourceIndex], Integer.toString(lumberCost));
+			resourceIndex++;
+		}
+		if (foodCost != 0) {
+			this.tooltipResourceFrames[resourceIndex].setVisible(true);
+			this.tooltipResourceIconFrames[resourceIndex].setTexture("ToolTipSupplyIcon", this.ui.rootFrame);
+			this.ui.rootFrame.setText(this.tooltipResourceTextFrames[resourceIndex], Integer.toString(foodCost));
+			resourceIndex++;
+		}
+		if (manaCost != 0) {
+			this.tooltipResourceFrames[resourceIndex].setVisible(true);
+			this.tooltipResourceIconFrames[resourceIndex].setTexture("ToolTipManaIcon", this.ui.rootFrame);
+			this.ui.rootFrame.setText(this.tooltipResourceTextFrames[resourceIndex], Integer.toString(manaCost));
+			resourceIndex++;
+		}
+		for (int i = resourceIndex; i < this.tooltipResourceFrames.length; i++) {
+			this.tooltipResourceFrames[i].setVisible(false);
+		}
+		final boolean hasInfo = (info != null) && !info.isEmpty() && (resourceIndex == 0);
+		final boolean hasUberTip = !shownUberTip.isEmpty();
+		this.ui.rootFrame.setText(this.tooltipInfoText, hasInfo ? info : "");
+		this.tooltipInfoText.setVisible(hasInfo);
+		this.tooltipUberTipText.setVisible(hasUberTip);
+		float gapsHeight;
+		if (hasInfo) {
+			this.tooltipUberTipText.addSetPoint(this.uberTipBelowInfoSetPoint);
+			gapsHeight = GAP_BELOW_NAME + (hasUberTip ? GAP_BELOW_INFO : 0);
+		}
+		else if (resourceIndex != 0) {
+			this.tooltipUberTipText.addSetPoint(this.uberTipWithResourcesSetPoint);
+			gapsHeight = COSTS_ROW + (hasUberTip ? GAP_BELOW_NAME : 0);
 		}
 		else {
-			final String shownUberTip = GameOptions.get().isEnhancedTooltips() ? uberTip : "";
-			this.ui.rootFrame.setText(this.tooltipUberTipText, shownUberTip);
-			int resourceIndex = 0;
-			if (goldCost != 0) {
-				this.tooltipResourceFrames[resourceIndex].setVisible(true);
-				this.tooltipResourceIconFrames[resourceIndex].setTexture("ToolTipGoldIcon", this.ui.rootFrame);
-				this.ui.rootFrame.setText(this.tooltipResourceTextFrames[resourceIndex], Integer.toString(goldCost));
-				resourceIndex++;
-			}
-			if (lumberCost != 0) {
-				this.tooltipResourceFrames[resourceIndex].setVisible(true);
-				this.tooltipResourceIconFrames[resourceIndex].setTexture("ToolTipLumberIcon", this.ui.rootFrame);
-				this.ui.rootFrame.setText(this.tooltipResourceTextFrames[resourceIndex], Integer.toString(lumberCost));
-				resourceIndex++;
-			}
-			if (foodCost != 0) {
-				this.tooltipResourceFrames[resourceIndex].setVisible(true);
-				this.tooltipResourceIconFrames[resourceIndex].setTexture("ToolTipSupplyIcon", this.ui.rootFrame);
-				this.ui.rootFrame.setText(this.tooltipResourceTextFrames[resourceIndex], Integer.toString(foodCost));
-				resourceIndex++;
-			}
-			if (manaCost != 0) {
-				this.tooltipResourceFrames[resourceIndex].setVisible(true);
-				this.tooltipResourceIconFrames[resourceIndex].setTexture("ToolTipManaIcon", this.ui.rootFrame);
-				this.ui.rootFrame.setText(this.tooltipResourceTextFrames[resourceIndex], Integer.toString(manaCost));
-				resourceIndex++;
-			}
-			for (int i = resourceIndex; i < this.tooltipResourceFrames.length; i++) {
-				this.tooltipResourceFrames[i].setVisible(false);
-			}
-			final boolean hasInfo = (info != null) && !info.isEmpty() && (resourceIndex == 0);
-			this.ui.rootFrame.setText(this.tooltipInfoText, hasInfo ? info : "");
-			this.tooltipInfoText.setVisible(hasInfo);
-			float gapsHeight;
-			if (hasInfo) {
-				this.tooltipUberTipText.addSetPoint(this.uberTipBelowInfoSetPoint);
-				gapsHeight = shownUberTip.isEmpty() ? 0.004f : 0.008f;
-			}
-			else if (resourceIndex != 0) {
-				this.tooltipUberTipText.addSetPoint(this.uberTipWithResourcesSetPoint);
-				gapsHeight = 0.014f;
-			}
-			else {
-				this.tooltipUberTipText.addSetPoint(this.uberTipNoResourcesSetPoint);
-				gapsHeight = 0.004f;
-			}
-			// A touch screen has no keyboard: the gold key marks of the names go.
-			this.ui.rootFrame.setText(this.tooltipText,
-					TouchInputRouter.isActive() ? HOTKEY_MARK.matcher(toolTip).replaceAll("") : toolTip);
-			final float predictedViewportHeight = this.tooltipText.getPredictedViewportHeight()
-					+ (hasInfo ? this.tooltipInfoText.getPredictedViewportHeight() : 0)
-					+ GameUI.convertY(this.ui.uiViewport, gapsHeight)
-					+ ((shownUberTip.isEmpty() && hasInfo) ? 0 : this.tooltipUberTipText.getPredictedViewportHeight())
-					+ GameUI.convertY(this.ui.uiViewport, 0.003f);
-			this.ui.tooltipFrame.setHeight(predictedViewportHeight);
-			this.ui.tooltipFrame.positionBounds(this.ui.rootFrame, this.ui.uiViewport);
-			this.ui.tooltipFrame.setVisible(true);
+			this.tooltipUberTipText.addSetPoint(this.uberTipNoResourcesSetPoint);
+			gapsHeight = hasUberTip ? GAP_BELOW_NAME : 0;
 		}
+		// A touch screen has no keyboard: the gold key marks of the names go.
+		this.ui.rootFrame.setText(this.tooltipText,
+				TouchInputRouter.isActive() ? HOTKEY_MARK.matcher(toolTip).replaceAll("") : toolTip);
+		this.ui.tooltipFrame.setHeight(this.tooltipText.getPredictedViewportHeight()
+				+ (hasInfo ? this.tooltipInfoText.getPredictedViewportHeight() : 0)
+				+ (hasUberTip ? this.tooltipUberTipText.getPredictedViewportHeight() : 0)
+				+ GameUI.convertY(this.ui.uiViewport, TEXT_TOP + gapsHeight + TEXT_BOTTOM));
+		final float insets = 2 * GameUI.convertX(this.ui.uiViewport, TOOLTIP_INSET);
+		float width = this.tooltipText.getPredictedViewportWidth() + insets;
+		if (enhanced) {
+			width = Math.max(width, GameUI.convertX(this.ui.uiViewport, TOOLTIP_WIDTH));
+		}
+		else {
+			if (hasInfo) {
+				width = Math.max(width, this.tooltipInfoText.getPredictedViewportWidth() + insets);
+			}
+			if (hasUberTip) {
+				width = Math.max(width, this.tooltipUberTipText.getPredictedViewportWidth() + insets);
+			}
+		}
+		final AbstractRenderableFrame box = (AbstractRenderableFrame) this.ui.tooltipFrame;
+		box.setWidth(width);
+		box.clearFramePointAssignments();
+		box.addAnchor(new AnchorDefinition(FramePoint.BOTTOMRIGHT, GameUI.convertX(this.ui.uiViewport, TOOLTIP_RIGHT),
+				GameUI.convertY(this.ui.uiViewport, TOOLTIP_BOTTOM)));
+		box.positionBounds(this.ui.rootFrame, this.ui.uiViewport);
+		if (!enhanced) {
+			if (resourceIndex != 0) {
+				final Rectangle lastCost = this.tooltipResourceTextFrames[resourceIndex - 1].getRenderBounds();
+				width = Math.max(width, (lastCost.x + lastCost.width) - this.tooltipText.getRenderBounds().x + insets);
+				box.setWidth(width);
+			}
+			final Rectangle console = this.ui.rootFrame.getRenderBounds();
+			final Rectangle over = ((AbstractRenderableFrame) frame).getRenderBounds();
+			final float left = Math.min(this.pointerX + GameUI.convertX(this.ui.uiViewport, SIMPLE_TIP_RIGHT_OF_POINTER),
+					(console.x + console.width) - width);
+			box.clearFramePointAssignments();
+			box.addAnchor(new AnchorDefinition(FramePoint.BOTTOMLEFT, left - console.x,
+					(over.y + over.height + GameUI.convertY(this.ui.uiViewport, SIMPLE_TIP_OVER_FRAME)) - console.y));
+			box.positionBounds(this.ui.rootFrame, this.ui.uiViewport);
+		}
+		this.ui.tooltipFrame.setVisible(true);
+	}
+
+	/** The requirement lines the command card puts before a description; they stay without the enhanced tool tips. */
+	private String requirementLines(final String uberTip) {
+		final int end = uberTip.indexOf("|n|r");
+		if ((end < 0) || !uberTip.startsWith(decorated("REQUIRESTOOLTIP"))) {
+			return "";
+		}
+		return uberTip.substring(0, end);
 	}
 }

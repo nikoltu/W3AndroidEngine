@@ -182,6 +182,8 @@ final class MenuSkirmish {
 			final Preferences preferences = Gdx.app.getPreferences("WarsmashWC3Engine");
 			preferences.putString(SKIRMISH_MAP_PREFERENCE, selectedItem);
 			preferences.flush();
+			// A custom game is no campaign's, whatever mission was played before it in this session.
+			this.menu.mapStart.setCampaign(-1, false);
 			this.menu.campaigns.hideScreens();
 			this.menu.campaigns.setMissionSelectMenuVisible(false);
 			this.skirmish.setVisible(false);

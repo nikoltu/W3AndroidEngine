@@ -25,7 +25,6 @@ public final class Movies {
 
 	private static final int[] WIDTHS = { 1920, 1280, 640 };
 	private static final String[] AUDIO_EXTENSIONS = { ".ogg", ".flac" };
-	private static final String CAPTION_FONT = "Fonts\\FRIZQT__.TTF";
 	private static volatile Player player;
 
 	private Movies() {
@@ -89,7 +88,43 @@ public final class Movies {
 			}
 		}
 		final File captions = file(data, "Movies\\Captions\\" + name + ".srt");
-		return new Movie(name, video, audio, captions, captions == null ? null : file(data, CAPTION_FONT));
+		return new Movie(name, video, audio, captions, () -> captionFonts(data));
+	}
+
+	/** The fonts the captions can be drawn in: the game's own, then the computer's. */
+	private static List<File> captionFonts(final DataSource data) {
+		// The game's own fonts, the interface font first and then the ones its other languages use (Cyrillic, Chinese,
+		// Korean); the Latin one lacks their letters.
+		final String[] gameFonts = { "Fonts\\FRIZQT__.TTF", "Fonts\\NIM_____.TTF",
+				"Fonts\\ARHEIU20M.TTF", "Fonts\\ARHEIU20_MD.TTF", "Fonts\\ARHEIGB_BD.TTF", "Fonts\\GHEI00B_T.TTF",
+				"Fonts\\DFHEIMD.TTF", "Fonts\\DFHEILT.TTF", "Fonts\\DFST-M3U.TTF", "Fonts\\TT5500M_.TTF",
+				"Fonts\\2002.TTF", "Fonts\\2002B.TTF", "Fonts\\DFKGOTHICMD.TTF", "Fonts\\ULEI00M.TTF" };
+		// Fonts of the computer that cover the scripts the game's own fonts miss.
+		final String[] computerFonts = { "C:/Windows/Fonts/msyh.ttc", "C:/Windows/Fonts/malgun.ttf",
+				"C:/Windows/Fonts/msjh.ttc", "C:/Windows/Fonts/YuGothM.ttc", "C:/Windows/Fonts/msgothic.ttc",
+				"C:/Windows/Fonts/simsun.ttc", "C:/Windows/Fonts/segoeui.ttf", "C:/Windows/Fonts/arial.ttf",
+				"/System/Library/Fonts/PingFang.ttc", "/System/Library/Fonts/AppleSDGothicNeo.ttc",
+				"/Library/Fonts/Arial Unicode.ttf", "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+				"/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+				"/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf" };
+		final List<File> fonts = new ArrayList<>();
+		for (final String path : gameFonts) {
+			final File font = file(data, path);
+			if (font != null) {
+				fonts.add(font);
+			}
+		}
+		final String windows = System.getenv("WINDIR");
+		for (final String path : computerFonts) {
+			File font = new File(path);
+			if (!font.isFile() && (windows != null) && path.startsWith("C:/Windows/")) {
+				font = new File(windows, path.substring("C:/Windows/".length()));
+			}
+			if (font.isFile()) {
+				fonts.add(font);
+			}
+		}
+		return fonts;
 	}
 
 	private static File file(final DataSource data, final String path) {

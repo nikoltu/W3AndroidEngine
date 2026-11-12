@@ -46,6 +46,8 @@ public class CAbilityMirrorImage extends CAbilityNoTargetSpellBase {
 	private final List<AbilityPointTarget> spots = new ArrayList<>();
 	// Tick each spot's missile lands, -1 once its unit appeared; empty until the missiles are launched.
 	private final List<Integer> arrivalTicks = new ArrayList<>();
+	private boolean casterEventPending;
+	private boolean hiding;
 
 	public CAbilityMirrorImage(final int handleId, final War3ID alias) {
 		super(handleId, alias);
@@ -75,6 +77,7 @@ public class CAbilityMirrorImage extends CAbilityNoTargetSpellBase {
 		}
 		this.spots.clear();
 		this.arrivalTicks.clear();
+		this.casterEventPending = false;
 		final int count = this.numberOfImages + 1;
 		final double centreAngle = simulation.getSeededRandom().nextDouble() * 2 * Math.PI;
 		final double centreX = caster.getX() + (StrictMath.cos(centreAngle) * CENTRE_OFFSET);
@@ -88,6 +91,7 @@ public class CAbilityMirrorImage extends CAbilityNoTargetSpellBase {
 		Collections.shuffle(this.spots, simulation.getSeededRandom());
 		simulation.createTemporarySpellEffectOnUnit(caster, getAlias(), CEffectType.SPECIAL);
 		caster.setHidden(true);
+		this.hiding = true;
 		caster.addStateModBuff(HIDDEN_INVULNERABLE);
 		caster.computeUnitState(simulation, StateModBuffType.INVULNERABLE);
 		this.appearTick = simulation.getGameTurnTick()
@@ -132,6 +136,7 @@ public class CAbilityMirrorImage extends CAbilityNoTargetSpellBase {
 				caster.setPointAndCheckUnstuck(spot.getX(), spot.getY(), simulation);
 				reveal(simulation, caster);
 				simulation.createTemporarySpellEffectOnUnit(caster, getAlias(), CEffectType.TARGET);
+				this.casterEventPending = true;
 			}
 			else {
 				final CUnit image = CIllusions.create(simulation, caster, caster.getPlayerIndex(), spot.getX(),
@@ -139,8 +144,15 @@ public class CAbilityMirrorImage extends CAbilityNoTargetSpellBase {
 						getDuration(), this.buffId);
 				if (image != null) {
 					simulation.createTemporarySpellEffectOnUnit(image, getAlias(), CEffectType.TARGET);
+					simulation.unitSummoned(caster, image);
 				}
 			}
+		}
+		// Measured on 1.29: the caster's own reappearance raises a summon event too, with no summoned unit, after
+		// the images' events.
+		if (this.casterEventPending && !pending) {
+			this.casterEventPending = false;
+			simulation.unitSummoned(caster, null);
 		}
 		return pending;
 	}
@@ -151,7 +163,24 @@ public class CAbilityMirrorImage extends CAbilityNoTargetSpellBase {
 		reveal(game, unit);
 	}
 
-	private static void reveal(final CSimulation simulation, final CUnit caster) {
+	/**
+	 * Measured on 1.29: while Mirror Image hides the caster he takes no order (move, attack and spells are refused,
+	 * stop is accepted but does nothing), and the images still appear.
+	 */
+	public static boolean isHidingCaster(final CUnit unit) {
+		if (!unit.isHidden()) {
+			return false;
+		}
+		for (final CAbility ability : unit.getAbilities()) {
+			if ((ability instanceof CAbilityMirrorImage) && ((CAbilityMirrorImage) ability).hiding) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private void reveal(final CSimulation simulation, final CUnit caster) {
+		this.hiding = false;
 		if (caster.isHidden()) {
 			caster.setHidden(false);
 			caster.removeStateModBuff(HIDDEN_INVULNERABLE);

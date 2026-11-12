@@ -25,6 +25,7 @@ import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowInsets;
+import android.view.WindowManager;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
@@ -100,6 +101,7 @@ public class AndroidLauncher extends AndroidApplication {
 	/** Goes on with the game once the movies it asked for have played. */
 	private Runnable afterMovies;
 	private Movies.Player moviePlayer;
+	private WarsmashGdxMultiScreenGame game;
 
 	/**
 	 * Settings files written before version 2 were made with music off by default, when music could not play yet; they
@@ -231,6 +233,12 @@ public class AndroidLauncher extends AndroidApplication {
 		final WarsmashGdxMultiScreenGame game = new WarsmashGdxMultiScreenGame();
 		initialize(GlContextWatch.watch(game, () -> contextLost(game, warsmashIni, fileToLoad)), config);
 		this.initialized = true;
+		if (getIntent().getStringExtra(LaunchContract.EXTRA_REPLAY_FILE) != null) {
+			// A replay is watched without touching the screen, which must not go dark under it.
+			getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+		}
+		this.game = game;
+		BackCallbacks.register(this, this::goBack);
 		// An unhandled Escape comes back from Android as Back and would close the game; a keyboard's Escape works as
 		// on a PC instead (ends a cinematic, closes menus and dialogs).
 		Gdx.input.setCatchKey(Input.Keys.ESCAPE, true);
@@ -359,7 +367,7 @@ public class AndroidLauncher extends AndroidApplication {
 			return;
 		}
 		this.resultWritten = true;
-		written.source = LaunchContract.request(getIntent()).source();
+		written.source = LaunchContract.request(getIntent()).source(written);
 		if (written.map == null) {
 			written.map = "";
 		}
@@ -423,6 +431,38 @@ public class AndroidLauncher extends AndroidApplication {
 		super.onResume();
 		PreparedMusic.resumeAll();
 		PooledSounds.resumeAll();
+	}
+
+	/**
+	 * Back from Android 13 on, where the system does not send it as a key: a running game gets it as its Back key
+	 * (game menu, step back in menus); while a map loads it does nothing; anywhere else it closes the activity.
+	 */
+	private void goBack() {
+		final WarsmashGdxMultiScreenGame current = this.game;
+		if ((current == null) || current.isLoadingMap()) {
+			// Leaving in the middle of loading would drop the player from a game the others are still starting.
+			return;
+		}
+		final WarsmashGdxMapScreen running = current.getRunningMapScreen();
+		if (running == null) {
+			finishAfterTransition();
+			return;
+		}
+		Gdx.app.postRunnable(() -> {
+			if (!running.isDisposed()) {
+				running.backPressed();
+			}
+		});
+	}
+
+	/** Back before Android 13, which the game screen catches itself; while a map loads it is ignored too. */
+	@Override
+	public void onBackPressed() {
+		final WarsmashGdxMultiScreenGame current = this.game;
+		if ((current == null) || current.isLoadingMap()) {
+			return;
+		}
+		super.onBackPressed();
 	}
 
 	@Override
@@ -587,6 +627,15 @@ public class AndroidLauncher extends AndroidApplication {
 					return -1;
 				}
 				return looping ? buffer.loop(volume, pitch, 0) : buffer.play(volume, pitch, 0);
+			}
+
+			@Override
+			public long playPanned(final Sound buffer, final float volume, final float pitch, final float pan,
+					final boolean looping) {
+				if (buffer == null) {
+					return -1;
+				}
+				return looping ? buffer.loop(volume, pitch, pan) : buffer.play(volume, pitch, pan);
 			}
 
 			@Override

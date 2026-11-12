@@ -19,12 +19,17 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.CommandStringE
 
 public class CAbilityItemManaRegain extends AbstractGenericSingleIconNoSmartActiveAbility {
 	public static final War3ID CODE = War3ID.fromString("AIma");
-	private final int manaToRegain;
-	private final float cooldown;
+	private int manaToRegain;
+	private float cooldown;
 
 	public CAbilityItemManaRegain(final int handleId, final War3ID code, final War3ID alias, final int manaToRegain,
 			final float cooldown) {
 		super(handleId, code, alias);
+		this.manaToRegain = manaToRegain;
+		this.cooldown = cooldown;
+	}
+
+	public void setLevelValues(final int manaToRegain, final float cooldown) {
 		this.manaToRegain = manaToRegain;
 		this.cooldown = cooldown;
 	}
@@ -69,6 +74,11 @@ public class CAbilityItemManaRegain extends AbstractGenericSingleIconNoSmartActi
 		}
 	}
 
+	public float getCooldown() {
+		final Float override = getCooldownOverride(getLevel());
+		return override != null ? Math.max(0f, override) : this.cooldown;
+	}
+
 	@Override
 	public int getBaseOrderId() {
 		return OrderIds.replenishmana;
@@ -105,7 +115,7 @@ public class CAbilityItemManaRegain extends AbstractGenericSingleIconNoSmartActi
 		if ((target == null) && (orderId == getBaseOrderId())) {
 			caster.restoreMana(game, this.manaToRegain);
 			game.createTemporarySpellEffectOnUnit(caster, getAlias(), CEffectType.CASTER);
-			caster.beginCooldown(game, CODE, this.cooldown);
+			caster.beginCooldown(game, CODE, getCooldown());
 			return false;
 		}
 		return super.checkBeforeQueue(game, caster, playerIndex, orderId, autoOrder, target);

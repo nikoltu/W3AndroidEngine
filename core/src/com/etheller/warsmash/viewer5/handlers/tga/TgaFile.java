@@ -5,8 +5,6 @@
 package com.etheller.warsmash.viewer5.handlers.tga;
 
 import java.awt.image.BufferedImage;
-import java.awt.image.DataBuffer;
-import java.awt.image.DataBufferByte;
 import java.awt.image.DataBufferInt;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -14,7 +12,6 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.RandomAccessFile;
 
 import com.etheller.warsmash.util.ArgbImage;
 
@@ -225,81 +222,5 @@ public class TgaFile {
 			}
 		}
 		return raw;
-	}
-
-	/**
-	 * Write a BufferedImage to a TGA file BufferedImages should be TYPE_INT_ARGB or
-	 * TYPE_INT_RGB
-	 *
-	 * @param src
-	 * @param file
-	 * @throws IOException
-	 */
-	public static void writeTGA(BufferedImage src, final File file) throws IOException {
-
-		final boolean alpha = src.getColorModel().hasAlpha();
-		src = ImageUtils.convertStandardImageType(src, alpha);
-
-		final DataBuffer buffer = src.getRaster().getDataBuffer();
-		byte[] data;
-
-		if (buffer instanceof DataBufferByte) {
-
-			// Not used anymore because convert to standard image type => Buffer is int
-			final byte[] pixels = ((DataBufferByte) src.getRaster().getDataBuffer()).getData();
-			if (pixels.length != (src.getWidth() * src.getHeight() * (alpha ? 4 : 3))) {
-				throw new IllegalStateException();
-			}
-
-			data = pixels;
-
-		}
-		else if (buffer instanceof DataBufferInt) {
-
-			final int[] pixels = ((DataBufferInt) src.getRaster().getDataBuffer()).getData();
-			if (pixels.length != (src.getWidth() * src.getHeight())) {
-				throw new IllegalStateException();
-			}
-
-			data = new byte[pixels.length * (alpha ? 4 : 3)];
-
-			if (alpha) {
-
-				for (int p = 0; p < pixels.length; p++) {
-					final int i = p * 4;
-					data[i + 0] = (byte) ((pixels[p] >> 0) & 0xFF);
-					data[i + 1] = (byte) ((pixels[p] >> 8) & 0xFF);
-					data[i + 2] = (byte) ((pixels[p] >> 16) & 0xFF);
-					data[i + 3] = (byte) ((pixels[p] >> 24) & 0xFF);
-				}
-			}
-			else {
-
-				for (int p = 0; p < pixels.length; p++) {
-					final int i = p * 3;
-					data[i + 0] = (byte) ((pixels[p] >> 0) & 0xFF);
-					data[i + 1] = (byte) ((pixels[p] >> 8) & 0xFF);
-					data[i + 2] = (byte) ((pixels[p] >> 16) & 0xFF);
-				}
-			}
-		}
-		else {
-			throw new UnsupportedOperationException();
-		}
-
-		final byte[] header = new byte[18];
-		header[2] = 2; // uncompressed, true-color image
-		header[12] = (byte) ((src.getWidth() >> 0) & 0xFF);
-		header[13] = (byte) ((src.getWidth() >> 8) & 0xFF);
-		header[14] = (byte) ((src.getHeight() >> 0) & 0xFF);
-		header[15] = (byte) ((src.getHeight() >> 8) & 0xFF);
-		header[16] = (byte) (alpha ? 32 : 24); // bits per pixel
-		header[17] = (byte) ((alpha ? 8 : 0) | (2 << 4));
-
-		final RandomAccessFile raf = new RandomAccessFile(file, "rw");
-		raf.write(header);
-		raf.write(data);
-		raf.setLength(raf.getFilePointer()); // trim
-		raf.close();
 	}
 }

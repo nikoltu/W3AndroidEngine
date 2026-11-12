@@ -1,5 +1,7 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat;
 
+import java.util.Locale;
+
 import java.util.EnumSet;
 import java.util.List;
 
@@ -51,7 +53,7 @@ public enum CTargetType implements CHandle {
 		if (targetTypeString == null) {
 			return null;
 		}
-		switch (targetTypeString.toLowerCase()) {
+		switch (targetTypeString.toLowerCase(Locale.ROOT)) {
 		case "air":
 			return AIR;
 		case "alive":

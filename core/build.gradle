@@ -8,17 +8,45 @@ java {
 sourceSets.main.java.srcDirs = [ "src/" ]
 sourceSets.test.java.srcDirs = [ "test/" ]
 
-// The engine's version is the Android app's version name; every platform reads it from this resource, so replays of
-// one platform are known to another.
-def engineVersion = (file("../android/build.gradle").text =~ /versionName\s*=?\s*"([^"]+)"/)[0][1]
+// The build's identity (version, commit, whether it is official) is the Android app's version plus the git state; every
+// platform reads it from this resource, so replays and updates of one platform are known to another.
+def androidGradle = file("../android/build.gradle").text
+def engineVersion = (androidGradle =~ /versionName\s*=?\s*"([^"]+)"/)[0][1]
+def engineVersionCode = (androidGradle =~ /versionCode\s*=?\s*(\d+)/)[0][1]
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.withInputStream { localProperties.load(it) }
+}
+// The fingerprint of the project's signing certificate is public; the key itself is never in the repository.
+def officialCertSha256 = (findProperty("warsmash.officialCertSha256") ?: localProperties.getProperty("warsmash.officialCertSha256") ?: "").toString().trim()
+// Desktop builds are official only when the build is told so; Android decides by its signing certificate.
+def officialFlag = "true".equalsIgnoreCase((findProperty("warsmash.official") ?: localProperties.getProperty("warsmash.official") ?: "false").toString().trim())
+def gitOutput = { List<String> args ->
+    try {
+        def process = new ProcessBuilder(["git", "-C", rootProject.projectDir.absolutePath] + args).redirectErrorStream(true).start()
+        def text = process.inputStream.getText("UTF-8").trim()
+        return process.waitFor() == 0 ? text : null
+    } catch (Exception e) {
+        return null
+    }
+}
 def engineVersionDir = layout.buildDirectory.dir("generated/engineVersion")
 def engineVersionResource = tasks.register("engineVersionResource") {
-    inputs.property("engineVersion", engineVersion)
+    // The git state changes without any input changing.
+    outputs.upToDateWhen { false }
     outputs.dir(engineVersionDir)
     doLast {
-        def file = engineVersionDir.get().file("com/etheller/warsmash/version.txt").asFile
+        def commit = gitOutput(["rev-parse", "--short=7", "HEAD"]) ?: "unknown"
+        def status = gitOutput(["status", "--porcelain"])
+        def dirty = (status == null) || !status.isEmpty()
+        def file = engineVersionDir.get().file("com/etheller/warsmash/build.properties").asFile
         file.parentFile.mkdirs()
-        file.text = engineVersion
+        def content = ["versionName=${engineVersion}", "versionCode=${engineVersionCode}", "commit=${commit}",
+                "dirty=${dirty}", "official=${officialFlag}", "officialCertSha256=${officialCertSha256}", ""].join(System.lineSeparator())
+        if (!file.exists() || file.text != content) {
+            file.text = content
+        }
     }
 }
 sourceSets.main.resources.srcDir(files(engineVersionDir).builtBy(engineVersionResource))

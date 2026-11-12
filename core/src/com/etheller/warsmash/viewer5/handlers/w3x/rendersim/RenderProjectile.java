@@ -40,6 +40,7 @@ public class RenderProjectile implements RenderEffect {
 			final float z, final float arc, final War3MapViewer war3MapViewer) {
 		this.simulationProjectile = simulationProjectile;
 		this.modelInstance = modelInstance;
+		modelInstance.hiddenInFog = true;
 		this.x = simulationProjectile.getX();
 		this.y = simulationProjectile.getY();
 		this.z = z;

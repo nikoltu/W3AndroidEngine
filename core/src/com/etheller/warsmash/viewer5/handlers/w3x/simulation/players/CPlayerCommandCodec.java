@@ -31,6 +31,7 @@ public final class CPlayerCommandCodec {
 	public static final byte SET_GAME_PAUSED = 18;
 	public static final byte MINIMAP_SIGNAL = 19;
 	public static final byte TRACKABLE_EVENT = 20;
+	public static final byte MOUSE_EVENT = 21;
 
 	/** A network packet holds a command, so the text of one stays well under its size. */
 	public static final int MAX_STRING_BYTES = 512;
@@ -271,6 +272,15 @@ public final class CPlayerCommandCodec {
 			putInt(trackableHandleId);
 			putBoolean(hit);
 		}
+
+		@Override
+		public void mouseEvent(final int eventId, final float x, final float y, final int button) {
+			type(MOUSE_EVENT);
+			putInt(eventId);
+			putFloat(x);
+			putFloat(y);
+			putInt(button);
+		}
 	}
 
 	/**
@@ -408,6 +418,13 @@ public final class CPlayerCommandCodec {
 		case TRACKABLE_EVENT: {
 			final int trackable = buffer.getInt();
 			listener.trackableEvent(trackable, getBoolean(buffer));
+			break;
+		}
+		case MOUSE_EVENT: {
+			final int eventId = buffer.getInt();
+			final float x = buffer.getFloat();
+			final float y = buffer.getFloat();
+			listener.mouseEvent(eventId, x, y, buffer.getInt());
 			break;
 		}
 		default:

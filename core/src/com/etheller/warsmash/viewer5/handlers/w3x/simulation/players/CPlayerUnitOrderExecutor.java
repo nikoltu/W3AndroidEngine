@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.etheller.warsmash.parsers.jass.scope.CommonTriggerExecutionScope;
-import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CReleaseCheats;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
@@ -215,7 +214,7 @@ public class CPlayerUnitOrderExecutor implements CPlayerUnitOrderListener {
 	}
 
 	private boolean isOtherPlayer(final int otherPlayerIndex) {
-		return (otherPlayerIndex >= 0) && (otherPlayerIndex < WarsmashConstants.MAX_PLAYERS)
+		return (otherPlayerIndex >= 0) && (otherPlayerIndex < this.game.getGameData().getMaxPlayers())
 				&& (otherPlayerIndex != this.playerIndex);
 	}
 
@@ -249,7 +248,7 @@ public class CPlayerUnitOrderExecutor implements CPlayerUnitOrderListener {
 
 	@Override
 	public void cheat(final String cheat) {
-		CReleaseCheats.apply(this.game, cheat);
+		CReleaseCheats.apply(this.game, this.playerIndex, cheat);
 	}
 
 	@Override
@@ -275,6 +274,20 @@ public class CPlayerUnitOrderExecutor implements CPlayerUnitOrderListener {
 				return;
 			}
 		}
+	}
+
+	@Override
+	public void mouseEvent(final int eventId, final float x, final float y, final int button) {
+		final JassGameEventsWar3 eventType = JassGameEventsWar3.getByEventId(eventId);
+		if ((eventType != JassGameEventsWar3.EVENT_PLAYER_MOUSE_DOWN)
+				&& (eventType != JassGameEventsWar3.EVENT_PLAYER_MOUSE_UP)
+				&& (eventType != JassGameEventsWar3.EVENT_PLAYER_MOUSE_MOVE)) {
+			return;
+		}
+		this.game.getPlayer(this.playerIndex).firePlayerEvents(
+				(type, trigger, player) -> CommonTriggerExecutionScope.playerMouseScope(type, trigger, player, x, y,
+						button),
+				eventType);
 	}
 
 }

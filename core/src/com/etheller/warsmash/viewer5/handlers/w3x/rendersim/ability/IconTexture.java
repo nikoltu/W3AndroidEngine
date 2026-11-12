@@ -19,6 +19,10 @@ public final class IconTexture {
 		this.path = path;
 	}
 
+	public String getPath() {
+		return this.path;
+	}
+
 	public Texture get() {
 		if (!this.loaded) {
 			this.texture = this.gameUI.loadTexture(this.path);

@@ -164,6 +164,8 @@ final class GroupNatives extends CommonNatives {
 				(arguments, globalScope, triggerScope) -> {
 					final List<CUnit> group = arguments.get(0)
 							.visit(ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					// As in the original, every enumeration replaces the contents of the group.
+					group.clear();
 					final String unitname = arguments.get(1).visit(StringJassValueVisitor.getInstance());
 					final TriggerBooleanExpression filter = nullable(arguments, 2,
 							ObjectJassValueVisitor.<TriggerBooleanExpression>getInstance());
@@ -171,7 +173,6 @@ final class GroupNatives extends CommonNatives {
 						if (unitname.equals(unit.getUnitType().getLegacyName())) {
 							if ((filter == null) || filter.evaluate(globalScope,
 									CommonTriggerExecutionScope.filterScope(triggerScope, unit))) {
-								// TODO the trigger scope for evaluation here might need to be a clean one?
 								group.add(unit);
 							}
 						}
@@ -182,6 +183,7 @@ final class GroupNatives extends CommonNatives {
 				(arguments, globalScope, triggerScope) -> {
 					final List<CUnit> group = arguments.get(0)
 							.visit(ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					group.clear();
 					final CPlayerJass player = arguments.get(1)
 							.visit(ObjectJassValueVisitor.<CPlayerJass>getInstance());
 					final TriggerBooleanExpression filter = nullable(arguments, 2,
@@ -193,7 +195,6 @@ final class GroupNatives extends CommonNatives {
 						if (unit.getPlayerIndex() == player.getId()) {
 							if ((filter == null) || filter.evaluate(globalScope,
 									CommonTriggerExecutionScope.filterScope(triggerScope, unit))) {
-								// TODO the trigger scope for evaluation here might need to be a clean one?
 								group.add(unit);
 							}
 						}
@@ -204,6 +205,7 @@ final class GroupNatives extends CommonNatives {
 				(arguments, globalScope, triggerScope) -> {
 					final List<CUnit> group = arguments.get(0)
 							.visit(ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					group.clear();
 					final CPlayerJass player = arguments.get(1)
 							.visit(ObjectJassValueVisitor.<CPlayerJass>getInstance());
 					final TriggerBooleanExpression filter = nullable(arguments, 2,
@@ -222,6 +224,7 @@ final class GroupNatives extends CommonNatives {
 				(arguments, globalScope, triggerScope) -> {
 					final List<CUnit> group = arguments.get(0)
 							.visit(ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					group.clear();
 					final String unitname = arguments.get(1).visit(StringJassValueVisitor.getInstance());
 					final TriggerBooleanExpression filter = nullable(arguments, 2,
 							ObjectJassValueVisitor.<TriggerBooleanExpression>getInstance());
@@ -231,7 +234,6 @@ final class GroupNatives extends CommonNatives {
 						if (unitname.equals(unit.getUnitType().getLegacyName())) {
 							if ((filter == null) || filter.evaluate(globalScope,
 									CommonTriggerExecutionScope.filterScope(triggerScope, unit))) {
-								// TODO the trigger scope for evaluation here might need to be a clean one?
 								group.add(unit);
 								count++;
 								if (count >= countLimit) {
@@ -246,16 +248,16 @@ final class GroupNatives extends CommonNatives {
 				(arguments, globalScope, triggerScope) -> {
 					final List<CUnit> group = arguments.get(0)
 							.visit(ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					group.clear();
 					final Rectangle rect = nullable(arguments, 1, ObjectJassValueVisitor.<Rectangle>getInstance());
 					if (rect != null) {
 						final TriggerBooleanExpression filter = nullable(arguments, 2,
 								ObjectJassValueVisitor.<TriggerBooleanExpression>getInstance());
-						// TODO: maybe change so that calling corpse function here as well is not needed
-						this.simulation.getWorldCollision().enumUnitsInRect(rect, (unit) -> {
+						// A corpse is enumerated until it decays, as by the range enumeration.
+						this.simulation.getWorldCollision().enumUnitsOrCorpsesInRect(rect, (unit) -> {
 							if (rectCellsContain(rect, unit.getX(), unit.getY()) && ((filter == null)
 									|| filter.evaluate(globalScope,
 											CommonTriggerExecutionScope.filterScope(triggerScope, unit)))) {
-								// TODO the trigger scope for evaluation here might need to be a clean one?
 								group.add(unit);
 							}
 							return false;
@@ -267,6 +269,7 @@ final class GroupNatives extends CommonNatives {
 				(arguments, globalScope, triggerScope) -> {
 					final List<CUnit> group = arguments.get(0)
 							.visit(ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					group.clear();
 					final Rectangle rect = arguments.get(1).visit(ObjectJassValueVisitor.<Rectangle>getInstance());
 					final TriggerBooleanExpression filter = nullable(arguments, 2,
 							ObjectJassValueVisitor.<TriggerBooleanExpression>getInstance());
@@ -280,7 +283,6 @@ final class GroupNatives extends CommonNatives {
 									if (rectCellsContain(rect, unit.getX(), unit.getY()) && ((filter == null)
 											|| filter.evaluate(globalScope,
 													CommonTriggerExecutionScope.filterScope(triggerScope, unit)))) {
-										// TODO the trigger scope for evaluation here might need to be a clean one?
 										group.add(unit);
 										this.count++;
 										if (this.count >= countLimit) {
@@ -296,6 +298,7 @@ final class GroupNatives extends CommonNatives {
 				(arguments, globalScope, triggerScope) -> {
 					final List<CUnit> group = arguments.get(0)
 							.visit(ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					group.clear();
 					final float x = arguments.get(1).visit(RealJassValueVisitor.getInstance()).floatValue();
 					final float y = arguments.get(2).visit(RealJassValueVisitor.getInstance()).floatValue();
 					final float radius = arguments.get(3).visit(RealJassValueVisitor.getInstance()).floatValue();
@@ -303,10 +306,10 @@ final class GroupNatives extends CommonNatives {
 							ObjectJassValueVisitor.<TriggerBooleanExpression>getInstance());
 					this.simulation.getWorldCollision().enumUnitsOrCorpsesInRange(x, y, radius,
 							(unit) -> {
-								if (unit.distance(x, y) <= radius) {
+								// Measured on 1.29: centre to centre, a unit's collision size does not count.
+								if (StrictMath.hypot(unit.getX() - x, unit.getY() - y) <= radius) {
 									if ((filter == null) || filter.evaluate(globalScope,
 											CommonTriggerExecutionScope.filterScope(triggerScope, unit))) {
-										// TODO the trigger scope for evaluation here might need to be a clean one?
 										group.add(unit);
 									}
 								}
@@ -318,6 +321,7 @@ final class GroupNatives extends CommonNatives {
 				(arguments, globalScope, triggerScope) -> {
 					final List<CUnit> group = arguments.get(0)
 							.visit(ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					group.clear();
 					final AbilityPointTarget whichLocation = arguments.get(1)
 							.visit(ObjectJassValueVisitor.<AbilityPointTarget>getInstance());
 					final float x = whichLocation.x;
@@ -328,10 +332,9 @@ final class GroupNatives extends CommonNatives {
 
 					this.simulation.getWorldCollision().enumUnitsOrCorpsesInRange(x, y, radius,
 							(unit) -> {
-								if (unit.distance(x, y) <= radius) {
+								if (StrictMath.hypot(unit.getX() - x, unit.getY() - y) <= radius) {
 									if ((filter == null) || filter.evaluate(globalScope,
 											CommonTriggerExecutionScope.filterScope(triggerScope, unit))) {
-										// TODO the trigger scope for evaluation here might need to be a clean one?
 										group.add(unit);
 									}
 								}
@@ -343,6 +346,7 @@ final class GroupNatives extends CommonNatives {
 				(arguments, globalScope, triggerScope) -> {
 					final List<CUnit> group = arguments.get(0)
 							.visit(ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					group.clear();
 					final float x = arguments.get(1).visit(RealJassValueVisitor.getInstance()).floatValue();
 					final float y = arguments.get(2).visit(RealJassValueVisitor.getInstance()).floatValue();
 					final float radius = arguments.get(3).visit(RealJassValueVisitor.getInstance()).floatValue();
@@ -355,11 +359,9 @@ final class GroupNatives extends CommonNatives {
 
 								@Override
 								public boolean call(final CUnit unit) {
-									if (unit.distance(x, y) <= radius) {
+									if (StrictMath.hypot(unit.getX() - x, unit.getY() - y) <= radius) {
 										if ((filter == null) || filter.evaluate(globalScope,
 												CommonTriggerExecutionScope.filterScope(triggerScope, unit))) {
-											// TODO the trigger scope for evaluation here might need to be a clean
-											// one?
 											group.add(unit);
 											this.count++;
 											if (this.count >= countLimit) {
@@ -376,6 +378,7 @@ final class GroupNatives extends CommonNatives {
 				(arguments, globalScope, triggerScope) -> {
 					final List<CUnit> group = arguments.get(0)
 							.visit(ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					group.clear();
 					final AbilityPointTarget whichLocation = arguments.get(1)
 							.visit(ObjectJassValueVisitor.<AbilityPointTarget>getInstance());
 					final float x = whichLocation.x;
@@ -390,11 +393,9 @@ final class GroupNatives extends CommonNatives {
 
 								@Override
 								public boolean call(final CUnit unit) {
-									if (unit.distance(x, y) <= radius) {
+									if (StrictMath.hypot(unit.getX() - x, unit.getY() - y) <= radius) {
 										if ((filter == null) || filter.evaluate(globalScope,
 												CommonTriggerExecutionScope.filterScope(triggerScope, unit))) {
-											// TODO the trigger scope for evaluation here might need to be a
-											// clean one?
 											group.add(unit);
 											this.count++;
 											if (this.count >= countLimit) {
@@ -451,7 +452,6 @@ final class GroupNatives extends CommonNatives {
 								if (whichUnit.canReach(unit, radius)) {
 									if ((filter == null) || filter.evaluate(globalScope,
 											CommonTriggerExecutionScope.filterScope(triggerScope, unit))) {
-										// TODO the trigger scope for evaluation here might need to be a clean one?
 										group.add(unit);
 									}
 								}
@@ -479,8 +479,6 @@ final class GroupNatives extends CommonNatives {
 									if (whichUnit.canReach(unit, radius)) {
 										if ((filter == null) || filter.evaluate(globalScope,
 												CommonTriggerExecutionScope.filterScope(triggerScope, unit))) {
-											// TODO the trigger scope for evaluation here might need to be a clean
-											// one?
 											group.add(unit);
 											this.count++;
 											if (this.count >= countLimit) {

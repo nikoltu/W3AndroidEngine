@@ -15,6 +15,10 @@ import com.hiveworkshop.rms.parsers.mdlx.MdlxTexture;
 public final class WeatherType {
 	private static final float BOUNDS = 100000;
 	private static final int UNFOGGED = 0x40000;
+	// Calibration: the original draws a streak (rain) wider and longer than the table's size and tail length give;
+	// the factors make the streaks match the original's pictures.
+	private static final float TAIL_WIDTH_SCALE = 4;
+	private static final float TAIL_LENGTH_SCALE = 1.7f;
 
 	private final String key;
 	private final String texturePath;
@@ -105,13 +109,19 @@ public final class WeatherType {
 		emitter.setRows(this.rows);
 		emitter.setColumns(this.columns);
 		emitter.setHeadOrTail(this.headOrTail);
-		emitter.setTailLength(this.tailLength);
+		emitter.setTailLength(this.tailLength * (this.headOrTail == HeadOrTail.TAIL ? TAIL_LENGTH_SCALE : 1));
 		emitter.setTimeMiddle(this.timeMiddle);
 		for (int i = 0; i < 3; i++) {
 			System.arraycopy(this.colors[i], 0, emitter.getSegmentColors()[i], 0, 3);
 		}
 		emitter.setSegmentAlphas(this.alphas.clone());
-		emitter.setSegmentScaling(this.scaling.clone());
+		final float[] sizes = this.scaling.clone();
+		if (this.headOrTail == HeadOrTail.TAIL) {
+			for (int i = 0; i < 3; i++) {
+				sizes[i] *= TAIL_WIDTH_SCALE;
+			}
+		}
+		emitter.setSegmentScaling(sizes);
 		emitter.setHeadIntervals(new long[][] { { this.headUv[0], this.headUv[1], 1 }, { this.headUv[1], this.headUv[2], 1 } });
 		emitter.setTailIntervals(new long[][] { { this.tailUv[0], this.tailUv[1], 1 }, { this.tailUv[1], this.tailUv[2], 1 } });
 		emitter.setTextureId(0);

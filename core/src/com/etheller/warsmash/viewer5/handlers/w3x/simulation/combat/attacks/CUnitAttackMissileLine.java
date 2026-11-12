@@ -3,6 +3,7 @@ package com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.attacks;
 import java.util.EnumSet;
 
 import com.badlogic.gdx.math.Rectangle;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.CAreaTargetVisibility;
 import com.etheller.warsmash.viewer5.handlers.w3x.AnimationTokens.SecondaryTag;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
@@ -112,7 +113,8 @@ public class CUnitAttackMissileLine extends CUnitAttackMissile {
 				final float along = ((enumUnit.getX() - x) * ux) + ((enumUnit.getY() - y) * uy);
 				final float across = Math.abs(((enumUnit.getX() - x) * uy) - ((enumUnit.getY() - y) * ux));
 				if ((along > 0) && (along <= this.damageSpillDistance) && (across <= reach)
-						&& enumUnit.canBeTargetedBy(cSimulation, source, this.spillTargets)) {
+						&& enumUnit.canBeAreaTargetedBy(cSimulation, source, CAreaTargetVisibility.NOT_INVISIBLE,
+								this.spillTargets)) {
 					enumUnit.damage(cSimulation, source, this.damageFlags, getAttackType(),
 							getWeaponType().getDamageType(), getWeaponSound(), spilledDamage, 0);
 					attackListener.onHit(enumUnit, spilledDamage);

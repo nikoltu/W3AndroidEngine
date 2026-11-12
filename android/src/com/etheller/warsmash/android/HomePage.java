@@ -21,6 +21,7 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import com.etheller.warsmash.BuildInfo;
 import com.etheller.warsmash.launcher.CampaignChoice;
 import com.etheller.warsmash.launcher.DataFolderCheck;
 import com.etheller.warsmash.launcher.LauncherBoard;
@@ -460,7 +461,7 @@ final class HomePage extends LauncherViews {
 		row.addView(music);
 		place(parent, row, 24, 1600, 592, 88);
 
-		final TextView version = text("v" + versionName() + dataVersion(), 24, LauncherKit.CAPTION);
+		final TextView version = text(buildLine() + dataVersion(), 24, LauncherKit.CAPTION);
 		version.setPadding(px(20), 0, 0, 0);
 		version.setShadowLayer(0, 0, 0, 0);
 		place(parent, version, 24, 1730, 592, 48);
@@ -482,6 +483,12 @@ final class HomePage extends LauncherViews {
 		item.setContentDescription(
 				label + ": " + getString(present ? R.string.options_found : R.string.options_missing));
 		return item;
+	}
+
+	/** Such as "v0.3.12 (abc1234)", with a marker when the build is not an official one. */
+	String buildLine() {
+		return BuildInfo.current().displayVersion()
+				+ (BuildInfo.current().isOfficial() ? "" : " - " + getString(R.string.build_unofficial));
 	}
 
 	String versionName() {

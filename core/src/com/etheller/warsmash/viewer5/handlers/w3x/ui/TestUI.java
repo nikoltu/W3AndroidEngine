@@ -33,7 +33,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.ui.sound.KeyedSounds;
 
 public class TestUI {
 	private static final Vector2 screenCoordsVector = new Vector2();
-	private static boolean ENABLE_NOT_YET_IMPLEMENTED_BUTTONS = false;
+	private static final boolean ENABLE_NOT_YET_IMPLEMENTED_BUTTONS = false;
 
 	private final DataSource dataSource;
 	private final Scene uiScene;

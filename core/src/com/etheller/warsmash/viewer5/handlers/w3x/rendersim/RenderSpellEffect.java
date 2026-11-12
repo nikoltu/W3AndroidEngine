@@ -51,6 +51,7 @@ public class RenderSpellEffect extends AllocatedHandle implements RenderEffect, 
 			final PrimaryTag[] animationQueue, final EnumSet<SecondaryTag> requiredAnimationNames) {
 		this.viewer = war3MapViewer;
 		this.modelInstance = modelInstance;
+		modelInstance.hiddenInFog = true;
 		this.animationQueue = animationQueue;
 		this.requiredAnimationNames = requiredAnimationNames;
 		final MdxModel model = (MdxModel) this.modelInstance.model;

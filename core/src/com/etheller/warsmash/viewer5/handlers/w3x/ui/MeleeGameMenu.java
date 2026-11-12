@@ -17,6 +17,7 @@ import java.util.regex.Pattern;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import com.etheller.warsmash.datasources.DataSource;
+import com.etheller.warsmash.util.GameDataConstants;
 import com.etheller.warsmash.parsers.fdf.GameUI;
 import com.etheller.warsmash.parsers.fdf.frames.GlueTextButtonFrame;
 import com.etheller.warsmash.parsers.fdf.frames.SimpleFrame;
@@ -52,7 +53,7 @@ final class MeleeGameMenu {
 
 	MeleeGameMenu(final GameUI rootFrame, final Viewport uiViewport, final SimpleFrame holder, final UIFrame backdrop,
 			final UIFrame mainPanel, final DataSource dataSource, final SavedGameDialog.Host host,
-			final Runnable optionsApplied) {
+			final Runnable optionsApplied, final GameDataConstants gameData) {
 		this.rootFrame = rootFrame;
 		this.uiViewport = uiViewport;
 		this.holder = holder;
@@ -94,7 +95,7 @@ final class MeleeGameMenu {
 			public void applied() {
 				optionsApplied.run();
 			}
-		});
+		}, gameData.isCatchCursor(), gameData.isEnableMusic());
 		this.helpPanel = rootFrame.getFrameByName("HelpPanel", 0);
 		this.tipsPanel = rootFrame.getFrameByName("TipsPanel", 0);
 		this.helpText = (TextAreaFrame) rootFrame.getFrameByName("HelpTextArea", 0);
@@ -129,6 +130,14 @@ final class MeleeGameMenu {
 		button.setEnabled(true);
 		button.setOnClick(action);
 		return button;
+	}
+
+	/** The Load Game button's panel, from the open menu; nothing when this game cannot load. */
+	void showLoadDialog() {
+		if (this.loadButton.isEnabled()) {
+			hideMain();
+			this.savedGames.showLoad();
+		}
 	}
 
 	void setSaveAndLoadEnabled(final boolean enabled) {
@@ -190,6 +199,10 @@ final class MeleeGameMenu {
 			return true;
 		}
 		return false;
+	}
+
+	void followKeyboard(final float holderTop) {
+		this.savedGames.followKeyboard(holderTop);
 	}
 
 	boolean isSubPanelShowing() {

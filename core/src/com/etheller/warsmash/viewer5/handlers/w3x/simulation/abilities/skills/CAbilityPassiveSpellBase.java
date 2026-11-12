@@ -59,7 +59,7 @@ public abstract class CAbilityPassiveSpellBase extends AbilityGenericSingleIconP
 		if (this.requirements != null) {
 			final CPlayer player = game.getPlayer(unit.getPlayerIndex());
 			for (final CUnitTypeRequirement requirement : this.requirements) {
-				if (player.getTechtreeUnlocked(requirement.getRequirement()) < requirement.getRequiredLevel()) {
+				if (!player.isRequirementMet(requirement.getRequirement(), requirement.getRequiredLevel())) {
 					return false;
 				}
 			}
@@ -73,7 +73,7 @@ public abstract class CAbilityPassiveSpellBase extends AbilityGenericSingleIconP
 		if (this.requirements != null) {
 			final CPlayer player = game.getPlayer(unit.getPlayerIndex());
 			for (final CUnitTypeRequirement requirement : this.requirements) {
-				if (player.getTechtreeUnlocked(requirement.getRequirement()) < requirement.getRequiredLevel()) {
+				if (!player.isRequirementMet(requirement.getRequirement(), requirement.getRequiredLevel())) {
 					receiver.missingRequirement(requirement.getRequirement(), requirement.getRequiredLevel());
 				}
 			}

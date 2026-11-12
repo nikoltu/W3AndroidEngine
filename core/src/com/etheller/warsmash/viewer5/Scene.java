@@ -53,7 +53,6 @@ public abstract class Scene {
 	public final EmittedObjectUpdater emitterObjectUpdater;
 	public final Map<TextureMapper, RenderBatch> batches;
 	public final Comparator<ModelInstance> instanceDepthComparator;
-	public DynamicShadowManager shadowManager;
 	/**
 	 * Similar to WebGL's own `alpha` parameter.
 	 *
@@ -102,7 +101,14 @@ public abstract class Scene {
 
 	public boolean enableAudio() {
 		if (this.audioContext == null) {
-			this.audioContext = Extensions.audio.createContext(this instanceof WorldScene);
+			final boolean world = this instanceof WorldScene;
+			this.audioContext = Extensions.audio.createContext(world);
+			this.audioContext.world = world;
+			// Without 3D sound the backend's listener is shared and keeps nothing, yet world sounds still fade with
+			// distance from the camera and come from its side.
+			if (world && !this.audioContext.listener.is3DSupported()) {
+				this.audioContext.listener = new AudioContext.Listener.Placed();
+			}
 		}
 		if (!this.audioContext.isRunning()) {
 			this.audioContext.resume();
@@ -212,6 +218,7 @@ public abstract class Scene {
 
 			listener.setPosition(x, y, z);
 			listener.setOrientation(forwardX, forwardY, forwardZ, upX, upY, upZ);
+			this.audioContext.updateLoops();
 		}
 
 		final int frame = this.viewer.frame;
@@ -310,11 +317,6 @@ public abstract class Scene {
 		Gdx.gl30.glClear(GL20.GL_DEPTH_BUFFER_BIT | GL20.GL_COLOR_BUFFER_BIT);
 		Gdx.gl30.glDisable(GL30.GL_SCISSOR_TEST);
 
-		// Render all of the opaque things of non-batched instances.
-//		for (final ModelInstance instance : this.instances) {
-//			instance.renderOpaque(depthMatrix);
-//		}
-
 		dynamicShadowManager.endShadowMap();
 		final Rectangle viewport = this.camera.rect;
 		this.viewer.gl.glViewport((int) viewport.x, (int) viewport.y, (int) viewport.width, (int) viewport.height);
@@ -350,12 +352,6 @@ public abstract class Scene {
 			this.boneAtlas.dispose();
 		}
 		this.lightManager.dispose();
-	}
-
-	public void clearEmitterObjects() {
-		for (final EmittedObject object : this.emitterObjectUpdater.objects) {
-			object.health = 0;
-		}
 	}
 
 	public void addLight(final SceneLightInstance lightInstance) {

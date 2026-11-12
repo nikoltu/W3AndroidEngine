@@ -3,6 +3,7 @@ package com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills;
 import java.util.EnumSet;
 import java.util.List;
 
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CReleaseCheats;
 import com.etheller.warsmash.units.GameObject;
 import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.util.WarsmashConstants;
@@ -86,6 +87,19 @@ public abstract class CAbilitySpellBase extends AbstractGenericSingleIconNoSmart
 		}
 
 		populateData(worldEditorAbility, level);
+		refreshCostOverrides();
+	}
+
+	@Override
+	protected void refreshCostOverrides() {
+		final Integer manaCostOverride = getManaCostOverride(getLevel());
+		if (manaCostOverride != null) {
+			this.manaCost = manaCostOverride;
+		}
+		final Float cooldownOverride = getCooldownOverride(getLevel());
+		if (cooldownOverride != null) {
+			this.cooldown = Math.max(0f, cooldownOverride);
+		}
 	}
 
 	@Override
@@ -93,7 +107,7 @@ public abstract class CAbilitySpellBase extends AbstractGenericSingleIconNoSmart
 		if (this.requirements != null) {
 			final CPlayer player = game.getPlayer(unit.getPlayerIndex());
 			for (final CUnitTypeRequirement requirement : this.requirements) {
-				if (player.getTechtreeUnlocked(requirement.getRequirement()) < requirement.getRequiredLevel()) {
+				if (!player.isRequirementMet(requirement.getRequirement(), requirement.getRequiredLevel())) {
 					return false;
 				}
 			}
@@ -107,7 +121,7 @@ public abstract class CAbilitySpellBase extends AbstractGenericSingleIconNoSmart
 		if (this.requirements != null) {
 			final CPlayer player = game.getPlayer(unit.getPlayerIndex());
 			for (final CUnitTypeRequirement requirement : this.requirements) {
-				if (player.getTechtreeUnlocked(requirement.getRequirement()) < requirement.getRequiredLevel()) {
+				if (!player.isRequirementMet(requirement.getRequirement(), requirement.getRequiredLevel())) {
 					receiver.missingRequirement(requirement.getRequirement(), requirement.getRequiredLevel());
 				}
 			}
@@ -176,7 +190,7 @@ public abstract class CAbilitySpellBase extends AbstractGenericSingleIconNoSmart
 					* WarsmashConstants.SIMULATION_STEP_TIME;
 			receiver.cooldownNotYetReady(cooldownRemaining, cooldownLengthDisplay);
 		}
-		else if (unit.getMana() < this.manaCost) {
+		else if (unit.getMana() < CReleaseCheats.manaCost(game, unit, this.manaCost)) {
 			receiver.activationCheckFailed(CommandStringErrorKeys.NOT_ENOUGH_MANA);
 		}
 		else {

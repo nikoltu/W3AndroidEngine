@@ -12,13 +12,13 @@ import com.etheller.interpreter.ast.value.IntegerJassValue;
 import com.etheller.interpreter.ast.value.JassValue;
 import com.etheller.interpreter.ast.value.RealJassValue;
 import com.etheller.interpreter.ast.value.visitor.BooleanJassValueVisitor;
+import com.etheller.interpreter.ast.value.visitor.IntegerJassValueVisitor;
 import com.etheller.interpreter.ast.value.visitor.ObjectJassValueVisitor;
 import com.etheller.interpreter.ast.value.visitor.RealJassValueVisitor;
 import com.etheller.warsmash.parsers.jass.Jass2.CommonEnvironment;
 import com.etheller.warsmash.parsers.jass.triggers.CRect;
 import com.etheller.warsmash.parsers.jass.triggers.LocationJass;
 import com.etheller.warsmash.util.War3ID;
-import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.viewer5.handlers.w3x.environment.PathingGrid;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbility;
@@ -339,7 +339,7 @@ final class RegionNatives extends CommonNatives {
 					// Not createUnitSimple: the blighted mine already stands here, so the hidden one would be moved
 					// off it and its pathing would block building around the Necropolis.
 					final CUnit goldMine = this.simulation.createUnit(goldMineRawcode,
-							WarsmashConstants.MAX_PLAYERS - 1, blightedMine.getX(), blightedMine.getY(),
+							this.simulation.getGameData().getMaxPlayers() - 1, blightedMine.getX(), blightedMine.getY(),
 							(float) facing);
 					goldMine.setHidden(true);
 					for (final CAbility ability : blightedMine.getAbilities()) {
@@ -355,6 +355,30 @@ final class RegionNatives extends CommonNatives {
 					final float x = arguments.get(0).visit(RealJassValueVisitor.getInstance()).floatValue();
 					final float y = arguments.get(1).visit(RealJassValueVisitor.getInstance()).floatValue();
 					return IntegerJassValue.of(this.simulation.getTerrainData().getLayerHeight(x, y));
+				});
+		jassProgramVisitor.getJassNativeManager().createNative("GetTerrainType",
+				(arguments, globalScope, triggerScope) -> {
+					final float x = arguments.get(0).visit(RealJassValueVisitor.getInstance()).floatValue();
+					final float y = arguments.get(1).visit(RealJassValueVisitor.getInstance()).floatValue();
+					return IntegerJassValue.of(this.simulation.getTerrainData().getTerrainType(x, y));
+				});
+		jassProgramVisitor.getJassNativeManager().createNative("GetTerrainVariance",
+				(arguments, globalScope, triggerScope) -> {
+					final float x = arguments.get(0).visit(RealJassValueVisitor.getInstance()).floatValue();
+					final float y = arguments.get(1).visit(RealJassValueVisitor.getInstance()).floatValue();
+					return IntegerJassValue.of(this.simulation.getTerrainData().getTerrainVariation(x, y));
+				});
+		jassProgramVisitor.getJassNativeManager().createNative("SetTerrainType",
+				(arguments, globalScope, triggerScope) -> {
+					final float x = arguments.get(0).visit(RealJassValueVisitor.getInstance()).floatValue();
+					final float y = arguments.get(1).visit(RealJassValueVisitor.getInstance()).floatValue();
+					final int terrainType = arguments.get(2).visit(IntegerJassValueVisitor.getInstance());
+					final int variation = arguments.get(3).visit(IntegerJassValueVisitor.getInstance());
+					final int area = arguments.get(4).visit(IntegerJassValueVisitor.getInstance());
+					final int shape = arguments.get(5).visit(IntegerJassValueVisitor.getInstance());
+					this.simulation.getTerrainTypeChanges().set(this.simulation, x, y, terrainType, variation, area,
+							shape);
+					return null;
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("SetBlightLoc",
 				(arguments, globalScope, triggerScope) -> {
@@ -409,6 +433,53 @@ final class RegionNatives extends CommonNatives {
 					return BooleanJassValue.of(pathingGrid.contains(x, y) && PathingGrid.PathingFlags
 							.isPathingFlag(pathingGrid.getPathing(x, y), PathingGrid.PathingFlags.BLIGHTED));
 				});
+		// Measured: a cell of the map's own terrain, 32 wide, takes the change; every type has a flag of its own, so
+		// changing walkability leaves peon harvest and amphibious pathing as they were, and ANY (and no type at
+		// all) changes all of them. Blocking a type reads back as unpathable, which is the flag set.
+		jassProgramVisitor.getJassNativeManager().createNative("SetTerrainPathable",
+				(arguments, globalScope, triggerScope) -> {
+					final float x = arguments.get(0).visit(RealJassValueVisitor.getInstance()).floatValue();
+					final float y = arguments.get(1).visit(RealJassValueVisitor.getInstance()).floatValue();
+					final CPathingTypeJass pathingType = nullable(arguments, 2,
+							ObjectJassValueVisitor.<CPathingTypeJass>getInstance());
+					final boolean pathable = arguments.get(3).visit(BooleanJassValueVisitor.getInstance());
+					final PathingGrid pathingGrid = this.simulation.getPathingGrid();
+					final CPathingTypeJass type = pathingType == null ? CPathingTypeJass.ANY : pathingType;
+					final boolean blocked = !pathable;
+					for (final CPathingTypeJass each : CPathingTypeJass.VALUES) {
+						if ((type != CPathingTypeJass.ANY) && (type != each)) {
+							continue;
+						}
+						switch (each) {
+						case WALKABILITY:
+							pathingGrid.setTerrainFlag(x, y, PathingGrid.PathingFlags.UNWALKABLE, blocked);
+							break;
+						case FLYABILITY:
+							pathingGrid.setTerrainFlag(x, y, PathingGrid.PathingFlags.UNFLYABLE, blocked);
+							break;
+						case BUILDABILITY:
+							pathingGrid.setTerrainFlag(x, y, PathingGrid.PathingFlags.UNBUILDABLE, blocked);
+							break;
+						case PEONHARVESTPATHING:
+							pathingGrid.setScriptFlag(x, y, PathingGrid.SCRIPT_PEON_BLOCKED,
+									PathingGrid.SCRIPT_PEON_OPEN, blocked);
+							break;
+						case BLIGHTPATHING:
+							pathingGrid.setTerrainFlag(x, y, PathingGrid.PathingFlags.BLIGHTED, blocked);
+							break;
+						case FLOATABILITY:
+							pathingGrid.setTerrainFlag(x, y, PathingGrid.PathingFlags.UNSWIMABLE, blocked);
+							break;
+						case AMPHIBIOUSPATHING:
+							pathingGrid.setScriptFlag(x, y, PathingGrid.SCRIPT_AMPHIBIOUS_BLOCKED,
+									PathingGrid.SCRIPT_AMPHIBIOUS_OPEN, blocked);
+							break;
+						default:
+							break;
+						}
+					}
+					return null;
+				});
 		// Only the map's own terrain pathing counts (not units, buildings or trees); outside the playable area
 		// every type except floatability is blocked, and ANY is always blocked.
 		jassProgramVisitor.getJassNativeManager().createNative("IsTerrainPathable",
@@ -428,11 +499,15 @@ final class RegionNatives extends CommonNatives {
 					}
 					final short pathing = this.simulation.getPathingGrid().getTerrainPathing(x,
 							y);
+					final short scriptFlags = this.simulation.getPathingGrid().getScriptFlags(x, y);
 					switch (pathingType) {
 					case WALKABILITY:
-					case PEONHARVESTPATHING:
 						return BooleanJassValue.of(PathingGrid.PathingFlags.isPathingFlag(pathing,
 								PathingGrid.PathingFlags.UNWALKABLE));
+					case PEONHARVESTPATHING:
+						return BooleanJassValue.of(scriptOverride(scriptFlags, PathingGrid.SCRIPT_PEON_BLOCKED,
+								PathingGrid.SCRIPT_PEON_OPEN, PathingGrid.PathingFlags.isPathingFlag(pathing,
+										PathingGrid.PathingFlags.UNWALKABLE)));
 					case FLYABILITY:
 						return BooleanJassValue.of(PathingGrid.PathingFlags.isPathingFlag(pathing,
 								PathingGrid.PathingFlags.UNFLYABLE));
@@ -446,13 +521,22 @@ final class RegionNatives extends CommonNatives {
 						return BooleanJassValue.of(PathingGrid.PathingFlags.isPathingFlag(pathing,
 								PathingGrid.PathingFlags.UNSWIMABLE));
 					case AMPHIBIOUSPATHING:
-						return BooleanJassValue.of(
+						return BooleanJassValue.of(scriptOverride(scriptFlags, PathingGrid.SCRIPT_AMPHIBIOUS_BLOCKED,
+								PathingGrid.SCRIPT_AMPHIBIOUS_OPEN,
 								PathingGrid.PathingFlags.isPathingFlag(pathing, PathingGrid.PathingFlags.UNWALKABLE)
 										&& PathingGrid.PathingFlags.isPathingFlag(pathing,
-												PathingGrid.PathingFlags.UNSWIMABLE));
+												PathingGrid.PathingFlags.UNSWIMABLE)));
 					default:
 						return BooleanJassValue.TRUE;
 					}
 				});
+	}
+
+	private static boolean scriptOverride(final short flags, final short blocked, final short open,
+			final boolean fallback) {
+		if ((flags & blocked) != 0) {
+			return true;
+		}
+		return ((flags & open) == 0) && fallback;
 	}
 }

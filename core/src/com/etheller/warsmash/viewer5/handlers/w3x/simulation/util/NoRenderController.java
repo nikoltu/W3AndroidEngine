@@ -402,6 +402,11 @@ public class NoRenderController implements SimulationRenderController {
 	}
 
 	@Override
+	public void setTerrainTypes(final int[] cells) {
+		this.world.setTerrainTypes(cells);
+	}
+
+	@Override
 	public void setTerrainDeformation(final int column, final int row, final int width, final int height,
 			final float[] offsets) {
 		this.world.setTerrainDeformation(column, row, width, height, offsets);

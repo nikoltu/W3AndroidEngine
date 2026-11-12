@@ -75,11 +75,13 @@ public final class MovieActivity extends Activity implements SurfaceHolder.Callb
 	private int resumeMovie = -1;
 	private long resumeMicros;
 	private float volume;
+	private boolean subtitles;
 	private boolean done;
 
 	@Override
 	protected void onCreate(final Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
+		BackCallbacks.register(this, this::skip);
 		getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 		this.videos = list(EXTRA_VIDEOS);
 		this.audios = list(EXTRA_AUDIOS);
@@ -88,6 +90,7 @@ public final class MovieActivity extends Activity implements SurfaceHolder.Callb
 		this.volume = settings.flag("sound", true)
 				? Math.max(0, Math.min(100, settings.number("soundVolume", 100))) / 100f
 				: 0;
+		this.subtitles = settings.flag("subtitles", true);
 		final FrameLayout root = new FrameLayout(this);
 		root.setBackgroundColor(Color.BLACK);
 		this.picture = new SurfaceView(this);
@@ -233,7 +236,7 @@ public final class MovieActivity extends Activity implements SurfaceHolder.Callb
 		final String audio = this.audios.size() > index ? this.audios.get(index) : "";
 		final String captions = this.captionFiles.size() > index ? this.captionFiles.get(index) : "";
 		this.playing = new Playback(video, reader, audio.isEmpty() ? null : new File(audio),
-				MovieCaptions.read(captions.isEmpty() ? null : new File(captions)), startMicros);
+				MovieCaptions.read(captions.isEmpty() || !this.subtitles ? null : new File(captions)), startMicros);
 		this.playing.start();
 	}
 

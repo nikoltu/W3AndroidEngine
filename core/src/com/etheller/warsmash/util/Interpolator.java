@@ -1,27 +1,6 @@
 package com.etheller.warsmash.util;
 
 public class Interpolator {
-	public static void interpolateScalar(final float[] out, final float[] a, final float[] b, final float[] c,
-			final float[] d, final float t, final int type) {
-		switch (type) {
-		case 0: {
-			out[0] = a[0];
-			break;
-		}
-		case 1: {
-			out[0] = RenderMathUtils.lerp(a[0], d[0], t);
-			break;
-		}
-		case 2: {
-			out[0] = RenderMathUtils.hermite(a[0], b[0], c[0], d[0], t);
-			break;
-		}
-		case 3: {
-			out[0] = RenderMathUtils.bezier(a[0], b[0], c[0], d[0], t);
-			break;
-		}
-		}
-	}
 
 	public static void interpolateVector(final float[] out, final float[] a, final float[] b, final float[] c,
 			final float[] d, final float t, final int type) {

@@ -6,7 +6,7 @@ public enum CRarityControl implements CHandle {
 	FREQUENT,
 	RARE;
 
-	public static CRarityControl[] VALUES = values();
+	public static final CRarityControl[] VALUES = values();
 
 	@Override
 	public int getHandleId() {

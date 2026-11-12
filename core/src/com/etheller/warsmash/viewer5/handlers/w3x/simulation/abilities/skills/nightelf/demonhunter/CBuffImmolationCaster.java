@@ -1,6 +1,7 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.nightelf.demonhunter;
 
 import com.badlogic.gdx.math.Rectangle;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.CAreaTargetVisibility;
 import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
@@ -59,7 +60,7 @@ public class CBuffImmolationCaster extends AbstractCBuff {
 				@Override
 				public boolean call(final CUnit enumUnit) {
 					if (caster.canReach(enumUnit, areaOfEffect) && (firstPulse || !enumUnit.isPaused())
-							&& enumUnit.canBeTargetedBy(game, caster,
+							&& enumUnit.canBeAreaTargetedBy(game, caster, CAreaTargetVisibility.ANY,
 							CBuffImmolationCaster.this.abilityImmolation.getTargetsAllowed())) {
 						enumUnit.damage(game, caster, DAMAGE_FLAGS, CAttackType.SPELLS, CDamageType.FIRE,
 								CWeaponSoundTypeJass.WHOKNOWS.name(),

@@ -13,19 +13,21 @@ import com.etheller.interpreter.ast.value.visitor.IntegerJassValueVisitor;
 import com.etheller.interpreter.ast.value.visitor.ObjectJassValueVisitor;
 import com.etheller.interpreter.ast.value.visitor.RealJassValueVisitor;
 import com.etheller.warsmash.parsers.jass.Jass2.CommonEnvironment;
-import com.etheller.warsmash.util.Log;
 import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbility;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.CAbilitySpell;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbilityDisableType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.AbstractCAbility;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.generic.CBuff;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.generic.CLevelingAbility;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.generic.GenericSingleIconActiveAbility;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.jass.CAbilityJass;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.inventory.CAbilityInventory;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.jass.CBuffJass;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.CAbilityType;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.data.CUnitData;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.ability.AbilityBuilderAbility;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.ability.AbilityBuilderActiveAbility;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.ability.GetABAbilityByRawcodeVisitor;
@@ -35,6 +37,11 @@ import java.util.List;
  * Unit abilities: adding, levels, flags, cooldowns and activation.
  */
 final class AbilityNatives extends CommonNatives {
+	private static final War3ID INVENTORY_CODE = War3ID.fromString("AInv");
+	/** The attack and move the engine gives units itself; the original does not add them by script. */
+	private static final War3ID ATTACK_CODE = War3ID.fromString("Aatk");
+	private static final War3ID MOVE_CODE = War3ID.fromString("Amov");
+
 	AbilityNatives(final CommonEnvironment environment) {
 		super(environment);
 	}
@@ -57,8 +64,15 @@ final class AbilityNatives extends CommonNatives {
 					if (whichWidget == null) {
 						return IntegerJassValue.ZERO;
 					}
-					final CAbility ability = whichWidget.getAbilityByRawcode(new War3ID(rawcode));
+					final War3ID abilityId = new War3ID(rawcode);
+					final CAbility ability = whichWidget.getAbilityByRawcode(abilityId);
 					if (ability == null) {
+						// Measured: the original reports the inventory under its code too (a unit with a plain
+						// inventory alias).
+						if (abilityId.equals(INVENTORY_CODE)
+								&& (whichWidget.getFirstAbilityOfType(CAbilityInventory.class) != null)) {
+							return IntegerJassValue.of(1);
+						}
 						final int illusionLevel = whichWidget.getIllusionAbilityLevel(rawcode);
 						if (illusionLevel > 0) {
 							return IntegerJassValue.of(illusionLevel);
@@ -95,6 +109,9 @@ final class AbilityNatives extends CommonNatives {
 					final int rawcode = arguments.get(1).visit(IntegerJassValueVisitor.getInstance());
 					final War3ID war3id = new War3ID(rawcode);
 					final CAbility found = whichWidget.getAbilityByRawcode(war3id);
+					if ((found == null) && war3id.equals(CUnitData.ALARM_ABILITY_ID)) {
+						return IntegerJassValue.ZERO;
+					}
 					if (found == null) {
 						final CAbility created = this.simulation.getAbilityData().createAbility(war3id,
 								this.simulation.getHandleIdAllocator().createId());
@@ -131,7 +148,8 @@ final class AbilityNatives extends CommonNatives {
 					final War3ID war3id = new War3ID(rawcode);
 					final CAbility found = whichUnit.getAbilityByRawcode(war3id);
 					if (found == null) {
-						return IntegerJassValue.of(newLevel);
+						// Measured: a missing alarm reads 0, it cannot be added by script.
+						return IntegerJassValue.of(war3id.equals(CUnitData.ALARM_ABILITY_ID) ? 0 : newLevel);
 					}
 					// Measured: the level is capped at the data's level count, so a built-in ability whose data has
 					// no levels (attack, move) reads 0 afterwards.
@@ -140,6 +158,13 @@ final class AbilityNatives extends CommonNatives {
 					if (found instanceof CLevelingAbility) {
 						final int leveled = Math.max(1, level);
 						((CLevelingAbility) found).setLevel(this.simulation, whichUnit, leveled);
+						// A spell also loads the new level's mana cost, cooldown and effect numbers.
+						if ((found instanceof CAbilitySpell) || (found instanceof AbilityBuilderAbility)) {
+							final CAbilityType<?> leveledType = this.simulation.getAbilityData().getAbilityType(war3id);
+							if (leveledType != null) {
+								leveledType.setLevel(this.simulation, whichUnit, (CLevelingAbility) found, leveled);
+							}
+						}
 						return IntegerJassValue.of(leveled);
 					}
 					if (found instanceof AbstractCAbility) {
@@ -157,17 +182,23 @@ final class AbilityNatives extends CommonNatives {
 					final War3ID rawcode = new War3ID(abilityId);
 					final CAbilityType<?> abilityTypeTmp = this.simulation.getAbilityData()
 							.getAbilityType(rawcode);
-					if (abilityTypeTmp == null) {
-						Log.warn(
-								"UnitAddAbility: The requested ability has not been programmed yet: " + rawcode);
+					if (rawcode.equals(CUnitData.ALARM_ABILITY_ID)) {
+						// Measured: the alarm cannot be added by script, not even back to a building it was removed from.
+						return BooleanJassValue.FALSE;
+					}
+					if ((abilityTypeTmp == null) && (rawcode.equals(ATTACK_CODE) || rawcode.equals(MOVE_CODE)
+							|| (this.simulation.getAbilityData().getLevelCount(rawcode) < 0))) {
 						return BooleanJassValue.FALSE;
 					}
 					final CAbility existingAbility = whichUnit.getAbilityByRawcode(rawcode);
 					if (existingAbility != null) {
 						return BooleanJassValue.FALSE;
 					}
-					final CAbility ability = abilityTypeTmp
-							.createAbility(this.simulation.getHandleIdAllocator().createId());
+					// Measured: an ability the data knows is added even where the engine has no behaviour for it
+					// (level 1, removable), as units made with such abilities already carry them.
+					final int abilityHandleId = this.simulation.getHandleIdAllocator().createId();
+					final CAbility ability = abilityTypeTmp != null ? abilityTypeTmp.createAbility(abilityHandleId)
+							: this.simulation.getAbilityData().createAbility(rawcode, abilityHandleId);
 					whichUnit.add(this.simulation, ability);
 					return BooleanJassValue.TRUE;
 				});
@@ -415,6 +446,9 @@ final class AbilityNatives extends CommonNatives {
 			if (abil != null) {
 				abil.resetCooldown(this.simulation, theUnit);
 			}
+			else {
+				theUnit.beginCooldown(this.simulation, new War3ID(aliasId), 0);
+			}
 			return null;
 		};
 		jassProgramVisitor.getJassNativeManager().createNative("EndUnitAbilityCooldown", endUnitAbilityCooldown);
@@ -465,7 +499,8 @@ final class AbilityNatives extends CommonNatives {
 			final CUnit theUnit = arguments.get(0).visit(ObjectJassValueVisitor.getInstance());
 			final int aliasIdRawcode = arguments.get(1).visit(IntegerJassValueVisitor.getInstance());
 			final War3ID aliasId = new War3ID(aliasIdRawcode);
-			return RealJassValue.of(theUnit.getCooldownRemainingTicks(this.simulation, aliasId)
+			return RealJassValue.of(Math.max(theUnit.getCooldownRemainingTicks(this.simulation, aliasId),
+					theUnit.getCooldownRemainingTicks(this.simulation, cooldownKey(theUnit, aliasId)))
 					* WarsmashConstants.SIMULATION_STEP_TIME);
 		};
 		jassProgramVisitor.getJassNativeManager().createNative("GetUnitAbilityCooldownRemaining",
@@ -477,8 +512,15 @@ final class AbilityNatives extends CommonNatives {
 					final CUnit theUnit = arguments.get(0).visit(ObjectJassValueVisitor.getInstance());
 					final int aliasIdRawcode = arguments.get(1).visit(IntegerJassValueVisitor.getInstance());
 					final War3ID aliasId = new War3ID(aliasIdRawcode);
-					return RealJassValue.of(theUnit.getCooldownLengthDisplayTicks(this.simulation, aliasId)
+					return RealJassValue.of(Math.max(theUnit.getCooldownLengthDisplayTicks(this.simulation, aliasId),
+							theUnit.getCooldownLengthDisplayTicks(this.simulation, cooldownKey(theUnit, aliasId)))
 							* WarsmashConstants.SIMULATION_STEP_TIME);
 				});
+	}
+
+	// Abilities run their cooldown under the code of the ability they are made from (a potion's 'AIh1' under 'AIhe').
+	private static War3ID cooldownKey(final CUnit unit, final War3ID rawcode) {
+		final CAbility ability = unit.getAbilityByRawcode(rawcode);
+		return ability == null ? rawcode : ability.getCode();
 	}
 }

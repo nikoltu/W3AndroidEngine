@@ -7,7 +7,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.viewer5.handlers.w3x.environment.PathingGrid;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnitClassification;
@@ -180,14 +179,12 @@ final class AIMapKnowledge {
 		return power;
 	}
 
+	/**
+	 * Measured: zero for campaign and melee scripts alike, with the opponent's army unseen, in sight, beside our base,
+	 * with a hero and with creeps around.
+	 */
 	static int getEnemyPower(final AIController ai) {
-		int power = 0;
-		for (int i = 0; i < WarsmashConstants.MAX_PLAYERS; i++) {
-			if (ai.isOpponent(i)) {
-				power += armyPower(ai, i);
-			}
-		}
-		return power;
+		return 0;
 	}
 
 	/**
@@ -198,7 +195,7 @@ final class AIMapKnowledge {
 		if (ours < 20) {
 			return null;
 		}
-		for (int i = 0; i < WarsmashConstants.MAX_PLAYERS; i++) {
+		for (int i = 0; i < ai.simulation.getGameData().getMaxPlayers(); i++) {
 			if (ai.isOpponent(i) && ((armyPower(ai, i) * 3) <= ours)) {
 				final CUnit base = findEnemyBase(ai, i);
 				if (base != null) {

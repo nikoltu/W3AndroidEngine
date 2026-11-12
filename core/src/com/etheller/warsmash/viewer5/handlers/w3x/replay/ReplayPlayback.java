@@ -24,11 +24,16 @@ public final class ReplayPlayback implements GameTurnManager, ReplaySession {
 	private final CReplay replay;
 	private final FileHandle file;
 	private final War3MapViewer viewer;
+	private boolean forced;
 	private boolean ended;
 	private boolean closed;
 
-	public ReplayPlayback(final CReplay replay, final FileHandle file, final War3MapViewer viewer)
-			throws IOException {
+	/**
+	 * @param startTick the step the playback plays on to without drawing before it shows the game, or 0 to start at the
+	 *                  beginning (a seek back restarts the replay this way)
+	 */
+	public ReplayPlayback(final CReplay replay, final FileHandle file, final War3MapViewer viewer,
+			final int startTick) throws IOException {
 		this.viewer = viewer;
 		this.replay = replay;
 		this.file = file;
@@ -38,7 +43,7 @@ public final class ReplayPlayback implements GameTurnManager, ReplaySession {
 		viewer.setReplaySession(this);
 		Log.warn("Replay: playing " + replay.getHeader().getMapPath() + " to step " + replay.getLastTick()
 				+ ", " + replay.getCommands().size() + " commands");
-		final int skipTo = Integer.getInteger(GameReplays.SKIP_TO_PROPERTY, -1);
+		final int skipTo = startTick > 0 ? startTick : Integer.getInteger(GameReplays.SKIP_TO_PROPERTY, -1);
 		if (skipTo > 0) {
 			skipTo(skipTo);
 		}
@@ -46,6 +51,11 @@ public final class ReplayPlayback implements GameTurnManager, ReplaySession {
 
 	/** Plays on to the step without drawing the game (see {@link War3MapViewer#fastForwardTo}). */
 	public void skipTo(final int tick) {
+		skipTo(tick, null);
+	}
+
+	/** @param whenReached run once the game is at the step, or where the replay ends before it */
+	public void skipTo(final int tick, final Runnable whenReached) {
 		this.viewer.fastForwardTo(tick, (steps, nanos) -> {
 			final CSimulation game = this.viewer.simulation;
 			final double seconds = nanos / 1e9;
@@ -53,6 +63,9 @@ public final class ReplayPlayback implements GameTurnManager, ReplaySession {
 					"Replay: skipped to step %d, %d steps in %.2f s (%.0f steps/s), checksum %08x",
 					game.getGameTurnTick(), steps, seconds, steps / Math.max(seconds, 1e-9),
 					SimulationChecksum.compute(game)));
+			if (whenReached != null) {
+				whenReached.run();
+			}
 		});
 	}
 
@@ -61,8 +74,26 @@ public final class ReplayPlayback implements GameTurnManager, ReplaySession {
 	 * script's SelectUnit or ForceUIKey goes through the interface as a command again; the recorded one already has
 	 * it. Only the viewer's pause stays, for the menu.
 	 */
+	/** Called with each chat line the recorded players sent, as the playback applies it. */
+	public interface ChatListener {
+		void chat(int senderIndex, int recipient, int recipientPlayerIndex, String message);
+	}
+
+	public void setChatListener(final ChatListener listener) {
+		this.player.setChatListener(listener == null ? null : listener::chat);
+	}
+
 	public CPlayerUnitOrderListener viewerCommands(final int localPlayerIndex) {
 		return new ReplayViewerCommands(() -> this.viewer.simulation.getPlayerCommandHost(), localPlayerIndex);
+	}
+
+	/** Whether the replay is played although this engine would have refused it. */
+	public boolean isForced() {
+		return this.forced;
+	}
+
+	public void setForced(final boolean forced) {
+		this.forced = forced;
 	}
 
 	public CReplayPlayer getPlayer() {

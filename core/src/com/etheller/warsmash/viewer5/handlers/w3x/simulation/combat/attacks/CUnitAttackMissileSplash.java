@@ -3,6 +3,7 @@ package com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.attacks;
 import java.util.EnumSet;
 
 import com.badlogic.gdx.math.Rectangle;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.CAreaTargetVisibility;
 import com.etheller.warsmash.viewer5.handlers.w3x.AnimationTokens.SecondaryTag;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CDestructable;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CDestructableEnumFunction;
@@ -200,7 +201,8 @@ public class CUnitAttackMissileSplash extends CUnitAttackMissile {
 		@Override
 		public boolean call(final CUnit enumUnit) {
 			if (enumUnit != this.source
-					&& enumUnit.canBeTargetedBy(this.simulation, this.source, this.attack.areaOfEffectTargets)) {
+					&& enumUnit.canBeAreaTargetedBy(this.simulation, this.source, CAreaTargetVisibility.NOT_INVISIBLE,
+							this.attack.areaOfEffectTargets)) {
 				float damageDealt = damageTarget(enumUnit);
 				if (enumUnit == this.target) {
 					this.hitTarget = true;

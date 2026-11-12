@@ -14,6 +14,10 @@ public final class SavedInterfaceState {
 	public java.util.List<com.etheller.warsmash.viewer5.handlers.w3x.ui.dialog.CScriptDialog> scriptDialogs;
 	public float[] cameraFields;
 	public boolean userUIEnabled = true;
+	/** Bits of the selection switches scripts turned off (MeleeUI.SELECTION_*); none in a game that never did. */
+	public int selectionOff;
+	public boolean allyFilterButtonEnabled = true;
+	public boolean creepFilterButtonEnabled = true;
 	public String dayNightTerrainModel;
 	public String dayNightUnitModel;
 	public String skyModel;
@@ -33,4 +37,7 @@ public final class SavedInterfaceState {
 	public String altMinimapIcon;
 	/** By {@code CSoundVolumeGroup} ordinal; null in saves from before it was kept, meaning every group at 1. */
 	public float[] volumeGroupScales;
+	/** The ground's blight and what the viewer had seen of it, a bit per corner; null in saves from before they were kept. */
+	public byte[] blightGround;
+	public byte[] blightSeen;
 }

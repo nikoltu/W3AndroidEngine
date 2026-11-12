@@ -101,4 +101,8 @@ final class ReplayViewerCommands implements CPlayerUnitOrderListener {
 	@Override
 	public void trackableEvent(final int trackableHandleId, final boolean hit) {
 	}
+
+	@Override
+	public void mouseEvent(final int eventId, final float x, final float y, final int button) {
+	}
 }

@@ -56,4 +56,10 @@ public interface CPlayerUnitOrderListener {
 
 	/** The player's pointer came onto a trackable (track) or clicked it (hit). */
 	void trackableEvent(int trackableHandleId, boolean hit);
+
+	/**
+	 * The player's mouse on the game world: a button pressed or released, or the pointer moved (button 0), with the
+	 * point of the ground under it. Sent only while a trigger listens for that player's mouse event.
+	 */
+	void mouseEvent(int eventId, float x, float y, int button);
 }

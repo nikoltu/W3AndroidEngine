@@ -34,6 +34,12 @@ public class PathingGrid {
 	private final float[] centerOffset;
 	private final List<RemovablePathingMapInstance> dynamicPathingInstances;
 	private int overlayVersion;
+	public static final short SCRIPT_PEON_BLOCKED = 1;
+	public static final short SCRIPT_PEON_OPEN = 2;
+	public static final short SCRIPT_AMPHIBIOUS_BLOCKED = 4;
+	public static final short SCRIPT_AMPHIBIOUS_OPEN = 8;
+	/** Allocated by the first script change of peon harvest or amphibious pathing; parallel to the grid. */
+	private short[] scriptFlags;
 
 	public PathingGrid(final War3MapWpm terrainPathing, final float[] centerOffset) {
 		this.centerOffset = centerOffset;
@@ -304,6 +310,63 @@ public class PathingGrid {
 		}
 	}
 
+	/**
+	 * SetTerrainPathable: one pathing cell of the map's own terrain gets a flag set or cleared. Peon harvest and
+	 * amphibious pathing have no flag of their own in the map file, so scripts keep theirs beside the grid.
+	 */
+	public void setTerrainFlag(final float x, final float y, final short flag, final boolean set) {
+		final int cellX = getCellX(x);
+		final int cellY = getCellY(y);
+		if (!isCellInside(cellX, cellY)) {
+			return;
+		}
+		if ((flag == PathingFlags.UNWALKABLE) || (flag == PathingFlags.UNSWIMABLE)) {
+			// Peon harvest and amphibious pathing keep what the map had when the cell's walking or swimming changes.
+			final short scripted = getScriptFlags(x, y);
+			final short pathing = this.pathingGrid[(cellY * this.pathingGridSizes[0]) + cellX];
+			final boolean unwalkable = PathingFlags.isPathingFlag(pathing, PathingFlags.UNWALKABLE);
+			if ((scripted & (SCRIPT_PEON_BLOCKED | SCRIPT_PEON_OPEN)) == 0) {
+				setScriptFlag(x, y, SCRIPT_PEON_BLOCKED, SCRIPT_PEON_OPEN, unwalkable);
+			}
+			if ((scripted & (SCRIPT_AMPHIBIOUS_BLOCKED | SCRIPT_AMPHIBIOUS_OPEN)) == 0) {
+				setScriptFlag(x, y, SCRIPT_AMPHIBIOUS_BLOCKED, SCRIPT_AMPHIBIOUS_OPEN,
+						unwalkable && PathingFlags.isPathingFlag(pathing, PathingFlags.UNSWIMABLE));
+			}
+		}
+		final int index = (cellY * this.pathingGridSizes[0]) + cellX;
+		this.pathingGrid[index] = (short) (set ? (this.pathingGrid[index] | flag) : (this.pathingGrid[index] & ~flag));
+		this.overlayVersion++;
+	}
+
+	public void setScriptFlag(final float x, final float y, final short onFlag, final short offFlag,
+			final boolean on) {
+		final int cellX = getCellX(x);
+		final int cellY = getCellY(y);
+		if (!isCellInside(cellX, cellY)) {
+			return;
+		}
+		if (this.scriptFlags == null) {
+			this.scriptFlags = new short[this.pathingGrid.length];
+		}
+		final int index = (cellY * this.pathingGridSizes[0]) + cellX;
+		this.scriptFlags[index] = (short) ((this.scriptFlags[index] & ~(onFlag | offFlag)) | (on ? onFlag : offFlag));
+	}
+
+	/** The peon harvest and amphibious flags scripts set on the cell, as {@link #SCRIPT_PEON_BLOCKED} and the like. */
+	public short getScriptFlags(final float x, final float y) {
+		final int cellX = getCellX(x);
+		final int cellY = getCellY(y);
+		if ((this.scriptFlags == null) || !isCellInside(cellX, cellY)) {
+			return 0;
+		}
+		return this.scriptFlags[(cellY * this.pathingGridSizes[0]) + cellX];
+	}
+
+	private boolean isCellInside(final int cellX, final int cellY) {
+		return (cellX >= 0) && (cellY >= 0) && (cellX < this.pathingGridSizes[0])
+				&& (cellY < this.pathingGridSizes[1]);
+	}
+
 	public void setBlighted(final float x, final float y, final boolean blighted) {
 		setCellBlighted(getCellX(x), getCellY(y), blighted);
 	}
@@ -334,15 +397,6 @@ public class PathingGrid {
 				}
 			}
 		}
-//		final float maxX = unitX + collisionSize;
-//		final float maxY = unitY + collisionSize;
-//		for (float minX = unitX - collisionSize; minX < maxX; minX += 32f) {
-//			for (float minY = unitY - collisionSize; minY < maxY; minY += 32f) {
-//				if (!pathingType.isPathable(getPathing(minX, minY))) {
-//					return false;
-//				}
-//			}
-//		}
 		return true;
 	}
 
@@ -377,24 +431,6 @@ public class PathingGrid {
 			}
 		}
 		return true;
-	}
-
-	public boolean isUnitCell(final float queryX, final float queryY, final float unitX, final float unitY,
-			final MovementType movementType, final float collisionSize) {
-		final float maxX = unitX + collisionSize;
-		final float maxY = unitY + collisionSize;
-		final int cellX = getCellX(queryX);
-		final int cellY = getCellY(queryY);
-		for (float minX = unitX - collisionSize; minX < maxX; minX += 32f) {
-			for (float minY = unitY - collisionSize; minY < maxY; minY += 32f) {
-				final int yy = getCellY(minY);
-				final int xx = getCellX(minX);
-				if ((yy == cellY) && (xx == cellX)) {
-					return true;
-				}
-			}
-		}
-		return false;
 	}
 
 	public boolean isCellPathable(final int x, final int y, final MovementType pathingType, final float collisionSize) {
@@ -463,13 +499,13 @@ public class PathingGrid {
 	}
 
 	public static final class PathingFlags {
-		public static short UNWALKABLE = 0x2;
-		public static short UNFLYABLE = 0x4;
-		public static short UNBUILDABLE = 0x8;
-		public static short BLOCKVISION = 0x10;
-		public static short BLIGHTED = 0x20;
-		public static short UNSWIMABLE = 0x40; // PROBABLY, didn't confirm this flag value is accurate
-		public static short BOUDNARY = 0xF0;
+		public static final short UNWALKABLE = 0x2;
+		public static final short UNFLYABLE = 0x4;
+		public static final short UNBUILDABLE = 0x8;
+		public static final short BLOCKVISION = 0x10;
+		public static final short BLIGHTED = 0x20;
+		public static final short UNSWIMABLE = 0x40; // PROBABLY, didn't confirm this flag value is accurate
+		public static final short BOUDNARY = 0xF0;
 
 		public static boolean isPathingFlag(final short pathingValue, final int flag) {
 			return (pathingValue & flag) != 0;
@@ -617,6 +653,10 @@ public class PathingGrid {
 			this.added = true;
 			PathingGrid.this.dynamicPathingInstances.add(this);
 			blit();
+		}
+
+		public int getRotationInput() {
+			return this.rotationInput;
 		}
 
 		public void setBlocksVision(boolean flag) {

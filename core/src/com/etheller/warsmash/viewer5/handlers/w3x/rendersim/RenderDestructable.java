@@ -34,6 +34,7 @@ public class RenderDestructable extends RenderDoodad implements RenderWidget {
 	private BuildingShadow destructableShadow;
 	private final boolean selectable;
 	private boolean blighted = false;
+	private boolean changedOutOfSight;
 	private final int replaceableTextureId;
 	private String replaceableTextureFile;
 
@@ -107,8 +108,23 @@ public class RenderDestructable extends RenderDoodad implements RenderWidget {
 		// doodad
 
 		final boolean dead = this.simulationDestructable.isDead();
+		final boolean blighted = this.simulationDestructable.isBlighted();
+		final boolean changed = (dead != this.dead) || (blighted && !this.blighted)
+				|| (!dead && (Math.abs(this.life - this.simulationDestructable.getLife()) > 0.003f));
+		if (changed && !war3MapViewer.isPointShownToViewer(this.x, this.y)) {
+			// Measured on 1.29: the fog keeps a tree as it was last seen; one cut or grown back out of sight
+			// shows its new state, without the fall or the growth, once the place is seen again.
+			this.changedOutOfSight = true;
+			this.unitAnimationListenerImpl.update();
+			return;
+		}
+		final boolean changedOutOfSight = this.changedOutOfSight;
+		this.changedOutOfSight = false;
 		if (dead && !this.dead) {
 			this.unitAnimationListenerImpl.playAnimation(true, PrimaryTag.DEATH, SequenceUtils.EMPTY, 1.0f, true);
+			if (changedOutOfSight) {
+				getInstance().setFrame(getInstance().clampFrame(Integer.MAX_VALUE));
+			}
 			if (this.destructableShadow != null) {
 				this.destructableShadow.remove();
 				this.destructableShadow = null;
@@ -124,14 +140,22 @@ public class RenderDestructable extends RenderDoodad implements RenderWidget {
 		}
 		else if (!dead) {
 			if (this.dead) {
-				this.unitAnimationListenerImpl.playAnimation(true, PrimaryTag.BIRTH, SequenceUtils.EMPTY, 1.0f, true);
-				this.unitAnimationListenerImpl.queueAnimation(PrimaryTag.STAND, SequenceUtils.EMPTY, true);
+				if (changedOutOfSight) {
+					this.unitAnimationListenerImpl.playAnimation(true, PrimaryTag.STAND, SequenceUtils.EMPTY, 1.0f,
+							true);
+				}
+				else {
+					this.unitAnimationListenerImpl.playAnimation(true, PrimaryTag.BIRTH, SequenceUtils.EMPTY, 1.0f,
+							true);
+					this.unitAnimationListenerImpl.queueAnimation(PrimaryTag.STAND, SequenceUtils.EMPTY, true);
+				}
+				this.life = this.simulationDestructable.getLife();
 				// TODO add back shadow here
 
 			}
 			else {
 				if (Math.abs(this.life - this.simulationDestructable.getLife()) > 0.003f) {
-					if (this.life > this.simulationDestructable.getLife()) {
+					if (!changedOutOfSight && (this.life > this.simulationDestructable.getLife())) {
 						this.unitAnimationListenerImpl.playAnimation(true, PrimaryTag.STAND, SequenceUtils.HIT, 1.0f,
 								true);
 					}
@@ -140,7 +164,6 @@ public class RenderDestructable extends RenderDoodad implements RenderWidget {
 			}
 		}
 		this.dead = dead;
-		final boolean blighted = this.simulationDestructable.isBlighted();
 		if (blighted && !this.blighted) {
 			this.blighted = blighted;
 			if ((this.replaceableTextureFile != null) && (this.replaceableTextureFile.length() > 1)) {

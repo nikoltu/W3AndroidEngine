@@ -8,7 +8,7 @@ public enum CUnitState implements CHandle {
 	MANA,
 	MAX_MANA;
 
-	public static CUnitState[] VALUES = values();
+	public static final CUnitState[] VALUES = values();
 
 	@Override
 	public int getHandleId() {

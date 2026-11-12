@@ -1,7 +1,6 @@
 package com.etheller.warsmash.datasources;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 import com.etheller.warsmash.datasources.CascDataSource.Product;
@@ -46,18 +45,6 @@ public class CascDataSourceDescriptor implements DataSourceDescriptor {
 
 	public void deletePrefix(final int index) {
 		this.prefixes.remove(index);
-	}
-
-	public void movePrefixUp(final int index) {
-		if (index > 0) {
-			Collections.swap(this.prefixes, index, index - 1);
-		}
-	}
-
-	public void movePrefixDown(final int index) {
-		if (index < (this.prefixes.size() - 1)) {
-			Collections.swap(this.prefixes, index, index + 1);
-		}
 	}
 
 	public String getGameInstallPath() {

@@ -23,7 +23,6 @@ import com.etheller.warsmash.datasources.DataSource;
 import com.etheller.warsmash.parsers.jass.ai.AIController;
 import com.etheller.warsmash.util.Log;
 import com.etheller.warsmash.util.War3ID;
-import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.viewer5.Scene;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
@@ -123,7 +122,8 @@ public class JassAIEnvironment {
 			final CUnitType type = simulation.getUnitData().getUnitType(new War3ID(integer(arguments, 0)));
 			return IntegerJassValue.of((type == null) || type.isHero() ? 0 : type.getLumberCost());
 		});
-		natives.createNative("IgnoredUnits", (arguments, globalScope, triggerScope) -> IntegerJassValue.ZERO);
+		natives.createNative("IgnoredUnits",
+				(arguments, globalScope, triggerScope) -> IntegerJassValue.of(ai.getIgnoredUnits(integer(arguments, 0))));
 
 		// Towns and expansions
 		natives.createNative("GetMinesOwned",
@@ -193,17 +193,22 @@ public class JassAIEnvironment {
 		natives.createNative("SetIgnoreInjured", setter((value) -> ai.setIgnoreInjured(value)));
 		natives.createNative("SetHeroesTakeItems", setter((value) -> ai.setHeroesTakeItems(value)));
 		for (final String ignored : new String[] { "SetRandomPaths", "SetDefendPlayer", "SetHeroesBuyItems",
-				"SetWatchMegaTargets", "SetSlowChopping", "SetCaptainChanges", "SetSmartArtillery",
-				"GroupTimedLife" }) {
+				"SetCaptainChanges", "SetSmartArtillery" }) {
 			natives.createNative(ignored, setter((value) -> {
 			}));
 		}
+		natives.createNative("SetWatchMegaTargets", setter((value) -> ai.setWatchMegaTargets(value)));
+		natives.createNative("SetSlowChopping", setter((value) -> ai.setSlowChopping(value)));
+		natives.createNative("GroupTimedLife", setter((value) -> ai.setGroupTimedLife(value)));
 		natives.createNative("SetReplacementCount", (arguments, globalScope, triggerScope) -> {
 			ai.setReplacementCount(integer(arguments, 0));
 			return null;
 		});
 		natives.createNative("DisablePathing", (arguments, globalScope, triggerScope) -> null);
-		natives.createNative("SetAmphibious", (arguments, globalScope, triggerScope) -> null);
+		natives.createNative("SetAmphibious", (arguments, globalScope, triggerScope) -> {
+			ai.setAmphibious();
+			return null;
+		});
 
 		// Harvesting
 		natives.createNative("ClearHarvestAI", (arguments, globalScope, triggerScope) -> {
@@ -435,7 +440,7 @@ public class JassAIEnvironment {
 			return own;
 		}
 		final CPlayer player = this.simulation.getPlayer(this.playerIndex);
-		for (int i = 0; i < WarsmashConstants.MAX_PLAYERS; i++) {
+		for (int i = 0; i < this.simulation.getGameData().getMaxPlayers(); i++) {
 			final CPlayer other = this.simulation.getPlayer(i);
 			if ((i != this.playerIndex) && (other.getAiScript() != null)
 					&& player.hasAlliance(i, CAllianceType.PASSIVE) && other.hasAlliance(this.playerIndex,

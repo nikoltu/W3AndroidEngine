@@ -22,6 +22,8 @@ import java.util.List;
 public class WorldScene extends Scene {
 
 	public Grid grid;
+	/** Where the viewer has vision; null shows every instance. */
+	public FogFilter fogFilter;
 	private final InstanceProcessor instanceProcessor = new InstanceProcessor();
 	private final List<ModelInstance> cellInstances = new ArrayList<>();
 
@@ -76,6 +78,34 @@ public class WorldScene extends Scene {
 		}
 }
 
+	/**
+	 * Models attached to a hidden one (a unit out of sight) are hidden with it, and effects of the world only show
+	 * where the viewer has vision.
+	 */
+	private boolean isHiddenFromViewer(final ModelInstance instance) {
+		if (instance.parent != null) {
+			GenericNode root = instance.parent;
+			while (root.parent != null) {
+				root = root.parent;
+			}
+			return (root instanceof ModelInstance) && !((ModelInstance) root).rendered;
+		}
+		if (this.fogFilter == null) {
+			return false;
+		}
+		return (instance.hiddenInFog && !this.fogFilter.isVisible(instance.worldLocation.x, instance.worldLocation.y))
+				|| (instance.hiddenInMask && !this.fogFilter.isExplored(instance.worldLocation.x, instance.worldLocation.y));
+	}
+
+	public interface FogFilter {
+		boolean isVisible(float x, float y);
+
+		/** Whether the point is out of the black mask: in sight or in fog. */
+		default boolean isExplored(final float x, final float y) {
+			return true;
+		}
+	}
+
 	private final class InstanceProcessor implements ModelInstanceCallback {
 		private float dt;
 		private int frame;
@@ -98,6 +128,10 @@ public class WorldScene extends Scene {
 						// it became hidden while it updated
 						return;
 					}
+				}
+				// Still updated, so that an effect hidden in the fog plays out and ends as it would in sight.
+				if (isHiddenFromViewer(instance)) {
+					return;
 				}
 
 				if (instance.isBatched()) {

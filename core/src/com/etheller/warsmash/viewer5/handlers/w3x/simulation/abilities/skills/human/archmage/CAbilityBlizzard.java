@@ -1,5 +1,6 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.human.archmage;
 
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.CAreaTargetVisibility;
 import com.etheller.warsmash.util.RandomBounds;
 import java.util.ArrayList;
 import java.util.List;
@@ -152,7 +153,8 @@ public class CAbilityBlizzard extends CAbilityPointTargetSpellBase implements CC
 					@Override
 					public boolean call(final CUnit possibleTarget) {
 						if (possibleTarget.canReach(target, CAbilityBlizzard.this.areaOfEffect)
-								&& possibleTarget.canBeTargetedBy(simulation, caster, false, getTargetsAllowed(),
+								&& possibleTarget.canBeAreaTargetedBy(simulation, caster, CAreaTargetVisibility.ANY,
+										getTargetsAllowed(),
 										BooleanAbilityTargetCheckReceiver.<CWidget>getInstance().reset())
 								&& !hasHitBuff(possibleTarget)) {
 							damageTargets.add(possibleTarget);

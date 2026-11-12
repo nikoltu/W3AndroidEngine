@@ -20,6 +20,8 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.CAbilityType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.CBehavior;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.inventory.CBehaviorDropItem;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.skills.CBehaviorNoTargetSpellBase;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.skills.CBehaviorTargetSpellBase;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.inventory.CBehaviorGetItem;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.inventory.CBehaviorGiveItemToHero;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.orders.COrderNoTarget;
@@ -45,6 +47,8 @@ public class CAbilityInventory extends AbstractGenericNoIconAbility {
 	private CBehaviorGetItem behaviorGetItem;
 	private CBehaviorDropItem behaviorDropItem;
 	private CBehaviorGiveItemToHero behaviorGiveItem;
+	private CAbility chargeOnEffectAbility;
+	private CItem chargeOnEffectItem;
 
 	public CAbilityInventory(final int handleId, final War3ID code, final War3ID alias, final boolean canDropItems,
 			final boolean canGetItems, final boolean canUseItems, final boolean dropItemsOnDeath,
@@ -67,8 +71,8 @@ public class CAbilityInventory extends AbstractGenericNoIconAbility {
 	public boolean isRequirementsMet(final CSimulation game, final CUnit unit) {
 		if (this.requirements != null) {
 			for (final CUnitTypeRequirement requirement : this.requirements) {
-				if (game.getPlayer(unit.getPlayerIndex())
-						.getTechtreeUnlocked(requirement.getRequirement()) < requirement.getRequiredLevel()) {
+				if (!game.getPlayer(unit.getPlayerIndex())
+						.isRequirementMet(requirement.getRequirement(), requirement.getRequiredLevel())) {
 					return false;
 				}
 			}
@@ -81,8 +85,8 @@ public class CAbilityInventory extends AbstractGenericNoIconAbility {
 			final AbilityActivationReceiver receiver) {
 		if (this.requirements != null) {
 			for (final CUnitTypeRequirement requirement : this.requirements) {
-				if (game.getPlayer(unit.getPlayerIndex())
-						.getTechtreeUnlocked(requirement.getRequirement()) < requirement.getRequiredLevel()) {
+				if (!game.getPlayer(unit.getPlayerIndex())
+						.isRequirementMet(requirement.getRequirement(), requirement.getRequiredLevel())) {
 					receiver.missingRequirement(requirement.getRequirement(), requirement.getRequiredLevel());
 				}
 			}
@@ -113,13 +117,13 @@ public class CAbilityInventory extends AbstractGenericNoIconAbility {
 	@Override
 	public boolean checkBeforeQueue(final CSimulation game, final CUnit caster, final int playerIndex,
 			final int orderId, final boolean autoOrder, final AbilityTarget target) {
-		if ((orderId >= OrderIds.itemdrag00) && (orderId <= OrderIds.itemdrag05)) {
-			if (moveItemToSlot(target, orderId - OrderIds.itemdrag00)) {
+		if ((orderId >= OrderIds.itemDragFirst(nineSlots(game))) && (orderId <= OrderIds.itemDragLast(nineSlots(game)))) {
+			if (moveItemToSlot(target, orderId - OrderIds.itemDragFirst(nineSlots(game)))) {
 				return false;
 			}
 		}
-		else if ((orderId >= OrderIds.itemuse00) && (orderId <= OrderIds.itemuse05)) {
-			final int slot = orderId - OrderIds.itemuse00;
+		else if ((orderId >= OrderIds.itemUseFirst(nineSlots(game))) && (orderId <= OrderIds.itemUseLast(nineSlots(game)))) {
+			final int slot = orderId - OrderIds.itemUseFirst(nineSlots(game));
 			final List<CAbility> itemsHeldAbilitiesForSlot = this.itemsHeldAbilities[slot];
 			if (!itemsHeldAbilitiesForSlot.isEmpty()) {
 				final CAbility cAbility = itemsHeldAbilitiesForSlot.get(0);
@@ -156,6 +160,37 @@ public class CAbilityInventory extends AbstractGenericNoIconAbility {
 		}
 	}
 
+	/**
+	 * Measured on 1.29: a cast item spell spends the charge and fires the use event when the spell takes effect, after
+	 * the turn and the cast point; an order interrupted before that keeps the charge.
+	 */
+	public boolean isItemSpellCast(final CAbility ability) {
+		return ability == this.chargeOnEffectAbility;
+	}
+
+	public void onItemAbilityEffect(final CSimulation game, final CUnit caster, final CAbility ability) {
+		if ((ability == this.chargeOnEffectAbility) && (this.chargeOnEffectItem != null)) {
+			final CItem item = this.chargeOnEffectItem;
+			this.chargeOnEffectAbility = null;
+			this.chargeOnEffectItem = null;
+			spendItemCharge(game, caster, item);
+		}
+	}
+
+	private void useItemCharge(final CSimulation game, final CUnit caster, final int slot, final CAbility ability,
+			final CBehavior behavior) {
+		final CItem cItem = this.itemsHeld[slot];
+		if (ability instanceof ItemChargeSpentOnEffect) {
+			return;
+		}
+		if ((behavior instanceof CBehaviorTargetSpellBase) || (behavior instanceof CBehaviorNoTargetSpellBase)) {
+			this.chargeOnEffectAbility = ability;
+			this.chargeOnEffectItem = cItem;
+			return;
+		}
+		consumePerishableCharge(game, caster, slot, cItem);
+	}
+
 	private void consumePerishableCharge(final CSimulation game, final CUnit caster, final int slot,
 			final CItem cItem) {
 		if (cItem == null) {
@@ -190,6 +225,16 @@ public class CAbilityInventory extends AbstractGenericNoIconAbility {
 		return this.itemsHeld[slotIndex];
 	}
 
+	/** Whether the ability is one of the abilities of an item held in this inventory. */
+	public boolean isHeldItemAbility(final CAbility ability) {
+		for (final List<CAbility> slotAbilities : this.itemsHeldAbilities) {
+			if (slotAbilities.contains(ability)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	public boolean isDropItemsOnDeath() {
 		return this.dropItemsOnDeath;
 	}
@@ -197,8 +242,8 @@ public class CAbilityInventory extends AbstractGenericNoIconAbility {
 	@Override
 	public CBehavior begin(final CSimulation game, final CUnit caster, final int playerIndex, final int orderId,
 			final boolean autoOrder, final CWidget target) {
-		if ((orderId >= OrderIds.itemuse00) && (orderId <= OrderIds.itemuse05)) {
-			final int slot = orderId - OrderIds.itemuse00;
+		if ((orderId >= OrderIds.itemUseFirst(nineSlots(game))) && (orderId <= OrderIds.itemUseLast(nineSlots(game)))) {
+			final int slot = orderId - OrderIds.itemUseFirst(nineSlots(game));
 			final List<CAbility> itemsHeldAbilitiesForSlot = this.itemsHeldAbilities[slot];
 			if (!itemsHeldAbilitiesForSlot.isEmpty()) {
 				final CAbility ability = itemsHeldAbilitiesForSlot.get(0);
@@ -207,10 +252,7 @@ public class CAbilityInventory extends AbstractGenericNoIconAbility {
 					forwardedOrderId = ((SingleOrderAbility) ability).getBaseOrderId();
 				}
 				final CBehavior behavior = ability.begin(game, caster, playerIndex, forwardedOrderId, false, target);
-				if (!(ability instanceof ItemChargeSpentOnEffect)) {
-					final CItem cItem = this.itemsHeld[slot];
-					consumePerishableCharge(game, caster, slot, cItem);
-				}
+				useItemCharge(game, caster, slot, ability, behavior);
 				return behavior;
 			}
 		}
@@ -234,8 +276,8 @@ public class CAbilityInventory extends AbstractGenericNoIconAbility {
 	@Override
 	public CBehavior begin(final CSimulation game, final CUnit caster, final int playerIndex, final int orderId,
 			final boolean autoOrder, final AbilityPointTarget point) {
-		if ((orderId >= OrderIds.itemuse00) && (orderId <= OrderIds.itemuse05)) {
-			final int slot = orderId - OrderIds.itemuse00;
+		if ((orderId >= OrderIds.itemUseFirst(nineSlots(game))) && (orderId <= OrderIds.itemUseLast(nineSlots(game)))) {
+			final int slot = orderId - OrderIds.itemUseFirst(nineSlots(game));
 			final List<CAbility> itemsHeldAbilitiesForSlot = this.itemsHeldAbilities[slot];
 			if (!itemsHeldAbilitiesForSlot.isEmpty()) {
 				final CAbility ability = itemsHeldAbilitiesForSlot.get(0);
@@ -244,10 +286,7 @@ public class CAbilityInventory extends AbstractGenericNoIconAbility {
 					forwardedOrderId = ((SingleOrderAbility) ability).getBaseOrderId();
 				}
 				final CBehavior behavior = ability.begin(game, caster, playerIndex, forwardedOrderId, false, point);
-				if (!(ability instanceof ItemChargeSpentOnEffect)) {
-					final CItem cItem = this.itemsHeld[slot];
-					consumePerishableCharge(game, caster, slot, cItem);
-				}
+				useItemCharge(game, caster, slot, ability, behavior);
 				return behavior;
 			}
 		}
@@ -257,8 +296,8 @@ public class CAbilityInventory extends AbstractGenericNoIconAbility {
 	@Override
 	public CBehavior beginNoTarget(final CSimulation game, final CUnit caster, final int playerIndex, final int orderId,
 			final boolean autoOrder) {
-		if ((orderId >= OrderIds.itemuse00) && (orderId <= OrderIds.itemuse05)) {
-			final int slot = orderId - OrderIds.itemuse00;
+		if ((orderId >= OrderIds.itemUseFirst(nineSlots(game))) && (orderId <= OrderIds.itemUseLast(nineSlots(game)))) {
+			final int slot = orderId - OrderIds.itemUseFirst(nineSlots(game));
 			final List<CAbility> itemsHeldAbilitiesForSlot = this.itemsHeldAbilities[slot];
 			if (!itemsHeldAbilitiesForSlot.isEmpty()) {
 				final CAbility ability = itemsHeldAbilitiesForSlot.get(0);
@@ -267,8 +306,7 @@ public class CAbilityInventory extends AbstractGenericNoIconAbility {
 					forwardedOrderId = ((SingleOrderAbility) ability).getBaseOrderId();
 				}
 				final CBehavior behavior = ability.beginNoTarget(game, caster, playerIndex, forwardedOrderId, false);
-				final CItem cItem = this.itemsHeld[slot];
-				consumePerishableCharge(game, caster, slot, cItem);
+				useItemCharge(game, caster, slot, ability, behavior);
 				return behavior;
 			}
 		}
@@ -298,7 +336,7 @@ public class CAbilityInventory extends AbstractGenericNoIconAbility {
 			}
 		}
 		else {
-			if ((orderId >= OrderIds.itemdrag00) && (orderId <= OrderIds.itemdrag05)) {
+			if ((orderId >= OrderIds.itemDragFirst(nineSlots(game))) && (orderId <= OrderIds.itemDragLast(nineSlots(game)))) {
 				if (target instanceof CItem) {
 					final int slot = getSlot((CItem) target);
 					if (slot != -1) {
@@ -336,8 +374,8 @@ public class CAbilityInventory extends AbstractGenericNoIconAbility {
 				}
 			}
 			else {
-				if ((orderId >= OrderIds.itemuse00) && (orderId <= OrderIds.itemuse05)) {
-					final int slot = orderId - OrderIds.itemuse00;
+				if ((orderId >= OrderIds.itemUseFirst(nineSlots(game))) && (orderId <= OrderIds.itemUseLast(nineSlots(game)))) {
+					final int slot = orderId - OrderIds.itemUseFirst(nineSlots(game));
 					final List<CAbility> itemsHeldAbilitiesForSlot = this.itemsHeldAbilities[slot];
 					if (!itemsHeldAbilitiesForSlot.isEmpty()) {
 						final CAbility ability = itemsHeldAbilitiesForSlot.get(0);
@@ -391,8 +429,8 @@ public class CAbilityInventory extends AbstractGenericNoIconAbility {
 			final boolean autoOrder, final AbilityPointTarget target,
 			final AbilityTargetCheckReceiver<AbilityPointTarget> receiver) {
 		if (orderId != OrderIds.dropitem) {
-			if ((orderId >= OrderIds.itemuse00) && (orderId <= OrderIds.itemuse05)) {
-				final int slot = orderId - OrderIds.itemuse00;
+			if ((orderId >= OrderIds.itemUseFirst(nineSlots(game))) && (orderId <= OrderIds.itemUseLast(nineSlots(game)))) {
+				final int slot = orderId - OrderIds.itemUseFirst(nineSlots(game));
 				final List<CAbility> itemsHeldAbilitiesForSlot = this.itemsHeldAbilities[slot];
 				if (!itemsHeldAbilitiesForSlot.isEmpty()) {
 					final CAbility ability = itemsHeldAbilitiesForSlot.get(0);
@@ -418,8 +456,8 @@ public class CAbilityInventory extends AbstractGenericNoIconAbility {
 	@Override
 	public void checkCanTargetNoTarget(final CSimulation game, final CUnit unit, final int playerIndex,
 			final int orderId, final boolean autoOrder, final AbilityTargetCheckReceiver<Void> receiver) {
-		if ((orderId >= OrderIds.itemuse00) && (orderId <= OrderIds.itemuse05)) {
-			final int slot = orderId - OrderIds.itemuse00;
+		if ((orderId >= OrderIds.itemUseFirst(nineSlots(game))) && (orderId <= OrderIds.itemUseLast(nineSlots(game)))) {
+			final int slot = orderId - OrderIds.itemUseFirst(nineSlots(game));
 			final List<CAbility> itemsHeldAbilitiesForSlot = this.itemsHeldAbilities[slot];
 			if (!itemsHeldAbilitiesForSlot.isEmpty()) {
 				final CAbility ability = itemsHeldAbilitiesForSlot.get(0);
@@ -445,9 +483,9 @@ public class CAbilityInventory extends AbstractGenericNoIconAbility {
 			receiver.activationCheckFailed(CommandStringErrorKeys.ILLUSIONS_CANNOT_PICK_UP_ITEMS);
 			return;
 		}
-		if ((orderId >= OrderIds.itemuse00) && (orderId <= OrderIds.itemuse05)) {
+		if ((orderId >= OrderIds.itemUseFirst(nineSlots(game))) && (orderId <= OrderIds.itemUseLast(nineSlots(game)))) {
 			if (this.canUseItems) {
-				final int slot = orderId - OrderIds.itemuse00;
+				final int slot = orderId - OrderIds.itemUseFirst(nineSlots(game));
 				if (this.itemsHeldAbilities[slot].size() < 1) {
 					receiver.notAnActiveAbility();
 				}
@@ -662,4 +700,8 @@ public class CAbilityInventory extends AbstractGenericNoIconAbility {
 		}
 	}
 
+
+	private static boolean nineSlots(final CSimulation game) {
+		return game.getGameData().isUseNineItemInventory();
+	}
 }

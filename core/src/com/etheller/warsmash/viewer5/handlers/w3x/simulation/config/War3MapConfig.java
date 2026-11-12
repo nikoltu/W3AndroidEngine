@@ -41,11 +41,15 @@ public class War3MapConfig implements CPlayerAPI {
 		this.players = new CBasePlayer[maxPlayers];
 		for (int i = 0; i < maxPlayers; i++) {
 			this.startLocations[i] = new War3MapConfigStartLoc();
-			this.players[i] = new War3MapConfigPlayer(i);
+			this.players[i] = new War3MapConfigPlayer(i, maxPlayers);
 			if (i >= (maxPlayers - 4)) {
 				this.players[i].setController(CMapControl.NEUTRAL);
 			}
 		}
+	}
+
+	public int getMaxPlayers() {
+		return this.players.length;
 	}
 
 	public void setMapName(final String mapName) {
@@ -70,12 +74,6 @@ public class War3MapConfig implements CPlayerAPI {
 
 	public void setPlayerCount(final int playerCount) {
 		this.playerCount = playerCount;
-	}
-
-	public void defineStartLocation(final int whichStartLoc, final float x, final float y) {
-		final War3MapConfigStartLoc startLoc = this.startLocations[whichStartLoc];
-		startLoc.setX(x);
-		startLoc.setY(y);
 	}
 
 	public War3MapConfigStartLoc getStartLoc(final int whichStartLoc) {

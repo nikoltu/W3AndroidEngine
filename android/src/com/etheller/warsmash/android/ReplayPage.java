@@ -126,7 +126,8 @@ final class ReplayPage extends LauncherViews {
 			row.setGravity(Gravity.CENTER_VERTICAL);
 			row.setPadding(px(t ? 16 : 10), 0, px(t ? 24 : 8), 0);
 			final float icon = rowH * (t ? 0.55f : 0.7f);
-			final ImageView file = image(SkinArt.ICON_MELEE, ImageView.ScaleType.FIT_CENTER);
+			final ImageView file = image(entry.melee == null ? SkinArt.ICON_FILE
+					: entry.melee ? SkinArt.ICON_MELEE : SkinArt.ICON_UMS, ImageView.ScaleType.FIT_CENTER);
 			file.setAlpha(playable ? 1f : 0.4f);
 			row.addView(file, new LinearLayout.LayoutParams(px(icon), px(icon)));
 			final LinearLayout texts = new LinearLayout(this.activity);
@@ -186,7 +187,7 @@ final class ReplayPage extends LauncherViews {
 		final FrameLayout info = this.replayInfo;
 		info.removeAllViews();
 		final boolean playable = entry.playable();
-		this.viewReplayButton.setEnabled(playable);
+		this.viewReplayButton.setEnabled(playable || entry.canTryAnyway());
 		this.deleteReplayButton.setEnabled(true);
 		final float frame = b.pageInset;
 		final float w = b.contentW - (t ? 1340 : 716);
@@ -261,7 +262,13 @@ final class ReplayPage extends LauncherViews {
 			final TextView shown = text(name, size, this.activity.art.text());
 			shown.setSingleLine(true);
 			shown.setEllipsize(TextUtils.TruncateAt.END);
-			place(info, shown, playersX + square + 14, y, playersW * 0.6f, -1);
+			final boolean symbol = player.raceIndex() > 0;
+			place(info, shown, playersX + square + 14, y, (playersW * 0.6f) - (symbol ? size * 1.5f : 0), -1);
+			if (symbol) {
+				final float mark = size * 1.3f;
+				place(info, image(SkinArt.RACE_SYMBOLS[player.raceIndex() - 1], ImageView.ScaleType.FIT_CENTER),
+						playersX + (playersW * 0.6f) - (size * 1.4f), y - (size * 0.15f), mark, mark);
+			}
 			final TextView race = text(raceName(player), size, this.activity.art.text2());
 			race.setGravity(Gravity.END);
 			place(info, race, playersX + (playersW * 0.6f), y, playersW * 0.4f, -1);
@@ -304,10 +311,21 @@ final class ReplayPage extends LauncherViews {
 
 	private void startReplay() {
 		final GameCatalog.ReplayEntry entry = this.replays == null ? null : chosenReplay();
-		if ((entry == null) || !entry.playable()) {
+		if (entry == null) {
 			return;
 		}
-		this.activity.launchGame(LaunchRequest.replay(entry), LauncherActivity.PAGE_REPLAY);
+		if (entry.playable()) {
+			this.activity.launchGame(LaunchRequest.replay(entry), LauncherActivity.PAGE_REPLAY);
+		}
+		else if (entry.canTryAnyway()) {
+			// The original asks before it plays a replay of another version, ignoring the recorded checksums.
+			this.activity.dialogs.showQuestion(glue("REPLAY_CONFIRM", "Incompatible Replay!") + "\n"
+					+ glue("REPLAY_CONFIRM_DESC", getString(R.string.replay_other_version)), null,
+					new CharSequence[] { glueLabel("NO", getString(R.string.game_no)),
+						glueLabel("YES", getString(R.string.game_yes)) },
+					new Runnable[] { null, () -> this.activity.launchGame(LaunchRequest.replay(entry, true),
+							LauncherActivity.PAGE_REPLAY) });
+		}
 	}
 
 	/** Rename Replay: in the top half on the phone, so that it shows above the keyboard. */

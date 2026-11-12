@@ -129,6 +129,7 @@ public class AbilityDataUI {
 	private final IconUI selectSkillUI;
 	private final IconUI neutralInteractUI;
 	private final String disabledPrefix;
+	private final GameUI gameUI;
 	private final Map<COrderButton, OrderButtonUI> buttonToRenderPeer = new HashMap<>();
 	private final CustomKeys customKeys = playerKeys();
 
@@ -139,6 +140,7 @@ public class AbilityDataUI {
 		final ObjectData unitData = allObjectData.getUnits();
 		final ObjectData itemData = allObjectData.getItems();
 		final ObjectData upgradeData = allObjectData.getUpgrades();
+		this.gameUI = gameUI;
 		this.disabledPrefix = gameUI.getSkinField("CommandButtonDisabledArtPath");
 		for (final String alias : abilityData.keySet()) {
 			if (alias.length() != 4) {
@@ -589,6 +591,11 @@ public class AbilityDataUI {
 			}
 		}
 		return null;
+	}
+
+	public void setIconPath(final IconUI iconUI, final String path) {
+		iconUI.setIcon(new IconTexture(this.gameUI, path),
+				new IconTexture(this.gameUI, disable(path, this.disabledPrefix)));
 	}
 
 	public static String disable(final String path, final String disabledPrefix) {

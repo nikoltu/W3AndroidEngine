@@ -163,11 +163,6 @@ public abstract class RawOpenGLTextureResource extends Texture {
 
 		gl.glBindTexture(GL20.GL_TEXTURE_2D, this.handle);
 
-//		if ((this.width == imageWidth) && (this.height == imageHeight)) {
-//			gl.glTexSubImage2D(GL20.GL_TEXTURE_2D, 0, 0, 0, imageWidth, imageHeight, GL20.GL_RGBA,
-//					GL20.GL_UNSIGNED_BYTE, buffer);
-//		}
-//		else {
 		gl.glTexImage2D(GL20.GL_TEXTURE_2D, 0, sRGBFix ? GL30.GL_SRGB8_ALPHA8 : GL30.GL_RGBA8, imageWidth, imageHeight,
 				0, GL20.GL_RGBA, GL20.GL_UNSIGNED_BYTE, buffer);
 		gl.glTexParameteri(GL20.GL_TEXTURE_2D, GL30.GL_TEXTURE_MAX_LEVEL, 0);
@@ -176,7 +171,6 @@ public abstract class RawOpenGLTextureResource extends Texture {
 		this.width = imageWidth;
 		this.height = imageHeight;
 		countUpload((long) imageWidth * imageHeight * BYTES_PER_PIXEL);
-//		}
 	}
 
 	/**

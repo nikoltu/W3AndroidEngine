@@ -142,6 +142,14 @@ public class CPlayerUnitOrderListenerDelaying implements CPlayerUnitOrderListene
 		this.delegate.trackableEvent(trackableHandleId, hit);
 	}
 
+	// A click that also orders units keeps its place among the orders of the step.
+	@Override
+	public void mouseEvent(final int eventId, final float x, final float y, final int button) {
+		this.actions.add(() -> {
+			this.delegate.mouseEvent(eventId, x, y, button);
+		});
+	}
+
 	// An action can make the script issue more of them (skipping a cinematic selects units); those are inputs of the
 	// next step, as any other input given between two steps, so they wait for the next publish.
 	public void publishDelayedActions() {

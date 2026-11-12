@@ -49,6 +49,13 @@ public interface CSound {
 	default void setConeOrientation(final float x, final float y, final float z) {
 	}
 
+	/** SetSoundPlayPosition: the next starts begin this far into the sound, in milliseconds. */
+	default void setPlayPosition(final int millisecs) {
+	}
+
+	default void setVelocity(final float x, final float y, final float z) {
+	}
+
 	default void attachToUnit(final RenderUnit unit) {
 	}
 

@@ -114,6 +114,13 @@ public class WarsmashGdxMultiScreenGame extends Game implements CanvasProvider {
 		}
 	}
 
+	/** Whether nothing is on the screen yet or a map is loading, when the player must not be able to leave. */
+	public boolean isLoadingMap() {
+		final Screen current = getScreen();
+		return (current == null)
+				|| ((current instanceof WarsmashGdxMenuScreen) && ((WarsmashGdxMenuScreen) current).isLoadingScreenShown());
+	}
+
 	/** The game on the screen, or null in the menu or while a map loads. */
 	public WarsmashGdxMapScreen getRunningMapScreen() {
 		final Screen current = getScreen();

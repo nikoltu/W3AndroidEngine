@@ -124,22 +124,6 @@ public class AnimatedObject {
 		this.variants.put(variantName, variants);
 	}
 
-	public void addVariantIntersection(final String[] names, final String variantName) {
-		final int sequences = this.model.getSequences().size();
-		final byte[] variants = new byte[sequences];
-
-		for (int i = 0; i < sequences; i++) {
-			for (final String name : names) {
-				final byte[] variantsAtName = this.variants.get(name);
-				if ((variantsAtName != null) && (variantsAtName[i] != 0)) {
-					variants[i] = 1;
-				}
-			}
-		}
-
-		this.variants.put(variantName, variants);
-	}
-
 	public boolean isVariant(final War3ID name, final int sequence) {
 		final Sd<?> timeline = findTimeline(name);
 

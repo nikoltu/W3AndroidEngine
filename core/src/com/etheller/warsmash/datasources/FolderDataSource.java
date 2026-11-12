@@ -24,26 +24,30 @@ import com.etheller.warsmash.util.Log;
 public class FolderDataSource implements DataSource {
 
 	private final Path folderPath;
-	private final Set<String> listfile;
+	private volatile Set<String> listfile;
 	/**
 	 * Lower case relative path to the path as stored on disk. Lookups are frequent
 	 * and mostly miss, so they must not touch the disk, and game data paths do not
 	 * match the case of the files on case sensitive file systems.
 	 */
-	private final Map<String, String> lowerCaseToStoredPath;
+	private volatile Map<String, String> lowerCaseToStoredPath;
 
 	public FolderDataSource(final Path folderPath) {
 		this.folderPath = folderPath;
+		useCurrentIndex();
+	}
+
+	private void useCurrentIndex() {
 		FolderIndex index;
 		synchronized (INDEXES) {
-			index = INDEXES.get(folderPath);
+			index = INDEXES.get(this.folderPath);
 			if ((index == null) || !index.isCurrent()) {
-				index = new FolderIndex(folderPath);
-				INDEXES.put(folderPath, index);
+				index = new FolderIndex(this.folderPath);
+				INDEXES.put(this.folderPath, index);
 			}
 		}
-		this.listfile = index.listfile;
 		this.lowerCaseToStoredPath = index.lowerCaseToStoredPath;
+		this.listfile = index.listfile;
 	}
 
 	/**
@@ -189,6 +193,8 @@ public class FolderDataSource implements DataSource {
 
 	@Override
 	public Collection<String> getListfile() {
+		// A source kept open while files were added or removed (a map dropped into the data folder) lists them anew.
+		useCurrentIndex();
 		return this.listfile;
 	}
 

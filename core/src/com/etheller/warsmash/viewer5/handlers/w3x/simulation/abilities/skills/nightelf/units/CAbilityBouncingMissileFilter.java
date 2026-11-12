@@ -1,6 +1,8 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.nightelf.units;
 
+import java.util.Collections;
 import java.util.EnumSet;
+import java.util.Set;
 
 import com.etheller.warsmash.units.GameObject;
 import com.etheller.warsmash.util.War3ID;
@@ -17,8 +19,8 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.CTargetType;
  * names, in the melee data the structures.
  */
 public class CAbilityBouncingMissileFilter extends CAbilityPassiveSpellBase {
-	private static final EnumSet<CTargetType> KINDS = EnumSet.of(CTargetType.GROUND, CTargetType.AIR,
-			CTargetType.STRUCTURE, CTargetType.WARD);
+	private static final Set<CTargetType> KINDS = Collections.unmodifiableSet(EnumSet.of(CTargetType.GROUND,
+			CTargetType.AIR, CTargetType.STRUCTURE, CTargetType.WARD));
 
 	private EnumSet<CTargetType> filteredKinds = EnumSet.noneOf(CTargetType.class);
 

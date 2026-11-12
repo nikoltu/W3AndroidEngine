@@ -1,5 +1,7 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.campaign;
 
+import java.util.Locale;
+
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.DataInputStream;
@@ -65,7 +67,7 @@ public final class CSaveStorage {
 	 */
 	private static String fileNameOf(final String name) {
 		String path = folderOf(name);
-		if (path.toLowerCase().endsWith(SAVE_EXTENSION)) {
+		if (path.toLowerCase(Locale.ROOT).endsWith(SAVE_EXTENSION)) {
 			path = path.substring(0, path.length() - SAVE_EXTENSION.length());
 		}
 		return path + SAVE_EXTENSION;

@@ -57,7 +57,7 @@ public class ABActionStartModifiedAttack implements ABAction {
 		}
 		if (stop) {
 			theUnit.performDefaultBehavior(game);
-			game.spawnTextTag(theUnit, theUnit.getPlayerIndex(), TextTagConfigType.CRITICAL_STRIKE, "miss");
+			game.spawnTextTag(theUnit, theUnit.getPlayerIndex(), TextTagConfigType.MISS_TEXT, "miss");
 		}
 	}
 }

@@ -28,7 +28,6 @@ import com.etheller.interpreter.ast.scope.trigger.RemovableTriggerEvent;
 import com.etheller.interpreter.ast.scope.trigger.Trigger;
 import com.etheller.warsmash.viewer5.handlers.w3x.save.SavedFormerly;
 import com.etheller.warsmash.viewer5.handlers.w3x.save.SavedDefault;
-import com.etheller.interpreter.ast.scope.trigger.TriggerBooleanExpression;
 import com.etheller.interpreter.ast.scope.variableevent.CLimitOp;
 import com.etheller.interpreter.ast.scope.variableevent.VariableEvent;
 import com.etheller.warsmash.parsers.jass.JassAIEnvironment;
@@ -37,6 +36,7 @@ import com.etheller.warsmash.units.DataTable;
 import com.etheller.warsmash.units.GameObject;
 import com.etheller.warsmash.units.ObjectData;
 import com.etheller.warsmash.util.ArgbImage;
+import com.etheller.warsmash.util.GameDataConstants;
 import com.etheller.warsmash.util.Log;
 import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.util.PerfStats;
@@ -104,6 +104,8 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.quest.CQuestLog;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.region.CRegionManager;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.state.FalseTimeOfDay;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.timers.CTimer;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.timers.CTimerFacing;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.timers.CTimerFlyHeight;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.timers.CTimerSleepAction;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.JassGameEventsWar3;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.CEffectType;
@@ -155,6 +157,7 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 	private final int mapVersion;
 	/** The game the map is played in: 0 Reign of Chaos, 1 The Frozen Throne. */
 	private final int mapGameVersion;
+	private final GameDataConstants gameData;
 	private final CGameplayConstants gameplayConstants;
 	private final Random seededRandom;
 	/**
@@ -182,6 +185,8 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 	private final Map<Long, com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.vision.CUnitVisionFogModifier> sharedVisions = new HashMap<>();
 	private final List<TimeOfDayEvent> timeOfDayVariableEvents = new ArrayList<>();
 	private final List<GameStateVariableEvent> gameStateVariableEvents = new ArrayList<>();
+	private final Map<CUnit, CTimerFlyHeight> flyHeightChanges = new HashMap<>();
+	private final Map<CUnit, CTimerFacing> facingTurns = new HashMap<>();
 	private final EnumMap<JassGameEventsWar3, List<CGlobalEvent>> eventTypeToEvents = new EnumMap<>(
 			JassGameEventsWar3.class);
 	private boolean timeOfDaySuspended;
@@ -194,7 +199,8 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 	private boolean daytime;
 	private final Set<CDestructable> ownedTreeSet = new HashSet<>();
 	private GlobalScope globalScope;
-	private static final int BUILDING_PLACE_SEARCH_RINGS = 32;
+	private static final int BUILDING_PLACE_SEARCH_RINGS = 17;
+	private Rectangle playableMapArea;
 	private static final long COMBAT_SEED_SALT = 0x2545F4914F6CDD1DL;
 	private static final String MISSILE_SPEED = "Missilespeed";
 	private static final double SPELL_MISSILE_AT_ONCE_FLIGHT = 0.0995;
@@ -208,6 +214,7 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 	private final List<Runnable> runningPostUpdateCallbacks = new ArrayList<>();
 	private final CQuestLog questLog = new CQuestLog();
 	private final CTerrainDeformations terrainDeformations = new CTerrainDeformations();
+	private final CTerrainTypeChanges terrainTypeChanges = new CTerrainTypeChanges();
 	private final EnumMap<JassGameEventsWar3, List<Trigger>> gameEventTriggers = new EnumMap<>(
 			JassGameEventsWar3.class);
 	private String saveBasicFilename = "";
@@ -218,6 +225,7 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 	private double timerFiringExactTime = Double.NaN;
 
 	public CSimulation(final War3MapConfig config, final int mapVersion, final int mapGameVersion,
+			final GameDataConstants gameData,
 			final DataTable miscData,
 			final ObjectData parsedUnitData, final ObjectData parsedItemData, final ObjectData parsedDestructableData,
 			final ObjectData parsedAbilityData, final ObjectData parsedUpgradeData,
@@ -227,15 +235,16 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 			final CommandErrorListener commandErrorListener) {
 		this.mapVersion = mapVersion;
 		this.mapGameVersion = mapGameVersion;
+		this.gameData = gameData;
 		this.gameplayConstants = new CGameplayConstants(miscData);
 		this.simulationRenderController = simulationRenderController;
 		this.pathingGrid = pathingGrid;
-		this.abilityData = new CAbilityData(parsedAbilityData, mapGameVersion);
+		this.abilityData = new CAbilityData(parsedAbilityData, mapGameVersion, gameData.getAbilityCompatibility());
 		this.upgradeData = new CUpgradeData(this.gameplayConstants, parsedUpgradeData, standardUpgradeEffectMeta,
 				mapGameVersion);
 		this.itemData = new CItemData(parsedItemData, mapGameVersion);
 		this.unitData = new CUnitData(this.gameplayConstants, parsedUnitData, this.abilityData, this.upgradeData,
-				pathingTextures, mapGameVersion);
+				pathingTextures, mapGameVersion, gameData.getGameVersion());
 		this.unitData.setTechEquivalents(this.itemData.getTechEquivalents());
 		this.unitData.setItemData(this.itemData);
 		this.unitData.getAllUnitTypesLightweight(); // Quick hack to avoid lag on first cast of Mech Critter
@@ -253,7 +262,7 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 		this.worldCollision = new CWorldCollision(entireMapBounds, this.gameplayConstants.getMaxCollisionRadius());
 		this.regionManager = new CRegionManager(entireMapBounds, pathingGrid);
 		// Created on first use; all of them share one node grid.
-		this.pathfindingProcessors = new CPathfindingProcessor[WarsmashConstants.MAX_PLAYERS];
+		this.pathfindingProcessors = new CPathfindingProcessor[this.gameData.getMaxPlayers()];
 		this.seededRandom = seededRandom;
 		this.combatRandom = new Random(combatSeed(seededRandom));
 		this.players = new ArrayList<>();
@@ -264,21 +273,21 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 		// order, before the preplaced objects; the rest get theirs from Player() in the game.
 		this.handleIdAllocator.skipHandleIds(8);
 		final List<CBasePlayer> configAskedPlayers = new ArrayList<>();
-		for (int i = 0; i < WarsmashConstants.MAX_PLAYERS; i++) {
+		for (int i = 0; i < this.gameData.getMaxPlayers(); i++) {
 			final CBasePlayer configPlayer = config.getPlayer(i);
 			final War3MapConfigStartLoc startLoc = config.getStartLoc(configPlayer.getStartLocationIndex());
 			CRace defaultRace = null;
-			final boolean randomRace = configPlayer.isRacePrefSet(WarsmashConstants.RACE_MANAGER.getRandomRacePreference())
+			final boolean randomRace = configPlayer.isRacePrefSet(this.gameData.getRaceManager().getRandomRacePreference())
 					|| (config.isMapFlagSet(CMapFlag.MAP_RANDOM_RACES) && configPlayer.isRaceSelectable());
 			if (randomRace) {
-				final CRaceManagerEntry raceEntry = WarsmashConstants.RACE_MANAGER
-						.get(seededRandom.nextInt(WarsmashConstants.RACE_MANAGER.getEntryCount()));
-				defaultRace = WarsmashConstants.RACE_MANAGER.getRace(raceEntry.getRaceId());
+				final CRaceManagerEntry raceEntry = this.gameData.getRaceManager()
+						.get(seededRandom.nextInt(this.gameData.getRaceManager().getEntryCount()));
+				defaultRace = this.gameData.getRaceManager().getRace(raceEntry.getRaceId());
 			} else {
-				for (int j = 0; j < WarsmashConstants.RACE_MANAGER.getEntryCount(); j++) {
-					final CRaceManagerEntry entry = WarsmashConstants.RACE_MANAGER.get(j);
-					final CRace race = WarsmashConstants.RACE_MANAGER.getRace(entry.getRaceId());
-					final CRacePreference racePreference = WarsmashConstants.RACE_MANAGER
+				for (int j = 0; j < this.gameData.getRaceManager().getEntryCount(); j++) {
+					final CRaceManagerEntry entry = this.gameData.getRaceManager().get(j);
+					final CRace race = this.gameData.getRaceManager().getRace(entry.getRaceId());
+					final CRacePreference racePreference = this.gameData.getRaceManager()
 							.getRacePreferenceById(entry.getRacePrefId());
 					if (configPlayer.isRacePrefSet(racePreference)) {
 						defaultRace = race;
@@ -286,11 +295,11 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 					}
 				}
 			}
-			if ((defaultRace == null) && (i < (WarsmashConstants.MAX_PLAYERS - 4))) {
+			if ((defaultRace == null) && (i < (this.gameData.getMaxPlayers() - 4))) {
 				// Measured: the original gives a slot without a race a random one.
-				final CRaceManagerEntry raceEntry = WarsmashConstants.RACE_MANAGER
-						.get(seededRandom.nextInt(WarsmashConstants.RACE_MANAGER.getEntryCount()));
-				defaultRace = WarsmashConstants.RACE_MANAGER.getRace(raceEntry.getRaceId());
+				final CRaceManagerEntry raceEntry = this.gameData.getRaceManager()
+						.get(seededRandom.nextInt(this.gameData.getRaceManager().getEntryCount()));
+				defaultRace = this.gameData.getRaceManager().getRace(raceEntry.getRaceId());
 			}
 			final CPlayer newPlayer = new CPlayer(defaultRace, new float[] { startLoc.getX(), startLoc.getY() },
 					configPlayer, new CPlayerFogOfWar(pathingGrid));
@@ -300,7 +309,9 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 			}
 			this.players.add(newPlayer);
 			this.defaultPlayerUnitOrderExecutors.add(new CPlayerUnitOrderExecutor(this, i));
-			if ((newPlayer.getController() == CMapControl.NEUTRAL) && (i < (WarsmashConstants.MAX_PLAYERS - 4))) {
+			if (((newPlayer.getController() == CMapControl.NEUTRAL)
+					|| (newPlayer.getController() == CMapControl.RESCUABLE))
+					&& (i < (this.gameData.getMaxPlayers() - 4))) {
 				neutralPlayers.add(newPlayer);
 			}
 		}
@@ -316,10 +327,16 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 		final CPlayer neutralPassive = this.players.get(this.players.size() - 1);
 		neutralPassive.setName(miscData.getLocalizedString("WESTRING_PLAYER_NP"));
 
-		for (int i = 0; i < WarsmashConstants.MAX_PLAYERS; i++) {
+		for (int i = 0; i < this.gameData.getMaxPlayers(); i++) {
 			final CPlayer cPlayer = this.players.get(i);
 			cPlayer.setAlliance(neutralPassive, CAllianceType.PASSIVE, true);
 			neutralPassive.setAlliance(cPlayer, CAllianceType.PASSIVE, true);
+			// Neutral and rescuable slots are passive only with the slots the map uses and with Neutral Passive,
+			// not with unused slots nor Neutral Hostile, Victim or Extra.
+			if ((cPlayer != neutralPassive) && ((i >= (this.gameData.getMaxPlayers() - 4))
+					|| (cPlayer.getController() == CMapControl.NONE))) {
+				continue;
+			}
 			for (final CPlayer otherNeutral : neutralPlayers) {
 				cPlayer.setAlliance(otherNeutral, CAllianceType.PASSIVE, true);
 				otherNeutral.setAlliance(cPlayer, CAllianceType.PASSIVE, true);
@@ -328,12 +345,12 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 
 		if (config.isLobbyTeams()) {
 			// Team mates chosen in game setup start allied with shared vision and allied victory, as in the original.
-			for (int i = 0; i < WarsmashConstants.MAX_PLAYERS; i++) {
+			for (int i = 0; i < this.gameData.getMaxPlayers(); i++) {
 				final CBasePlayer configPlayer = config.getPlayer(i);
 				if (configPlayer.getSlotState() != CPlayerSlotState.PLAYING) {
 					continue;
 				}
-				for (int j = 0; j < WarsmashConstants.MAX_PLAYERS; j++) {
+				for (int j = 0; j < this.gameData.getMaxPlayers(); j++) {
 					final CBasePlayer otherPlayer = config.getPlayer(j);
 					if ((i != j) && (otherPlayer.getSlotState() == CPlayerSlotState.PLAYING)
 							&& (otherPlayer.getTeam() == configPlayer.getTeam())) {
@@ -352,12 +369,12 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 		}
 		this.mapConfig = config;
 		if (config.isMapFlagSet(CMapFlag.MAP_SHARED_ADVANCED_CONTROL)) {
-			for (int i = 0; i < WarsmashConstants.MAX_PLAYERS; i++) {
+			for (int i = 0; i < this.gameData.getMaxPlayers(); i++) {
 				final CBasePlayer configPlayer = config.getPlayer(i);
 				if (configPlayer.getSlotState() != CPlayerSlotState.PLAYING) {
 					continue;
 				}
-				for (int j = 0; j < WarsmashConstants.MAX_PLAYERS; j++) {
+				for (int j = 0; j < this.gameData.getMaxPlayers(); j++) {
 					final CBasePlayer otherPlayer = config.getPlayer(j);
 					if ((i != j) && (otherPlayer.getSlotState() == CPlayerSlotState.PLAYING)
 							&& (otherPlayer.getTeam() == configPlayer.getTeam())) {
@@ -560,32 +577,43 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 		float x = unitX;
 		float y = unitY;
 		if (this.pathingGrid.contains(x, y) && !this.pathingGrid.isPathable(x, y, PathingGrid.PathingType.WALKABLE)) {
-			// Measured on 1.29: an item made on unwalkable ground (in a stand of trees) goes to the centre of a
-			// walkable cell on the nearest square ring of 32 steps round the point; heroes could not reach it there.
+			// Measured on 1.29: an item made on unwalkable ground goes to the centre of a walkable cell on the nearest
+			// square ring of cells round the point; within a ring the first walkable cell wins, walking the ring from its
+			// second cell on the low-y side towards +x, then up the +x side, back along the high-y side and down the -x side.
 			search: for (int ring = 1; ring <= ITEM_SPOT_RINGS; ring++) {
-				double bestDistance = Double.MAX_VALUE;
-				for (int i = -ring; i <= ring; i++) {
-					for (int j = -ring; j <= ring; j++) {
-						if ((Math.abs(i) != ring) && (Math.abs(j) != ring)) {
-							continue;
-						}
-						final float spotX = unitX + (i * 32);
-						final float spotY = unitY + (j * 32);
-						if (!this.pathingGrid.contains(spotX, spotY)
-								|| !this.pathingGrid.isPathable(spotX, spotY, PathingGrid.PathingType.WALKABLE)) {
-							continue;
-						}
-						final float cellX = this.pathingGrid.getWorldX(this.pathingGrid.getCellX(spotX));
-						final float cellY = this.pathingGrid.getWorldY(this.pathingGrid.getCellY(spotY));
-						final double distance = StrictMath.hypot(cellX - unitX, cellY - unitY);
-						if (distance < bestDistance) {
-							bestDistance = distance;
-							x = cellX;
-							y = cellY;
-						}
+				final int steps = ring * 8;
+				for (int n = 0; n < steps; n++) {
+					final int k = (n + 1) % steps;
+					final int side = k / (ring * 2);
+					final int along = k % (ring * 2);
+					final int i;
+					final int j;
+					switch (side) {
+					case 0:
+						i = -ring + along;
+						j = -ring;
+						break;
+					case 1:
+						i = ring;
+						j = -ring + along;
+						break;
+					case 2:
+						i = ring - along;
+						j = ring;
+						break;
+					default:
+						i = -ring;
+						j = ring - along;
+						break;
 					}
-				}
-				if (bestDistance < Double.MAX_VALUE) {
+					final float spotX = unitX + (i * 32);
+					final float spotY = unitY + (j * 32);
+					if (!this.pathingGrid.contains(spotX, spotY)
+							|| !this.pathingGrid.isPathable(spotX, spotY, PathingGrid.PathingType.WALKABLE)) {
+						continue;
+					}
+					x = this.pathingGrid.getWorldX(this.pathingGrid.getCellX(spotX));
+					y = this.pathingGrid.getWorldY(this.pathingGrid.getCellY(spotY));
 					break search;
 				}
 			}
@@ -634,14 +662,7 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 			createdUnit.performDefaultBehavior(this);
 			// Fog is recomputed once a second; without this a script could not order a unit it just made against
 			// anything, because the new unit would not yet see its target.
-			createdUnit.updateFogOfWar(this);
-			// Players the owner shares its vision with see the new unit at once too (measured on 1.29).
-			final CPlayer owner = getPlayer(playerIndex);
-			for (final CPlayer receiver : this.players) {
-				if ((receiver != owner) && sharesVision(owner, receiver)) {
-					createdUnit.updateFogOfWar(this, receiver.getFogOfWar());
-				}
-			}
+			updateFogOfWarOfNewUnit(createdUnit);
 			createdUnit.onCreatedNightSleep(this);
 			if (createdUnit.isHero()) {
 				heroCreateEvent(createdUnit);
@@ -650,17 +671,31 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 		return createdUnit;
 	}
 
+	private void updateFogOfWarOfNewUnit(final CUnit unit) {
+		unit.updateFogOfWar(this);
+		// Players the owner shares its vision with see the new unit at once too (measured on 1.29).
+		final CPlayer owner = getPlayer(unit.getPlayerIndex());
+		for (final CPlayer receiver : this.players) {
+			if ((receiver != owner) && sharesVision(owner, receiver)) {
+				unit.updateFogOfWar(this, receiver.getFogOfWar());
+			}
+		}
+	}
+
 	/**
 	 * As in the original game, a building a script creates is moved off cliffs, slopes and other buildings instead of
 	 * overlapping them. Measured: the original takes the first free grid point along a square spiral that starts
-	 * downwards and turns counter-clockwise (down 1, right 1, up 2, left 2, down 3, ...), not the nearest one.
+	 * downwards and turns counter-clockwise (down 1, right 1, up 2, left 2, down 3, ...), not the nearest one. It
+	 * gives up after 1225 points (a spot found at step 1168 was taken, one at 1243 was not) and then keeps the point.
 	 */
 	private Vector2 findBuildingPlace(final CUnitType unitType, final float x, final float y) {
 		final ArgbImage pathingMap = unitType.getBuildingPathingPixelMap();
 		final float offsetX = ((pathingMap.getWidth() / 2) % 2) == 1 ? 32f : 0f;
 		final float offsetY = ((pathingMap.getHeight() / 2) % 2) == 1 ? 32f : 0f;
-		final float baseX = gridPoint(x, offsetX);
-		final float baseY = gridPoint(y, offsetY);
+		final Vector2 clamped = placeOutsidePlayableArea(unitType, gridPoint(x, offsetX), gridPoint(y, offsetY), true,
+				new boolean[1]);
+		final float baseX = clamped.x;
+		final float baseY = clamped.y;
 		final int[] stepX = { 0, 1, 0, -1 };
 		final int[] stepY = { -1, 0, 1, 0 };
 		int cellX = 0;
@@ -670,11 +705,12 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 		int visited = 0;
 		for (int legLength = 1; visited < maxSteps; legLength++) {
 			for (int leg = 0; leg < 2; leg++) {
-				for (int step = 0; step < legLength; step++) {
+				for (int step = 0; (step < legLength) && (visited < maxSteps); step++) {
 					final float candidateX = baseX + (cellX * 64f);
 					final float candidateY = baseY + (cellY * 64f);
 					// Measured: a script-created Undead building is not moved to blight.
-					if (!AbstractCAbilityBuild.isBuildLocationObstructed(this, unitType, pathingMap, false,
+					if (this.pathingGrid.contains(candidateX, candidateY)
+							&& !AbstractCAbilityBuild.isBuildLocationObstructed(this, unitType, pathingMap, false,
 							candidateX, candidateY, null, BuildOnBuildingIntersector.INSTANCE, true)) {
 						return new Vector2(candidateX, candidateY);
 					}
@@ -698,14 +734,83 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 		return value < 0 ? point - offset : point + offset;
 	}
 
+	public void setPlayableMapArea(final Rectangle playableMapArea) {
+		this.playableMapArea = playableMapArea;
+	}
+
+	/**
+	 * Measured: a point outside the playable area is first cut back into the map's 32 cell grid. A building is then
+	 * only clamped to the map (on its 64 grid, its far edge one cell in). A flyer goes to the nearest playable cell and,
+	 * when it was out on one side only, slides along that edge by the number of cells it was out (33 past the right
+	 * edge ends one cell up, 64 past two); out on two sides it is just clamped, and past the top of the map it is only
+	 * clamped to the map. A land unit is only clamped to the map and then pushed off unwalkable ground as usual.
+	 */
+	private Vector2 placeOutsidePlayableArea(final CUnitType unitType, final float x, final float y,
+			final boolean building, final boolean[] exact) {
+		final PathingGrid grid = this.pathingGrid;
+		final int width = grid.getWidth();
+		final int height = grid.getHeight();
+		final float worldX = grid.getWorldXFromCorner(0);
+		final float worldY = grid.getWorldYFromCorner(0);
+		if (building) {
+			return new Vector2(Math.max(worldX, Math.min(worldX + (width * 32f) - 64f, x)),
+					Math.max(worldY, Math.min(worldY + (height * 32f) - 64f, y)));
+		}
+		final int cellX = Math.max(0, Math.min(width - 1, (int) Math.floor((x - worldX) / 32f)));
+		final int cellY = Math.max(0, Math.min(height - 1, (int) Math.floor((y - worldY) / 32f)));
+		final int minX = Math.round((this.playableMapArea.x - worldX) / 32f);
+		final int minY = Math.round((this.playableMapArea.y - worldY) / 32f);
+		final int maxX = Math.round((this.playableMapArea.x + this.playableMapArea.width - worldX) / 32f) - 1;
+		final int maxY = Math.round((this.playableMapArea.y + this.playableMapArea.height - worldY) / 32f) - 1;
+		final float originX = worldX + (cellX * 32f);
+		final float originY = worldY + (cellY * 32f);
+		if (unitType.getMovementType() != PathingGrid.MovementType.FLY) {
+			// A land unit only loses what lies beyond the map; the unit nudge then looks for a free cell within its
+			// own search range and leaves the unit where it is when there is none.
+			return new Vector2(Math.max(worldX, Math.min(worldX + (width * 32f) - 32f, x)),
+					Math.max(worldY, Math.min(worldY + (height * 32f) - 32f, y)));
+		}
+		if (y >= (worldY + (height * 32f))) {
+			exact[0] = true;
+			return new Vector2(originX, originY);
+		}
+		exact[0] = true;
+		final int clampX = Math.max(minX, Math.min(maxX, cellX));
+		final int clampY = Math.max(minY, Math.min(maxY, cellY));
+		float placeX = worldX + (clampX * 32f);
+		float placeY = worldY + (clampY * 32f);
+		final boolean outX = cellX != clampX;
+		final boolean outY = cellY != clampY;
+		if (outX && !outY) {
+			final int slide = cellX < minX ? minX - cellX : cellX - maxX;
+			placeY += (cellX < minX ? -slide : slide) * 32f;
+		}
+		else if (outY && !outX) {
+			final int slide = cellY < minY ? minY - cellY : cellY - (maxY + 1);
+			placeX += (cellY < minY ? slide : -slide) * 32f;
+		}
+		return new Vector2(placeX, placeY);
+	}
+
 	public CUnit createUnitSimple(final War3ID typeId, final int playerIndex, float x, float y,
 			final float facing) {
 		final CUnitType unitType = this.unitData.getUnitType(typeId);
+		boolean keepPlace = false;
 		if ((unitType != null) && (unitType.getBuildingPathingPixelMap() != null)
 				&& !unitType.isCanBeBuiltOnThem()) {
 			final Vector2 place = findBuildingPlace(unitType, x, y);
 			x = place.x;
 			y = place.y;
+			// Measured: when the search finds nothing the building stays on the rounded point; it is not pushed
+			// out again by the unit nudge below.
+			keepPlace = true;
+		}
+		else if ((unitType != null) && (this.playableMapArea != null) && !this.playableMapArea.contains(x, y)) {
+			final boolean[] exact = new boolean[1];
+			final Vector2 place = placeOutsidePlayableArea(unitType, x, y, false, exact);
+			x = place.x;
+			y = place.y;
+			keepPlace = exact[0];
 		}
 		final CUnit newUnit = createUnit(typeId, playerIndex, x, y, facing);
 		if (newUnit != null) {
@@ -721,7 +826,17 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 			if (silentEnter) {
 				this.regionManager.setSilentEnterUnit(newUnit);
 			}
-			newUnit.setPointAndCheckUnstuck(x, y, this);
+			if (keepPlace) {
+				newUnit.setPoint(x, y, this.worldCollision, this.regionManager);
+				unitRepositioned(newUnit);
+			}
+			else {
+				newUnit.setPointAndCheckUnstuck(x, y, this);
+				// The unit sees from the spot it was nudged to, so a script can order it against what stands there.
+				if ((newUnit.getX() != x) || (newUnit.getY() != y)) {
+					updateFogOfWarOfNewUnit(newUnit);
+				}
+			}
 			if (silentEnter) {
 				this.regionManager.setSilentEnterUnit(null);
 			}
@@ -956,6 +1071,15 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 		}
 		pathfindingProcessor.findNaiveSlowPath(ignoreIntersectionsWithThisUnit, ignoreIntersectionsWithThisSecondUnit,
 				startX, startY, goal, movementType, collisionSize, allowSmoothing, queueItem);
+	}
+
+	/** Whether a unit at a point can walk to within a reach of another point, ignoring other units. */
+	public boolean canWalkNear(final CUnit unit, final float toX, final float toY, final float reach) {
+		if (this.pathfindingGraph == null) {
+			this.pathfindingGraph = new CPathfindingProcessor.SharedGraph(this.pathingGrid);
+		}
+		return this.pathfindingGraph.canReach(this.pathingGrid, unit.getMovementType(),
+				unit.getUnitType().getCollisionSize(), unit.getX(), unit.getY(), toX, toY, reach);
 	}
 
 	/** Path search nodes that only earlier searches used are made again when needed; a save leaves them out. */
@@ -1443,6 +1567,18 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 		return playerIndex == (this.players.size() - 4);
 	}
 
+	/**
+	 * Measured on 1.29: units of Neutral Hostile and of a computer player that runs no AI script cast their spells by
+	 * themselves while they fight (a scripted Blademaster casts Mirror Image as soon as an enemy comes at him).
+	 */
+	public boolean castsSpellsByItself(final int playerIndex) {
+		if (isNeutralAggressive(playerIndex)) {
+			return true;
+		}
+		final CPlayer player = getPlayer(playerIndex);
+		return (player != null) && (player.getController() == CMapControl.COMPUTER) && (player.getAiScript() == null);
+	}
+
 	public boolean isNeutralPassive(final int playerIndex) {
 		return playerIndex == (this.players.size() - 1);
 	}
@@ -1465,6 +1601,10 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 
 	public CQuestLog getQuestLog() {
 		return this.questLog;
+	}
+
+	public CTerrainTypeChanges getTerrainTypeChanges() {
+		return this.terrainTypeChanges;
 	}
 
 	public CTerrainDeformations getTerrainDeformations() {
@@ -1602,12 +1742,19 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 
 	public TextTag spawnTextTag(final CUnit unit, final int playerIndex, final TextTagConfigType type,
 			final int amount) {
-		return this.simulationRenderController.spawnTextTag(unit, type, amount);
+		return forReceiver(this.simulationRenderController.spawnTextTag(unit, type, amount), playerIndex, type);
 	}
 
 	public TextTag spawnTextTag(final CUnit unit, final int playerIndex, final TextTagConfigType type,
 			final String message) {
-		return this.simulationRenderController.spawnTextTag(unit, type, message);
+		return forReceiver(this.simulationRenderController.spawnTextTag(unit, type, message), playerIndex, type);
+	}
+
+	private static TextTag forReceiver(final TextTag textTag, final int playerIndex, final TextTagConfigType type) {
+		if ((textTag != null) && (type != null) && type.isShownToReceiverOnly()) {
+			textTag.setReceivingPlayer(playerIndex);
+		}
+		return textTag;
 	}
 
 	public TextTag createTextTag() {
@@ -1883,13 +2030,6 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 		return this.eventTypeToEvents.get(eventType);
 	}
 
-	public RemovableTriggerEvent registerGlobalUnitEvent(final Trigger whichTrigger, final JassGameEventsWar3 eventType,
-			final TriggerBooleanExpression filter) {
-		final CGlobalEvent newEvent = new CGlobalWidgetEvent(this, this.globalScope, whichTrigger, eventType, filter);
-		getOrCreateEventList(eventType).add(newEvent);
-		return newEvent;
-	}
-
 	public void addGlobalEvent(final CGlobalEvent newEvent) {
 		getOrCreateEventList(newEvent.getEventType()).add(newEvent);
 	}
@@ -2122,14 +2262,55 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 		}
 	}
 
-	public RemovableTriggerEvent registerEventPlayerDefeat(final GlobalScope globalScope, final Trigger whichTrigger,
-			final CPlayerJass whichPlayer) {
-		throw new UnsupportedOperationException("registerEventPlayerDefeat is NYI");
+	/**
+	 * A script's SetUnitFlyHeight: at a positive rate the height moves toward the target that many units per second,
+	 * replacing a change still under way; otherwise it is set at once.
+	 */
+	public void setUnitFlyHeight(final CUnit unit, final float height, final float rate) {
+		final CTimerFlyHeight running = this.flyHeightChanges.remove(unit);
+		if (running != null) {
+			running.setRepeats(false);
+		}
+		if ((rate <= 0) || (unit.getFlyHeight() == height)) {
+			unit.setFlyHeight(height);
+			return;
+		}
+		final CTimerFlyHeight change = new CTimerFlyHeight(unit, height, rate);
+		this.flyHeightChanges.put(unit, change);
+		change.start(this);
 	}
 
-	public RemovableTriggerEvent registerEventPlayerVictory(final GlobalScope globalScope, final Trigger whichTrigger,
-			final CPlayerJass whichPlayer) {
-		throw new UnsupportedOperationException("registerEventPlayerVictory is NYI");
+	public CTimerFlyHeight getFlyHeightChange(final CUnit unit) {
+		return this.flyHeightChanges.get(unit);
+	}
+
+	public void endFlyHeightChange(final CTimerFlyHeight change) {
+		if (this.flyHeightChanges.get(change.getUnit()) == change) {
+			this.flyHeightChanges.remove(change.getUnit());
+		}
+	}
+
+	/** A script's SetUnitFacingTimed; a duration of 0 or less turns the unit as SetUnitFacing does. */
+	public void setUnitFacingTimed(final CUnit unit, final float facing, final float duration) {
+		this.facingTurns.remove(unit);
+		if (duration <= 0) {
+			unit.getDrawnFacing(this);
+			unit.setFacing(facing);
+			return;
+		}
+		final CTimerFacing turn = new CTimerFacing(unit, facing, duration);
+		this.facingTurns.put(unit, turn);
+		turn.start(this);
+	}
+
+	public CTimerFacing getFacingTurn(final CUnit unit) {
+		return this.facingTurns.get(unit);
+	}
+
+	public void endFacingTurn(final CTimerFacing turn) {
+		if (this.facingTurns.get(turn.getUnit()) == turn) {
+			this.facingTurns.remove(turn.getUnit());
+		}
 	}
 
 	public void setAllItemTypeSlots(final int slots) {
@@ -2219,6 +2400,10 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 	public void setTimeOfDaySuspended(final boolean flag) {
 		this.timeOfDaySuspended = flag;
 
+	}
+
+	public boolean isTimeOfDaySuspended() {
+		return this.timeOfDaySuspended;
 	}
 
 	public boolean isDay() {
@@ -2354,6 +2539,10 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 		return taken;
 	}
 
+	public GameDataConstants getGameData() {
+		return this.gameData;
+	}
+
 	public int getMapGameVersion() {
 		return this.mapGameVersion;
 	}
@@ -2383,6 +2572,10 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 	/** iseedeadpeople: measured on 1.29, every place is visible to every player. */
 	public void toggleCheatRevealMap() {
 		this.cheatRevealMap = !this.cheatRevealMap;
+	}
+
+	public boolean isCheatRevealMap() {
+		return this.cheatRevealMap;
 	}
 
 	/** warpten: measured on 1.29, train, research and build run 16 times faster. */

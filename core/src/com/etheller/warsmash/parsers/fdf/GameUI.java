@@ -113,10 +113,20 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 	// Each portrait frame renders through a scene of its own that its viewer does not know of.
 	private final List<SpriteFrame2> portraitFrames = new ArrayList<>();
 	private boolean wideRoot;
+	// The menu switches the game version while a game keeps its interface.
+	private final int gameVersion;
 
 	public GameUI(final DataSource dataSource, final GameSkin skin, final Viewport viewport, final Scene uiScene,
 			final AbstractMdxModelViewer modelViewer, final int racialCommandIndex, final WTS mapStrings) {
+		this(dataSource, skin, viewport, uiScene, modelViewer, racialCommandIndex, mapStrings,
+				WarsmashConstants.GAME_VERSION);
+	}
+
+	public GameUI(final DataSource dataSource, final GameSkin skin, final Viewport viewport, final Scene uiScene,
+			final AbstractMdxModelViewer modelViewer, final int racialCommandIndex, final WTS mapStrings,
+			final int gameVersion) {
 		super("GameUI", null);
+		this.gameVersion = gameVersion;
 		this.dataSource = dataSource;
 		this.skin = skin.getSkin();
 		this.viewport = viewport;
@@ -192,9 +202,6 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 				throw new RuntimeException(e);
 			}
 		}
-//		final Element main = skinsTable.get("Main");
-//		final String skinsField = main.getField("Skins");
-//		final String[] skins = skinsField.split(",");
 		final Element defaultSkin = skinsTable.get("Default");
 		final Element userSkin = skinsTable.get(skin);
 		final Element customSkin = skinsTable.get("CustomSkin");
@@ -287,7 +294,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 			file = this.skin.getField(file);
 		}
 		else {
-			final String fieldVersioned = file + "_V" + WarsmashConstants.GAME_VERSION;
+			final String fieldVersioned = file + "_V" + this.gameVersion;
 			if (this.skin.hasField(fieldVersioned)) {
 				file = this.skin.getField(fieldVersioned);
 			}
@@ -299,10 +306,14 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 	}
 
 	public String trySkinField(final String file) {
-		return trySkinField(this.skin, file);
+		return trySkinField(this.skin, file, this.gameVersion);
 	}
 
 	public static String trySkinField(final Element skin, String file) {
+		return trySkinField(skin, file, WarsmashConstants.GAME_VERSION);
+	}
+
+	public static String trySkinField(final Element skin, String file, final int gameVersion) {
 		if (file == null) {
 			throw new NullPointerException("file is null");
 		}
@@ -310,7 +321,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 			file = skin.getField(file);
 		}
 		else {
-			final String fieldVersioned = file + "_V" + WarsmashConstants.GAME_VERSION;
+			final String fieldVersioned = file + "_V" + gameVersion;
 			if (skin.hasField(fieldVersioned)) {
 				file = skin.getField(fieldVersioned);
 			}
@@ -432,7 +443,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 	}
 
 	public BitmapFont generateFont(final float fdfFontSize) {
-		this.fontParam.size = (int) convertY(this.viewport, fdfFontSize);
+		this.fontParam.size = fontPixelSize(this.viewport, fdfFontSize);
 		if (this.fontParam.size == 0) {
 			this.fontParam.size = 128;
 		}
@@ -754,7 +765,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 					font = parentDefinitionIfAvailable.getFont("FrameFont");
 				}
 				final Float height = frameDefinition.getFloat("Height");
-				this.fontParam.size = (int) convertY(viewport2,
+				this.fontParam.size = fontPixelSize(viewport2,
 						(font == null ? (height == null ? 0.06f : height) : font.getFontSize()));
 				if (this.fontParam.size == 0) {
 					this.fontParam.size = 24;
@@ -1364,7 +1375,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 				if ((font == null) && (parentDefinitionIfAvailable != null)) {
 					font = parentDefinitionIfAvailable.getFont("FrameFont");
 				}
-				this.fontParam.size = (int) convertY(viewport2,
+				this.fontParam.size = fontPixelSize(viewport2,
 						(font == null ? (textAreaLineHeight == null ? 0.06f : textAreaLineHeight)
 								: font.getFontSize()));
 				if (this.fontParam.size == 0) {
@@ -1421,7 +1432,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 					font = parentDefinitionIfAvailable.getFont("FrameFont");
 				}
 				final Float height = frameDefinition.getFloat("Height");
-				this.fontParam.size = (int) convertY(viewport2,
+				this.fontParam.size = fontPixelSize(viewport2,
 						(font == null ? (height == null ? 0.06f : height) : font.getFontSize()));
 				if (this.fontParam.size == 0) {
 					this.fontParam.size = 24;
@@ -1586,7 +1597,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 						fontColorDefinition.getZ(), fontColorDefinition.getW());
 			}
 			final FontDefinition font = frameDefinition.getFont("Font");
-			this.fontParam.size = (int) convertY(viewport2, font.getFontSize());
+			this.fontParam.size = fontPixelSize(viewport2, font.getFontSize());
 			if (this.fontParam.size == 0) {
 				this.fontParam.size = 24;
 			}
@@ -1722,6 +1733,11 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 			return (fdfX / 0.8f) * ((ExtendViewport) viewport).getMinWorldWidth();
 		}
 		return (fdfX / 0.8f) * viewport.getWorldWidth();
+	}
+
+	/** The nearest whole pixel size; cutting the fraction off made text up to a pixel smaller than its height. */
+	private static int fontPixelSize(final Viewport viewport, final float fdfHeight) {
+		return Math.round(convertY(viewport, fdfHeight));
 	}
 
 	public static float convertY(final Viewport viewport, final float fdfY) {

@@ -6,7 +6,7 @@
 
 <p align="center">
   <img alt="Platform: Windows and Android" src="https://img.shields.io/badge/platform-Windows%20%7C%20Android%208.0%2B-3DDC84?logo=android&logoColor=white">
-  <img alt="Version 0.3.6" src="https://img.shields.io/badge/version-0.3.6-blue">
+  <img alt="Version 0.3.8" src="https://img.shields.io/badge/version-0.3.8-blue">
   <img alt="Licence: AGPL-3.0" src="https://img.shields.io/badge/licence-AGPL--3.0-orange">
   <img alt="Engine: Warsmash" src="https://img.shields.io/badge/engine-Warsmash-8a2be2">
   <img alt="Languages: Java 17, JASS2, GLSL" src="https://img.shields.io/badge/code-Java%2017%20%7C%20JASS2%20%7C%20GLSL-lightgrey">
@@ -75,7 +75,7 @@ The aim is to play W3 on phones and tablets with classic graphics at a steady 30
 ## Feature status
 
 Legend: **Working** — used in the regular test runs or played on real devices ·
-**In progress** — partly built, not finished or not fully verified · **Planned** — decided, not built.
+**In progress** — partly built, not finished or not fully verified · **Planned** — decided, not built · **Not planned** — will never be implemented.
 
 | Area | Feature | Status | Notes |
 |---|---|---|---|
@@ -98,6 +98,7 @@ Legend: **Working** — used in the regular test runs or played on real devices 
 | Simulation | Determinism and replays | In progress | |
 | Performance | Frame rate on phones and tablets | In progress | |
 | Multiplayer | LAN | Planned | |
+| Multiplayer | Online multiplayer | Not planned | Will never be implemented |
 
 ## Requirements
 
@@ -245,7 +246,7 @@ docs/images/            images used in this file
 
 ## Status and roadmap
 
-Current version: **v0.3.6**
+Current version: **v0.3.12**
 
 - **Custom games:** work end-to-end.
 - **Campaigns:** Reign of Chaos and The Frozen Throne can be completed to the end. Tweaking required.

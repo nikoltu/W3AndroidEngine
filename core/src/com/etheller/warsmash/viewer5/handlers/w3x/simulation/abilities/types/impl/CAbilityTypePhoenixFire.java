@@ -22,7 +22,7 @@ public class CAbilityTypePhoenixFire extends CAbilityType<CAbilityTypePhoenixFir
 		final CAbilityTypePhoenixFireLevelData levelData = getLevelData(0);
 		return new CAbilityPhoenixFire(handleId, getCode(), getAlias(), levelData.getInitialDamage(),
 				levelData.getDamagePerSecond(), levelData.getAreaOfEffect(), levelData.getCooldown(),
-				levelData.getDuration(), levelData.getTargetsAllowed());
+				levelData.getDuration(), levelData.getBuffId(), levelData.getTargetsAllowed());
 	}
 
 	@Override
@@ -35,6 +35,7 @@ public class CAbilityTypePhoenixFire extends CAbilityType<CAbilityTypePhoenixFir
 		heroAbility.setAreaOfEffect(levelData.getAreaOfEffect());
 		heroAbility.setCooldown(levelData.getCooldown());
 		heroAbility.setDuration(levelData.getDuration());
+		heroAbility.setBuffId(levelData.getBuffId());
 		heroAbility.setTargetsAllowed(levelData.getTargetsAllowed());
 
 		heroAbility.setLevel(game, unit, level);

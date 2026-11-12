@@ -4,16 +4,11 @@ import java.util.HashMap;
 import java.util.Map;
 
 import com.etheller.warsmash.util.Log;
-import com.etheller.warsmash.util.WarsmashConstants;
 
 public class ReplaceableIds {
-	private static final Map<Long, String> ID_TO_STR = new HashMap<>();
 	private static final Map<Long, String> REPLACEABLE_ID_TO_STR = new HashMap<>();
 
 	static {
-		for (int i = 0; i < WarsmashConstants.MAX_PLAYERS; i++) {
-			ID_TO_STR.put(Long.valueOf(i), String.format("%2d", i).replace(' ', '0'));
-		}
 		REPLACEABLE_ID_TO_STR.put(Long.valueOf(1), "TeamColor\\TeamColor");
 		REPLACEABLE_ID_TO_STR.put(Long.valueOf(2), "TeamGlow\\TeamGlow");
 		REPLACEABLE_ID_TO_STR.put(Long.valueOf(11), "Cliff\\Cliff0");
@@ -29,11 +24,12 @@ public class ReplaceableIds {
 	}
 
 	public static void main(final String[] args) {
-		Log.info(ID_TO_STR);
+		Log.info(REPLACEABLE_ID_TO_STR);
 	}
 
 	public static String getIdString(final long replaceableId) {
-		return ID_TO_STR.get(replaceableId);
+		// The team color number is a player slot, which the game's player count (a per-game constant) bounds.
+		return (replaceableId >= 0) ? String.format("%2d", replaceableId).replace(' ', '0') : null;
 	}
 
 	public static String getPathString(final long replaceableId) {

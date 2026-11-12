@@ -34,6 +34,7 @@ import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.unit.CUnitTypeJass;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.data.CUnitRace;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CRace;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CRaceManager;
 import com.etheller.warsmash.viewer5.handlers.w3x.UnitSound;
 import com.etheller.warsmash.viewer5.handlers.w3x.War3MapViewer;
 import com.etheller.warsmash.viewer5.handlers.w3x.camera.GameCameraManager;
@@ -310,8 +311,35 @@ final class CampaignNatives {
 			CCampaignProgress.setEndingCinematicAvailable(integer(arguments, 0), bool(arguments, 1));
 			return null;
 		});
+		add("PlayModelCinematic", (arguments, globalScope, triggerScope) -> {
+			this.viewer.playModelCinematic(string(arguments, 0));
+			return null;
+		});
 		add("PlayCinematic", (arguments, globalScope, triggerScope) -> {
 			this.simulation.queueCinematic(string(arguments, 0));
+			return null;
+		});
+		// Measured: in a custom or melee map the buttons never change from hidden; only a campaign mission sets them.
+		add("SetCustomCampaignButtonVisible", (arguments, globalScope, triggerScope) -> {
+			if (isCampaignMission()) {
+				CCampaignProgress.setCustomCampaignButtonVisible(integer(arguments, 0), bool(arguments, 1));
+			}
+			return null;
+		});
+		add("GetCustomCampaignButtonVisible", (arguments, globalScope, triggerScope) -> BooleanJassValue
+				.of(isCampaignMission() && CCampaignProgress.isCustomCampaignButtonVisible(integer(arguments, 0))));
+		add("ReloadGame", (arguments, globalScope, triggerScope) -> {
+			this.viewer.runAfterPendingSave(() -> {
+				this.viewer.setRestartAsNextLevel();
+				this.ui.endGame(false);
+			});
+			return null;
+		});
+		add("DisplayLoadDialog", (arguments, globalScope, triggerScope) -> {
+			final MeleeUI meleeUI = meleeUI();
+			if (meleeUI != null) {
+				meleeUI.displayLoadDialog();
+			}
 			return null;
 		});
 		add("SetTutorialCleared", (arguments, globalScope, triggerScope) -> {
@@ -424,6 +452,12 @@ final class CampaignNatives {
 		return level;
 	}
 
+	private boolean isCampaignMission() {
+		final String mapFile = this.viewer.getMapFileName();
+		final String mapPath = mapFile == null ? "" : mapFile.toLowerCase(Locale.ROOT).replace('/', '\\');
+		return mapPath.contains(CLASSIC_CAMPAIGN_FOLDER) || mapPath.contains(REFORGED_CAMPAIGN_FOLDER);
+	}
+
 	/** Classic Reign of Chaos maps are .w3m, The Frozen Throne and Reforged ones .w3x. */
 	private static String otherCampaignEditionLevel(final DataSource dataSource, final String level,
 			final String levelPath, final boolean levelClassic) {
@@ -465,32 +499,16 @@ final class CampaignNatives {
 	private void registerSounds() {
 		// The World Editor writes this instead of the separate setters when a sound keeps its label's defaults; the
 		// files and the looping come from CreateSound.
-		add("SetSoundParamsFromLabel", soundSetter((sound, arguments) -> {
-			final Element row = this.viewer.getSoundLabel(string(arguments, 1));
-			if (row == null) {
-				return;
-			}
-			// Dialogue and MIDI labels only carry a volume.
-			if (!row.getField("Volume").isEmpty()) {
-				sound.setVolume(row.getFieldValue("Volume"));
-			}
-			if (!row.getField("Pitch").isEmpty()) {
-				sound.setPitch(row.getFieldFloatValue("Pitch"));
-				sound.setPitchVariance(hasFlag(row, "RANDOMPITCH") ? row.getFieldFloatValue("PitchVariance") : 0f);
-			}
-			if (!row.getField("Channel").isEmpty()) {
-				sound.setChannel(row.getFieldValue("Channel"));
-			}
-			if (!row.getField("MinDistance").isEmpty()) {
-				sound.setDistances(row.getFieldFloatValue("MinDistance"), row.getFieldFloatValue("MaxDistance"));
-				sound.setDistanceCutoff(row.getFieldFloatValue("DistanceCutoff"));
-			}
-		}));
+		add("SetSoundParamsFromLabel", soundSetter(
+				(sound, arguments) -> applyLabelParameters(sound, this.viewer.getSoundLabel(string(arguments, 1)))));
 		add("SetSoundVolume", soundSetter((sound, arguments) -> sound.setVolume(integer(arguments, 1))));
 		add("SetSoundPitch", soundSetter((sound, arguments) -> sound.setPitch(real(arguments, 1))));
 		add("SetSoundChannel", soundSetter((sound, arguments) -> sound.setChannel(integer(arguments, 1))));
 		add("SetSoundPosition", soundSetter(
 				(sound, arguments) -> sound.setPosition(real(arguments, 1), real(arguments, 2), real(arguments, 3))));
+		add("SetSoundPlayPosition", soundSetter((sound, arguments) -> sound.setPlayPosition(integer(arguments, 1))));
+		add("SetSoundVelocity", soundSetter(
+				(sound, arguments) -> sound.setVelocity(real(arguments, 1), real(arguments, 2), real(arguments, 3))));
 		add("SetSoundDistances",
 				soundSetter((sound, arguments) -> sound.setDistances(real(arguments, 1), real(arguments, 2))));
 		add("SetSoundDistanceCutoff", soundSetter((sound, arguments) -> sound.setDistanceCutoff(real(arguments, 1))));
@@ -571,6 +589,29 @@ final class CampaignNatives {
 		add("KillSoundWhenDone", soundSetter((sound, arguments) -> sound.killWhenDone()));
 	}
 
+	static void applyLabelParameters(final CSound sound, final Element row) {
+		if (row == null) {
+			return;
+		}
+		// Dialogue and MIDI labels only carry a volume.
+		if (!row.getField("Volume").isEmpty()) {
+			sound.setVolume(row.getFieldValue("Volume"));
+		}
+		if (!row.getField("Pitch").isEmpty()) {
+			sound.setPitch(row.getFieldFloatValue("Pitch"));
+			sound.setPitchVariance(hasFlag(row, "RANDOMPITCH") ? row.getFieldFloatValue("PitchVariance") : 0f);
+		}
+		if (!row.getField("Channel").isEmpty()) {
+			sound.setChannel(row.getFieldValue("Channel"));
+		}
+		if (!row.getField("MinDistance").isEmpty()) {
+			sound.setDistances(row.getFieldFloatValue("MinDistance"), row.getFieldFloatValue("MaxDistance"));
+			if (row.hasFieldValue("DistanceCutoff")) {
+				sound.setDistanceCutoff(row.getFieldFloatValue("DistanceCutoff"));
+			}
+		}
+	}
+
 	private static boolean hasFlag(final Element row, final String flag) {
 		for (final String value : row.getField("Flags").split("[,|]")) {
 			if (flag.equals(value.trim())) {
@@ -617,6 +658,8 @@ final class CampaignNatives {
 				(arguments, globalScope, triggerScope) -> RealJassValue.of(local(camera().getNoisyTargetX())));
 		add("GetCameraTargetPositionY",
 				(arguments, globalScope, triggerScope) -> RealJassValue.of(local(camera().getNoisyTargetY())));
+		add("GetCameraTargetPositionZ",
+				(arguments, globalScope, triggerScope) -> RealJassValue.of(local(camera().getNoisyTargetZ())));
 		add("GetCameraEyePositionX",
 				(arguments, globalScope, triggerScope) -> RealJassValue.of(local(camera().getEyeX())));
 		add("GetCameraEyePositionY",
@@ -629,8 +672,25 @@ final class CampaignNatives {
 				new AbilityPointTarget(local(camera().getEyeX()), local(camera().getEyeY()))));
 		// Measured: a smoothing factor does not change a timed pan (linear with it too). The original applies it to
 		// the free camera, which has no such movement here.
-		ignored("CameraSetSmoothingFactor", "SetCinematicCamera", "CameraSetDepthOfFieldScale",
-				"CameraSetFocalDistance", "BlzCameraSetupSetCameraType");
+		ignored("CameraSetSmoothingFactor", "CameraSetDepthOfFieldScale", "CameraSetFocalDistance",
+				"BlzCameraSetupSetCameraType");
+		// Measured: an empty name leaves a running model camera as it is.
+		add("SetCinematicCamera", (arguments, globalScope, triggerScope) -> {
+			final String file = string(arguments, 0);
+			if ((file != null) && !file.isEmpty()) {
+				final String mdx = War3MapViewer.mdx(file);
+				if (this.viewer.dataSource.has(mdx) || this.viewer.dataSource.has(War3MapViewer.mdl(mdx))) {
+					final com.etheller.warsmash.viewer5.handlers.mdx.MdxModel model = this.viewer.loadModelMdx(file);
+					if ((model != null) && !model.getCameras().isEmpty()) {
+						camera().setCinematicCamera(model.getCameras().get(0), model);
+					}
+				}
+			}
+			return null;
+		});
+		// Measured: neither changes the camera's rotation or the target the camera natives report, with the unit
+		// turning or moving or the rotation running its time.
+		ignored("SetCameraRotateMode", "SetCameraOrientController");
 		add("BlzCameraSetupApplyForceDurationSmooth", (arguments, globalScope, triggerScope) -> {
 			final com.etheller.warsmash.viewer5.handlers.w3x.camera.CustomCameraSetup setup = object(arguments, 0);
 			if (setup != null) {
@@ -673,6 +733,45 @@ final class CampaignNatives {
 					(gameUI != null) && gameUI.hasSkinField(key) ? gameUI.getSkinField(key) : key);
 		});
 		add("BlzIsSelectionEnabled", (arguments, globalScope, triggerScope) -> BooleanJassValue.TRUE);
+		add("EnableSelect", (arguments, globalScope, triggerScope) -> {
+			final MeleeUI meleeUI = meleeUI();
+			if (meleeUI != null) {
+				meleeUI.enableSelect(bool(arguments, 0), bool(arguments, 1));
+			}
+			return null;
+		});
+		add("EnableDragSelect", (arguments, globalScope, triggerScope) -> {
+			final MeleeUI meleeUI = meleeUI();
+			if (meleeUI != null) {
+				meleeUI.enableDragSelect(bool(arguments, 0), bool(arguments, 1));
+			}
+			return null;
+		});
+		add("EnablePreSelect", (arguments, globalScope, triggerScope) -> {
+			final MeleeUI meleeUI = meleeUI();
+			if (meleeUI != null) {
+				meleeUI.enablePreSelect(bool(arguments, 0), bool(arguments, 1));
+			}
+			return null;
+		});
+		add("EnableMinimapFilterButtons", (arguments, globalScope, triggerScope) -> {
+			final MeleeUI meleeUI = meleeUI();
+			if (meleeUI != null) {
+				meleeUI.enableMinimapFilterButtons(bool(arguments, 0), bool(arguments, 1));
+			}
+			return null;
+		});
+		add("SetCreepCampFilterState", (arguments, globalScope, triggerScope) -> {
+			final MeleeUI meleeUI = meleeUI();
+			if (meleeUI != null) {
+				meleeUI.setCreepCampFilterState(bool(arguments, 0));
+			}
+			return null;
+		});
+		add("GetCreepCampFilterState", (arguments, globalScope, triggerScope) -> {
+			final MeleeUI meleeUI = meleeUI();
+			return BooleanJassValue.of((meleeUI != null) && meleeUI.getCreepCampFilterState());
+		});
 		add("SetDoodadAnimation", (arguments, globalScope, triggerScope) -> {
 			this.viewer.setDoodadAnimation(new War3ID(integer(arguments, 3)).toString(), null, real(arguments, 0),
 					real(arguments, 1), real(arguments, 2), bool(arguments, 4), noneIfNull(string(arguments, 5)));
@@ -704,9 +803,13 @@ final class CampaignNatives {
 		registerTerrainDeformations();
 		// Occlusion and the fog at the map edge have no drawing here yet; HD water and terrain fog extras do not exist
 		// in the classic graphics.
+		// The old fog natives and the water ripples have no counterpart in the classic graphics; a single player game
+		// has no other player to wait for at a sync point, and the intro shot belongs to the loading screen.
+		ignored("SetTerrainFog", "SetUnitFog", "SetWaterDeforms", "TriggerSyncStart", "TriggerSyncReady",
+				"SetIntroShotText", "SetIntroShotModel");
 		ignored("EnableOcclusion", "EnableWorldFogBoundary", "SetHDWaterParamsEx", "BlzSetTerrainFogDrawOverSky",
 				"BlzSetTerrainFogMaxLinearDensity", "SetTerrainFogExV", "PreloadRefresh", "PreloadEndEx",
-				"SyncSelections", "PlayModelCinematic",
+				"SyncSelections",
 				"CreateCommandButtonEffect", "CreateUpgradeCommandButtonEffect", "CreateLearnCommandButtonEffect",
 				"DestroyCommandButtonEffect", "TriggerRegisterCommandEvent", "TriggerRegisterUpgradeCommandEvent",
 				"SetItemColor");
@@ -1240,20 +1343,21 @@ final class CampaignNatives {
 		});
 	}
 
-	private static CRace jassRace(final CUnitRace race) {
+	private CRace jassRace(final CUnitRace race) {
+		final CRaceManager raceManager = this.viewer.getGameData().getRaceManager();
 		switch (race) {
 		case HUMAN:
-			return WarsmashConstants.RACE_MANAGER.getRace(1);
+			return raceManager.getRace(1);
 		case ORC:
-			return WarsmashConstants.RACE_MANAGER.getRace(2);
+			return raceManager.getRace(2);
 		case UNDEAD:
-			return WarsmashConstants.RACE_MANAGER.getRace(3);
+			return raceManager.getRace(3);
 		case NIGHTELF:
-			return WarsmashConstants.RACE_MANAGER.getRace(4);
+			return raceManager.getRace(4);
 		case DEMON:
-			return WarsmashConstants.RACE_MANAGER.getRace(5);
+			return raceManager.getRace(5);
 		default:
-			return WarsmashConstants.RACE_MANAGER.getRace(7);
+			return raceManager.getRace(7);
 		}
 	}
 

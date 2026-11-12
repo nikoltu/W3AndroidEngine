@@ -329,12 +329,6 @@ public class WarsmashGdxFDFTestRenderScreen implements InputProcessor, Screen, S
 			this.scene.fogSettings.density = fogSettings.density;
 			this.scene.fogSettings.start = fogSettings.start;
 			this.scene.fogSettings.end = fogSettings.end;
-//			if (this.modelCamera != null) {
-//				this.scene.fogSettings.start = (fogSettings.start - this.modelCamera.nearClippingPlane)
-//						/ (this.modelCamera.farClippingPlane - this.modelCamera.nearClippingPlane);
-//				this.scene.fogSettings.end = (fogSettings.end - this.modelCamera.nearClippingPlane)
-//						/ (this.modelCamera.farClippingPlane - this.modelCamera.nearClippingPlane);
-//			}
 		}
 
 	}
@@ -544,11 +538,7 @@ public class WarsmashGdxFDFTestRenderScreen implements InputProcessor, Screen, S
 		}
 		this.viewer.updateAndRender();
 
-		Gdx.gl30.glDisable(GL30.GL_SCISSOR_TEST);
-
-		Gdx.gl30.glDisable(GL30.GL_CULL_FACE);
-
-		this.viewer.webGL.useShaderProgram(null);
+		WarsmashGdxGame.leaveViewerState(this.viewer.webGL);
 
 		Gdx.gl30.glActiveTexture(GL30.GL_TEXTURE0);
 	}
@@ -662,14 +652,6 @@ public class WarsmashGdxFDFTestRenderScreen implements InputProcessor, Screen, S
 
 				this.position.set(WarsmashGdxFDFTestRenderScreen.this.modelCamera.position);
 				this.target.set(WarsmashGdxFDFTestRenderScreen.this.modelCamera.targetPosition);
-//				this.vecHeap2.set(this.target);
-//				this.vecHeap2.sub(this.position);
-//				this.vecHeap.set(this.vecHeap2);
-//				this.vecHeap.crs(this.worldUp);
-//				this.vecHeap.crs(this.vecHeap2);
-//				this.vecHeap.nor();
-//				this.vecHeap.scl(this.camera.rect.height / 2f);
-//				this.position.add(this.vecHeap);
 
 				this.position.add(WarsmashGdxFDFTestRenderScreen.this.cameraPositionTemp[0],
 						WarsmashGdxFDFTestRenderScreen.this.cameraPositionTemp[1],
@@ -689,9 +671,6 @@ public class WarsmashGdxFDFTestRenderScreen implements InputProcessor, Screen, S
 			this.camera.moveToAndFace(this.position, this.target, this.worldUp);
 		}
 
-//	private void cameraUpdate() {
-//
-//	}
 	}
 
 	public DataSource getCodebase() {
@@ -763,11 +742,7 @@ public class WarsmashGdxFDFTestRenderScreen implements InputProcessor, Screen, S
 
 	private void renderLibGDXContent() {
 
-		Gdx.gl30.glDisable(GL30.GL_SCISSOR_TEST);
-
-		Gdx.gl30.glDisable(GL30.GL_CULL_FACE);
-
-		this.viewer.webGL.useShaderProgram(null);
+		WarsmashGdxGame.leaveViewerState(this.viewer.webGL);
 
 		Gdx.gl30.glActiveTexture(GL30.GL_TEXTURE0);
 
@@ -777,8 +752,7 @@ public class WarsmashGdxFDFTestRenderScreen implements InputProcessor, Screen, S
 		this.menuUI.render(this.batch, this.glyphLayout);
 		this.batch.end();
 
-		Gdx.gl30.glEnable(GL30.GL_SCISSOR_TEST);
-		Gdx.gl30.glBindVertexArray(WarsmashGdxGame.VAO);
+		WarsmashGdxGame.enterViewerState();
 	}
 
 	private class LibGDXContentLayerModelInstance extends ModelInstance {

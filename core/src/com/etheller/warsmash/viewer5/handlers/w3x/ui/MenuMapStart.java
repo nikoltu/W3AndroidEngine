@@ -129,12 +129,14 @@ final class MenuMapStart {
 	}
 
 	/**
-	 * @param campaign the campaign of the mission started, by the number scripts know it by
+	 * @param campaign the campaign of the mission started, by the number scripts know it by; -1 for a game that is no
+	 *                 campaign's, such as a custom game
 	 * @param reforged whether the mission is played in the Reforged campaign version, else the Classic one
 	 */
 	void setCampaign(final int campaign, final boolean reforged) {
 		this.campaign = campaign;
 		this.reforgedCampaign = reforged;
+		this.menu.campaigns.setStartedCampaign(campaign);
 	}
 
 	/**
@@ -197,7 +199,7 @@ final class MenuMapStart {
 		final War3MapViewer viewer = new War3MapViewer(codebase, this.menu.screenManager, this.menu.currentMapConfig,
 				turnManager);
 		viewer.setTextureSizeLimit(GraphicsSettings.textureSize(this.menu.warsmashIni));
-		viewer.setCampaign(CampaignMaps.isCampaignMap(mapFilename) ? this.campaign : -1, this.reforgedCampaign);
+		viewer.setCampaign(this.campaign, this.reforgedCampaign);
 		final boolean loadingSavedGame = this.pendingSavedGame != null;
 		viewer.setSavedGameToLoad(this.pendingSavedGame, this.pendingSavedGameByScript);
 		setPendingLoad(null, false);
@@ -311,7 +313,9 @@ final class MenuMapStart {
 					}
 					else if (beginGameInformation.replay != null) {
 						final ReplayPlayback playback = new ReplayPlayback(beginGameInformation.replay,
-								beginGameInformation.replayFile, this.loadingMap.viewer);
+								beginGameInformation.replayFile, this.loadingMap.viewer,
+								beginGameInformation.replayStartTick);
+						playback.setForced(beginGameInformation.replayForced);
 						uiOrderListener = playback.viewerCommands(localPlayerIndex);
 						warsmashClient = null;
 						this.loadingMap.viewer.setGameTurnManager(playback);
@@ -509,14 +513,17 @@ final class MenuMapStart {
 		}
 	}
 
-	boolean startReplay(final FileHandle file) {
+	boolean startReplay(final FileHandle file, final int startTick, final boolean forced) {
 		final CReplay replay;
 		try {
 			replay = GameReplays.load(file);
 			final String reason = GameReplays.unplayableReason(replay,
 					this.menu.gameData != null ? this.menu.gameData : this.menu.dataSource);
 			if (reason != null) {
-				throw new CReplayException(reason);
+				if (!forced && !Boolean.getBoolean(GameReplays.FORCE_PROPERTY)) {
+					throw new CReplayException(reason);
+				}
+				Log.warn("Replay: played although " + reason);
 			}
 		}
 		catch (final IOException e) {
@@ -524,15 +531,20 @@ final class MenuMapStart {
 			return false;
 		}
 		final CReplayHeader header = replay.getHeader();
-		this.reforgedCampaign = false;
-		this.campaign = -1;
+		final String buildWarning = GameReplays.buildWarning(header);
+		if (buildWarning != null) {
+			Log.warn("Replay: " + buildWarning);
+		}
+		setCampaign(-1, false);
 		if (!startMap(header.getMapPath(), null)) {
 			return false;
 		}
-		header.applyTo(this.menu.currentMapConfig);
+		header.applyTo(this.menu.currentMapConfig, WarsmashConstants.RACE_MANAGER);
 		this.menu.beginGameInformation.localPlayerIndex = header.getLocalPlayerIndex();
 		this.menu.beginGameInformation.replay = replay;
 		this.menu.beginGameInformation.replayFile = file;
+		this.menu.beginGameInformation.replayStartTick = startTick;
+		this.menu.beginGameInformation.replayForced = forced;
 		return true;
 	}
 

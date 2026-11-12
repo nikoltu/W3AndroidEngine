@@ -12,10 +12,13 @@ import java.util.function.Consumer;
 import org.junit.jupiter.api.Test;
 
 import com.etheller.warsmash.testing.TestObjects;
+import com.etheller.warsmash.util.GameDataConstants;
 import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CPlayerStateListener.CPlayerStateNotifier;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.config.War3MapConfig;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.JassGameEventsWar3;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.CPlayerSlotState;
 
 public class CPlayerCommandTest {
 	private static final List<Consumer<CPlayerUnitOrderListener>> EVERY_COMMAND = List.of(
@@ -30,7 +33,9 @@ public class CPlayerCommandTest {
 			l -> l.transferResources(1, 100, 50), l -> l.fireGameEvent(42), l -> l.saveGame("My Save"),
 			l -> l.leaveGame(), l -> l.cheat("greedisgood 500"), l -> l.setGamePaused(true),
 			l -> l.minimapSignal(-1024f, 2048.25f), l -> l.trackableEvent(1048600, true),
-			l -> l.trackableEvent(7, false));
+			l -> l.trackableEvent(7, false),
+			l -> l.mouseEvent(JassGameEventsWar3.EVENT_PLAYER_MOUSE_DOWN.getEventId(), -512.5f, 1e-3f, 3),
+			l -> l.mouseEvent(JassGameEventsWar3.EVENT_PLAYER_MOUSE_MOVE.getEventId(), 7f, -7f, 0));
 
 	private static byte[] encode(final Consumer<CPlayerUnitOrderListener> command) {
 		final CPlayerCommandCodec.Encoder encoder = new CPlayerCommandCodec.Encoder();
@@ -91,6 +96,7 @@ public class CPlayerCommandTest {
 
 	private static CSimulation gameWithPlayers(final int gold) {
 		final CSimulation game = TestObjects.allocate(CSimulation.class);
+		TestObjects.set(game, "gameData", GameDataConstants.current());
 		final List<CPlayer> players = new ArrayList<>();
 		for (int i = 0; i < WarsmashConstants.MAX_PLAYERS; i++) {
 			final CPlayer player = TestObjects.allocate(CPlayer.class);
@@ -144,6 +150,8 @@ public class CPlayerCommandTest {
 	@Test
 	public void cheatCommandGivesEveryPlayerGold() {
 		final CSimulation game = gameWithPlayers(0);
+		TestObjects.set(game.getPlayer(0), "mapControl", CMapControl.USER);
+		TestObjects.set(game.getPlayer(0), "slotState", CPlayerSlotState.PLAYING);
 		new CPlayerUnitOrderExecutor(game, 0).cheat("  GreedIsGood 500 ");
 		for (int i = 0; i < WarsmashConstants.MAX_PLAYERS; i++) {
 			assertEquals(500, game.getPlayer(i).getGold());

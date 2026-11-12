@@ -137,7 +137,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.def
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.definitions.impl.CAbilityTypeDefinitionCargoHoldCorpses;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.definitions.impl.CAbilityTypeDefinitionCargoHoldEntangledMine;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.definitions.impl.CAbilityTypeDefinitionCarrionSwarmDummy;
-import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.definitions.impl.CAbilityTypeDefinitionChannelTest;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.definitions.impl.CAbilityTypeDefinitionChannel;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.definitions.impl.CAbilityTypeDefinitionColdArrows;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.definitions.impl.CAbilityTypeDefinitionDrop;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.definitions.impl.CAbilityTypeDefinitionGoldMine;
@@ -185,9 +185,13 @@ public class CAbilityData {
 	private Map<War3ID, CAbilityType<?>> aliasToAbilityType = new HashMap<>();
 	private final Map<War3ID, CAbilityTypeDefinition> codeToAbilityTypeDefinition = new HashMap<>();
 
-	public CAbilityData(final ObjectData abilityData, final int mapGameVersion) {
+	private final List<String> abilityCompatibility;
+
+	public CAbilityData(final ObjectData abilityData, final int mapGameVersion,
+			final List<String> abilityCompatibility) {
 		this.abilityData = abilityData;
 		this.mapGameVersion = mapGameVersion;
+		this.abilityCompatibility = abilityCompatibility;
 		this.aliasToAbilityType = new HashMap<>();
 		registerCodes();
 	}
@@ -517,7 +521,7 @@ public class CAbilityData {
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Ahar"), new CAbilityTypeDefinitionHarvest());
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Awha"), new CAbilityTypeDefinitionWispHarvest());
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Ahrl"), new CAbilityTypeDefinitionHarvestLumber());
-		this.codeToAbilityTypeDefinition.put(War3ID.fromString("ANcl"), new CAbilityTypeDefinitionChannelTest());
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("ANcl"), new CAbilityTypeDefinitionChannel());
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AUcs"), new CAbilityTypeDefinitionCarrionSwarmDummy());
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("AInv"), new CAbilityTypeDefinitionInventory());
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Arep"), new CAbilityTypeDefinitionHumanRepair());
@@ -634,16 +638,16 @@ public class CAbilityData {
 				}
 			}
 			
-			if (WarsmashConstants.ABILITY_COMPATIBILITY != null && WarsmashConstants.ABILITY_COMPATIBILITY.size() > 0) {
+			if (this.abilityCompatibility != null && this.abilityCompatibility.size() > 0) {
 				final List<AbilityBuilderParser> inheritingCompatAbilities = new ArrayList<>();
-				boolean all = WarsmashConstants.ABILITY_COMPATIBILITY.contains("all");
+				boolean all = this.abilityCompatibility.contains("all");
 
 				AbilityBuilderParserUtil.loadAbilityBuilderFiles(behavior -> {
 					if (behavior.getType().equals(AbilityBuilderType.INHERIT)) {
 						inheritingCompatAbilities.add(behavior);
 					} else if (behavior.getType().equals(AbilityBuilderType.TEMPLATE)) {
 						for (AbilityBuilderDupe dupe : behavior.getIds()) {
-							if (all || WarsmashConstants.ABILITY_COMPATIBILITY.contains(dupe.getId())) {
+							if (all || this.abilityCompatibility.contains(dupe.getId())) {
 								previousAbilityParsers.put(dupe.getId(), behavior);
 								this.codeToAbilityTypeDefinition.put(War3ID.fromString(dupe.getId()),
 										new CAbilityTypeDefinitionAbilityTemplateBuilder(behavior));
@@ -651,7 +655,7 @@ public class CAbilityData {
 						}
 					} else {
 						for (AbilityBuilderDupe dupe : behavior.getIds()) {
-							if (all || WarsmashConstants.ABILITY_COMPATIBILITY.contains(dupe.getId())) {
+							if (all || this.abilityCompatibility.contains(dupe.getId())) {
 								previousAbilityParsers.put(dupe.getId(), behavior);
 								AbilityBuilderConfiguration config = new AbilityBuilderConfiguration(behavior, dupe);
 								this.codeToAbilityTypeDefinition.put(War3ID.fromString(config.getId()),
@@ -684,7 +688,7 @@ public class CAbilityData {
 						if (parent != null) {
 							parser.updateFromParent(parent);
 							for (AbilityBuilderDupe dupe : parser.getIds()) {
-								if (all || WarsmashConstants.ABILITY_COMPATIBILITY.contains(dupe.getId())) {
+								if (all || this.abilityCompatibility.contains(dupe.getId())) {
 									previousAbilityParsers.put(dupe.getId(), parser);
 									AbilityBuilderConfiguration config = new AbilityBuilderConfiguration(parser, dupe);
 									this.codeToAbilityTypeDefinition.put(War3ID.fromString(config.getId()),

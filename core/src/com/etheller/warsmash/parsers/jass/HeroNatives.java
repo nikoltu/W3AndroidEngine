@@ -9,6 +9,7 @@ import com.etheller.warsmash.parsers.jass.Jass2.CommonEnvironment;
 import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.hero.CAbilityHero;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayer;
 
 /**
  * Hero experience, levels, attributes and skills.
@@ -203,7 +204,10 @@ final class HeroNatives extends CommonNatives {
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("CachePlayerHeroData",
 				(arguments, globalScope, triggerScope) -> {
-					// Only feeds the campaign score screen, which this engine does not have.
+					final CPlayer player = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
+					if (player != null) {
+						player.cacheHeroData(this.simulation);
+					}
 					return null;
 				});
 	}

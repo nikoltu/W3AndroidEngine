@@ -1,6 +1,8 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.harvest;
 
+import java.util.Collections;
 import java.util.EnumSet;
+import java.util.Set;
 
 import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CDestructable;
@@ -21,7 +23,8 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.AbilityTargetC
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.CommandStringErrorKeys;
 
 public class CAbilityWispHarvest extends AbstractGenericSingleIconActiveAbility {
-	public static final EnumSet<CTargetType> TREE_ALIVE_TYPE_ONLY = EnumSet.of(CTargetType.TREE, CTargetType.ALIVE);
+	public static final Set<CTargetType> TREE_ALIVE_TYPE_ONLY = Collections
+			.unmodifiableSet(EnumSet.of(CTargetType.TREE, CTargetType.ALIVE));
 
 	private int lumberPerInterval;
 	private float artAttachmentHeight;

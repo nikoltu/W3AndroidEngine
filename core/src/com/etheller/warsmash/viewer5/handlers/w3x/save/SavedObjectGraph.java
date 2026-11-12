@@ -1256,6 +1256,14 @@ public final class SavedObjectGraph {
 				"com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation$FogUpdateTimer");
 		FORMER_CLASS_NAMES.put("com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation$2",
 				"com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation$TimeOfDayEventRegistration");
+		FORMER_CLASS_NAMES.put("com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.test.CAbilityChannelTest",
+				"com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.channel.CAbilityChannel");
+		FORMER_CLASS_NAMES.put("com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.test.CBehaviorChannelTest",
+				"com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.channel.CBehaviorChannel");
+		FORMER_CLASS_NAMES.put("com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.test.CAbilityCarrionSwarmDummy",
+				"com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.undead.dreadlord.CAbilityCarrionSwarmDummy");
+		FORMER_CLASS_NAMES.put("com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.test.CBehaviorCarrionSwarmDummy",
+				"com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.skills.undead.dreadlord.CBehaviorCarrionSwarmDummy");
 	}
 
 	/** For tables that carry no format, as the saves this engine writes. */

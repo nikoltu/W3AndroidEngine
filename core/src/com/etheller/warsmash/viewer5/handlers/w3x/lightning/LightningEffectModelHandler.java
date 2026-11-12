@@ -12,7 +12,7 @@ import com.etheller.warsmash.viewer5.handlers.mdx.MdxShaders;
 import java.util.ArrayList;
 
 public class LightningEffectModelHandler extends ModelHandler {
-
+	public ShaderProgram simple;
 
 	public LightningEffectModelHandler() {
 		this.extensions = new ArrayList<>();
@@ -21,8 +21,8 @@ public class LightningEffectModelHandler extends ModelHandler {
 
 	@Override
 	public boolean load(final ModelViewer viewer) {
-	 	Shaders.simple = viewer.webGL.createShaderProgram(MdxShaders.vsLightning, MdxShaders.fsLightning);
-		return Shaders.simple.isCompiled();
+		this.simple = viewer.webGL.createShaderProgram(MdxShaders.vsLightning, MdxShaders.fsLightning);
+		return this.simple.isCompiled();
 	}
 
 	@Override
@@ -31,10 +31,4 @@ public class LightningEffectModelHandler extends ModelHandler {
 				params.getPathSolver(), params.getFetchUrl());
 	}
 
-	public static final class Shaders {
-		private Shaders() {
-		}
-
-		public static ShaderProgram simple;
-	}
 }

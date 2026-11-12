@@ -56,7 +56,4 @@ public abstract class CameraManager {
 
 	public abstract void updateCamera();
 
-//	private void cameraUpdate() {
-//
-//	}
 }

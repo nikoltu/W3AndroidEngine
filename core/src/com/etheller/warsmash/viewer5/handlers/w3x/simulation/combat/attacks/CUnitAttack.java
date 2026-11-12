@@ -324,11 +324,6 @@ public abstract class CUnitAttack {
 		computeDerivedFields();
 	}
 
-	public void setPermanentDamageBonus(final int permanentDamageBonus) {
-		this.permanentDamageBonus = permanentDamageBonus;
-		computeDerivedFields();
-	}
-
 	public void setTemporaryDamageBonus(final int temporaryDamageBonus) {
 		this.temporaryDamageBonus = temporaryDamageBonus;
 		computeDerivedFields();
@@ -461,12 +456,12 @@ public abstract class CUnitAttack {
 			} else if (this.weaponType == CWeaponType.MSPLASH) {
 				result.setDamageMultiplier(simulation.getGameplayConstants().getMissDamageReduction());
 				result.setBonusDamage(result.getBonusDamage() * simulation.getGameplayConstants().getMissDamageReduction());
-				simulation.spawnTextTag(attacker, attacker.getPlayerIndex(), TextTagConfigType.CRITICAL_STRIKE, "miss");
+				simulation.spawnTextTag(attacker, attacker.getPlayerIndex(), TextTagConfigType.MISS_TEXT, "miss");
 			} else {
 				result.setBaseDamage(0);
 				result.setBonusDamage(0);
 				result.setDamageMultiplier(0);
-				simulation.spawnTextTag(attacker, attacker.getPlayerIndex(), TextTagConfigType.CRITICAL_STRIKE, "miss"); // TODO
+				simulation.spawnTextTag(attacker, attacker.getPlayerIndex(), TextTagConfigType.MISS_TEXT, "miss"); // TODO
 																															// Technically
 																															// cheating
 																															// here
@@ -482,9 +477,6 @@ public abstract class CUnitAttack {
 		if (!result.isMiss() && (result.getDamageMultiplier() != 1) && (result.getDamageMultiplier() != 0)) {
 			simulation.spawnTextTag(attacker, attacker.getPlayerIndex(), TextTagConfigType.CRITICAL_STRIKE,
 					Math.round(result.computeFinalDamage()));
-		} else if (result.getBonusDamage() != 0) {
-			simulation.spawnTextTag(attacker, attacker.getPlayerIndex(), TextTagConfigType.BASH,
-					Math.round(result.getBonusDamage()));
 		}
 		return result;
 	}

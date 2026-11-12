@@ -8,6 +8,7 @@ import java.util.regex.Matcher;
 
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.utils.TimeUtils;
 import com.etheller.interpreter.ast.scope.GlobalScope;
 import com.etheller.warsmash.parsers.fdf.GameUI;
@@ -54,6 +55,12 @@ final class MeleeUIMessages {
 	private static final float GAME_MESSAGE_BOTTOM = 0.2405f;
 	private static final float GAME_MESSAGE_WIDTH = 0.495f;
 	private static final int GAME_MESSAGE_MAX_LINES = 16;
+	/**
+	 * Game messages keep their font height between lines, but 1.29 draws their letters at four fifths of it, where
+	 * other text has letters of its full font height.
+	 */
+	private static final float GAME_MESSAGE_GLYPH_SCALE = 0.8f;
+
 	// The x and y of the last script message move all of them, by about this much per 1.
 	private static final float GAME_MESSAGE_OFFSET_X_SCALE = 0.308f;
 	private static final float GAME_MESSAGE_OFFSET_Y_SCALE = 0.223f;
@@ -62,6 +69,8 @@ final class MeleeUIMessages {
 	private float gameMessageLift;
 	private long lastErrorMessageExpireTime;
 	private long lastErrorMessageFadeTime;
+	/** Game time: it stands while the game is paused and runs with the game speed. */
+	private double gameClockMillis;
 	private CLeaderboard shownLeaderboard;
 	private UIFrame leaderboardFrame;
 	private StringFrame leaderboardTitle;
@@ -73,6 +82,7 @@ final class MeleeUIMessages {
 	private static final float TIMER_DIALOG_TOP = -0.0353f;
 	private static final float TIMER_DIALOG_STEP = 0.03f;
 	private static final float TIMER_DIALOG_GAP = 0.002f;
+	private static final float MULTIBOARD_TOP = -0.0236f;
 	// Measured on 1.29: shown 1 s after the death, fully for 10 s, then fading out.
 	private static final long HERO_DEATH_MESSAGE_DELAY_MILLIS = 1000;
 	private static final float HERO_DEATH_MESSAGE_SECONDS = 10;
@@ -81,8 +91,19 @@ final class MeleeUIMessages {
 	private static final float SHARED_CONTROL_MESSAGE_SECONDS = 10;
 	private static final Color SHARED_CONTROL_MESSAGE_COLOR = new Color(0xFED312FF);
 	private SharedControlWatcher[] sharedControlWatchers;
-	private static final float LEADERBOARD_WIDTH = 0.2f;
-	private static final float LEADERBOARD_FONT_HEIGHT = 0.009f;
+	// Measured on 1.29: the box takes its width once, when a leaderboard is first shown in the game, from what that
+	// board holds then (the widest label and value, with the insets and the space between them, or the title); later
+	// boards and later items keep it, and what does not fit is cut.
+	private static final float LEADERBOARD_MIN_WIDTH = 0.0367f;
+	private static final float LEADERBOARD_TEXT_SPACE = 0.0647f;
+	private static final float LEADERBOARD_TITLE_LEFT = 0.02f;
+	private static final float LEADERBOARD_TITLE_OVERHANG = 0.003f;
+	private static final float LEADERBOARD_VALUE_GAP = 0.004f;
+	private static final float LEADERBOARD_UNDER_BOARD_GAP = 0.0053f;
+	private float leaderboardWidth = Float.NaN;
+	private float leaderboardRight = Float.NaN;
+	private float leaderboardTop = Float.NaN;
+	private static final float LEADERBOARD_FONT_HEIGHT = 0.011f;
 	private static final float LEADERBOARD_INSET_X = 0.016f;
 	private static final float LEADERBOARD_TITLE_TOP = 0.013f;
 	private static final float LEADERBOARD_ROWS_TOP = 0.028f;
@@ -114,7 +135,7 @@ final class MeleeUIMessages {
 	}
 
 	public void showInterfaceError(final int playerIndex, final String externStringKey) {
-		if (playerIndex == this.ui.war3MapViewer.getLocalPlayerIndex()) {
+		if (this.ui.war3MapViewer.isViewedPlayer(playerIndex)) {
 			if (externStringKey != null) {
 				showLocalCommandErrorString(playerIndex, externStringKey);
 			}
@@ -132,7 +153,7 @@ final class MeleeUIMessages {
 	}
 
 	public void showCommandErrorWithoutSound(final int playerIndex, final String message) {
-		if (playerIndex == this.ui.war3MapViewer.getLocalPlayerIndex()) {
+		if (this.ui.war3MapViewer.isViewedPlayer(playerIndex)) {
 			showLocalCommandErrorString(playerIndex, message);
 		}
 	}
@@ -206,6 +227,15 @@ final class MeleeUIMessages {
 		showGameMessage(message, Color.WHITE, duration);
 	}
 
+	private long gameClock() {
+		return (long) this.gameClockMillis;
+	}
+
+	/** Called every frame with the game time that passed, 0 while the game is paused. */
+	void advanceGameClock(final float gameSeconds) {
+		this.gameClockMillis += gameSeconds * 1000.0;
+	}
+
 	private void showGameMessage(final String message, final Color color, final float duration) {
 		this.ui.messageLog.add(message);
 		// The score screen replaces the game screen; messages that come after it are only kept in the log.
@@ -213,7 +243,9 @@ final class MeleeUIMessages {
 			return;
 		}
 		final StringFrame gameMessagesFrame = this.ui.rootFrame.createStringFrame("SmashGameMessageFrame",
-				this.ui.rootFrame, color, TextJustify.LEFT, TextJustify.MIDDLE, this.worldFrameUnitMessageFontHeight);
+				this.ui.rootFrame, color, TextJustify.LEFT, TextJustify.MIDDLE,
+				this.worldFrameUnitMessageFontHeight * GAME_MESSAGE_GLYPH_SCALE);
+		gameMessagesFrame.setLineSpacing(GameUI.convertY(this.ui.uiViewport, this.worldFrameUnitMessageFontHeight));
 		gameMessagesFrame.setWidth(GameUI.convertX(this.ui.uiViewport, GAME_MESSAGE_WIDTH));
 
 		gameMessagesFrame.setFontShadowColor(new Color(0f, 0f, 0f, 0.9f));
@@ -226,7 +258,7 @@ final class MeleeUIMessages {
 		gameMessagesFrame.setAlpha(1.0f);
 
 		final int lines = Math.max(1,
-				Math.round(gameMessagesFrame.getAssignedHeight() / gameMessagesFrame.getFrameFont().getLineHeight()));
+				Math.round(gameMessagesFrame.getAssignedHeight() / gameMessagesFrame.getLineSpacing()));
 		final long fadeTime;
 		final long expireTime;
 		if (duration == 0) {
@@ -259,23 +291,38 @@ final class MeleeUIMessages {
 	}
 
 	/**
-	 * The local player's hero died: as on 1.29, a second later "<name> the <class> (level N) has fallen." in the
-	 * wording of the player's race, the name in the player's color, with the race's hero death sound.
+	 * A hero of the local player or of an ally died: as on 1.29, a second of game time later "<name> the <class>
+	 * (level N) has fallen." in the wording of the local player's race, the name in the owner's color, with the
+	 * race's hero death sound, or its ally hero death sound for an ally's hero. A paused game holds the message
+	 * back; once shown, it fades in real time like any other message.
 	 */
 	void heroDied(final CUnit hero) {
-		if ((hero.getPlayerIndex() != this.ui.war3MapViewer.getLocalPlayerIndex()) || (hero.getHeroData() == null)) {
+		if (hero.getHeroData() == null) {
+			return;
+		}
+		final int localPlayerIndex = this.ui.war3MapViewer.getLocalPlayerIndex();
+		final CPlayer owner = this.ui.war3MapViewer.simulation.getPlayer(hero.getPlayerIndex());
+		final boolean own = hero.getPlayerIndex() == localPlayerIndex;
+		if (!own && ((owner == null) || (localPlayerIndex < 0) || !isHeroDeathAlly(owner, localPlayerIndex))) {
 			return;
 		}
 		final String format = this.ui.rootFrame.getErrorString("Herodeath");
-		final String name = "|cff"
-				+ MeleeChat.playerTextHex(this.ui.war3MapViewer.simulation.getPlayer(hero.getPlayerIndex()).getColor())
-				+ hero.getHeroData().getProperName() + "|r";
+		final String name = "|cff" + MeleeChat.playerTextHex(owner.getColor()) + hero.getHeroData().getProperName()
+				+ "|r";
 		final String message = (format == null) || format.isEmpty() ? null
 				: format.replaceFirst("%s", Matcher.quoteReplacement(name))
 						.replaceFirst("%s", Matcher.quoteReplacement(hero.getUnitType().getName()))
 						.replaceFirst("%d", Integer.toString(hero.getHeroData().getHeroLevel()));
-		this.pendingHeroDeaths.addLast(new PendingHeroDeath(TimeUtils.millis() + HERO_DEATH_MESSAGE_DELAY_MILLIS,
-				message));
+		this.pendingHeroDeaths.addLast(new PendingHeroDeath(gameClock() + HERO_DEATH_MESSAGE_DELAY_MILLIS, message,
+				own ? "HeroDiesSound" : "AllyHeroDiesSound"));
+	}
+
+	/** Measured on 1.29: an ally answering calls for help gives the message; passive or shared vision alone not. */
+	private boolean isHeroDeathAlly(final CPlayer owner, final int localPlayerIndex) {
+		final CPlayer local = this.ui.war3MapViewer.simulation.getPlayer(localPlayerIndex);
+		return owner.hasAlliance(localPlayerIndex, CAllianceType.PASSIVE)
+				&& local.hasAlliance(owner.getId(), CAllianceType.PASSIVE)
+				&& owner.hasAlliance(localPlayerIndex, CAllianceType.HELP_RESPONSE);
 	}
 
 	/**
@@ -352,15 +399,16 @@ final class MeleeUIMessages {
 		}
 	}
 
-	private void showPendingHeroDeaths(final long currentMillis) {
-		while (!this.pendingHeroDeaths.isEmpty() && (currentMillis >= this.pendingHeroDeaths.getFirst().dueMillis)) {
+	private void showPendingHeroDeaths() {
+		final long now = gameClock();
+		while (!this.pendingHeroDeaths.isEmpty() && (now >= this.pendingHeroDeaths.getFirst().dueMillis)) {
 			final PendingHeroDeath death = this.pendingHeroDeaths.removeFirst();
 			if (death.message != null) {
 				showGameMessage(death.message, HERO_DEATH_MESSAGE_SECONDS);
 			}
-			if (this.ui.rootFrame.hasSkinField("HeroDiesSound")) {
+			if (this.ui.rootFrame.hasSkinField(death.soundField)) {
 				final UnitSound sound = this.ui.war3MapViewer.getUiSounds()
-						.getSound(this.ui.rootFrame.getSkinField("HeroDiesSound"));
+						.getSound(this.ui.rootFrame.getSkinField(death.soundField));
 				if (sound != null) {
 					sound.play(this.ui.uiScene.audioContext, 0, 0, 0);
 				}
@@ -371,15 +419,17 @@ final class MeleeUIMessages {
 	private static final class PendingHeroDeath {
 		private final long dueMillis;
 		private final String message;
+		private final String soundField;
 
-		private PendingHeroDeath(final long dueMillis, final String message) {
+		private PendingHeroDeath(final long dueMillis, final String message, final String soundField) {
 			this.dueMillis = dueMillis;
 			this.message = message;
+			this.soundField = soundField;
 		}
 	}
 
 	public void showUpgradeCompleteAlert(final int playerIndex, final War3ID queuedRawcode, final int level) {
-		if (playerIndex == this.ui.war3MapViewer.getLocalPlayerIndex()) {
+		if (this.ui.war3MapViewer.isViewedPlayer(playerIndex)) {
 			String upgradeName;
 			final CUpgradeType upgradeType = this.ui.war3MapViewer.simulation.getUpgradeData().getType(queuedRawcode);
 			if (upgradeType != null) {
@@ -402,7 +452,7 @@ final class MeleeUIMessages {
 	}
 
 	void updateMessages(final long currentMillis) {
-		showPendingHeroDeaths(currentMillis);
+		showPendingHeroDeaths();
 		if (currentMillis > this.lastErrorMessageExpireTime) {
 			this.errorMessageFrame.setVisible(false);
 		}
@@ -485,7 +535,7 @@ final class MeleeUIMessages {
 					GameUI.convertY(this.ui.uiViewport, -LEADERBOARD_ROWS_TOP)));
 			this.leaderboardValues.addSetPoint(new SetPoint(FramePoint.BOTTOMRIGHT, backdrop, FramePoint.BOTTOMRIGHT,
 					GameUI.convertX(this.ui.uiViewport, -LEADERBOARD_INSET_X), 0));
-			this.leaderboardFrame.setWidth(GameUI.convertX(this.ui.uiViewport, LEADERBOARD_WIDTH));
+			this.leaderboardFrame.setWidth(GameUI.convertX(this.ui.uiViewport, LEADERBOARD_MIN_WIDTH));
 			this.ui.leaderboardSlot = -1;
 		}
 		final boolean shown = leaderboard != null;
@@ -510,8 +560,33 @@ final class MeleeUIMessages {
 		}
 		// Measured on 1.29: an empty title takes no line, the rows start where it would be (the Human08 board).
 		final boolean titled = board.isShowLabel() && (board.getLabel() != null) && !board.getLabel().isEmpty();
-		this.leaderboardTitle.setVisible(titled);
-		this.ui.rootFrame.setText(this.leaderboardTitle, titled ? board.getLabel() : "");
+		final float unit = GameUI.convertX(this.ui.uiViewport, 1f);
+		float labelsWidth = 0;
+		float valuesWidth = 0;
+		for (final CLeaderboard.Item item : board.getItems()) {
+			if (board.isShowNames() && item.showLabel) {
+				labelsWidth = Math.max(labelsWidth, leaderboardTextWidth(this.leaderboardLabels, item.label) / unit);
+			}
+			if (board.isShowValues() && item.showValue) {
+				valuesWidth = Math.max(valuesWidth,
+						leaderboardTextWidth(this.leaderboardValues, Integer.toString(item.value)) / unit);
+			}
+		}
+		if (Float.isNaN(this.leaderboardWidth)) {
+			float width = board.getItemCount() > 0 ? labelsWidth + valuesWidth + LEADERBOARD_TEXT_SPACE : 0;
+			if (titled) {
+				width = Math.max(width, (2 * LEADERBOARD_TITLE_LEFT)
+						+ (leaderboardTextWidth(this.leaderboardTitle, board.getLabel()) / unit));
+			}
+			this.leaderboardWidth = Math.max(LEADERBOARD_MIN_WIDTH, width);
+			this.leaderboardFrame.setWidth(GameUI.convertX(this.ui.uiViewport, this.leaderboardWidth));
+		}
+		final String title = titled ? fitLeaderboardText(this.leaderboardTitle, board.getLabel(),
+				(this.leaderboardWidth - LEADERBOARD_TITLE_LEFT) + LEADERBOARD_TITLE_OVERHANG) : "";
+		this.leaderboardTitle.setVisible(!title.isEmpty());
+		this.ui.rootFrame.setText(this.leaderboardTitle, title);
+		final float labelSpace = this.leaderboardWidth - (2 * LEADERBOARD_INSET_X) - valuesWidth
+				- LEADERBOARD_VALUE_GAP;
 		final StringBuilder labels = new StringBuilder();
 		final StringBuilder values = new StringBuilder();
 		for (final CLeaderboard.Item item : board.getItems()) {
@@ -519,17 +594,20 @@ final class MeleeUIMessages {
 				labels.append('\n');
 				values.append('\n');
 			}
+			final String label = fitLeaderboardText(this.leaderboardLabels, item.label, labelSpace);
 			// A row with nothing in it still takes its line.
-			if (board.isShowNames() && item.showLabel && !item.label.isEmpty()) {
-				appendLeaderboardText(labels, item.label,
-						leaderboardColor(item.labelColor, board.getLabelColor(), item.playerIndex));
+			if (board.isShowNames() && item.showLabel && !label.isEmpty()) {
+				appendLeaderboardText(labels, label,
+						leaderboardColor(item.labelColorSet, item.labelColor, board.isLabelColorSet(),
+								board.getLabelColor(), item.playerIndex));
 			}
 			else {
 				labels.append(' ');
 			}
 			if (board.isShowValues() && item.showValue) {
 				appendLeaderboardText(values, Integer.toString(item.value),
-						leaderboardColor(item.valueColor, board.getValueColor(), item.playerIndex));
+						leaderboardColor(item.valueColorSet, item.valueColor, board.isValueColorSet(),
+								board.getValueColor(), item.playerIndex));
 			}
 			else {
 				values.append(' ');
@@ -546,8 +624,38 @@ final class MeleeUIMessages {
 		this.leaderboardFrame.setHeight(GameUI.convertY(this.ui.uiViewport,
 				rowsTop + (rows * LEADERBOARD_ROW_HEIGHT) + LEADERBOARD_BOTTOM_INSET));
 		this.leaderboardFrame.positionBounds(this.ui.rootFrame, this.ui.uiViewport);
+		this.leaderboardLabels.positionBounds(this.ui.rootFrame, this.ui.uiViewport);
+		this.leaderboardValues.positionBounds(this.ui.rootFrame, this.ui.uiViewport);
 		this.ui.rootFrame.setText(this.leaderboardLabels, labels.toString());
 		this.ui.rootFrame.setText(this.leaderboardValues, values.toString());
+	}
+
+	private float leaderboardTextWidth(final StringFrame frame, final String text) {
+		final GlyphLayout layout = this.ui.rootFrame.getGlyphLayout();
+		layout.setText(frame.getFrameFont(), text.replaceAll("\\|[cC][0-9a-fA-F]{8}|\\|[rR]", ""));
+		return layout.width;
+	}
+
+	/** One line cut to the width: at a word when one fits, else at a letter; nothing when no letter fits. */
+	private String fitLeaderboardText(final StringFrame frame, final String text, final float width) {
+		final float unit = GameUI.convertX(this.ui.uiViewport, 1f);
+		if ((leaderboardTextWidth(frame, text) / unit) <= width) {
+			return text;
+		}
+		int fit = 0;
+		for (int end = 1; end <= text.length(); end++) {
+			if ((leaderboardTextWidth(frame, text.substring(0, end)) / unit) > width) {
+				break;
+			}
+			fit = end;
+		}
+		if ((fit < text.length()) && (text.charAt(fit) != ' ')) {
+			final int space = text.lastIndexOf(' ', fit);
+			if (space > 0) {
+				return text.substring(0, space);
+			}
+		}
+		return text.substring(0, fit).trim();
 	}
 
 	private static void appendLeaderboardText(final StringBuilder text, final String value, final int rgba) {
@@ -555,11 +663,12 @@ final class MeleeUIMessages {
 				.append("|r");
 	}
 
-	private int leaderboardColor(final int itemColor, final int boardColor, final int playerIndex) {
-		if (itemColor != -1) {
+	private int leaderboardColor(final boolean itemColorSet, final int itemColor, final boolean boardColorSet,
+			final int boardColor, final int playerIndex) {
+		if (itemColorSet) {
 			return itemColor;
 		}
-		if (boardColor != -1) {
+		if (boardColorSet) {
 			return boardColor;
 		}
 		if (playerIndex >= 0) {
@@ -583,12 +692,15 @@ final class MeleeUIMessages {
 	void layoutTimerDialogs() {
 		float screenRight = GameUI.convertX(this.ui.uiViewport, TIMER_DIALOG_RIGHT)
 				- Math.min(0, (this.ui.uiViewport.getMinWorldWidth() - this.ui.uiViewport.getWorldWidth()) / 2);
+		// Without timer dialogs a multiboard hangs from the top right corner of the 4:3 area instead.
+		float boardRight = 0;
 		// The touch control group buttons take the right screen edge, so the timers and the leaderboard go beside
 		// them.
 		final ControlGroupBar groupBar = this.ui.groups.getControlGroupBar();
 		if (groupBar != null) {
-			screenRight = Math.min(screenRight,
-					groupBar.columnLeft() - this.ui.rootFrame.getFramePointX(FramePoint.RIGHT));
+			final float groupBarLeft = groupBar.columnLeft() - this.ui.rootFrame.getFramePointX(FramePoint.RIGHT);
+			screenRight = Math.min(screenRight, groupBarLeft);
+			boardRight = Math.min(boardRight, groupBarLeft);
 		}
 		if (screenRight != this.timerDialogRight) {
 			this.timerDialogRight = screenRight;
@@ -614,22 +726,49 @@ final class MeleeUIMessages {
 			slot++;
 		}
 		// The leaderboard takes the place under the row of shown timer dialogs, right aligned with it. A shown
-		// multiboard takes that place instead: the game shows one board at a time.
+		// script multiboard takes that place instead: the game shows one board at a time. The Team Resources board
+		// is not one of them; the leaderboard hangs under it, right aligned with it (1.29).
 		final int leaderboardRow = Math.min(slot, 1);
-		this.ui.multiboard.anchor(screenRight,
-				GameUI.convertY(this.ui.uiViewport, TIMER_DIALOG_TOP - (leaderboardRow * TIMER_DIALOG_STEP)));
+		if (slot == 0) {
+			this.ui.multiboard.anchor(boardRight, GameUI.convertY(this.ui.uiViewport, MULTIBOARD_TOP));
+		}
+		else {
+			this.ui.multiboard.anchor(screenRight,
+					GameUI.convertY(this.ui.uiViewport, TIMER_DIALOG_TOP - (leaderboardRow * TIMER_DIALOG_STEP)));
+		}
+		final boolean underTeamResources = this.ui.multiboard.isShowing()
+				&& this.ui.teamResources.isBoard(this.ui.multiboard.getShownBoard());
 		if (this.leaderboardFrame != null) {
-			final boolean leaderboardShown = (this.shownLeaderboard != null) && !this.ui.multiboard.isShowing();
+			final boolean leaderboardShown = (this.shownLeaderboard != null)
+					&& (!this.ui.multiboard.isShowing() || underTeamResources);
 			if (this.leaderboardFrame.isVisible() != leaderboardShown) {
 				this.leaderboardFrame.setVisible(leaderboardShown);
 				this.leaderboardLabels.setVisible(leaderboardShown);
 				this.leaderboardValues.setVisible(leaderboardShown);
 			}
 		}
-		if ((this.leaderboardFrame != null) && (this.ui.leaderboardSlot != leaderboardRow)) {
+		if (this.leaderboardFrame == null) {
+			return;
+		}
+		final float leaderboardRight;
+		final float leaderboardTop;
+		if (underTeamResources) {
+			leaderboardRight = this.ui.multiboard.getAnchorRight();
+			leaderboardTop = (this.ui.multiboard.getBottom() - this.ui.rootFrame.getFramePointY(FramePoint.TOP))
+					- GameUI.convertY(this.ui.uiViewport, LEADERBOARD_UNDER_BOARD_GAP);
+		}
+		else {
+			leaderboardRight = screenRight;
+			leaderboardTop = GameUI.convertY(this.ui.uiViewport,
+					TIMER_DIALOG_TOP - (leaderboardRow * TIMER_DIALOG_STEP));
+		}
+		if ((this.ui.leaderboardSlot != leaderboardRow) || (leaderboardRight != this.leaderboardRight)
+				|| (leaderboardTop != this.leaderboardTop)) {
 			this.ui.leaderboardSlot = leaderboardRow;
-			this.leaderboardFrame.addAnchor(new AnchorDefinition(FramePoint.TOPRIGHT, screenRight,
-					GameUI.convertY(this.ui.uiViewport, TIMER_DIALOG_TOP - (leaderboardRow * TIMER_DIALOG_STEP))));
+			this.leaderboardRight = leaderboardRight;
+			this.leaderboardTop = leaderboardTop;
+			this.leaderboardFrame
+					.addAnchor(new AnchorDefinition(FramePoint.TOPRIGHT, leaderboardRight, leaderboardTop));
 			this.leaderboardFrame.positionBounds(this.ui.rootFrame, this.ui.uiViewport);
 			// The row texts belong to the root frame, so moving the leaderboard does not move them.
 			this.leaderboardLabels.positionBounds(this.ui.rootFrame, this.ui.uiViewport);

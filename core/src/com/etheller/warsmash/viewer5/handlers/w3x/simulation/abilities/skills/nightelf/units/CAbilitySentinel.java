@@ -108,9 +108,4 @@ public class CAbilitySentinel extends CAbilityTargetSpellBase {
 		owl.perch(game, this.effectId, (float) StrictMath.toDegrees(caster.angleTo(tree)), this.hoveringHeight);
 		this.owls.add(owl);
 	}
-
-	public int getOwlCount() {
-		this.owls.removeIf(CSentinelOwl::isGone);
-		return this.owls.size();
-	}
 }

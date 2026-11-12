@@ -137,6 +137,11 @@ public class WarsmashGdxMapScreen implements InputProcessor, Screen, TouchTarget
 		return this.disposed;
 	}
 
+	/** Leaves the game as the Quit Mission button does: the score screen's exit, back to the menu or the launcher. */
+	public void quitMission() {
+		this.baseMeleeUI.quitMission();
+	}
+
 	/*
 	 * (non-Javadoc)
 	 *
@@ -261,6 +266,10 @@ public class WarsmashGdxMapScreen implements InputProcessor, Screen, TouchTarget
 					private void leaveGame() {
 						final GameResult result = gameResult(
 								WarsmashGdxMapScreen.this.scriptFailed ? "error" : localPlayerResult());
+						if ("victory".equals(result.result)
+								&& !WarsmashGdxMapScreen.this.viewer.isReplayPlayback()) {
+							WarsmashGdxMapScreen.this.menuScreen.recordVictory(result.map);
+						}
 						// The menu picks up its own sounds and textures from here on.
 						WarsmashGdxMapScreen.this.endSession();
 						final WarsmashGdxMenuScreen.GameEndListener gameEndListener = WarsmashGdxMapScreen.this.menuScreen
@@ -285,7 +294,8 @@ public class WarsmashGdxMapScreen implements InputProcessor, Screen, TouchTarget
 						}
 						CGameCache.dropUnsaved();
 						if (exit.getNextReplay() != null) {
-							WarsmashGdxMapScreen.this.menuScreen.startReplay(exit.getNextReplay());
+							WarsmashGdxMapScreen.this.menuScreen.startReplay(exit.getNextReplay(),
+									exit.getNextReplayStartTick(), exit.isNextReplayForced());
 						}
 						else if (exit.hasNextLevel()) {
 							WarsmashGdxMapScreen.this.menuScreen.startMap(exit.getNextLevel(),
@@ -294,6 +304,7 @@ public class WarsmashGdxMapScreen implements InputProcessor, Screen, TouchTarget
 					}
 				});
 		baseMeleeUI.setResultShownOutside(this.menuScreen.showsResultOutside());
+		baseMeleeUI.setReforgedSkin(this.menuScreen.isReforgedLoadingScreens());
 		this.baseMeleeUI = baseMeleeUI;
 		final MeleeToggleUI toggleUI = new MeleeToggleUI(baseMeleeUI, Arrays.asList(baseMeleeUI));
 		this.meleeUI = toggleUI;
@@ -427,11 +438,7 @@ public class WarsmashGdxMapScreen implements InputProcessor, Screen, TouchTarget
 		this.meleeUI.update(deltaTime);
 		this.viewer.updateAndRender();
 
-		Gdx.gl30.glDisable(GL30.GL_SCISSOR_TEST);
-
-		Gdx.gl30.glDisable(GL30.GL_CULL_FACE);
-
-		this.viewer.webGL.useShaderProgram(null);
+		WarsmashGdxGame.leaveViewerState(this.viewer.webGL);
 
 		Gdx.gl30.glActiveTexture(GL30.GL_TEXTURE0);
 		GammaOverlay.render(this.batch);
@@ -440,11 +447,7 @@ public class WarsmashGdxMapScreen implements InputProcessor, Screen, TouchTarget
 	private void renderLibGDXContent(final boolean modal) {
 
 		Gdx.gl30.glClear(GL30.GL_DEPTH_BUFFER_BIT);
-		Gdx.gl30.glDisable(GL30.GL_SCISSOR_TEST);
-
-		Gdx.gl30.glDisable(GL30.GL_CULL_FACE);
-
-		this.viewer.webGL.useShaderProgram(null);
+		WarsmashGdxGame.leaveViewerState(this.viewer.webGL);
 
 		Gdx.gl30.glActiveTexture(GL30.GL_TEXTURE0);
 
@@ -462,8 +465,7 @@ public class WarsmashGdxMapScreen implements InputProcessor, Screen, TouchTarget
 		this.batch.end();
 		PerfStats.interfaceDraws(this.batch.totalRenderCalls - drawsBefore);
 
-		Gdx.gl30.glEnable(GL30.GL_SCISSOR_TEST);
-		Gdx.gl30.glBindVertexArray(WarsmashGdxGame.VAO);
+		WarsmashGdxGame.enterViewerState();
 	}
 
 	@Override
@@ -511,6 +513,7 @@ public class WarsmashGdxMapScreen implements InputProcessor, Screen, TouchTarget
 		final GameResult ended = new GameResult();
 		ended.result = result;
 		ended.map = this.viewer.getMapFileName();
+		ended.campaign = this.viewer.getCampaign();
 		ended.race = localPlayerRace();
 		try {
 			final CSimulation simulation = this.viewer.simulation;
@@ -581,8 +584,17 @@ public class WarsmashGdxMapScreen implements InputProcessor, Screen, TouchTarget
 				return true;
 			}
 		}
+		if ((keycode == Input.Keys.ESCAPE) && this.viewer.skipModelCinematic()) {
+			return true;
+		}
 		this.meleeUI.keyDown(keycode);
 		return true;
+	}
+
+	/** Back from a platform that delivers it as an action rather than a key: the same as the Back key. */
+	public void backPressed() {
+		keyDown(Input.Keys.BACK);
+		keyUp(Input.Keys.BACK);
 	}
 
 	@Override
@@ -697,7 +709,7 @@ public class WarsmashGdxMapScreen implements InputProcessor, Screen, TouchTarget
 
 	@Override
 	public boolean skipCinematic() {
-		return this.meleeUI.skipCinematic();
+		return this.viewer.skipModelCinematic() || this.meleeUI.skipCinematic();
 	}
 
 	@Override

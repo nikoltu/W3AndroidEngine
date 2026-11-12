@@ -201,6 +201,7 @@ public class DataFolderActivity extends Activity {
 
 	private final Handler handler = new Handler(Looper.getMainLooper());
 	private final Runnable importWatch = this::watchImport;
+	private UpdatePrompt updatePrompt;
 	private File dataFolder;
 	private File chosenFolder;
 	private boolean writeFailed;
@@ -237,6 +238,18 @@ public class DataFolderActivity extends Activity {
 			finish();
 			return;
 		}
+		// The window of a map asked for by name or opened from the launcher goes on without the release check.
+		final boolean direct = getIntent().getBooleanExtra(EXTRA_OPEN, false)
+				|| getIntent().hasExtra(AndroidLauncher.EXTRA_LOAD_FILE);
+		if (!direct && UpdatePrompt.pending(this)) {
+			this.updatePrompt = new UpdatePrompt(this, this::proceed);
+			this.updatePrompt.show();
+			return;
+		}
+		proceed();
+	}
+
+	private void proceed() {
 		final File appData = appDataFolder();
 		final String saved = getSharedPreferences(PREFERENCES, MODE_PRIVATE).getString(KEY_DATA_FOLDER, null);
 		this.dataFolder = saved != null ? new File(saved) : appData;
@@ -266,6 +279,14 @@ public class DataFolderActivity extends Activity {
 			else {
 				refresh();
 			}
+		}
+	}
+
+	@Override
+	protected void onDestroy() {
+		super.onDestroy();
+		if (this.updatePrompt != null) {
+			this.updatePrompt.detach();
 		}
 	}
 

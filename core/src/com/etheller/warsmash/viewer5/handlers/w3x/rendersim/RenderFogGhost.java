@@ -30,6 +30,9 @@ public final class RenderFogGhost {
 	private int shownTeamColor = -1;
 	private byte fogShade;
 	private boolean shaded;
+	private boolean masked;
+	private final String buildingShadowFile;
+	private boolean buildingShadowMasked;
 
 	public RenderFogGhost(final War3MapViewer map, final RenderUnit source) {
 		this.unit = source.getSimulationUnit();
@@ -39,6 +42,7 @@ public final class RenderFogGhost {
 		this.fakePlayerIndex = this.unit.getFakePlayerIndex();
 		this.colorIndex = source.playerIndex;
 		this.minimapIconHidden = this.unit.isHideMinimapIcon();
+		this.buildingShadowFile = source.getTypeData().getBuildingShadow();
 		final MdxComplexInstance seen = source.instance;
 		this.instance = (MdxComplexInstance) ((MdxModel) seen.model).addInstance();
 		this.instance.setTransformation(seen.localLocation, seen.localRotation, seen.localScale);
@@ -49,6 +53,7 @@ public final class RenderFogGhost {
 		this.instance.setSequence(seen.sequence);
 		this.instance.setFrame(seen.frame);
 		this.instance.setAnimationSpeed(0);
+		this.instance.emittersSuppressed = true;
 		this.instance.setScene(map.worldScene);
 		updateColors(map);
 	}
@@ -60,6 +65,8 @@ public final class RenderFogGhost {
 		this.buildingShadow = buildingShadow;
 		this.uberSplat = uberSplat;
 		this.renderUnit = null;
+		// Under the mask the building had already taken its shadow away.
+		this.buildingShadowMasked = (buildingShadow == null) && this.masked;
 	}
 
 	/**
@@ -74,8 +81,45 @@ public final class RenderFogGhost {
 			remove(map);
 			return true;
 		}
+		// Under the black mask (a fog modifier or a script can mask an explored place again) nothing is shown, not
+		// even what was seen there before, on the minimap neither.
+		final boolean nowMasked = CFogState.MASKED.equals(state);
+		if (nowMasked != this.masked) {
+			this.masked = nowMasked;
+			if (nowMasked) {
+				this.instance.hide();
+				if (this.uberSplat != null) {
+					this.uberSplat.hide();
+				}
+				if (this.buildingShadow != null) {
+					this.buildingShadow.remove();
+					this.buildingShadow = null;
+					this.buildingShadowMasked = true;
+				}
+			}
+			else {
+				this.instance.show();
+				if (this.uberSplat != null) {
+					this.uberSplat.show(map.terrain.centerOffset);
+				}
+				if (this.buildingShadowMasked) {
+					this.buildingShadowMasked = false;
+					if (this.buildingShadowFile != null) {
+						this.buildingShadow = map.terrain.addShadow(this.buildingShadowFile, this.x, this.y);
+					}
+				}
+			}
+			if (this.renderUnit != null) {
+				this.renderUnit.fogGhostMaskChanged(map);
+			}
+		}
 		updateColors(map);
 		return false;
+	}
+
+	/** Whether the ghost is drawn: not while its place is under the black mask. */
+	public boolean isShown() {
+		return !this.masked;
 	}
 
 	public void remove(final War3MapViewer map) {

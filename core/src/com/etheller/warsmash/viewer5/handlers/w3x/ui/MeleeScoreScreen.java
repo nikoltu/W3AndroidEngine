@@ -3,8 +3,10 @@ package com.etheller.warsmash.viewer5.handlers.w3x.ui;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.BooleanSupplier;
 
 import com.badlogic.gdx.graphics.Color;
@@ -116,7 +118,7 @@ public class MeleeScoreScreen {
 		}
 		this.frame = (AbstractUIFrame) root.createFrame("ScoreScreenFrame", root, 0, 0);
 		this.frame.setSetAllPoints(true);
-		final String raceArt = raceArt(this.simulation.getPlayer(this.localPlayerIndex));
+		final String raceArt = raceArt(this.simulation.getPlayer(this.localPlayerIndex), this.simulation.getGameData().getGameVersion());
 		final SpriteFrame raceArtFrame = (SpriteFrame) root.getFrameByName("ScoreScreenRaceArt", 0);
 		if (raceArt != null) {
 			root.setSpriteFrameModel(raceArtFrame, raceArt);
@@ -128,7 +130,7 @@ public class MeleeScoreScreen {
 		((SpriteFrame) root.getFrameByName("ScoreScreenPageTab", 0)).setZDepth(-1.0f);
 
 		final List<CPlayer> players = this.players;
-		for (int i = 0; i < (WarsmashConstants.MAX_PLAYERS - 4); i++) {
+		for (int i = 0; i < (this.simulation.getGameData().getMaxPlayers() - 4); i++) {
 			final CPlayer player = this.simulation.getPlayer(i);
 			if ((player.getSlotState() == CPlayerSlotState.PLAYING) || (player.getSlotState() == CPlayerSlotState.LEFT)) {
 				players.add(player);
@@ -207,7 +209,7 @@ public class MeleeScoreScreen {
 	}
 
 	// The frame has no art of its own: the local player's victory scene for its race, or the defeat scene.
-	private static String raceArt(final CPlayer player) {
+	private static String raceArt(final CPlayer player, final int gameVersion) {
 		final CPlayerGameResult result = player.getRemovedResult();
 		if (result == CPlayerGameResult.DEFEAT) {
 			return "UI\\Glues\\ScoreScreen\\ScoreScreen-Defeat\\ScoreScreen-Defeat.mdl";
@@ -232,7 +234,7 @@ public class MeleeScoreScreen {
 		default:
 			return null;
 		}
-		final String name = "ScoreScreen-" + race + "Victory" + (WarsmashConstants.GAME_VERSION == 0 ? "" : "Expansion");
+		final String name = "ScoreScreen-" + race + "Victory" + (gameVersion == 0 ? "" : "Expansion");
 		return "UI\\Glues\\ScoreScreen\\" + name + "\\" + name + ".mdl";
 	}
 
@@ -397,15 +399,29 @@ public class MeleeScoreScreen {
 		return Integer.parseInt(value);
 	}
 
-	// The game is over when the screen opens; a hero's level is the one it ended with, dead or alive.
+	// The game is over when the screen opens; a hero's level is the one it ended with, dead or alive. A player the
+	// script cached the heroes of (CachePlayerHeroData, before a defeat hands the units over) shows those.
 	private void collectHeroes() {
+		final Set<CUnit> cached = new HashSet<>();
 		for (final CPlayer player : this.players) {
-			this.heroes.put(player, new ArrayList<>());
+			final List<HeroEntry> list = new ArrayList<>();
+			this.heroes.put(player, list);
+			final List<CUnit> cachedHeroes = player.getCachedHeroes();
+			if (cachedHeroes != null) {
+				for (int i = 0; i < cachedHeroes.size(); i++) {
+					list.add(new HeroEntry(heroIcon(cachedHeroes.get(i)), player.getCachedHeroLevel(i)));
+					cached.add(cachedHeroes.get(i));
+				}
+			}
 		}
 		final List<CUnit> units = new ArrayList<>(this.simulation.getUnits());
 		units.sort(Comparator.comparingInt(CUnit::getHandleId));
 		for (final CUnit unit : units) {
-			if (!unit.isHero() || (unit.getHeroData() == null)) {
+			if (!unit.isHero() || (unit.getHeroData() == null) || cached.contains(unit)) {
+				continue;
+			}
+			final CPlayer owner = this.simulation.getPlayer(unit.getPlayerIndex());
+			if (owner.getCachedHeroes() != null) {
 				continue;
 			}
 			final List<HeroEntry> list = this.heroes.get(this.simulation.getPlayer(unit.getPlayerIndex()));

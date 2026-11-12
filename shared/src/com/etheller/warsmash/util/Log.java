@@ -2,6 +2,7 @@ package com.etheller.warsmash.util;
 
 import java.io.PrintStream;
 import java.util.Locale;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Leveled engine log. Errors and warnings go to the standard error stream, info and debug to the standard output
@@ -16,6 +17,7 @@ public final class Log {
 	}
 
 	private static volatile Level threshold = parseLevel(System.getProperty("warsmash.log"), Level.DEBUG);
+	private static final AtomicInteger loggedThrowables = new AtomicInteger();
 
 	private Log() {
 	}
@@ -30,6 +32,11 @@ public final class Log {
 		catch (final IllegalArgumentException e) {
 			return fallback;
 		}
+	}
+
+	/** How many exceptions were logged so far, whatever the threshold, for tests that expect none. */
+	public static int getLoggedThrowableCount() {
+		return loggedThrowables.get();
 	}
 
 	public static Level getLevel() {
@@ -100,6 +107,9 @@ public final class Log {
 	}
 
 	private static void write(final Level level, final Object message, final Throwable throwable) {
+		if (throwable != null) {
+			loggedThrowables.incrementAndGet();
+		}
 		if (!isEnabled(level)) {
 			return;
 		}

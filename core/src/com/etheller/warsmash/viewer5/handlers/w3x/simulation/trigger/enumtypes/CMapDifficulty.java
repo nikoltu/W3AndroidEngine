@@ -8,7 +8,7 @@ public enum CMapDifficulty implements CHandle {
 	HARD,
 	INSANE;
 
-	public static CMapDifficulty[] VALUES = values();
+	public static final CMapDifficulty[] VALUES = values();
 
 	@Override
 	public int getHandleId() {

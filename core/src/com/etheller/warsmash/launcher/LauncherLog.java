@@ -1,5 +1,7 @@
 package com.etheller.warsmash.launcher;
 
+import com.etheller.warsmash.util.Log;
+
 /** Where the launcher's warnings go: the platform's log, standard error until a platform sets one. */
 public final class LauncherLog {
 	public interface Sink {
@@ -11,9 +13,15 @@ public final class LauncherLog {
 	public static final int ERROR = 2;
 
 	private static volatile Sink sink = (level, message, error) -> {
-		System.err.println((level == ERROR ? "E " : level == WARN ? "W " : "I ") + message);
-		if (error != null) {
-			error.printStackTrace();
+		final String text = (level == ERROR ? "E " : level == WARN ? "W " : "I ") + message;
+		if (level == INFO) {
+			Log.info(text);
+		}
+		else if (level == WARN) {
+			Log.warn(text, error);
+		}
+		else {
+			Log.error(text, error);
 		}
 	};
 

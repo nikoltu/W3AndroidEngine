@@ -4,7 +4,6 @@ import java.util.List;
 import java.util.function.ToIntFunction;
 
 import com.etheller.warsmash.util.Log;
-import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.campaign.CGameCache;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayerCommandCodec;
@@ -20,12 +19,13 @@ public final class CReplayPlayer {
 	private final CReplay replay;
 	private final CSimulation game;
 	private final ToIntFunction<CSimulation> checksum;
-	private final CPlayerUnitOrderListener[] executors = new CPlayerUnitOrderListener[WarsmashConstants.MAX_PLAYERS];
+	private final CPlayerUnitOrderListener[] executors;
 	private int nextCommand;
 	private int nextChecksum;
 	private int nextCacheRead;
 	private int nextLocalValue;
 	private boolean localValuesRanOut;
+	private ChatListener chatListener;
 	private int checksumsCompared;
 	private int desyncTick = -1;
 	private int desyncs;
@@ -33,7 +33,17 @@ public final class CReplayPlayer {
 	public CReplayPlayer(final CReplay replay, final CSimulation game, final ToIntFunction<CSimulation> checksum) {
 		this.replay = replay;
 		this.game = game;
+		this.executors = new CPlayerUnitOrderListener[game.getGameData().getMaxPlayers()];
 		this.checksum = checksum;
+	}
+
+	/** Told of each chat line a recorded player sent, as the playback applies it. */
+	public interface ChatListener {
+		void chat(int senderIndex, int recipient, int recipientPlayerIndex, String message);
+	}
+
+	public void setChatListener(final ChatListener chatListener) {
+		this.chatListener = chatListener;
 	}
 
 	/** Whether the game may make its next step. */
@@ -128,8 +138,12 @@ public final class CReplayPlayer {
 			return null;
 		}
 		if (this.executors[playerIndex] == null) {
-			this.executors[playerIndex] = new CReplayCommands(
-					new CPlayerUnitOrderExecutor(this.game, playerIndex));
+			this.executors[playerIndex] = new CReplayCommands(new CPlayerUnitOrderExecutor(this.game, playerIndex),
+					(recipient, recipientPlayerIndex, message) -> {
+						if (this.chatListener != null) {
+							this.chatListener.chat(playerIndex, recipient, recipientPlayerIndex, message);
+						}
+					});
 		}
 		return this.executors[playerIndex];
 	}

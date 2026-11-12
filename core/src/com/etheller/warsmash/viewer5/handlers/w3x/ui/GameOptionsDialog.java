@@ -23,7 +23,6 @@ import com.etheller.warsmash.parsers.fdf.frames.ScrollBarFrame;
 import com.etheller.warsmash.parsers.fdf.frames.SimpleFrame;
 import com.etheller.warsmash.parsers.fdf.frames.StringFrame;
 import com.etheller.warsmash.parsers.fdf.frames.UIFrame;
-import com.etheller.warsmash.util.WarsmashConstants;
 
 /**
  * The Options dialog of the game menu and the main menu. Controls are filled from {@link GameOptions} when a panel
@@ -45,6 +44,8 @@ final class GameOptionsDialog {
 	private final SimpleFrame holder;
 	private final UIFrame backdrop;
 	private final Host host;
+	private final boolean catchCursor;
+	private final boolean enableMusic;
 	private final List<PopupMenuFrame> popups = new ArrayList<>();
 	private UIFrame panel;
 	private UIFrame optionsPanel;
@@ -75,12 +76,14 @@ final class GameOptionsDialog {
 	private CheckBoxFrame subtitles;
 
 	GameOptionsDialog(final GameUI rootFrame, final Viewport uiViewport, final SimpleFrame holder,
-			final UIFrame backdrop, final Host host) {
+			final UIFrame backdrop, final Host host, final boolean catchCursor, final boolean enableMusic) {
 		this.rootFrame = rootFrame;
 		this.uiViewport = uiViewport;
 		this.holder = holder;
 		this.backdrop = backdrop;
 		this.host = host;
+		this.catchCursor = catchCursor;
+		this.enableMusic = enableMusic;
 	}
 
 	SimpleFrame getHolder() {
@@ -203,8 +206,8 @@ final class GameOptionsDialog {
 		this.tooltips = (CheckBoxFrame) frame("TooltipsCheckBox");
 		this.healthBars = (CheckBoxFrame) frame("HealthBarsCheckBox");
 		// A finger scrolls by dragging, so this slider sets that speed; only the edge scrolling can be turned off.
-		enable(this.mouseScroll, WarsmashConstants.CATCH_CURSOR || TouchInputRouter.isActive());
-		enable(this.mouseScrollDisable, WarsmashConstants.CATCH_CURSOR);
+		enable(this.mouseScroll, this.catchCursor || TouchInputRouter.isActive());
+		enable(this.mouseScrollDisable, this.catchCursor);
 		enable(this.keyScroll,
 				!TouchInputRouter.isActive() || Gdx.input.isPeripheralAvailable(Input.Peripheral.HardwareKeyboard));
 		disableCheckBox("SubgroupCheckBox");
@@ -271,8 +274,8 @@ final class GameOptionsDialog {
 		this.unit = (CheckBoxFrame) frame("UnitCheckBox");
 		this.subtitles = (CheckBoxFrame) frame("SubtitlesCheckBox");
 		// warsmash.ini can leave out music altogether.
-		enable(this.music, WarsmashConstants.ENABLE_MUSIC);
-		enable(this.musicVolume, WarsmashConstants.ENABLE_MUSIC);
+		enable(this.music, this.enableMusic);
+		enable(this.musicVolume, this.enableMusic);
 		disableCheckBox("EnviroCheckBox");
 		disableCheckBox("PositionalCheckBox");
 		hide("ProviderLabel", "ProviderValue");

@@ -8,7 +8,7 @@ public enum CMapDensity implements CHandle {
 	MEDIUM,
 	HEAVY;
 
-	public static CMapDensity[] VALUES = values();
+	public static final CMapDensity[] VALUES = values();
 
 	@Override
 	public int getHandleId() {

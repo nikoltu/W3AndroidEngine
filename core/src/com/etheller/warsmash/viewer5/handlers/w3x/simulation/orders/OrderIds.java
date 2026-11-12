@@ -1,6 +1,5 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.orders;
 
-import com.etheller.warsmash.util.WarsmashConstants;
 
 /**
  * Thanks to the Wurst guys for this list of ids, taken from this link:
@@ -31,11 +30,36 @@ public class OrderIds {
 	 * then but this id doesn't seem to work any more.
 	 */
 	public static final int cancel = 851976;
+	// A nine-slot inventory moves the first and last slot ids out of the six-slot range so that
+	// slots 6-8 fit; the choice belongs to the running game's data, not to the class load. Kept
+	// out of the order id fields, which OrderIdUtils reads by reflection as the order name table.
+	private static final class NineSlots {
+		private static final int ITEMDRAG00 = 85200200;
+		private static final int ITEMDRAG05 = 85200700;
+		private static final int ITEMUSE00 = 85200800;
+		private static final int ITEMUSE05 = 85201300;
+	}
+
+	public static int itemDragFirst(final boolean nineSlots) {
+		return nineSlots ? NineSlots.ITEMDRAG00 : itemdrag00;
+	}
+
+	public static int itemDragLast(final boolean nineSlots) {
+		return nineSlots ? NineSlots.ITEMDRAG05 : itemdrag05;
+	}
+
+	public static int itemUseFirst(final boolean nineSlots) {
+		return nineSlots ? NineSlots.ITEMUSE00 : itemuse00;
+	}
+
+	public static int itemUseLast(final boolean nineSlots) {
+		return nineSlots ? NineSlots.ITEMUSE05 : itemuse05;
+	}
 	/**
 	 * An item targeted order that move the target item to a certain inventory slot
 	 * of the ordered hero.
 	 */
-	public static final int itemdrag00 = WarsmashConstants.USE_NINE_ITEM_INVENTORY ? 85200200 : 852002;
+	public static final int itemdrag00 = 852002;
 	/**
 	 * An item targeted order that move the target item to a certain inventory slot
 	 * of the ordered hero.
@@ -60,13 +84,13 @@ public class OrderIds {
 	 * An item targeted order that move the target item to a certain inventory slot
 	 * of the ordered hero.
 	 */
-	public static final int itemdrag05 = WarsmashConstants.USE_NINE_ITEM_INVENTORY ? 85200700 : 852007;
+	public static final int itemdrag05 = 852007;
 	/**
 	 * An order that will make the ordered hero use the item in a certain inventory
 	 * slot. If it's an order with no target or object or point targeted depends on
 	 * the type of item.
 	 */
-	public static final int itemuse00 = WarsmashConstants.USE_NINE_ITEM_INVENTORY ? 85200800 : 852008;
+	public static final int itemuse00 = 852008;
 	/**
 	 * An order that will make the ordered hero use the item in a certain inventory
 	 * slot. If it's an order with no target or object or point targeted depends on
@@ -96,7 +120,7 @@ public class OrderIds {
 	 * slot. If it's an order with no target or object or point targeted depends on
 	 * the type of item.
 	 */
-	public static final int itemuse05 = WarsmashConstants.USE_NINE_ITEM_INVENTORY ? 85201300 : 852013;
+	public static final int itemuse05 = 852013;
 	/**
 	 * Order for AIaa ability, which blizzard made for tome of attack, but never
 	 * used it. But it can actually change caster's base attack!

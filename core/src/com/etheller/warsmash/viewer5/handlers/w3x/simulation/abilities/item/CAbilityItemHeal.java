@@ -19,12 +19,17 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.CommandStringE
 
 public class CAbilityItemHeal extends AbstractGenericSingleIconNoSmartActiveAbility {
 	public static final War3ID CODE = War3ID.fromString("AIhe");
-	private final int lifeToRegain;
-	private final float cooldown;
+	private int lifeToRegain;
+	private float cooldown;
 
 	public CAbilityItemHeal(final int handleId, final War3ID code, final War3ID alias, final int lifeToRegain,
 			final float cooldown) {
 		super(handleId, code, alias);
+		this.lifeToRegain = lifeToRegain;
+		this.cooldown = cooldown;
+	}
+
+	public void setLevelValues(final int lifeToRegain, final float cooldown) {
 		this.lifeToRegain = lifeToRegain;
 		this.cooldown = cooldown;
 	}
@@ -69,6 +74,11 @@ public class CAbilityItemHeal extends AbstractGenericSingleIconNoSmartActiveAbil
 		}
 	}
 
+	public float getCooldown() {
+		final Float override = getCooldownOverride(getLevel());
+		return override != null ? Math.max(0f, override) : this.cooldown;
+	}
+
 	@Override
 	public int getBaseOrderId() {
 		return OrderIds.heal;
@@ -105,7 +115,7 @@ public class CAbilityItemHeal extends AbstractGenericSingleIconNoSmartActiveAbil
 		if ((target == null) && (orderId == getBaseOrderId())) {
 			caster.heal(game, this.lifeToRegain);
 			game.createTemporarySpellEffectOnUnit(caster, getAlias(), CEffectType.TARGET);
-			caster.beginCooldown(game, CODE, this.cooldown);
+			caster.beginCooldown(game, CODE, getCooldown());
 			return false;
 		}
 		return super.checkBeforeQueue(game, caster, playerIndex, orderId, autoOrder, target);

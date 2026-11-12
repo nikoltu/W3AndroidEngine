@@ -12,8 +12,8 @@ public class War3MapConfigPlayer extends CBasePlayer {
 		super(other);
 	}
 
-	public War3MapConfigPlayer(final int id) {
-		super(id);
+	public War3MapConfigPlayer(final int id, final int maxPlayers) {
+		super(id, maxPlayers);
 	}
 
 	@Override

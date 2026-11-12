@@ -14,6 +14,8 @@ public final class CGameExit {
 	private FileHandle savedGame;
 	private boolean savedGameLoadedByScript;
 	private FileHandle nextReplay;
+	private int nextReplayStartTick;
+	private boolean nextReplayForced;
 
 	public void setNextLevel(final String levelFile, final String computerSlots) {
 		this.nextLevel = levelFile;
@@ -53,12 +55,24 @@ public final class CGameExit {
 	}
 
 	/** A replay's Restart: the same replay is played again from its start. */
-	public void setNextReplay(final FileHandle replay) {
+	public void setNextReplay(final FileHandle replay, final int startTick, final boolean forced) {
 		this.nextReplay = replay;
+		this.nextReplayStartTick = startTick;
+		this.nextReplayForced = forced;
 	}
 
 	public FileHandle getNextReplay() {
 		return this.nextReplay;
+	}
+
+	/** The step the next replay plays on to before it is shown: a seek back restarts the replay there. */
+	public int getNextReplayStartTick() {
+		return this.nextReplayStartTick;
+	}
+
+	/** Whether the next replay is played although this engine would refuse it. */
+	public boolean isNextReplayForced() {
+		return this.nextReplayForced;
 	}
 
 	public void forceCampaignSelectScreen() {

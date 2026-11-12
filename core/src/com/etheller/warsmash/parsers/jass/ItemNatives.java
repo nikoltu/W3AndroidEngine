@@ -17,8 +17,8 @@ import com.etheller.interpreter.ast.value.visitor.ObjectJassValueVisitor;
 import com.etheller.interpreter.ast.value.visitor.RealJassValueVisitor;
 import com.etheller.warsmash.parsers.jass.Jass2.CommonEnvironment;
 import com.etheller.warsmash.parsers.jass.scope.CommonTriggerExecutionScope;
+import com.etheller.warsmash.parsers.jass.triggers.CItemPool;
 import com.etheller.warsmash.util.War3ID;
-import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.ability.ItemUI;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CItem;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CItemType;
@@ -62,6 +62,43 @@ final class ItemNatives extends CommonNatives {
 					return new HandleJassValue(itemType, this.simulation
 							.createItem(new War3ID(rawcode), (float) x, (float) y));
 				});
+		final HandleJassType itempoolType = type("itempool");
+		jassProgramVisitor.getJassNativeManager().createNative("CreateItemPool",
+				(arguments, globalScope, triggerScope) -> newHandle(itempoolType, new CItemPool()));
+		jassProgramVisitor.getJassNativeManager().createNative("DestroyItemPool",
+				(arguments, globalScope, triggerScope) -> {
+					release(nullable(arguments, 0, ObjectJassValueVisitor.getInstance()));
+					return null;
+				});
+		jassProgramVisitor.getJassNativeManager().createNative("ItemPoolAddItemType",
+				(arguments, globalScope, triggerScope) -> {
+					final CItemPool pool = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
+					if (pool != null) {
+						pool.add(new War3ID(intArg(arguments, 1)), realArg(arguments, 2));
+					}
+					return null;
+				});
+		jassProgramVisitor.getJassNativeManager().createNative("ItemPoolRemoveItemType",
+				(arguments, globalScope, triggerScope) -> {
+					final CItemPool pool = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
+					if (pool != null) {
+						pool.remove(new War3ID(intArg(arguments, 1)));
+					}
+					return null;
+				});
+		jassProgramVisitor.getJassNativeManager().createNative("PlaceRandomItem",
+				(arguments, globalScope, triggerScope) -> {
+					final CItemPool pool = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
+					if (pool == null) {
+						return itemType.getNullValue();
+					}
+					final War3ID picked = pool.pick(this.simulation.getSeededRandom());
+					if (picked == null) {
+						return itemType.getNullValue();
+					}
+					return new HandleJassValue(itemType,
+							this.simulation.createItem(picked, realArg(arguments, 1), realArg(arguments, 2)));
+				});
 		jassProgramVisitor.getJassNativeManager().createNative("BlzCreateItemWithSkin",
 				(arguments, globalScope, triggerScope) -> {
 					final int rawcode = arguments.get(0).visit(IntegerJassValueVisitor.getInstance());
@@ -92,7 +129,7 @@ final class ItemNatives extends CommonNatives {
 					}
 					final int itemPlayerIndex = whichItem.getPlayerIndex();
 					return new HandleJassValue(playerType, this.simulation.getPlayer(
-							itemPlayerIndex < 0 ? WarsmashConstants.MAX_PLAYERS - 1 : itemPlayerIndex));
+							itemPlayerIndex < 0 ? this.simulation.getGameData().getMaxPlayers() - 1 : itemPlayerIndex));
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("GetItemTypeId",
 				(arguments, globalScope, triggerScope) -> {
@@ -296,7 +333,7 @@ final class ItemNatives extends CommonNatives {
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("GetItemName",
 				(arguments, globalScope, triggerScope) -> {
-					final CItem whichItem = arguments.get(0).visit(ObjectJassValueVisitor.getInstance());
+					final CItem whichItem = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
 					if (whichItem == null) {
 						return JassType.STRING.getNullValue();
 					}

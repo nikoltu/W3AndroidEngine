@@ -19,6 +19,7 @@ import com.etheller.interpreter.ast.value.visitor.ObjectJassValueVisitor;
 import com.etheller.interpreter.ast.value.visitor.RealJassValueVisitor;
 import com.etheller.interpreter.ast.value.visitor.StringJassValueVisitor;
 import com.etheller.warsmash.parsers.jass.Jass2.CommonEnvironment;
+import com.etheller.warsmash.parsers.jass.triggers.CUnitPool;
 import com.etheller.warsmash.parsers.jass.triggers.EnumSetHandle;
 import com.etheller.warsmash.parsers.jass.triggers.LocationJass;
 import com.etheller.warsmash.util.Log;
@@ -26,6 +27,7 @@ import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.viewer5.handlers.w3x.AnimationTokens.PrimaryTag;
 import com.etheller.warsmash.viewer5.handlers.w3x.AnimationTokens.SecondaryTag;
 import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.RenderUnit;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CComputerWorkers;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CDestructable;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CItem;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
@@ -49,6 +51,8 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayer;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayerColor;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CRace;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.state.CUnitState;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.timers.CTimerDamagePoint;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.timers.CTimerFlyHeight;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.CDamageType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.CFogState;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.CRarityControl;
@@ -81,11 +85,10 @@ final class UnitNatives extends CommonNatives {
 
 		jassProgramVisitor.getJassNativeManager().createNative("GetUnitName",
 				(arguments, globalScope, triggerScope) -> {
-					final CUnit whichWidget = nullable(arguments, 0, ObjectJassValueVisitor.<CUnit>getInstance());
+					final CUnit whichWidget = inGame(nullable(arguments, 0, ObjectJassValueVisitor.<CUnit>getInstance()));
 					if (whichWidget == null) {
 						return JassType.STRING.getNullValue();
 					}
-					// Measured on 1.29: a removed or exploded unit keeps its name, though its type reads 0.
 					return new StringJassValue(whichWidget.getName());
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("SetUnitOwner",
@@ -96,6 +99,7 @@ final class UnitNatives extends CommonNatives {
 
 					if ((whichUnit != null) && (whichPlayer != null)) {
 						whichUnit.changeOwner(this.simulation, whichPlayer.getId(), changeColor);
+						CComputerWorkers.onScriptUnitGiven(this.simulation, whichUnit);
 					}
 					return null;
 				});
@@ -160,12 +164,18 @@ final class UnitNatives extends CommonNatives {
 		jassProgramVisitor.getJassNativeManager().createNative("WaygateActivate",
 				(arguments, globalScope, triggerScope) -> {
 					final CUnit whichUnit = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
+					final boolean activate = arguments.get(1).visit(BooleanJassValueVisitor.getInstance());
 					if (whichUnit != null) {
 						final CAbilityWayGate wayGateAbility = whichUnit
 								.getFirstAbilityOfType(CAbilityWayGate.class);
 						if (wayGateAbility != null) {
-							wayGateAbility.setGateEnabled(true);
-							whichUnit.getUnitAnimationListener().addSecondaryTag(SecondaryTag.ALTERNATE);
+							wayGateAbility.setGateEnabled(activate);
+							if (activate) {
+								whichUnit.getUnitAnimationListener().addSecondaryTag(SecondaryTag.ALTERNATE);
+							}
+							else {
+								whichUnit.getUnitAnimationListener().removeSecondaryTag(SecondaryTag.ALTERNATE);
+							}
 							whichUnit.getUnitAnimationListener().forceResetCurrentAnimation();
 						}
 					}
@@ -538,6 +548,41 @@ final class UnitNatives extends CommonNatives {
 					}
 					return BooleanJassValue.FALSE;
 				});
+		jassProgramVisitor.getJassNativeManager().createNative("UnitDamagePoint",
+				(arguments, globalScope, triggerScope) -> {
+					final CUnit whichUnit = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
+					final float delay = realArg(arguments, 1);
+					final float radius = realArg(arguments, 2);
+					final float x = realArg(arguments, 3);
+					final float y = realArg(arguments, 4);
+					final float amount = realArg(arguments, 5);
+					final boolean attack = arguments.get(6).visit(BooleanJassValueVisitor.getInstance());
+					final boolean ranged = arguments.get(7).visit(BooleanJassValueVisitor.getInstance());
+					final Object attackTypeValue = nullable(arguments, 8, ObjectJassValueVisitor.getInstance());
+					final Object damageTypeValue = nullable(arguments, 9, ObjectJassValueVisitor.getInstance());
+					final Object weaponTypeValue = nullable(arguments, 10, ObjectJassValueVisitor.getInstance());
+					if ((whichUnit == null) || (attackTypeValue instanceof UnknownEnumHandle)
+							|| (weaponTypeValue instanceof UnknownEnumHandle) || ((damageTypeValue instanceof UnknownEnumHandle)
+									&& (((UnknownEnumHandle) damageTypeValue).getHandleId() < 0))) {
+						return BooleanJassValue.FALSE;
+					}
+					final CAttackType attackType = attackTypeValue == null ? CAttackType.UNKNOWN
+							: (CAttackType) attackTypeValue;
+					final CDamageType damageType = damageTypeValue instanceof CDamageType
+							? (CDamageType) damageTypeValue : CDamageType.UNKNOWN;
+					final CWeaponSoundTypeJass weaponType = weaponTypeValue == null ? CWeaponSoundTypeJass.WHOKNOWS
+							: (CWeaponSoundTypeJass) weaponTypeValue;
+					final CTimerDamagePoint damagePoint = new CTimerDamagePoint(whichUnit, x, y, radius, amount,
+							attack, ranged, attackType, damageType, weaponType.name());
+					if (delay > 0) {
+						damagePoint.setTimeoutTime(delay);
+						damagePoint.start(this.simulation);
+					}
+					else {
+						damagePoint.damage(this.simulation);
+					}
+					return BooleanJassValue.TRUE;
+				});
 		jassProgramVisitor.getJassNativeManager().createNative("SetUnitState",
 				(arguments, globalScope, triggerScope) -> {
 					final CUnit whichUnit = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
@@ -565,14 +610,22 @@ final class UnitNatives extends CommonNatives {
 		jassProgramVisitor.getJassNativeManager().createNative("GetWidgetLife",
 				(arguments, globalScope, triggerScope) -> {
 					final CWidget whichWidget = inGame(nullable(arguments, 0, ObjectJassValueVisitor.getInstance()));
+					if (whichWidget instanceof CUnit) {
+						return new RealJassValue(((CUnit) whichWidget).getScriptLife());
+					}
 					return new RealJassValue(whichWidget == null ? 0 : whichWidget.getLife());
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("SetWidgetLife",
 				(arguments, globalScope, triggerScope) -> {
 					final CWidget whichWidget = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
 					if (whichWidget != null) {
-						whichWidget.setLife(this.simulation,
-								arguments.get(1).visit(RealJassValueVisitor.getInstance()).floatValue());
+						final float life = arguments.get(1).visit(RealJassValueVisitor.getInstance()).floatValue();
+						if ((whichWidget instanceof CUnit) && ((CUnit) whichWidget).isDead()) {
+							((CUnit) whichWidget).setDeadScriptLife(life);
+						}
+						else {
+							whichWidget.setLife(this.simulation, life);
+						}
 					}
 					return null;
 				});
@@ -657,7 +710,7 @@ final class UnitNatives extends CommonNatives {
 				(arguments, globalScope, triggerScope) -> {
 					final CUnit unit = nullable(arguments, 0, ObjectJassValueVisitor.<CUnit>getInstance());
 					if (unit == null) {
-						return BooleanJassValue.TRUE; // TODO this is a workaround, probably
+						return BooleanJassValue.FALSE;
 					}
 					if (unit.isRemovedFromGame()) {
 						return BooleanJassValue.FALSE;
@@ -796,10 +849,53 @@ final class UnitNatives extends CommonNatives {
 			final War3ID rawcodeId = new War3ID(rawcode);
 			final CUnit newUnit = this.simulation.createUnitSimple(rawcodeId, player.getId(),
 					(float) x, (float) y, (float) facing);
+			CComputerWorkers.onScriptUnitGiven(this.simulation, newUnit);
 			return new HandleJassValue(unitType, newUnit);
 		};
 		jassProgramVisitor.getJassNativeManager().createNative("CreateUnit", createUnitFxn);
 		unitType.setConstructorNative(new HandleJassTypeConstructor("CreateUnit"));
+		final HandleJassType unitpoolType = type("unitpool");
+		jassProgramVisitor.getJassNativeManager().createNative("CreateUnitPool",
+				(arguments, globalScope, triggerScope) -> newHandle(unitpoolType, new CUnitPool()));
+		jassProgramVisitor.getJassNativeManager().createNative("DestroyUnitPool",
+				(arguments, globalScope, triggerScope) -> {
+					release(nullable(arguments, 0, ObjectJassValueVisitor.getInstance()));
+					return null;
+				});
+		jassProgramVisitor.getJassNativeManager().createNative("UnitPoolAddUnitType",
+				(arguments, globalScope, triggerScope) -> {
+					final CUnitPool pool = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
+					if (pool != null) {
+						pool.add(new War3ID(intArg(arguments, 1)), realArg(arguments, 2));
+					}
+					return null;
+				});
+		jassProgramVisitor.getJassNativeManager().createNative("UnitPoolRemoveUnitType",
+				(arguments, globalScope, triggerScope) -> {
+					final CUnitPool pool = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
+					if (pool != null) {
+						pool.remove(new War3ID(intArg(arguments, 1)));
+					}
+					return null;
+				});
+		jassProgramVisitor.getJassNativeManager().createNative("PlaceRandomUnit",
+				(arguments, globalScope, triggerScope) -> {
+					final CUnitPool pool = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
+					final CPlayer player = nullable(arguments, 1, ObjectJassValueVisitor.getInstance());
+					final float x = realArg(arguments, 2);
+					final float y = realArg(arguments, 3);
+					final float facing = realArg(arguments, 4);
+					if ((pool == null) || (player == null)) {
+						return unitType.getNullValue();
+					}
+					final War3ID picked = pool.pick(this.simulation.getSeededRandom());
+					if (picked == null) {
+						return unitType.getNullValue();
+					}
+					final CUnit newUnit = this.simulation.createUnitSimple(picked, player.getId(), x, y, facing);
+					CComputerWorkers.onScriptUnitGiven(this.simulation, newUnit);
+					return new HandleJassValue(unitType, newUnit);
+				});
 		jassProgramVisitor.getJassNativeManager().createNative("CreateUnitByName",
 				(arguments, globalScope, triggerScope) -> {
 					final CPlayer player = arguments.get(0).visit(ObjectJassValueVisitor.getInstance());
@@ -815,6 +911,7 @@ final class UnitNatives extends CommonNatives {
 					final CUnit newUnit = this.simulation.createUnitSimple(
 							unitTypeByJassLegacyName.getTypeId(), player.getId(), (float) x, (float) y,
 							(float) facing);
+					CComputerWorkers.onScriptUnitGiven(this.simulation, newUnit);
 					return new HandleJassValue(unitType, newUnit);
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("CreateUnitAtLoc",
@@ -832,6 +929,7 @@ final class UnitNatives extends CommonNatives {
 					final float y = whichLocation == null ? 0 : (float) whichLocation.y;
 					final CUnit newUnit = this.simulation.createUnitSimple(rawcodeId,
 							player.getId(), x, y, facing);
+					CComputerWorkers.onScriptUnitGiven(this.simulation, newUnit);
 					return new HandleJassValue(unitType, newUnit);
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("CreateUnitAtLocByName",
@@ -850,6 +948,7 @@ final class UnitNatives extends CommonNatives {
 					final float y = whichLocation == null ? 0 : (float) whichLocation.y;
 					final CUnit newUnit = this.simulation
 							.createUnitSimple(unitTypeByJassLegacyName.getTypeId(), player.getId(), x, y, facing);
+					CComputerWorkers.onScriptUnitGiven(this.simulation, newUnit);
 					return new HandleJassValue(unitType, newUnit);
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("CreateCorpse",
@@ -887,6 +986,7 @@ final class UnitNatives extends CommonNatives {
 						// ")");
 						rawcode = skinId;
 					}
+					CComputerWorkers.onScriptUnitGiven(this.simulation, newUnit);
 					return new HandleJassValue(unitType, newUnit);
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("KillUnit",
@@ -943,8 +1043,10 @@ final class UnitNatives extends CommonNatives {
 					final CUnit whichUnit = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
 					final float positionX = arguments.get(1).visit(RealJassValueVisitor.getInstance()).floatValue();
 					if (whichUnit != null) {
+						whichUnit.setRegionEventsDeferred(true);
 						whichUnit.setX(positionX, this.simulation.getWorldCollision(),
 								this.simulation.getRegionManager());
+						whichUnit.setRegionEventsDeferred(false);
 					}
 					return null;
 				});
@@ -953,8 +1055,10 @@ final class UnitNatives extends CommonNatives {
 					final CUnit whichUnit = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
 					final float positionX = arguments.get(1).visit(RealJassValueVisitor.getInstance()).floatValue();
 					if (whichUnit != null) {
+						whichUnit.setRegionEventsDeferred(true);
 						whichUnit.setY(positionX, this.simulation.getWorldCollision(),
 								this.simulation.getRegionManager());
+						whichUnit.setRegionEventsDeferred(false);
 					}
 					return null;
 				});
@@ -964,8 +1068,10 @@ final class UnitNatives extends CommonNatives {
 					final double positionX = arguments.get(1).visit(RealJassValueVisitor.getInstance());
 					final double positionY = arguments.get(2).visit(RealJassValueVisitor.getInstance());
 					if (whichUnit != null) {
+						whichUnit.setRegionEventsDeferred(true);
 						whichUnit.setPointAndCheckUnstuck((float) positionX, (float) positionY,
 								this.simulation);
+						whichUnit.setRegionEventsDeferred(false);
 					}
 					return null;
 				});
@@ -975,8 +1081,10 @@ final class UnitNatives extends CommonNatives {
 					final AbilityPointTarget positionLoc = arguments.get(1)
 							.visit(ObjectJassValueVisitor.getInstance());
 					if (whichUnit != null) {
+						whichUnit.setRegionEventsDeferred(true);
 						whichUnit.setPointAndCheckUnstuck(positionLoc.x, positionLoc.y,
 								this.simulation);
+						whichUnit.setRegionEventsDeferred(false);
 					}
 					return null;
 				});
@@ -987,18 +1095,17 @@ final class UnitNatives extends CommonNatives {
 					if (whichUnit != null) {
 						// Script timers run before the units in a step: the drawn turn ticks that already passed must
 						// still follow the old heading.
-						whichUnit.getDrawnFacing(simulation);
-						whichUnit.setFacing((float) facing);
+						this.simulation.setUnitFacingTimed(whichUnit, (float) facing, 0);
 					}
 					return null;
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("SetUnitFacingTimed",
 				(arguments, globalScope, triggerScope) -> {
-					// TODO this needs to apply the time delay
 					final CUnit whichUnit = arguments.get(0).visit(ObjectJassValueVisitor.getInstance());
 					final double facing = arguments.get(1).visit(RealJassValueVisitor.getInstance());
+					final double duration = arguments.get(2).visit(RealJassValueVisitor.getInstance());
 					if (whichUnit != null) {
-						whichUnit.setFacing((float) facing);
+						this.simulation.setUnitFacingTimed(whichUnit, (float) facing, (float) duration);
 					}
 					return null;
 				});
@@ -1015,10 +1122,9 @@ final class UnitNatives extends CommonNatives {
 				(arguments, globalScope, triggerScope) -> {
 					final CUnit whichUnit = arguments.get(0).visit(ObjectJassValueVisitor.getInstance());
 					final float newHeight = arguments.get(1).visit(RealJassValueVisitor.getInstance()).floatValue();
-					// TODO rate
-					final double rate = arguments.get(2).visit(RealJassValueVisitor.getInstance());
+					final float rate = arguments.get(2).visit(RealJassValueVisitor.getInstance()).floatValue();
 					if (whichUnit != null) {
-						whichUnit.setFlyHeight(newHeight);
+						this.simulation.setUnitFlyHeight(whichUnit, newHeight, rate);
 					}
 					return null;
 				});
@@ -1079,7 +1185,13 @@ final class UnitNatives extends CommonNatives {
 					final CUnit unit = inGame(nullable(arguments, 0, ObjectJassValueVisitor.<CUnit>getInstance()));
 					if (unit != null) {
 						final CBuffEnsnare snare = CBuffEnsnare.getFlyingSnare(unit);
-						return RealJassValue.of(snare != null ? snare.getScriptFlyHeight() : unit.getFlyHeight());
+						if (snare != null) {
+							return RealJassValue.of(snare.getScriptFlyHeight());
+						}
+						// Measured on 1.29: a script reads the target of SetUnitFlyHeight at once, while the unit
+						// still rises or sinks to it at the rate.
+						final CTimerFlyHeight change = this.simulation.getFlyHeightChange(unit);
+						return RealJassValue.of(change != null ? change.getTargetHeight() : unit.getFlyHeight());
 					}
 					return RealJassValue.ZERO;
 				});
@@ -1123,10 +1235,11 @@ final class UnitNatives extends CommonNatives {
 		jassProgramVisitor.getJassNativeManager().createNative("GetUnitMoveSpeed",
 				(arguments, globalScope, triggerScope) -> {
 					final CUnit whichUnit = inGame(nullable(arguments, 0, ObjectJassValueVisitor.<CUnit>getInstance()));
-					// A unit that cannot move, such as a building, reads 0 as in the original game.
-					return RealJassValue.of((whichUnit != null) && (whichUnit.getMoveBehavior() != null)
-							? whichUnit.getSpeed()
-							: 0.0);
+					// A unit type without a move speed, such as a Farm, reads 0; a rooted Ancient keeps its own speed.
+					return RealJassValue.of((whichUnit != null)
+							&& ((whichUnit.getMoveBehavior() != null) || (whichUnit.getUnitType().getSpeed() > 0))
+									? whichUnit.getSpeed()
+									: 0.0);
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("IsUnitInRange",
 				(arguments, globalScope, triggerScope) -> {
@@ -1367,6 +1480,11 @@ final class UnitNatives extends CommonNatives {
 							else if ((behavior != null) && (orderId == OrderIds.smart)
 									&& (behavior.getHighlightOrderId() == OrderIds.board)) {
 								orderId = OrderIds.board;
+							}
+							// Measured on 1.29: a harvesting worker carrying its load back reads resumeharvesting.
+							else if ((behavior != null) && (orderId == OrderIds.harvest)
+									&& (behavior.getHighlightOrderId() == OrderIds.returnresources)) {
+								orderId = OrderIds.resumeharvesting;
 							}
 						}
 					}

@@ -41,7 +41,7 @@ public enum CPlayerState implements CHandle {
 
 	NO_CREEP_SLEEP;
 
-	public static CPlayerState[] VALUES = values();
+	public static final CPlayerState[] VALUES = values();
 
 	@Override
 	public int getHandleId() {

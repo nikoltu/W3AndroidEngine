@@ -182,7 +182,7 @@ public final class DataFolderCheck {
 		lines.add("Type00=" + (kind == Kind.CASC ? "CASC" : "Folder"));
 		lines.add("Path00=\"" + dataFolder.getAbsolutePath() + "\"");
 		if (kind == Kind.CASC) {
-			lines.add("Prefixes00=" + CLASSIC_PREFIXES);
+			lines.add("Prefixes00=" + cascPrefixes(dataFolder));
 			// 1.31 stores its file table in the older TVFS layout.
 			if (cascVersion(dataFolder).startsWith("version 1.31")) {
 				lines.add("OldFormat00=1");
@@ -291,10 +291,7 @@ public final class DataFolderCheck {
 		if (locale == null) {
 			locale = "";
 			if (kind == Kind.CASC) {
-				final Matcher matcher = LOCALE_TAG.matcher(buildInfoField(folder, "Tags!"));
-				if (matcher.find()) {
-					locale = matcher.group(1);
-				}
+				locale = cascLocales(folder).isEmpty() ? "" : cascLocale(folder);
 			}
 			else {
 				locale = markerField(new File(folder, PACKER_MARKER), "locale");
@@ -311,6 +308,47 @@ public final class DataFolderCheck {
 			DESCRIPTIONS.put(key, locale);
 		}
 		return locale;
+	}
+
+	/** The text languages an installed game holds, as its build tags list them ("enUS", "ruRU"), in that order. */
+	public static synchronized List<String> cascLocales(final File folder) {
+		final List<String> locales = new ArrayList<>();
+		final Matcher matcher = LOCALE_TAG.matcher(buildInfoField(folder, "Tags!"));
+		while (matcher.find()) {
+			if (!locales.contains(matcher.group(1))) {
+				locales.add(matcher.group(1));
+			}
+		}
+		return locales;
+	}
+
+	/**
+	 * The language the engine reads an installed game in: the only one it holds, else the one of this computer's
+	 * language, else the first the install lists; English when the tags name none.
+	 */
+	public static String cascLocale(final File folder) {
+		final List<String> locales = cascLocales(folder);
+		if (locales.isEmpty()) {
+			return "enUS";
+		}
+		final Locale system = Locale.getDefault();
+		for (final String locale : locales) {
+			if (locale.equals(system.getLanguage() + system.getCountry())) {
+				return locale;
+			}
+		}
+		for (final String locale : locales) {
+			if (locale.startsWith(system.getLanguage())) {
+				return locale;
+			}
+		}
+		return locales.get(0);
+	}
+
+	/** The data source prefixes of an installed game: the Classic files with the text and speech of its language. */
+	public static String cascPrefixes(final File folder) {
+		return "war3.w3mod,war3.w3mod\\_deprecated.w3mod,war3.w3mod\\_locales\\"
+				+ cascLocale(folder).toLowerCase(Locale.ROOT) + ".w3mod";
 	}
 
 	/** The LANGID='enUS' line of the game's config.txt; its comment lines list every language. */

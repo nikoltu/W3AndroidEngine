@@ -50,7 +50,9 @@ import com.etheller.warsmash.viewer5.Scene;
 import com.etheller.warsmash.viewer5.gl.Extensions;
 import com.etheller.warsmash.viewer5.handlers.mdx.MdxViewer;
 import com.etheller.warsmash.viewer5.handlers.w3x.UnitSound;
+import com.etheller.warsmash.viewer5.handlers.w3x.replay.GameReplays;
 import com.etheller.warsmash.viewer5.handlers.w3x.save.SavedGame;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.replay.CReplay;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.campaign.CSaveStorage;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.config.War3MapConfig;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.sound.CSoundMixer;
@@ -70,7 +72,7 @@ import net.warsmash.uberserver.LobbyPlayerType;
  */
 public class MenuUI {
 	private static final Vector2 screenCoordsVector = new Vector2();
-	private static boolean ENABLE_NOT_YET_IMPLEMENTED_BUTTONS = false;
+	private static final boolean ENABLE_NOT_YET_IMPLEMENTED_BUTTONS = false;
 	public static final int MAIN_PHASES = 4;
 
 	final DataSource dataSource;
@@ -370,6 +372,7 @@ public class MenuUI {
 		this.loadSavedButton = (GlueTextButtonFrame) this.rootFrame.getFrameByName("LoadSavedButton", 0);
 		this.loadSavedButton.setOnClick(this::showSavedGames);
 		this.viewReplayButton = (GlueTextButtonFrame) this.rootFrame.getFrameByName("ViewReplayButton", 0);
+		this.viewReplayButton.setOnClick(this::showReplays);
 		this.customCampaignButton = (GlueTextButtonFrame) this.rootFrame.getFrameByName("CustomCampaignButton", 0);
 		this.skirmishButton = (GlueTextButtonFrame) this.rootFrame.getFrameByName("SkirmishButton", 0);
 
@@ -543,9 +546,18 @@ public class MenuUI {
 		return this.campaigns.startCampaignMission(campaignNumber, missionIndex, difficulty, reforgedMaps);
 	}
 
+	public boolean isLoadingScreenShown() {
+		return this.loadingScreen.isShown();
+	}
+
 	/** Whether a map is one of the missions of the campaign {@link #startCampaignMission} started. */
 	public boolean isStartedCampaignMission(final String mapFile) {
 		return this.campaigns.isStartedCampaignMission(mapFile);
+	}
+
+	/** Records a won map that is a campaign's mission as won. */
+	public void recordVictory(final String mapFile) {
+		this.campaigns.recordVictory(mapFile);
 	}
 
 	/**
@@ -589,7 +601,16 @@ public class MenuUI {
 	 * engine version or map is refused with the reason.
 	 */
 	public boolean startReplay(final FileHandle file) {
-		return this.mapStart.startReplay(file);
+		return this.mapStart.startReplay(file, 0, false);
+	}
+
+	/**
+	 * @param startTick the step the replay plays on to without drawing before it is shown
+	 * @param forced    play it although this engine would refuse it (another version, map or game data); it may
+	 *                  desync
+	 */
+	public boolean startReplay(final FileHandle file, final int startTick, final boolean forced) {
+		return this.mapStart.startReplay(file, startTick, forced);
 	}
 
 	/** The profile a launcher chose for the game it starts: saves and campaign progress go to its folder. */
@@ -601,7 +622,7 @@ public class MenuUI {
 		this.profileButton.setEnabled(b);
 		this.campaignButton.setEnabled(b);
 		this.loadSavedButton.setEnabled(b);
-		this.viewReplayButton.setEnabled(b && ENABLE_NOT_YET_IMPLEMENTED_BUTTONS);
+		this.viewReplayButton.setEnabled(b);
 		if (this.customCampaignButton != null) {
 			this.customCampaignButton.setEnabled(b && ENABLE_NOT_YET_IMPLEMENTED_BUTTONS);
 		}
@@ -914,7 +935,7 @@ public class MenuUI {
 								}
 							}
 						}
-					});
+					}, WarsmashConstants.CATCH_CURSOR, WarsmashConstants.ENABLE_MUSIC);
 		}
 		setMainMenuVisible(false);
 		this.optionsDialog.getHolder().setVisible(true);
@@ -922,6 +943,15 @@ public class MenuUI {
 	}
 
 	private void showSavedGames() {
+		openSavedGameDialog(false);
+	}
+
+	/** View Replay: the replays in the saved games' dialog. */
+	private void showReplays() {
+		openSavedGameDialog(true);
+	}
+
+	private void openSavedGameDialog(final boolean replays) {
 		if (this.savedGameDialog == null) {
 			final SimpleFrame holder = (SimpleFrame) this.rootFrame.createSimpleFrame("SmashEscMenu", this.rootFrame, 0);
 			holder.addAnchor(new AnchorDefinition(FramePoint.TOP, 0, GameUI.convertY(this.uiViewport, -0.05f)));
@@ -955,12 +985,72 @@ public class MenuUI {
 							holder.setVisible(false);
 							MenuUI.this.singlePlayerMenu.setVisible(true);
 						}
+
+						@Override
+						public List<String> replayNames() {
+							return MenuUI.this.replayNames();
+						}
+
+						@Override
+						public String replayProblem(final String name) {
+							return MenuUI.this.replayProblem(name);
+						}
+
+						@Override
+						public boolean replayTryable(final String name) {
+							return !MenuUI.REPLAY_DAMAGED.equals(MenuUI.this.replayProblem(name));
+						}
+
+						@Override
+						public void playReplay(final String name, final boolean forced) {
+							holder.setVisible(false);
+							if (!MenuUI.this.startReplay(GameReplays.folder().child(name + GameReplays.EXTENSION), 0,
+									forced)) {
+								MenuUI.this.showMapLoadError();
+							}
+						}
 					});
 			this.savedGameHolder = holder;
 		}
 		this.singlePlayerMenu.setVisible(false);
 		this.savedGameHolder.setVisible(true);
-		this.savedGameDialog.showLoad();
+		if (replays) {
+			this.savedGameDialog.showReplays();
+		}
+		else {
+			this.savedGameDialog.showLoad();
+		}
+	}
+
+	private static final String REPLAY_DAMAGED = "damaged";
+
+	/** The replays of the Replay folder: the last game's first, then the newest first. */
+	private List<String> replayNames() {
+		final List<FileHandle> files = new ArrayList<>();
+		for (final FileHandle file : GameReplays.folder().list(GameReplays.EXTENSION)) {
+			files.add(file);
+		}
+		files.sort((a, b) -> {
+			final boolean lastA = a.nameWithoutExtension().equalsIgnoreCase(GameReplays.LAST_REPLAY);
+			final boolean lastB = b.nameWithoutExtension().equalsIgnoreCase(GameReplays.LAST_REPLAY);
+			return lastA != lastB ? (lastA ? -1 : 1) : Long.compare(b.lastModified(), a.lastModified());
+		});
+		final List<String> names = new ArrayList<>();
+		for (final FileHandle file : files) {
+			names.add(file.nameWithoutExtension());
+		}
+		return names;
+	}
+
+	/** Why a replay is not played as it is: REPLAY_DAMAGED for a file that cannot be read, else the engine's reason. */
+	private String replayProblem(final String name) {
+		try {
+			final CReplay replay = GameReplays.load(GameReplays.folder().child(name + GameReplays.EXTENSION));
+			return GameReplays.unplayableReason(replay, this.gameData != null ? this.gameData : this.dataSource);
+		}
+		catch (final IOException | RuntimeException e) {
+			return REPLAY_DAMAGED;
+		}
 	}
 
 	/**

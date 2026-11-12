@@ -9,7 +9,6 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbility;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.generic.CLevelingAbility;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.item.CAbilityItemAttackBonus;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.CAbilityType;
-import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.CAbilityTypeLevelData;
 
 public class CAbilityTypeItemAttackBonus extends CAbilityType<CAbilityTypeItemAttackBonusLevelData> {
 
@@ -26,13 +25,10 @@ public class CAbilityTypeItemAttackBonus extends CAbilityType<CAbilityTypeItemAt
 
 	@Override
 	public void setLevel(final CSimulation game, final CUnit unit, final CLevelingAbility existingAbility, final int level) {
-
-		final CAbilityTypeLevelData levelData = getLevelData(level - 1);
-		final CLevelingAbility heroAbility = (existingAbility);
-
-		// TODO ignores fields
-
-		heroAbility.setLevel(game, unit, level);
-
+		final CAbilityTypeItemAttackBonusLevelData levelData = getLevelData(level - 1);
+		if (existingAbility instanceof CAbilityItemAttackBonus) {
+			((CAbilityItemAttackBonus) existingAbility).setDamageBonus(game, unit, levelData.getDamageBonus());
+		}
+		existingAbility.setLevel(game, unit, level);
 	}
 }

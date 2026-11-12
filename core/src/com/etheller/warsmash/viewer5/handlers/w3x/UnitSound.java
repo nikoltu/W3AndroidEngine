@@ -36,6 +36,7 @@ public final class UnitSound {
 	private final float distanceCutoff;
 	private final boolean looping;
 	private int channel;
+	private boolean wants3D = true;
 
 	private Sound lastPlayedSound;
 	private int lastPlayedIndex;
@@ -46,8 +47,8 @@ public final class UnitSound {
 		if (row == null) {
 			return SILENT;
 		}
-		final String fileNames = row.getField("FileNames");
-		String directoryBase = row.getField("DirectoryBase");
+		final String fileNames = row.hasFieldValue("FileNames") ? row.getField("FileNames") : "";
+		String directoryBase = row.hasFieldValue("DirectoryBase") ? row.getField("DirectoryBase") : "";
 		if ((directoryBase.length() > 1) && !directoryBase.endsWith("\\")) {
 			directoryBase += "\\";
 		}
@@ -59,17 +60,25 @@ public final class UnitSound {
 		}
 		final float minDistance = row.getFieldFloatValue("MinDistance");
 		final float maxDistance = row.getFieldFloatValue("MaxDistance");
-		final float distanceCutoff = row.getFieldFloatValue("DistanceCutoff");
+		// Reforged leaves the cutoff of unit responses blank, which means none beyond the maximum distance.
+		final float distanceCutoff = row.hasFieldValue("DistanceCutoff") ? row.getFieldFloatValue("DistanceCutoff")
+				: maxDistance;
 		final String[] flags = row.getField("Flags").split(",");
 		boolean looping = false;
+		boolean wants3D = false;
 		for (final String flag : flags) {
-			if ("LOOPING".equals(flag)) {
+			final String trimmedFlag = flag.trim();
+			if ("LOOPING".equals(trimmedFlag)) {
 				looping = true;
+			}
+			else if ("WANT3D".equals(trimmedFlag)) {
+				wants3D = true;
 			}
 		}
 		final UnitSound sound = new UnitSound(dataSource, volume, pitch, pitchVariance, minDistance, maxDistance,
 				distanceCutoff, looping);
 		sound.channel = row.getFieldValue("Channel");
+		sound.wants3D = wants3D;
 		for (final String fileName : fileNames.split(",")) {
 			final String resolvedPath = resolveSoundPath(dataSource, directoryBase + fileName);
 			if (dataSource.has(resolvedPath)) {
@@ -197,6 +206,22 @@ public final class UnitSound {
 
 	public long play(final AudioContext audioContext, final float x, final float y, final float z, final int index,
 			final Boolean loopOverride) {
+		return play(audioContext, x, y, z, index, loopOverride, null);
+	}
+
+	/**
+	 * Plays a random file of the sound; a loop follows the live position given, such as a unit's.
+	 */
+	public long playFollowing(final AudioContext audioContext, final float x, final float y, final float z,
+			final Boolean loopOverride, final float[] follow) {
+		return play(audioContext, x, y, z, (int) (Math.random() * this.sounds.size()), loopOverride, follow);
+	}
+
+	/**
+	 * @param follow a live position that a loop moves with (a unit's), or null for the given place
+	 */
+	public long play(final AudioContext audioContext, final float x, final float y, final float z, final int index,
+			final Boolean loopOverride, final float[] follow) {
 		if (this.sounds.isEmpty()) {
 			return -1;
 		}
@@ -210,6 +235,8 @@ public final class UnitSound {
 		// Panner settings
 		panner.setPosition(x, y, z);
 		panner.setDistances(this.distanceCutoff, this.minDistance);
+		panner.setWants3D(this.wants3D);
+		panner.followLocation = follow;
 		panner.connect(audioContext.destination);
 
 		// Source.
@@ -220,21 +247,18 @@ public final class UnitSound {
 		source.connect(panner);
 
 		// Make a sound.
-		long soundId = -1;
-		final float mixedVolume = this.volume * CSoundMixer.audible().channelScale(this.channel);
-		if (loopOverride == null) {
-			soundId = source.start(0, mixedVolume,
-					(this.pitch + ((float) Math.random() * this.pitchVariance * 2)) - this.pitchVariance, this.looping);
+		final boolean loop = loopOverride == null ? this.looping : loopOverride;
+		final float pitchNow = (this.pitch + ((float) Math.random() * this.pitchVariance * 2)) - this.pitchVariance;
+		final long soundId;
+		if (loop) {
+			// The original plays nothing of a place the player does not see, and a loop follows the player's sight.
+			soundId = source.startLoop(this.volume, this.channel, pitchNow, true);
 		}
 		else {
-			soundId = source.start(0, mixedVolume,
-					(this.pitch + ((float) Math.random() * this.pitchVariance * 2)) - this.pitchVariance, loopOverride);
+			soundId = source.start(0, this.volume * CSoundMixer.audible().channelScale(this.channel), pitchNow, false);
 		}
 		this.lastPlayedSound = source.buffer;
 		this.lastPlayedIndex = index;
-		if ((soundId != -1) && (loopOverride == null ? this.looping : loopOverride)) {
-			CSoundMixer.audible().loopStarted(source.buffer, soundId, this.volume, this.channel);
-		}
 		return soundId;
 	}
 
@@ -260,6 +284,10 @@ public final class UnitSound {
 			this.durations.set(index, duration);
 		}
 		return duration;
+	}
+
+	public boolean isLooping() {
+		return this.looping;
 	}
 
 	public int getSoundCount() {

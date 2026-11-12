@@ -1,5 +1,6 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.neutral.creeps;
 
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.CAreaTargetVisibility;
 import com.etheller.warsmash.units.GameObject;
 import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
@@ -87,7 +88,7 @@ public class CAbilityPermanentImmolation extends CAbilityPassiveSpellBase {
 		final float area = getAreaOfEffect();
 		game.getWorldCollision().enumUnitsInRange(source.getX(), source.getY(), area, (enumUnit) -> {
 			if ((enumUnit == source) || !source.canReach(enumUnit, area)
-					|| !enumUnit.canBeTargetedBy(game, source, false, getTargetsAllowed(),
+					|| !enumUnit.canBeAreaTargetedBy(game, source, CAreaTargetVisibility.ANY, getTargetsAllowed(),
 							BooleanAbilityTargetCheckReceiver.<CWidget>getInstance().reset())) {
 				return false;
 			}

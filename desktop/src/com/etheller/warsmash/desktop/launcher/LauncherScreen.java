@@ -25,6 +25,7 @@ import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.utils.Align;
+import com.etheller.warsmash.BuildInfo;
 import com.etheller.warsmash.GlueBackdropRenderer;
 import com.etheller.warsmash.WarsmashGdxMapScreen;
 import com.etheller.warsmash.WarsmashGdxMenuScreen;
@@ -53,6 +54,7 @@ import com.etheller.warsmash.launcher.LauncherStrings;
 import com.etheller.warsmash.launcher.Profiles;
 import com.etheller.warsmash.launcher.SharedDataSource;
 import com.etheller.warsmash.launcher.SkinArt;
+import com.etheller.warsmash.launcher.UpdateCheck;
 import com.etheller.warsmash.movie.Movies;
 import com.etheller.warsmash.units.DataTable;
 import com.etheller.warsmash.util.DataSourceFileHandle;
@@ -110,10 +112,12 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		DELETE_REPLAY,
 		RENAME_REPLAY,
 		OVERWRITE_REPLAY,
+		TRY_REPLAY,
 		DELETE_PROFILE,
 		RENAME,
 		PORTRAIT,
-		ADVANCED
+		ADVANCED,
+		UPDATE
 	}
 
 	private final WarsmashGdxMultiScreenGame game;
@@ -154,6 +158,11 @@ public final class LauncherScreen implements Screen, InputProcessor {
 	private final Map<String, Boolean> recorded = new HashMap<>();
 	private LauncherBoard board;
 
+	/** The newer engine release the launcher found, once the check is done; the check runs once per launch. */
+	private volatile UpdateCheck.Release updateRelease;
+	private volatile boolean updateChecked;
+	private boolean updateStarted;
+	private boolean updateHandled;
 	private Page page = Page.HOME;
 	private Dialog dialog = Dialog.NONE;
 	private String messageTitle;
@@ -350,6 +359,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		if (this.playingMovie) {
 			return;
 		}
+		checkUpdates();
 		if ((this.art == null) && this.dataReady) {
 			dataOpened();
 		}
@@ -389,6 +399,38 @@ public final class LauncherScreen implements Screen, InputProcessor {
 			this.cursor = new LauncherCursor(this.data);
 		}
 		this.cursor.render(Gdx.input.getX(), Gdx.input.getY());
+	}
+
+	/** Looks for a newer release beside the launcher and offers it over the first page that shows. */
+	private void checkUpdates() {
+		if (this.updateHandled) {
+			return;
+		}
+		if (!this.updateStarted) {
+			this.updateStarted = true;
+			if (!this.preferences.getBoolean(LauncherKeys.KEY_UPDATE_CHECK, true)) {
+				this.updateHandled = true;
+				return;
+			}
+			final Thread thread = new Thread(() -> {
+				this.updateRelease = UpdateCheck.fetchLatest(2000);
+				this.updateChecked = true;
+			}, "UpdateCheck");
+			thread.setDaemon(true);
+			thread.start();
+			return;
+		}
+		if (!this.updateChecked) {
+			return;
+		}
+		if (!UpdateCheck.offers(GameReplays.engineVersion(), this.updateRelease,
+				this.preferences.getString(LauncherKeys.KEY_UPDATE_SKIPPED, ""))) {
+			this.updateHandled = true;
+		}
+		else if ((this.art != null) && (this.dialog == Dialog.NONE)) {
+			this.updateHandled = true;
+			this.dialog = Dialog.UPDATE;
+		}
 	}
 
 	private void disposeCursor() {
@@ -781,8 +823,9 @@ public final class LauncherScreen implements Screen, InputProcessor {
 	}
 
 	private String versionLine() {
-		final String version = LauncherScreen.class.getPackage().getImplementationVersion();
-		return (version != null ? "v" + version : "Warsmash") + " (" + dataVersion() + ")";
+		final BuildInfo build = BuildInfo.current();
+		return build.displayVersion() + (build.isOfficial() ? "" : " - " + s("build_unofficial")) + " ("
+				+ dataVersion() + ")";
 	}
 
 	private String dataVersion() {
@@ -1224,9 +1267,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 			final boolean isChosen = index == chosen;
 			final boolean clicked;
 			if (reforged) {
-				final boolean won = index < 0 ? false
-						: index < (missions.size() - 1) ? CampaignCatalog.isMissionOpen(entry, index + 1, progress)
-								: progress.isEndingCinematicAvailable(entry.getNumber());
+				final boolean won = (index >= 0) && CampaignCatalog.isMissionWon(entry, index, progress);
 				clicked = chapterRow("m" + index + mission.getMissionName(), mission, isChosen,
 						index < 0 ? SkinArt.CHAPTER_CINEMATIC : won ? SkinArt.CHAPTER_WON : SkinArt.CHAPTER_OPEN, x, y,
 						w, rowH);
@@ -2097,8 +2138,15 @@ public final class LauncherScreen implements Screen, InputProcessor {
 	}
 
 	private void startReplay(final GameCatalog.ReplayEntry entry) {
-		if ((entry != null) && entry.playable()) {
+		if (entry == null) {
+			return;
+		}
+		if (entry.playable()) {
 			launchGame(LaunchRequest.replay(entry), Page.REPLAY);
+		}
+		else if (entry.canTryAnyway()) {
+			this.triedReplay = entry;
+			this.dialog = Dialog.TRY_REPLAY;
 		}
 	}
 
@@ -2139,7 +2187,9 @@ public final class LauncherScreen implements Screen, InputProcessor {
 					g.image(this.art.image(SkinArt.ROW_HIGHLIGHT), x, y, w, rowH, entry == chosen ? 1 : 0.5f);
 				}
 				final float alpha = playable ? 1 : 0.5f;
-				g.image(this.art.image(SkinArt.ICON_MELEE), x + 12, y + ((rowH - icon) / 2), icon, icon, alpha);
+				g.image(this.art.image(entry.melee == null ? SkinArt.ICON_FILE
+						: entry.melee ? SkinArt.ICON_MELEE : SkinArt.ICON_UMS), x + 12, y + ((rowH - icon) / 2), icon,
+						icon, alpha);
 				final float textX = x + 12 + icon + 18;
 				final String when = t ? format.format(new Date(entry.recorded)) : CampaignChoice.elapsed(entry.length);
 				g.text(entry.name, textX, y + (rowH * 0.08f), (w * 0.62f) - icon, rowH * 0.5f, rowH * 0.3f,
@@ -2194,7 +2244,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 			this.dialog = Dialog.DELETE_REPLAY;
 		}
 		final float[] view = b.actionSlot(2);
-		final boolean playable = (chosen != null) && chosen.playable();
+		final boolean playable = (chosen != null) && (chosen.playable() || chosen.canTryAnyway());
 		final String viewLabel = this.art.reforged ? glue("WATCH_REPLAY", "Watch")
 				: glue("KEY_VIEW_REPLAY", "View Replay");
 		if (g.button("view", viewLabel, view[0], b.backY, view[1], b.backH, size,
@@ -2280,7 +2330,14 @@ public final class LauncherScreen implements Screen, InputProcessor {
 					CustomGame.PLAYER_COLORS[Math.abs(player.color) % CustomGame.PLAYER_COLORS.length]);
 			final String name = player.name != null ? player.name
 					: s("replay_computer") + " (" + glue("PLAYER", "Player") + " " + (player.slot + 1) + ")";
-			g.text(name, playersX + square + 14, y, playersW * 0.6f, step, size, g.palette.text, Align.left);
+			final boolean symbol = player.raceIndex() > 0;
+			g.text(name, playersX + square + 14, y, (playersW * 0.6f) - (symbol ? size * 1.5f : 0), step, size,
+					g.palette.text, Align.left);
+			if (symbol) {
+				final float mark = size * 1.3f;
+				g.image(this.art.image(SkinArt.RACE_SYMBOLS[player.raceIndex() - 1]),
+						playersX + (playersW * 0.6f) - (size * 1.4f), y + ((step - mark) / 2), mark, mark);
+			}
 			g.text(raceName(player), playersX + (playersW * 0.6f), y, playersW * 0.4f, step, size, g.palette.text2,
 					Align.right);
 			y += step;
@@ -2293,6 +2350,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 	}
 
 	private GameCatalog.ReplayEntry renamingReplay;
+	private GameCatalog.ReplayEntry triedReplay;
 
 	private void openRenameReplay(final GameCatalog.ReplayEntry entry) {
 		this.renamingReplay = entry;
@@ -2441,6 +2499,23 @@ public final class LauncherScreen implements Screen, InputProcessor {
 			rows.add(infoRow(rowY, index, x, w, controlX, s("options_engine"), s("options_engine_value")));
 			rows.add(infoRow(rowY, index, x, w, controlX, s("options_license"), s("options_license_value")));
 			rows.add(infoRow(rowY, index, x, w, controlX, s("options_art"), s("options_art_value")));
+			rows.add(checkRow(rowY, index, x, w, controlX, s("options_check_updates"),
+					this.preferences.getBoolean(LauncherKeys.KEY_UPDATE_CHECK, true),
+					on -> this.preferences.edit().putBoolean(LauncherKeys.KEY_UPDATE_CHECK, on).apply()));
+			final String skipped = this.preferences.getString(LauncherKeys.KEY_UPDATE_SKIPPED, "");
+			if (!skipped.isEmpty()) {
+				final int at = index[0]++;
+				rows.add(() -> {
+					final LauncherBoard bd = this.board;
+					optionRow(x, rowY[0], w, at, s("options_skipped_update"));
+					if (this.gui.button("skippedUpdate", s("options_skipped_update_clear") + " · " + skipped, controlX,
+							rowY[0] + 8, 640, bd.rowH - 16, bd.tablet ? 32 : 24, Gui.TONE_NORMAL)) {
+						playClick();
+						this.preferences.edit().remove(LauncherKeys.KEY_UPDATE_SKIPPED).apply();
+					}
+					rowY[0] += bd.rowH;
+				});
+			}
 			break;
 		default:
 			graphicsRows(rows, rowY, index, x, w, controlX, engine);
@@ -3595,7 +3670,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 				final int furthest = CampaignChoice.furthestMission(entry, progress);
 				final boolean started = CampaignChoice.started(entry, progress);
 				final String value = !started ? s("profile_not_started")
-						: progress.isEndingCinematicAvailable(entry.getNumber()) ? s("profile_completed")
+						: CampaignCatalog.isCompleted(entry, progress) ? s("profile_completed")
 								: furthest < 0 ? ""
 										: GlueText.plain(glue(menu.getMissions().get(furthest).getHeader(),
 												menu.getMissions().get(furthest).getHeader()));
@@ -3702,6 +3777,18 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		case RENAME_REPLAY:
 			renameReplayDialog();
 			break;
+		case TRY_REPLAY: {
+			final GameCatalog.ReplayEntry entry = this.triedReplay;
+			// The original asks before it plays a replay of another version, ignoring the recorded checksums.
+			question(glue("REPLAY_CONFIRM", "Incompatible Replay!"),
+					glue("REPLAY_CONFIRM_DESC", s("replay_other_version")),
+					new String[] { s("game_no"), s("game_yes") }, choice -> {
+						if ((choice == 1) && (entry != null)) {
+							launchGame(LaunchRequest.replay(entry, true), Page.REPLAY);
+						}
+					}, 0);
+			break;
+		}
 		case OVERWRITE_REPLAY: {
 			final GameCatalog.ReplayEntry entry = this.renamingReplay;
 			final String name = this.renameField.toString().trim();
@@ -3716,6 +3803,20 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		case PORTRAIT:
 			portraitDialog();
 			break;
+		case UPDATE: {
+			final UpdateCheck.Release latest = this.updateRelease;
+			question(s("update_title"),
+					s("update_offer_desktop").replace("%1$s", latest.tag).replace("%2$s", GameReplays.engineVersion()),
+					new String[] { s("update_open_page"), s("update_later"), s("update_skip") }, choice -> {
+						if (choice == 0) {
+							Gdx.net.openURI(latest.pageUrl);
+						}
+						else if (choice == 2) {
+							this.preferences.edit().putString(LauncherKeys.KEY_UPDATE_SKIPPED, latest.tag).apply();
+						}
+					}, 1);
+			break;
+		}
 		case ADVANCED: {
 			final float w = 1120;
 			final float h = 600;
@@ -4019,7 +4120,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 				LauncherLog.w("Unable to let go of the engine's menu", e);
 			}
 		}
-		returned.source = this.launched == null ? LaunchRequest.SOURCE_LOAD : this.launched.source();
+		returned.source = this.launched == null ? LaunchRequest.SOURCE_LOAD : this.launched.source(returned);
 		returned.profile = this.launched == null ? "" : this.launched.profile;
 		returned.finished = System.currentTimeMillis();
 		this.launched = null;
@@ -4031,6 +4132,11 @@ public final class LauncherScreen implements Screen, InputProcessor {
 			next = Page.HOME;
 		}
 		final LauncherStore.Edit edit = this.preferences.edit().remove(LauncherKeys.KEY_LAUNCHED);
+		if (CampaignResult.shows(returned) && (returned.campaign >= 0)
+				&& (this.preferences.getInt(LauncherKeys.KEY_CAMPAIGN, -1) != returned.campaign)) {
+			// The result is of the campaign the game played, which a save loaded in the game may have changed.
+			edit.putInt(LauncherKeys.KEY_CAMPAIGN, returned.campaign).remove(LauncherKeys.KEY_MISSION);
+		}
 		if (LaunchRequest.SOURCE_CUSTOM.equals(returned.source) && !returned.failed() && !"exit".equals(result)
 				&& !returned.profile.isEmpty()) {
 			final int played = (race > 0) && (race < CustomGame.RACES.length) ? race

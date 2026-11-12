@@ -36,6 +36,16 @@ public class RenderDoodad {
 	private final float[] vertexColorBase;
 	private final float[] vertexColorFogged;
 
+	/**
+	 * A non-looping sequence a script chose stays on its last frame (a banner that died stays gone); the stand
+	 * animation only takes over again when the script picks one.
+	 */
+	private boolean holdsScriptedEnd;
+
+	public boolean holdsScriptedEnd() {
+		return this.holdsScriptedEnd;
+	}
+
 	public boolean isOfType(final String doodadId) {
 		return doodadId.equals(this.row.getId());
 	}
@@ -55,6 +65,7 @@ public class RenderDoodad {
 			for (int i = 0; i < sequences.length; i++) {
 				if (sequences[i].getName().toLowerCase().startsWith(animation.toLowerCase())) {
 					mdxInstance.setSequence(i);
+					this.holdsScriptedEnd = sequences[i].getFlags() != 0;
 					return;
 				}
 			}

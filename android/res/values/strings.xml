@@ -69,6 +69,7 @@
     <string name="launcher_classic">Classic</string>
     <string name="launcher_reforged">Reforged</string>
     <string name="launcher_music">Music</string>
+    <string name="build_unofficial">unofficial build</string>
     <string name="launcher_data_version_unknown">game version unknown</string>
     <string name="launcher_campaign_maps">Campaign Version:</string>
     <string name="launcher_back">Back</string>
@@ -90,6 +91,36 @@
     <string name="options_texture_512">512</string>
     <string name="options_texture_1024">1024</string>
     <string name="options_texture_full">Full</string>
+    <string name="options_check_updates">Check for updates</string>
+    <string name="options_skipped_update">Skipped update</string>
+    <string name="options_skipped_update_value">%1$s · tap to offer it again</string>
+    <string name="options_skipped_update_clear">Offer again</string>
+    <string name="update_checking">Checking for updates…</string>
+    <string name="update_title">Update available</string>
+    <string name="update_offer">Version %1$s is available; this is %2$s. Download size %3$s.</string>
+    <string name="update_offer_unofficial">Version %1$s is available; this is %2$s, a build that was not made by the project. Download size %3$s.
+
+Android will not install the release over this copy, because it is signed with another key. After the download you remove this copy yourself (Android Settings, Apps) and then install the release. Nothing is removed for you. Removing the app deletes its own saves and settings; the game data folder you chose stays where it is, so back up anything you want to keep first.</string>
+    <string name="update_offer_page">Version %1$s is available; this is %2$s. It has no APK to install from here.</string>
+    <string name="update_offer_desktop">Version %1$s is available; this is %2$s. Open the release page to download it.</string>
+    <string name="update_now">Update</string>
+    <string name="update_later">Later</string>
+    <string name="update_skip">Skip this version</string>
+    <string name="update_open_page">Open release page</string>
+    <string name="update_downloading">Downloading %1$s</string>
+    <string name="update_progress">%1$s of %2$s</string>
+    <string name="update_cancel">Cancel</string>
+    <string name="update_permission_title">Allow installing updates</string>
+    <string name="update_permission_detail">Android asks you to allow this app to install apps. Allow it, then come back.</string>
+    <string name="update_allow">Allow</string>
+    <string name="update_manual_title">Install this update by hand</string>
+    <string name="update_manual_detail">This copy was signed differently from the release, so Android would not accept the update. Remove this copy yourself (Android Settings, Apps), then install the release from its page. Its own saves and settings go with the app; your game data folder stays. Nothing is removed for you.</string>
+    <string name="update_failed_title">The update did not finish</string>
+    <string name="update_failed_detail">%1$s</string>
+    <string name="update_retry">Retry</string>
+    <string name="update_installing">Installing…</string>
+    <string name="update_installing_detail">Confirm the installation when Android asks. The game restarts after it.</string>
+    <string name="update_continue">Continue</string>
     <string name="options_animated">Animated menu background</string>
     <string name="options_particles">Particles</string>
     <string name="options_low">Low</string>

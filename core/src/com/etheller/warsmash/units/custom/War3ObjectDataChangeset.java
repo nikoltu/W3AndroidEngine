@@ -350,11 +350,6 @@ public final class War3ObjectDataChangeset {
 		}
 	}
 
-	public void renameIds() {
-		renameids(this.original, true);
-		renameids(this.custom, false);
-	}
-
 	// ' ' - '/'
 	// ':' - '@'
 	// '[' - '`'
@@ -465,19 +460,6 @@ public final class War3ObjectDataChangeset {
 	public void merge(final War3ObjectDataChangeset obj, final CollisionHandling collisionHandling) {
 		mergetable(this.original, this.custom, obj.original, collisionHandling);
 		mergetable(this.original, this.custom, obj.custom, collisionHandling);
-	}
-
-	public int getvartype(final String name) {
-		if ("int".equals(name) || "bool".equals(name)) {
-			return 0;
-		}
-		else if ("real".equals(name)) {
-			return 1;
-		}
-		else if ("unreal".equals(name)) {
-			return 2;
-		}
-		return 3; // string
 	}
 
 	public boolean loadtable(final LittleEndianDataInputStream stream, final ObjectMap map, final boolean isOriginal,
@@ -749,13 +731,6 @@ public final class War3ObjectDataChangeset {
 							outputStream.writeFloat(change.getRealval());
 							break;
 						}
-						// if (change.getJunkDNA() == null) {
-						// saveWriteChars(outputStream, cl.getNewId().asStringValue().toCharArray());
-						// } else {
-						// saveWriteChars(outputStream,
-						// change.getJunkDNA().asStringValue().toCharArray());
-						// }
-						// saveWriteChars(outputStream, cl.getNewId().asStringValue().toCharArray());
 						ParseUtils.writeWar3ID(outputStream, noid);
 					}
 				}

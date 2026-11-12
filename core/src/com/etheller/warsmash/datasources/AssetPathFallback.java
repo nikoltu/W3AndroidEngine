@@ -17,6 +17,8 @@ public final class AssetPathFallback {
 	private static final String IMPORT_FOLDER = "war3mapimported\\";
 	private static final String DIFFUSE_SUFFIX = "_diffuse";
 	private static final String ART_FOLDER = "\\assets\\art\\";
+	private static final String BUILD_FOLDER = "\\bz\\";
+	private static final String GAME_FOLDER = "\\war3.w3mod\\";
 
 	private AssetPathFallback() {
 	}
@@ -87,11 +89,23 @@ public final class AssetPathFallback {
 		if ((normalized.length() > 2) && (normalized.charAt(1) == ':')) {
 			final String lower = normalized.toLowerCase(Locale.US);
 			final int importFolder = lower.lastIndexOf(IMPORT_FOLDER);
-			final int packageStart = lower.lastIndexOf(ART_FOLDER) + ART_FOLDER.length();
+			final int gameFolder = lower.lastIndexOf(GAME_FOLDER);
+			int packageStart = lower.lastIndexOf(ART_FOLDER);
+			if (packageStart != -1) {
+				packageStart += ART_FOLDER.length();
+			}
+			else if (lower.startsWith(BUILD_FOLDER, 2)) {
+				// A path on the artists' build drive (h:\bz\de\buildings\...) names the package the same way.
+				packageStart = 2 + BUILD_FOLDER.length();
+			}
 			if (importFolder != -1) {
 				normalized = normalized.substring(importFolder);
 			}
-			else if ((packageStart >= ART_FOLDER.length()) && (lower.length() > (packageStart + 3))
+			else if (gameFolder != -1) {
+				// A path into a checkout of the game data (...\war3.w3mod\_de.w3mod\...) is relative to war3.w3mod.
+				normalized = normalized.substring(gameFolder + GAME_FOLDER.length());
+			}
+			else if ((packageStart != -1) && (lower.length() > (packageStart + 3))
 					&& (lower.charAt(packageStart + 2) == '\\')) {
 				// Some HD and DE models name other models by their path in the artists' source tree
 				// (...\assets\art\de\buildings\...); the folder after "art" is the graphics package.

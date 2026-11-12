@@ -7,11 +7,11 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.ai.AIDifficulty;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.config.CBasePlayer;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.config.War3MapConfig;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CMapControl;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CRaceManager;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CRacePreference;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.CMapDifficulty;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.CPlayerSlotState;
@@ -22,6 +22,8 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.C
  */
 public final class CReplayHeader {
 	private final String engineVersion;
+	private final String buildCommit;
+	private final boolean officialBuild;
 	private final String mapPath;
 	private final int mapChecksum;
 	private final long mapSize;
@@ -38,11 +40,14 @@ public final class CReplayHeader {
 	/**
 	 * @param dataChecksum the checksum of the game data the game ran on (see {@code GameReplays#dataChecksum})
 	 */
-	public CReplayHeader(final String engineVersion, final String mapPath, final int mapChecksum, final long mapSize,
+	public CReplayHeader(final String engineVersion, final String buildCommit, final boolean officialBuild,
+			final String mapPath, final int mapChecksum, final long mapSize,
 			final int dataChecksum, final long recordedAt, final int seed, final int localPlayerIndex,
 			final float gameSpeed, final CMapDifficulty difficulty, final int checksumInterval, final List<Slot> slots,
 			final byte[] gameCaches) {
 		this.engineVersion = engineVersion;
+		this.buildCommit = buildCommit;
+		this.officialBuild = officialBuild;
 		this.mapPath = mapPath;
 		this.mapChecksum = mapChecksum;
 		this.mapSize = mapSize;
@@ -61,30 +66,42 @@ public final class CReplayHeader {
 	 * @param gameCaches the game caches the game started with (see {@code CGameCache#snapshot}), or null when none
 	 *                   were read from the disk yet
 	 */
-	public static CReplayHeader of(final String engineVersion, final String mapPath, final int mapChecksum,
+	public static CReplayHeader of(final String engineVersion, final String buildCommit, final boolean officialBuild,
+			final String mapPath, final int mapChecksum,
 			final long mapSize, final int dataChecksum, final long recordedAt, final int seed,
 			final int localPlayerIndex, final float gameSpeed, final War3MapConfig config, final int checksumInterval,
 			final byte[] gameCaches) {
 		final List<Slot> slots = new ArrayList<>();
-		for (int i = 0; i < WarsmashConstants.MAX_PLAYERS; i++) {
+		for (int i = 0; i < config.getMaxPlayers(); i++) {
 			slots.add(Slot.of(config.getPlayer(i)));
 		}
-		return new CReplayHeader(engineVersion, mapPath, mapChecksum, mapSize, dataChecksum, recordedAt, seed,
+		return new CReplayHeader(engineVersion, buildCommit, officialBuild, mapPath, mapChecksum, mapSize,
+				dataChecksum, recordedAt, seed,
 				localPlayerIndex, gameSpeed, config.getGameDifficulty(), checksumInterval, slots, gameCaches);
 	}
 
 	/** Puts the recorded game setup over the one the map's own setup made. */
-	public void applyTo(final War3MapConfig config) {
+	public void applyTo(final War3MapConfig config, final CRaceManager raceManager) {
 		config.setGameDifficulty(this.difficulty);
 		for (final Slot slot : this.slots) {
-			if ((slot.id >= 0) && (slot.id < WarsmashConstants.MAX_PLAYERS)) {
-				slot.applyTo(config.getPlayer(slot.id));
+			if ((slot.id >= 0) && (slot.id < config.getMaxPlayers())) {
+				slot.applyTo(config.getPlayer(slot.id), raceManager);
 			}
 		}
 	}
 
 	public String getEngineVersion() {
 		return this.engineVersion;
+	}
+
+	/** The short git commit of the build that recorded the game, or "unknown". */
+	public String getBuildCommit() {
+		return this.buildCommit;
+	}
+
+	/** Whether the recording build was an official release. */
+	public boolean isOfficialBuild() {
+		return this.officialBuild;
 	}
 
 	public String getMapPath() {
@@ -137,6 +154,8 @@ public final class CReplayHeader {
 
 	void write(final DataOutputStream out) throws IOException {
 		out.writeUTF(this.engineVersion);
+		out.writeUTF(this.buildCommit);
+		out.writeBoolean(this.officialBuild);
 		out.writeUTF(this.mapPath);
 		out.writeInt(this.mapChecksum);
 		out.writeLong(this.mapSize);
@@ -162,6 +181,8 @@ public final class CReplayHeader {
 
 	static CReplayHeader read(final DataInputStream in) throws IOException {
 		final String engineVersion = in.readUTF();
+		final String buildCommit = in.readUTF();
+		final boolean officialBuild = in.readBoolean();
 		final String mapPath = in.readUTF();
 		final int mapChecksum = in.readInt();
 		final long mapSize = in.readLong();
@@ -183,7 +204,8 @@ public final class CReplayHeader {
 			gameCaches = new byte[cachesLength];
 			in.readFully(gameCaches);
 		}
-		return new CReplayHeader(engineVersion, mapPath, mapChecksum, mapSize, dataChecksum, recordedAt, seed,
+		return new CReplayHeader(engineVersion, buildCommit, officialBuild, mapPath, mapChecksum, mapSize,
+				dataChecksum, recordedAt, seed,
 				localPlayerIndex, gameSpeed, difficulty, checksumInterval, slots, gameCaches);
 	}
 
@@ -226,14 +248,14 @@ public final class CReplayHeader {
 					player.getStartLocationIndex(), player.getHandicap());
 		}
 
-		void applyTo(final CBasePlayer player) {
+		void applyTo(final CBasePlayer player, final CRaceManager raceManager) {
 			player.setName(this.name);
 			player.setController(this.controller);
 			player.setSlotState(this.slotState);
 			player.setAIDifficulty(this.aiDifficulty);
 			player.getRacePreferences().setBitFlags(this.racePreferences);
 			player.setRaceSkin(this.raceSkin == NO_VALUE ? null
-					: WarsmashConstants.RACE_MANAGER.getRacePreference(this.raceSkin));
+					: raceManager.getRacePreference(this.raceSkin));
 			player.setTeam(this.team);
 			player.setColor(this.color);
 			player.setStartLocationIndex(this.startLocationIndex);

@@ -9,7 +9,6 @@ import com.etheller.warsmash.viewer5.SceneLightInstance;
 import com.etheller.warsmash.viewer5.UpdatableObject;
 
 public class LightInstance implements UpdatableObject, SceneLightInstance {
-	private static final Matrix4 matrix4Heap = new Matrix4();
 	private static final Vector3 vector3Heap = new Vector3();
 	private static final float[] vectorHeap = new float[3];
 	private static final float[] scalarHeap = new float[1];

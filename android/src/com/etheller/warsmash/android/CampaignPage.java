@@ -412,9 +412,7 @@ final class CampaignPage extends LauncherViews {
 					: v -> launchMission(entry, number, LauncherActivity.PAGE_MISSIONS);
 			final View row;
 			if (reforged) {
-				final boolean won = number < 0 ? false
-						: number < (missions.size() - 1) ? CampaignCatalog.isMissionOpen(entry, number + 1, progress)
-								: progress.isEndingCinematicAvailable(entry.getNumber());
+				final boolean won = (number >= 0) && CampaignCatalog.isMissionWon(entry, number, progress);
 				row = chapterRow(mission, number == chosen,
 						number < 0 ? SkinArt.CHAPTER_CINEMATIC : won ? SkinArt.CHAPTER_WON : SkinArt.CHAPTER_OPEN, tap);
 			}

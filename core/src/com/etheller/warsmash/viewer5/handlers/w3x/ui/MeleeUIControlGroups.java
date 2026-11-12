@@ -21,7 +21,6 @@ import com.etheller.warsmash.parsers.fdf.frames.SimpleStatusBarFrame;
 import com.etheller.warsmash.parsers.fdf.frames.SingleStringFrame;
 import com.etheller.warsmash.parsers.fdf.frames.SpriteFrame;
 import com.etheller.warsmash.parsers.fdf.frames.TextureFrame;
-import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.RenderUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.RenderWidget;
 import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.ability.IconUI;
@@ -184,11 +183,12 @@ final class MeleeUIControlGroups {
 			icon.setVisible(false);
 			this.heroBarIcons[i] = icon;
 		}
-		this.ui.idleWorkerIcon = createIdleWorkerButton(heroBar, size);
+		this.ui.idleWorkerIcon = createIdleWorkerButton(heroBar, size, pointsFont);
 		anchorHeroBar();
 	}
 
-	private MultiSelectionIcon createIdleWorkerButton(final SimpleFrame parent, final float size) {
+	private HeroBarIcon createIdleWorkerButton(final SimpleFrame parent, final float size,
+			final BitmapFont countFont) {
 		final MultiSelectionIconListener listener = new MultiSelectionIconListener() {
 			@Override
 			public void multiSelectIconClicked(final int index) {
@@ -205,7 +205,7 @@ final class MeleeUIControlGroups {
 			public void multiSelectIconRelease(final int index) {
 			}
 		};
-		final MultiSelectionIcon icon = new MultiSelectionIcon("SmashIdleWorkerButton", parent, listener, 0);
+		final HeroBarIcon icon = new HeroBarIcon("SmashIdleWorkerButton", parent, listener, 0);
 		final TextureFrame iconTexture = new TextureFrame("SmashIdleWorkerBackdrop", icon, false,
 				new Vector4Definition(0, 1, 0, 1));
 		final SimpleStatusBarFrame hpBar = new SimpleStatusBarFrame("SmashIdleWorkerHpBar", parent, true, true, 3.0f);
@@ -220,6 +220,18 @@ final class MeleeUIControlGroups {
 		iconTexture.setWidth(size);
 		iconTexture.setHeight(size);
 		iconTexture.setTexture(this.ui.rootFrame.loadTexture(this.ui.rootFrame.getSkinField("IdlePeon")));
+		// The count of idle workers, on the number overlay of the hero buttons (1.29).
+		final TextureFrame countOverlay = new TextureFrame("SmashIdleWorkerNumberOverlay", icon, true, null);
+		countOverlay.addSetPoint(new SetPoint(FramePoint.BOTTOMRIGHT, iconTexture, FramePoint.BOTTOMRIGHT, 0, 0));
+		countOverlay.setWidth(size * HERO_POINTS_OVERLAY_RATIO);
+		countOverlay.setHeight(size * HERO_POINTS_OVERLAY_RATIO);
+		countOverlay.setTexture("CommandButtonNumberOverlay", this.ui.rootFrame);
+		final SingleStringFrame countText = new SingleStringFrame("SmashIdleWorkerNumberOverlayText", countOverlay,
+				Color.WHITE, TextJustify.CENTER, TextJustify.MIDDLE, countFont);
+		countText.setSetAllPoints(true);
+		icon.setSkillPointFrames(countOverlay, countText, null);
+		countOverlay.setVisible(false);
+		countText.setVisible(false);
 		icon.setToolTip(this.ui.rootFrame.getTemplates().getDecoratedString("IDLE_PEON"));
 		icon.setInfoTip(this.ui.rootFrame.getTemplates().getDecoratedString("IDLE_PEON_DESC"));
 		icon.setUberTip("");
@@ -309,7 +321,7 @@ final class MeleeUIControlGroups {
 		// Heroes of players sharing their units come after the slots kept for the local player's own heroes.
 		final int localPlayerIndex = this.ui.localPlayer.getId();
 		boolean alliedPadding = true;
-		for (int playerIndex = 0; playerIndex < WarsmashConstants.MAX_PLAYERS; playerIndex++) {
+		for (int playerIndex = 0; playerIndex < this.ui.war3MapViewer.getGameData().getMaxPlayers(); playerIndex++) {
 			final CPlayer player = this.ui.war3MapViewer.simulation.getPlayer(playerIndex);
 			if ((playerIndex == localPlayerIndex) || !player.hasAlliance(localPlayerIndex, CAllianceType.SHARED_CONTROL)) {
 				continue;
@@ -379,6 +391,7 @@ final class MeleeUIControlGroups {
 		if (this.ui.idleWorkerIcon.isVisible() != show) {
 			this.ui.idleWorkerIcon.setVisible(show);
 		}
+		this.ui.idleWorkerIcon.setCount(this.ui.idleWorkers.size());
 	}
 
 	/**

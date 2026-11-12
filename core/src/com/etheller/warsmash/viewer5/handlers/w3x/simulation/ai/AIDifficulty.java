@@ -7,7 +7,7 @@ public enum AIDifficulty implements CHandle {
 	NORMAL,
 	INSANE;
 
-	public static AIDifficulty[] VALUES = values();
+	public static final AIDifficulty[] VALUES = values();
 
 	@Override
 	public int getHandleId() {

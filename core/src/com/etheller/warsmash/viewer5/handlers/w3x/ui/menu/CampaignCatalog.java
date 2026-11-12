@@ -213,6 +213,24 @@ public final class CampaignCatalog {
 		return isOpen(entry, progress) && ((mission == 0) || progress.isMissionAvailable(entry.number, mission));
 	}
 
+	/**
+	 * A mission the player has won: recorded at its victory, else known from what the victory opened, the next mission
+	 * or, after the last one, the campaign's ending cinematic.
+	 */
+	public static boolean isMissionWon(final Entry entry, final int mission, final CCampaignProgress.Snapshot progress) {
+		if (progress.isMissionWon(entry.number, mission)) {
+			return true;
+		}
+		final int last = entry.data.getMissions().size() - 1;
+		return mission < last ? isMissionOpen(entry, mission + 1, progress)
+				: (mission == last) && progress.isEndingCinematicAvailable(entry.number);
+	}
+
+	/** Whether the player has won the campaign's last mission. */
+	public static boolean isCompleted(final Entry entry, final CCampaignProgress.Snapshot progress) {
+		return isMissionWon(entry, entry.data.getMissions().size() - 1, progress);
+	}
+
 	/** The campaign the menu opens on: the one the last mission chose, else none (the caller keeps its own). */
 	public int menuCampaignNumber(final CCampaignProgress.Snapshot progress) {
 		return this.classicList ? progress.getClassicMenuCampaignIndex() : progress.getMenuCampaignIndex();

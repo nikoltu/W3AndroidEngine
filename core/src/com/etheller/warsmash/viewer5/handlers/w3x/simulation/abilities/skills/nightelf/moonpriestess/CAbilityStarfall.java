@@ -6,6 +6,7 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.CAreaTargetVisibility;
 import com.etheller.warsmash.units.GameObject;
 import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
@@ -86,7 +87,8 @@ public class CAbilityStarfall extends CAbilityNoTargetSpellBase {
 		simulation.getWorldCollision().enumUnitsInRange(caster.getX(), caster.getY(), this.areaOfEffect,
 				(enumUnit) -> {
 					if (!enumUnit.isUnitAlly(simulation.getPlayer(caster.getPlayerIndex()))
-							&& enumUnit.canBeTargetedBy(simulation, caster, getTargetsAllowed())) {
+							&& enumUnit.canBeAreaTargetedBy(simulation, caster, CAreaTargetVisibility.VISIBLE,
+									getTargetsAllowed())) {
 						inArea.add(enumUnit);
 					}
 					return false;

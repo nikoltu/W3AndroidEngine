@@ -1,6 +1,5 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.replay;
 
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -11,6 +10,7 @@ import java.util.zip.CRC32;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.files.FileHandle;
+import com.etheller.warsmash.BuildInfo;
 import com.etheller.warsmash.datasources.DataSource;
 import com.etheller.warsmash.util.Log;
 import com.etheller.warsmash.viewer5.handlers.w3x.CampaignMaps;
@@ -43,12 +43,15 @@ public final class GameReplays {
 	 * how fast it got there.
 	 */
 	public static final String SKIP_TO_PROPERTY = "warsmash.replay.skipto";
+	/**
+	 * -Dwarsmash.replay.force=true: a replay is played although this engine would refuse it (another version, map or
+	 * game data), as the player's "try anyway" does.
+	 */
+	public static final String FORCE_PROPERTY = "warsmash.replay.force";
 	/** -Dwarsmash.replay.exit=true: the program ends with the playback. */
 	public static final String EXIT_PROPERTY = "warsmash.replay.exit";
 	/** -Dwarsmash.version=&lt;version&gt;: stands for the engine's own version; a replay of another one is refused. */
 	public static final String VERSION_PROPERTY = "warsmash.version";
-	/** Written by the build from the Android app's version name, so that every platform has the same one. */
-	private static final String VERSION_RESOURCE = "/com/etheller/warsmash/version.txt";
 	/**
 	 * The game data files the game's rules come from. Text that only names and describes things (the *Strings files)
 	 * is left out, so a replay plays in every language.
@@ -68,7 +71,6 @@ public final class GameReplays {
 			"Units\\NeutralUpgradeFunc.txt", "Units\\NightElfUpgradeFunc.txt", "Units\\OrcUpgradeFunc.txt",
 			"Units\\UndeadUpgradeFunc.txt", "Units\\UpgradeSkin.txt", "Units\\MiscData.txt", "Units\\MiscGame.txt",
 			"TerrainArt\\Terrain.slk", "TerrainArt\\CliffTypes.slk", "TerrainArt\\Water.slk" };
-	private static String bundledVersion;
 	/** Once a game second. */
 	public static final int CHECKSUM_INTERVAL = 20;
 
@@ -80,31 +82,7 @@ public final class GameReplays {
 		if ((version != null) && !version.isEmpty()) {
 			return version;
 		}
-		return bundledVersion();
-	}
-
-	private static synchronized String bundledVersion() {
-		if (bundledVersion == null) {
-			bundledVersion = "dev";
-			try (InputStream in = GameReplays.class.getResourceAsStream(VERSION_RESOURCE)) {
-				if (in != null) {
-					final ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-					final byte[] buffer = new byte[64];
-					int read;
-					while ((read = in.read(buffer)) != -1) {
-						bytes.write(buffer, 0, read);
-					}
-					final String text = new String(bytes.toByteArray(), StandardCharsets.UTF_8).trim();
-					if (!text.isEmpty()) {
-						bundledVersion = text;
-					}
-				}
-			}
-			catch (final IOException e) {
-				Log.error("No engine version: " + e);
-			}
-		}
-		return bundledVersion;
+		return BuildInfo.current().getVersionName();
 	}
 
 	public static FileHandle folder() {
@@ -134,10 +112,10 @@ public final class GameReplays {
 	public static CReplayHeader header(final DataSource dataSource, final String mapFile, final War3MapViewer viewer,
 			final War3MapConfig config, final int localPlayerIndex) throws IOException {
 		final long[] map = mapChecksum(dataSource, mapFile);
-		return CReplayHeader.of(engineVersion(), mapFile, (int) map[0], map[1], dataChecksum(dataSource),
-				System.currentTimeMillis(),
-				viewer.getGameSeed(), localPlayerIndex, viewer.getTimeScale(), config, CHECKSUM_INTERVAL,
-				CGameCache.snapshot());
+		return CReplayHeader.of(engineVersion(), BuildInfo.current().getCommit(),
+				BuildInfo.current().isOfficial(), mapFile, (int) map[0], map[1], dataChecksum(dataSource),
+				System.currentTimeMillis(), viewer.getGameSeed(), localPlayerIndex, viewer.getTimeScale(), config,
+				CHECKSUM_INTERVAL, CGameCache.snapshot());
 	}
 
 	public static ReplayRecording startRecording(final War3MapViewer viewer, final CReplayHeader header)
@@ -171,8 +149,11 @@ public final class GameReplays {
 	 */
 	public static String unplayableReason(final CReplayHeader header, final DataSource dataSource,
 			final Integer dataChecksum) {
-		if (!isThisEngine(header)) {
+		if (!header.getEngineVersion().equals(engineVersion())) {
 			return "recorded with engine version " + header.getEngineVersion() + ", this is " + engineVersion();
+		}
+		if (!isThisCommit(header)) {
+			return "recorded with build " + header.getBuildCommit() + ", this is " + BuildInfo.current().getCommit();
 		}
 		final long[] map;
 		try {
@@ -218,7 +199,30 @@ public final class GameReplays {
 	}
 
 	public static boolean isThisEngine(final CReplayHeader header) {
-		return header.getEngineVersion().equals(engineVersion());
+		return header.getEngineVersion().equals(engineVersion()) && isThisCommit(header);
+	}
+
+	/**
+	 * Builds of one version but other commits play the rules differently. A commit that is not known on either side
+	 * cannot be told apart, so it is let through.
+	 */
+	private static boolean isThisCommit(final CReplayHeader header) {
+		final String mine = BuildInfo.current().getCommit();
+		final String recorded = header.getBuildCommit();
+		return BuildInfo.UNKNOWN_COMMIT.equals(mine) || BuildInfo.UNKNOWN_COMMIT.equals(recorded)
+				|| mine.equals(recorded);
+	}
+
+	/**
+	 * A playable replay that is not exactly this kind of build: the same commit, but one side is an official build and
+	 * the other is not. Null when there is nothing to warn about.
+	 */
+	public static String buildWarning(final CReplayHeader header) {
+		if (header.isOfficialBuild() == BuildInfo.current().isOfficial()) {
+			return null;
+		}
+		return "recorded with " + (header.isOfficialBuild() ? "an official" : "an unofficial") + " build, this is "
+				+ (BuildInfo.current().isOfficial() ? "an official" : "an unofficial") + " one";
 	}
 
 	/** The CRC-32 of the game data files, each with its name and size; a missing file counts as missing. */

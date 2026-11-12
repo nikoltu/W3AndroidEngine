@@ -4,7 +4,6 @@ import java.util.EnumMap;
 import java.util.EnumSet;
 
 import com.etheller.interpreter.ast.util.CHandle;
-import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.ai.AIDifficulty;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CAllianceType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CMapControl;
@@ -62,12 +61,13 @@ public abstract class CBasePlayer implements CPlayerJass, CHandle {
 		this.handleId = handleId;
 	}
 
-	public CBasePlayer(final int id) {
+	public CBasePlayer(final int id, final int maxPlayers) {
 		this.id = id;
 		this.color = id;
-		this.name = "null";
-		this.alliances = new EnumSet[WarsmashConstants.MAX_PLAYERS];
-		this.taxRates = new EnumMap[WarsmashConstants.MAX_PLAYERS];
+		// A slot the map information does not list reads as "Player N" in the original.
+		this.name = "Player " + (id + 1);
+		this.alliances = new EnumSet[maxPlayers];
+		this.taxRates = new EnumMap[maxPlayers];
 		this.racePrefs = new CRacePreferences();
 		this.configPlayerStates = new EnumMap<>(CPlayerState.class);
 		for (int i = 0; i < this.alliances.length; i++) {

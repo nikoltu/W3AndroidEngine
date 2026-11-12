@@ -94,7 +94,7 @@ public class CAbilityImmolation extends AbstractGenericSingleIconNoSmartActiveAb
 			return false;
 		}
 		else if (!this.active && (orderId == OrderIds.immolation)) {
-			if (caster.chargeMana(this.manaCost)) {
+			if (caster.chargeMana(chargedManaCost())) {
 				activate(game, caster);
 			}
 			return false;
@@ -163,7 +163,7 @@ public class CAbilityImmolation extends AbstractGenericSingleIconNoSmartActiveAb
 	@Override
 	protected void innerCheckCanUse(final CSimulation game, final CUnit unit, final int playerIndex, final int orderId,
 			final AbilityActivationReceiver receiver) {
-		if (!this.active && (unit.getMana() < (this.manaCost + this.bufferManaRequired))) {
+		if (!this.active && (unit.getMana() < (chargedManaCost() + this.bufferManaRequired))) {
 			receiver.activationCheckFailed(CommandStringErrorKeys.NOT_ENOUGH_MANA);
 		}
 		else {
@@ -207,7 +207,12 @@ public class CAbilityImmolation extends AbstractGenericSingleIconNoSmartActiveAb
 		if (this.active) {
 			return 0;
 		}
-		return this.manaCost;
+		return chargedManaCost();
+	}
+
+	private int chargedManaCost() {
+		final Integer override = getManaCostOverride(getLevel());
+		return override != null ? override : this.manaCost;
 	}
 
 	public void setManaCost(final int manaCost) {

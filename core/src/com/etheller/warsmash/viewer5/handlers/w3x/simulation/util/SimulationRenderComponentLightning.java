@@ -17,5 +17,10 @@ public interface SimulationRenderComponentLightning extends SimulationRenderComp
 	};
 	void setColor(float r, float g, float b, float a);
 
+	/** The colour last set, or null while the lightning has its type's own colour. */
+	default float[] getColor() {
+		return null;
+	}
+
 	boolean isRemoved();
 }

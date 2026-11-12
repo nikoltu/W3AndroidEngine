@@ -7,7 +7,7 @@ public enum CGameState implements CHandle {
 	DISCONNECTED,
 	TIME_OF_DAY;
 
-	public static CGameState[] VALUES = values();
+	public static final CGameState[] VALUES = values();
 
 	@Override
 	public int getHandleId() {

@@ -132,8 +132,13 @@ public class CBehaviorAttack extends CAbstractRangedBehavior {
 		if (isWasInRange() && (simulation.getGameTurnTick() < this.unit.getCooldownEndTime())) {
 			range += this.unitAttack.getRangeMotionBuffer();
 		}
-		return this.unit.canReach(this.target, range)
-				&& (this.unit.distance(this.target) >= this.unit.getUnitType().getMinimumAttackRange());
+		// Measured on 1.29: a building is attacked from range plus both collision sizes off its centre in every
+		// direction; its pathing footprint adds no reach at the corners.
+		final CUnit targetUnit = this.target.visit(AbilityTargetVisitor.UNIT);
+		final double distance = this.unit.distance(this.target);
+		final boolean reached = ((targetUnit != null) && targetUnit.isBuilding()) ? (distance <= range)
+				: this.unit.canReach(this.target, range);
+		return reached && (distance >= this.unit.getUnitType().getMinimumAttackRange());
 	}
 
 	/** A chase that keeps its target while the fog hides it (attacking back an unseen attacker). */
@@ -268,7 +273,8 @@ public class CBehaviorAttack extends CAbstractRangedBehavior {
 		this.swingReadyTime = 0;
 		if ((this.unit.getCurrentBehavior() != this) || this.unit.isDead() || this.unit.isPaused()
 				|| (this.damagePointLaunchTime != 0) || (this.backSwingTime != 0) || !this.lastWithinFacingWindow
-				|| !checkTargetStillValid(simulation) || !isWithinRange(simulation)) {
+				|| !checkTargetStillValid(simulation) || !isWithinRange(simulation)
+				|| this.unit.isWhirlingAttackSuppressed()) {
 			return;
 		}
 		startSwing(simulation);
@@ -336,7 +342,8 @@ public class CBehaviorAttack extends CAbstractRangedBehavior {
 				if (this.firstSwingWaitPending) {
 					startFirstSwingWait(simulation);
 				}
-				if ((currentTurnTick >= cooldownEndTime) && swingReadyNow(simulation)) {
+				if ((currentTurnTick >= cooldownEndTime) && !this.unit.isWhirlingAttackSuppressed()
+						&& swingReadyNow(simulation)) {
 					startSwing(simulation);
 				}
 				else if (currentTurnTick >= this.thisOrderCooldownEndTime) {

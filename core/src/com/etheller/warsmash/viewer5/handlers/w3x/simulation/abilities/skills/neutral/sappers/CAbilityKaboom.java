@@ -1,5 +1,6 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.neutral.sappers;
 
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.CAreaTargetVisibility;
 import com.etheller.warsmash.units.GameObject;
 import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CDestructable;
@@ -134,7 +135,8 @@ public class CAbilityKaboom extends CAbilityUnitOrPointTargetSpellBase implement
 	private void explode(final CSimulation simulation, final CUnit caster) {
 		final float radius = StrictMath.max(this.partialDamageRadius, this.fullDamageRadius);
 		simulation.getWorldCollision().enumUnitsInRange(caster.getX(), caster.getY(), radius, (enumUnit) -> {
-			if (enumUnit.canBeTargetedBy(simulation, caster, false, getTargetsAllowed(),
+			if (enumUnit.canBeAreaTargetedBy(simulation, caster, CAreaTargetVisibility.NOT_INVISIBLE,
+					getTargetsAllowed(),
 					BooleanAbilityTargetCheckReceiver.<CWidget>getInstance().reset())) {
 				float damageAmount;
 				if (caster.canReach(enumUnit, this.fullDamageRadius)) {

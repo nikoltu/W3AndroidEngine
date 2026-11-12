@@ -20,6 +20,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.region.CRegion;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.state.CUnitState;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.timers.CTimer;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.campaign.CTrackable;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayerState;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.state.CGameState;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.JassGameEventsWar3;
 import com.etheller.warsmash.viewer5.handlers.w3x.ui.dialog.CScriptDialog;
@@ -101,10 +102,14 @@ public class CommonTriggerExecutionScope extends TriggerExecutionScope {
 	private CUnit damageSource;
 	private String chatString;
 	private String chatStringMatched;
+	private float mouseX;
+	private float mouseY;
+	private int mouseButton;
 
 	private JassGameEventsWar3 triggerEventId;
 	private CUnitState eventUnitState;
 	private CGameState eventGameState;
+	private CPlayerState eventPlayerState;
 
 	public CommonTriggerExecutionScope(final Trigger triggeringTrigger) {
 		super(triggeringTrigger);
@@ -187,10 +192,14 @@ public class CommonTriggerExecutionScope extends TriggerExecutionScope {
 		this.triggerEventId = parentScope.triggerEventId;
 		this.eventUnitState = parentScope.eventUnitState;
 		this.eventGameState = parentScope.eventGameState;
+		this.eventPlayerState = parentScope.eventPlayerState;
 		this.damageTaken = parentScope.damageTaken;
 		this.damageSource = parentScope.damageSource;
 		this.chatString = parentScope.chatString;
 		this.chatStringMatched = parentScope.chatStringMatched;
+		this.mouseX = parentScope.mouseX;
+		this.mouseY = parentScope.mouseY;
+		this.mouseButton = parentScope.mouseButton;
 	}
 
 	public CUnit getEnumUnit() {
@@ -437,6 +446,10 @@ public class CommonTriggerExecutionScope extends TriggerExecutionScope {
 		return this.eventGameState;
 	}
 
+	public CPlayerState getEventPlayerState() {
+		return this.eventPlayerState;
+	}
+
 	public CUnit getSpellAbilityUnit() {
 		return this.spellAbilityUnit;
 	}
@@ -505,6 +518,18 @@ public class CommonTriggerExecutionScope extends TriggerExecutionScope {
 		return this.chatString;
 	}
 
+	public float getMouseX() {
+		return this.mouseX;
+	}
+
+	public float getMouseY() {
+		return this.mouseY;
+	}
+
+	public int getMouseButton() {
+		return this.mouseButton;
+	}
+
 	public String getChatStringMatched() {
 		return this.chatStringMatched;
 	}
@@ -519,6 +544,10 @@ public class CommonTriggerExecutionScope extends TriggerExecutionScope {
 		return scope;
 	}
 
+	/**
+	 * Measured on 1.29: a group filter (and an enum callback) keeps the event responses of the code that enumerates,
+	 * and an enumeration inside a filter does not change GetFilterUnit there; outside them it reads null.
+	 */
 	public static CommonTriggerExecutionScope filterScope(final TriggerExecutionScope parentScope,
 			final CUnit filterUnit) {
 		final CommonTriggerExecutionScope scope = new CommonTriggerExecutionScope(parentScope.getTriggeringTrigger(),
@@ -587,6 +616,15 @@ public class CommonTriggerExecutionScope extends TriggerExecutionScope {
 	public static CommonTriggerExecutionScope expiringTimer(final Trigger trigger, final CTimer cTimerJass) {
 		final CommonTriggerExecutionScope scope = new CommonTriggerExecutionScope(trigger, TriggerExecutionScope.EMPTY);
 		scope.expiringTimer = cTimerJass;
+		if (trigger != null) {
+			scope.triggerEventId = JassGameEventsWar3.EVENT_GAME_TIMER_EXPIRED;
+		}
+		return scope;
+	}
+
+	public static CommonTriggerExecutionScope timerEventScope(final Trigger trigger) {
+		final CommonTriggerExecutionScope scope = new CommonTriggerExecutionScope(trigger, TriggerExecutionScope.EMPTY);
+		scope.triggerEventId = JassGameEventsWar3.EVENT_GAME_TIMER_EXPIRED;
 		return scope;
 	}
 
@@ -721,6 +759,17 @@ public class CommonTriggerExecutionScope extends TriggerExecutionScope {
 		return scope;
 	}
 
+	public static CommonTriggerExecutionScope unitDecayScope(final JassGameEventsWar3 triggerEventId,
+			final Trigger trigger, final CUnit decayingUnit, final CPlayerJass player) {
+		final CommonTriggerExecutionScope scope = new CommonTriggerExecutionScope(trigger, TriggerExecutionScope.EMPTY);
+		scope.decayingUnit = decayingUnit;
+		scope.triggerWidget = decayingUnit;
+		scope.triggeringUnit = decayingUnit;
+		scope.triggerEventId = triggerEventId;
+		scope.triggeringPlayer = player;
+		return scope;
+	}
+
 	public static CommonTriggerExecutionScope widgetTriggerScope(final JassGameEventsWar3 triggerEventId,
 			final Trigger trigger, final CWidget triggerWidget) {
 		final CommonTriggerExecutionScope scope = new CommonTriggerExecutionScope(trigger, TriggerExecutionScope.EMPTY);
@@ -750,6 +799,14 @@ public class CommonTriggerExecutionScope extends TriggerExecutionScope {
 		final CommonTriggerExecutionScope scope = new CommonTriggerExecutionScope(trigger, TriggerExecutionScope.EMPTY);
 		scope.triggerEventId = JassGameEventsWar3.EVENT_GAME_STATE_LIMIT;
 		scope.eventGameState = state;
+		return scope;
+	}
+
+	public static CommonTriggerExecutionScope playerStateLimitScope(final Trigger trigger,
+			final CPlayerJass player, final CPlayerState state) {
+		final CommonTriggerExecutionScope scope = triggerPlayerScope(JassGameEventsWar3.EVENT_PLAYER_STATE_LIMIT,
+				trigger, player);
+		scope.eventPlayerState = state;
 		return scope;
 	}
 
@@ -1010,6 +1067,7 @@ public class CommonTriggerExecutionScope extends TriggerExecutionScope {
 	public static CommonTriggerExecutionScope unitDamageTakenScope(final JassGameEventsWar3 triggerEventId,
 			final Trigger trigger, final CUnit damagedUnit, final CUnit source, final float damage) {
 		final CommonTriggerExecutionScope scope = new CommonTriggerExecutionScope(trigger, TriggerExecutionScope.EMPTY);
+		scope.triggerEventId = triggerEventId;
 		scope.damageTaken = damage;
 		scope.damageSource = source;
 		scope.triggeringUnit = damagedUnit;
@@ -1033,6 +1091,15 @@ public class CommonTriggerExecutionScope extends TriggerExecutionScope {
 		final CommonTriggerExecutionScope scope = new CommonTriggerExecutionScope(trigger, TriggerExecutionScope.EMPTY);
 		scope.triggeringPlayer = player;
 		scope.triggerEventId = triggerEventId;
+		return scope;
+	}
+
+	public static CommonTriggerExecutionScope playerMouseScope(final JassGameEventsWar3 triggerEventId,
+			final Trigger trigger, final CPlayerJass player, final float x, final float y, final int button) {
+		final CommonTriggerExecutionScope scope = guiPlayerEventTriggerScope(triggerEventId, trigger, player);
+		scope.mouseX = x;
+		scope.mouseY = y;
+		scope.mouseButton = button;
 		return scope;
 	}
 

@@ -35,7 +35,7 @@ import java.util.zip.ZipException;
 public final class CReplay {
 	public static final int MAGIC = ('W' << 24) | ('S' << 16) | ('R' << 8) | 'P';
 	/** A replay of another format version is refused rather than played wrong. */
-	public static final int FORMAT_VERSION = 3;
+	public static final int FORMAT_VERSION = 4;
 
 	static final int END = 0;
 	static final int COMMAND = 1;

@@ -1,7 +1,6 @@
 package com.etheller.warsmash.units.manager;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -94,136 +93,6 @@ public final class MutableObjectData {
 		}
 	}
 
-	public void mergeChangset(final War3ObjectDataChangeset changeset) {
-		final List<War3ID> newObjects = new ArrayList<>();
-		final Map<War3ID, War3ID> previousAliasToNewAlias = new HashMap<>();
-		for (final Map.Entry<War3ID, ObjectDataChangeEntry> entry : changeset.getCustom()) {
-
-//			final String newId = JOptionPane.showInputDialog("Choose UNIT ID");
-			final War3ID nextDefaultEditorId = /* War3ID.fromString(newId); */getNextDefaultEditorId(
-					War3ID.fromString(entry.getKey().charAt(0) + "000"));
-			;
-			Log.info("Merging " + nextDefaultEditorId + " for  " + entry.getKey());
-			// createNew API will notifier the changeNotifier
-			final MutableGameObject newObject = createNew(nextDefaultEditorId, entry.getValue().getOldId(), false);
-			for (final Map.Entry<War3ID, List<Change>> changeList : entry.getValue().getChanges()) {
-				newObject.customUnitData.getChanges().add(changeList.getKey(), changeList.getValue());
-			}
-			newObjects.add(nextDefaultEditorId);
-			previousAliasToNewAlias.put(entry.getKey(), nextDefaultEditorId);
-		}
-		final War3ID[] fieldsToCheck = this.worldEditorDataType == WorldEditorDataType.UNITS
-				? new War3ID[] { War3ID.fromString("utra"), War3ID.fromString("uupt"), War3ID.fromString("ubui") }
-				: new War3ID[] {};
-		for (final War3ID unitId : newObjects) {
-			final MutableGameObject unit = get(unitId);
-			for (final War3ID field : fieldsToCheck) {
-				final String techtreeString = unit.getFieldAsString(field, 0);
-				final java.util.List<String> techList = Arrays.asList(techtreeString.split(","));
-				final ArrayList<String> resultingTechList = new ArrayList<>();
-				for (final String tech : techList) {
-					if (tech.length() == 4) {
-						final War3ID newTechId = previousAliasToNewAlias.get(War3ID.fromString(tech));
-						if (newTechId != null) {
-							resultingTechList.add(newTechId.toString());
-						}
-						else {
-							resultingTechList.add(tech);
-						}
-					}
-					else {
-						resultingTechList.add(tech);
-					}
-				}
-				final StringBuilder sb = new StringBuilder();
-				for (final String tech : resultingTechList) {
-					if (sb.length() > 0) {
-						sb.append(",");
-					}
-					sb.append(tech);
-				}
-				unit.setField(field, 0, sb.toString());
-			}
-		}
-		this.changeNotifier.objectsCreated(newObjects.toArray(new War3ID[newObjects.size()]));
-	}
-
-	public War3ObjectDataChangeset copySelectedObjects(final List<MutableGameObject> objectsToCopy) {
-		final War3ObjectDataChangeset changeset = new War3ObjectDataChangeset(this.editorData.getExpectedKind());
-		final War3ID[] fieldsToCheck = this.worldEditorDataType == WorldEditorDataType.UNITS
-				? new War3ID[] { War3ID.fromString("utra"), War3ID.fromString("uupt"), War3ID.fromString("ubui") }
-				: new War3ID[] {};
-		final Map<War3ID, War3ID> previousAliasToNewAlias = new HashMap<>();
-		for (final MutableGameObject gameObject : objectsToCopy) {
-			final ObjectDataChangeEntry gameObjectUserDataToCopy;
-			final ObjectDataChangeEntry gameObjectUserData;
-			final War3ID alias = gameObject.getAlias();
-			if (this.editorData.getOriginal().containsKey(alias)) {
-				gameObjectUserDataToCopy = this.editorData.getOriginal().get(alias);
-				final War3ID newAlias = getNextDefaultEditorId(
-						War3ID.fromString(gameObject.getCode().charAt(0) + "000"), changeset, this.sourceSLKData);
-				gameObjectUserData = new ObjectDataChangeEntry(gameObjectUserDataToCopy.getOldId(), newAlias);
-			}
-			else if (this.editorData.getCustom().containsKey(alias)) {
-				gameObjectUserDataToCopy = this.editorData.getCustom().get(alias);
-				gameObjectUserData = new ObjectDataChangeEntry(gameObjectUserDataToCopy.getOldId(),
-						gameObjectUserDataToCopy.getNewId());
-			}
-			else {
-				gameObjectUserDataToCopy = null;
-				final War3ID newAlias = getNextDefaultEditorId(
-						War3ID.fromString(gameObject.getCode().charAt(0) + "000"), changeset, this.sourceSLKData);
-				gameObjectUserData = new ObjectDataChangeEntry(
-						gameObject.isCustom() ? gameObject.getCode() : gameObject.getAlias(), newAlias);
-			}
-			if (gameObjectUserDataToCopy != null) {
-				for (final Map.Entry<War3ID, List<Change>> changeEntry : gameObjectUserDataToCopy.getChanges()) {
-					for (final Change change : changeEntry.getValue()) {
-						final Change newChange = new Change();
-						newChange.copyFrom(change);
-						gameObjectUserData.getChanges().add(change.getId(), newChange);
-					}
-				}
-			}
-			previousAliasToNewAlias.put(gameObject.getAlias(), gameObjectUserData.getNewId());
-			changeset.getCustom().put(gameObjectUserData.getNewId(), gameObjectUserData);
-		}
-		final MutableObjectData changeEditManager = new MutableObjectData(this.worldEditStrings,
-				this.worldEditorDataType, this.sourceSLKData, this.sourceSLKMetaData, changeset);
-		for (final War3ID unitId : changeEditManager.keySet()) {
-			final MutableGameObject unit = changeEditManager.get(unitId);
-			for (final War3ID field : fieldsToCheck) {
-				final String techtreeString = unit.getFieldAsString(field, 0);
-				final java.util.List<String> techList = Arrays.asList(techtreeString.split(","));
-				final ArrayList<String> resultingTechList = new ArrayList<>();
-				for (final String tech : techList) {
-					if (tech.length() == 4) {
-						final War3ID newTechId = previousAliasToNewAlias.get(War3ID.fromString(tech));
-						if (newTechId != null) {
-							resultingTechList.add(newTechId.toString());
-						}
-						else {
-							resultingTechList.add(tech);
-						}
-					}
-					else {
-						resultingTechList.add(tech);
-					}
-				}
-				final StringBuilder sb = new StringBuilder();
-				for (final String tech : resultingTechList) {
-					if (sb.length() > 0) {
-						sb.append(",");
-					}
-					sb.append(tech);
-				}
-				unit.setField(field, 0, sb.toString());
-			}
-		}
-		return changeset;
-
-	}
-
 	public WorldEditorDataType getWorldEditorDataType() {
 		return this.worldEditorDataType;
 	}
@@ -261,11 +130,6 @@ public final class MutableObjectData {
 			this.cachedKeySet = customKeys;
 		}
 		return this.cachedKeySet;
-	}
-
-	public void dropCachesHack() {
-		this.cachedKeySet = null;
-		this.cachedKeyToGameObject.clear();
 	}
 
 	public MutableGameObject get(final War3ID id) {
@@ -403,8 +267,6 @@ public final class MutableObjectData {
 	private static final War3ID HERO_PROPER_NAMES = War3ID.fromString("upro");
 
 	private static final Set<War3ID> CATEGORY_FIELDS = new HashSet<>();
-	private static final Set<War3ID> TEXT_FIELDS = new HashSet<>();
-	private static final Set<War3ID> ICON_FIELDS = new HashSet<>();
 	private static final Set<War3ID> FIELD_SETTINGS_FIELDS = new HashSet<>();
 
 	static {
@@ -799,11 +661,7 @@ public final class MutableObjectData {
 						if (name.length() > 0) {
 							name += " ";
 						}
-						// if (subName.startsWith("WESTRING")) {
-						// name += WEString.getString(subName);
-						// } else {
 						name += subName;
-						// }
 					}
 				}
 				if (name.startsWith("\"") && name.endsWith("\"")) {
@@ -815,9 +673,6 @@ public final class MutableObjectData {
 						+ getAlias().toString() + "'";
 			}
 			if ((suf.length() > 0) && !suf.equals("_")) {
-				// if (suf.startsWith("WESTRING")) {
-				// suf = WEString.getString(suf);
-				// }
 				if (!suf.startsWith(" ")) {
 					name += " ";
 				}
@@ -1040,13 +895,5 @@ public final class MutableObjectData {
 			}
 		}
 		return metaDataName;
-	}
-
-	public static String getDisplayAsRawDataName(final MutableGameObject gameObject) {
-		String aliasString = gameObject.getAlias().toString();
-		if (!gameObject.getAlias().equals(gameObject.getCode())) {
-			aliasString += ":" + gameObject.getCode().toString();
-		}
-		return aliasString + " (" + gameObject.getName() + ")";
 	}
 }

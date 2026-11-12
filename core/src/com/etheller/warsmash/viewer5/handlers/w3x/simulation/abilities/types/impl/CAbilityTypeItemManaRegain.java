@@ -9,7 +9,6 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbility;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.generic.CLevelingAbility;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.item.CAbilityItemManaRegain;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.CAbilityType;
-import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.CAbilityTypeLevelData;
 
 public class CAbilityTypeItemManaRegain extends CAbilityType<CAbilityTypeItemManaRegainLevelData> {
 
@@ -26,13 +25,10 @@ public class CAbilityTypeItemManaRegain extends CAbilityType<CAbilityTypeItemMan
 
 	@Override
 	public void setLevel(final CSimulation game, CUnit unit, final CLevelingAbility existingAbility, final int level) {
-
-		final CAbilityTypeLevelData levelData = getLevelData(level - 1);
-		final CLevelingAbility heroAbility = (existingAbility);
-
-		// TODO ignores fields
-
-		heroAbility.setLevel(game, unit, level);
-
+		final CAbilityTypeItemManaRegainLevelData levelData = getLevelData(level - 1);
+		if (existingAbility instanceof CAbilityItemManaRegain) {
+			((CAbilityItemManaRegain) existingAbility).setLevelValues(levelData.getManaToRegain(), levelData.getCooldown());
+		}
+		existingAbility.setLevel(game, unit, level);
 	}
 }

@@ -1,6 +1,7 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.behavior.condition.unit;
 
 import java.util.Map;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CReleaseCheats;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.behavior.callback.integercallbacks.ABIntegerCallback;
@@ -47,6 +48,7 @@ public class ABConditionSuccessfullyChargeResources extends ABCondition {
 			foodCost = food.callback(game, caster, localStore, castId);
 		}
 
+		manaCost = CReleaseCheats.manaCost(game, theUnit, manaCost);
 		if ((manaCost > 0 && manaCost > theUnit.getMana()) || (goldCost > 0 && goldCost > thePlayer.getGold())
 				|| (lumberCost > 0 && lumberCost > thePlayer.getLumber())
 				|| (foodCost > 0 && foodCost > (thePlayer.getFoodCapLimit() - thePlayer.getFoodUsed()))) {

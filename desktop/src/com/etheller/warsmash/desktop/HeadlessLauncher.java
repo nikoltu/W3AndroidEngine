@@ -67,10 +67,19 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.SimulationChecksum;
  * <li>-frametime S: game seconds a frame passes on to the game (default 1, so 20 steps a frame).</li>
  * </ul>
  * The program ends with the game (EndGame, the end of a replay with -Dwarsmash.replay.exit=true) or at -steps.
+ *
+ * -Dwarsmash.test.games=<map>;<map>;...;<steps> plays the maps one after another in this one process, each from the
+ * menu: a game runs to the step, is left as Quit Mission leaves it, and the next map is started from the menu. The
+ * checksum and the number of exceptions logged are printed for every game (and written to the file named by
+ * -Dwarsmash.test.result), to compare a game that follows others with the same game run alone.
  */
 public final class HeadlessLauncher {
 	private static final int WIDTH = 1920;
 	private static final int HEIGHT = 1080;
+	private static final String GAMES_PROPERTY = "warsmash.test.games";
+	private static final String RESULT_PROPERTY = "warsmash.test.result";
+	private static final long GAME_TIMEOUT_NANOS = 15L * 60L * 1_000_000_000L;
+	private static final long LOAD_TIMEOUT_NANOS = 3L * 60L * 1_000_000_000L;
 
 	private final ArrayDeque<Runnable> runnables = new ArrayDeque<>();
 	private final Map<String, Preferences> preferences = new HashMap<>();
@@ -122,7 +131,7 @@ public final class HeadlessLauncher {
 				frameTime = Float.parseFloat(arg[++argIndex]);
 			}
 		}
-		if ((fileToLoad == null) && (replayToPlay == null)) {
+		if ((fileToLoad == null) && (replayToPlay == null) && (System.getProperty(GAMES_PROPERTY) == null)) {
 			Log.warn("HeadlessLauncher: -loadfile <map> or -replay <file> is needed");
 			System.exit(2);
 		}
@@ -162,6 +171,18 @@ public final class HeadlessLauncher {
 		game.resize(WIDTH, HEIGHT);
 		final WarsmashGdxMenuScreen menuScreen = new WarsmashGdxMenuScreen(warsmashIni, game);
 		game.setScreen(menuScreen);
+		final String gamesSpec = System.getProperty(GAMES_PROPERTY);
+		if ((gamesSpec != null) && (replayToPlay == null)) {
+			final int status = runGames(game, menuScreen, gamesSpec, computerSlots);
+			game.pause();
+			try {
+				game.dispose();
+			}
+			catch (final RuntimeException e) {
+				Log.error(e);
+			}
+			return status;
+		}
 		if (replayToPlay != null) {
 			menuScreen.startReplay(Gdx.files.absolute(new File(replayToPlay).getAbsolutePath()));
 		}
@@ -217,6 +238,96 @@ public final class HeadlessLauncher {
 			Log.error(e);
 		}
 		return 0;
+	}
+
+	/**
+	 * Plays the maps of the spec "map;map;...;steps" one after another from the menu. Returns 0 when every game ran
+	 * to its step or ended by itself (EndGame) and logged no exception, 1 when one did not, 3 when a game never
+	 * started.
+	 */
+	private int runGames(final WarsmashGdxMultiScreenGame game, final WarsmashGdxMenuScreen menuScreen,
+			final String spec, final String computerSlots) {
+		final String[] parts = spec.split(";");
+		final int steps = Integer.parseInt(parts[parts.length - 1].trim());
+		final StringBuilder report = new StringBuilder();
+		int status = 0;
+		for (int index = 0; index < (parts.length - 1); index++) {
+			final String map = parts[index].trim();
+			menuScreen.startMap(map, computerSlots);
+			final int throwablesBefore = Log.getLoggedThrowableCount();
+			final long started = System.nanoTime();
+			CSimulation simulation = null;
+			int firstTick = 0;
+			int lastTick = 0;
+			String checksum = "none";
+			String how = "steps";
+			boolean quit = false;
+			while (true) {
+				runPostedRunnables();
+				final CSimulation running = runningGame(game);
+				float frame = this.frameTime;
+				if (running != null) {
+					if (simulation == null) {
+						firstTick = running.getGameTurnTick();
+					}
+					simulation = running;
+					lastTick = running.getGameTurnTick();
+					if (lastTick >= steps) {
+						checksum = String.format(Locale.ROOT, "%08x", SimulationChecksum.compute(running));
+						game.getRunningMapScreen().quitMission();
+						quit = true;
+					}
+					else {
+						frame = Math.min(frame, (steps - lastTick) * WarsmashConstants.SIMULATION_STEP_TIME);
+					}
+				}
+				else if (simulation != null) {
+					if (!quit) {
+						how = "ended";
+						checksum = String.format(Locale.ROOT, "%08x", SimulationChecksum.compute(simulation));
+					}
+					break;
+				}
+				if (((System.nanoTime() - started) > (simulation == null ? LOAD_TIMEOUT_NANOS : GAME_TIMEOUT_NANOS))
+						|| this.exitRequested) {
+					how = "timeout";
+					break;
+				}
+				this.frameId++;
+				this.currentFrameTime = frame;
+				game.render();
+			}
+			// The screens the game left are disposed on the frames that follow, before the next game starts.
+			for (int frames = 0; frames < 3; frames++) {
+				runPostedRunnables();
+				this.frameId++;
+				this.currentFrameTime = 0f;
+				game.render();
+			}
+			final int throwables = Log.getLoggedThrowableCount() - throwablesBefore;
+			if ((simulation == null) || "timeout".equals(how) || (throwables != 0)) {
+				status = simulation == null ? 3 : Math.max(status, 1);
+			}
+			report.append(String.format(Locale.ROOT, "game %d map %s from %d to %d checksum %s exceptions %d end %s%n",
+					index + 1, map, firstTick, lastTick, checksum, throwables, how));
+			if (simulation == null) {
+				break;
+			}
+		}
+		Log.warn("Headless games:\n" + report);
+		final String resultFile = System.getProperty(RESULT_PROPERTY);
+		if ((resultFile != null) && !resultFile.isEmpty()) {
+			try (java.io.Writer writer = new java.io.OutputStreamWriter(new FileOutputStream(resultFile),
+					java.nio.charset.StandardCharsets.UTF_8)) {
+				writer.write(report.toString());
+				writer.write("status " + status + "\n");
+			}
+			catch (final java.io.IOException e) {
+				Log.error(e);
+				status = 1;
+			}
+		}
+		return status;
 	}
 
 	private static CSimulation runningGame(final WarsmashGdxMultiScreenGame game) {

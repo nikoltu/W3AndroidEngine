@@ -17,7 +17,6 @@ public class CampaignButtonUI extends AbstractUIFrame implements ClickableFrame 
 	private StringFrame nameText;
 	private Color defaultNameColor;
 	private Color defaultHeaderColor;
-	private boolean artHighlight;
 
 	public CampaignButtonUI(final String name, final UIFrame parent) {
 		super(name, parent);

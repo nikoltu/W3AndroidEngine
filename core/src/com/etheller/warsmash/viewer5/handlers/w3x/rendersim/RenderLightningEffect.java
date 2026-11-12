@@ -18,6 +18,7 @@ public class RenderLightningEffect extends AllocatedHandle implements Simulation
 	private final float[] points = new float[6];
 	private float[] color;
 	private Object savedForm;
+	private boolean checkVisibility;
 
 	public RenderLightningEffect(LightningEffectNode source, LightningEffectNode target, War3MapViewer viewer,
 			War3ID lightningId, CUnit sourceUnit, CWidget targetWidget, float x1, float y1, float z1, float x2,
@@ -56,12 +57,21 @@ public class RenderLightningEffect extends AllocatedHandle implements Simulation
 		return this.points.clone();
 	}
 
+	@Override
 	public float[] getColor() {
 		return this.color;
 	}
 
 	public float getLifeSpanRemaining() {
 		return this.source.getLifeSpanRemaining();
+	}
+
+	public boolean isCheckVisibility() {
+		return this.checkVisibility;
+	}
+
+	public void setCheckVisibility(final boolean checkVisibility) {
+		this.checkVisibility = checkVisibility;
 	}
 
 	public Object getSavedForm() {

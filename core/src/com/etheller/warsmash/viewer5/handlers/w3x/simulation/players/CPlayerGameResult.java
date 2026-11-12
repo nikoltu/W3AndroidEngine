@@ -8,7 +8,7 @@ public enum CPlayerGameResult implements CHandle {
 	TIE,
 	NEUTRAL;
 
-	public static CPlayerGameResult[] VALUES = values();
+	public static final CPlayerGameResult[] VALUES = values();
 
 	@Override
 	public int getHandleId() {

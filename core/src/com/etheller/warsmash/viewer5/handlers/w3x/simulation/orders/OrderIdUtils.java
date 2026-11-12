@@ -1,5 +1,7 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.orders;
 
+import java.util.Locale;
+
 import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -37,7 +39,7 @@ public class OrderIdUtils {
 	}
 
 	public static int getOrderId(final String orderIdString) {
-		final Integer orderId = stringToOrderId.get(orderIdString.toLowerCase());
+		final Integer orderId = stringToOrderId.get(orderIdString.toLowerCase(Locale.ROOT));
 		if (orderId == null) {
 			return 0;
 		}
