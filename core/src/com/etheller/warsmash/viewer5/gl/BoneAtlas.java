@@ -45,16 +45,15 @@ public class BoneAtlas {
 	}
 
 	/**
-	 * Returns the texel the matrices start at, or -1 when they would not fit in one row.
+	 * Returns the texel the matrices start at. Matrices that do not fit in the rest of a row start on the next row,
+	 * and a model with more bones than a row holds takes whole rows, so the texture never needs to be wider than
+	 * {@link #WIDTH} (phones allow no more than 8192 texels).
 	 */
 	public int add(final float[] matrices, final int floatCount) {
 		final int texels = floatCount / 4;
-		if (texels > WIDTH) {
-			return -1;
-		}
 		int base = this.usedTexels;
 		final int rowEnd = ((base / WIDTH) + 1) * WIDTH;
-		if ((base + texels) > rowEnd) {
+		if (((base + texels) > rowEnd) && (base % WIDTH != 0)) {
 			base = rowEnd;
 		}
 		final int end = base + texels;

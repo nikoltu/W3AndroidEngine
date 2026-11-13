@@ -39,7 +39,7 @@ public final class SessionResources {
 	}
 
 	/** A new scope over the one open, which takes what is tracked from now until it ends. */
-	public static Scope begin() {
+	public static synchronized Scope begin() {
 		// A finished Android game activity takes its GL context and its open scopes along.
 		for (final Iterator<Scope> it = OPEN.iterator(); it.hasNext();) {
 			if (it.next().app != Gdx.app) {
@@ -51,7 +51,7 @@ public final class SessionResources {
 		return scope;
 	}
 
-	public static <T extends Disposable> T track(final T resource) {
+	public static synchronized <T extends Disposable> T track(final T resource) {
 		if (!OPEN.isEmpty() && (resource != null)) {
 			OPEN.get(OPEN.size() - 1).resources.add(resource);
 		}
@@ -59,7 +59,7 @@ public final class SessionResources {
 	}
 
 	/** Stops tracking into this scope; what it has is kept for its dispose. */
-	public static void end(final Scope scope) {
+	public static synchronized void end(final Scope scope) {
 		OPEN.remove(scope);
 	}
 }

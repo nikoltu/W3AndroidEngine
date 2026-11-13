@@ -48,6 +48,8 @@ public class AIController {
 	boolean harvestPassPending;
 	int harvestCallTick;
 	final Set<CUnit> harvestUnsent = new LinkedHashSet<>();
+	CUnit harvestStarter;
+	boolean harvestStarterChosen;
 	final Map<Integer, List<CDestructable>> townTrees = new HashMap<>();
 	final Map<Integer, Integer> townTreesTick = new HashMap<>();
 	final AICaptain attackCaptain = new AICaptain();
@@ -79,6 +81,7 @@ public class AIController {
 	int levelingHeroLevel;
 	CUnit threat;
 	int retreatTick;
+	int fightGeneration = -1;
 	int goalProgressGeneration = -1;
 	float bestGoalDistance;
 	int goalProgressTick;

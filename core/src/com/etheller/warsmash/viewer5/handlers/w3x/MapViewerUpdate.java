@@ -161,14 +161,20 @@ final class MapViewerUpdate {
 			final Scene worldScene = viewer.worldScene;
 
 			PerfStats.mark();
+			final boolean fullScreenCinematic = (viewer.modelCinematic != null) && !viewer.modelCinematic.isInGame();
+			if (viewer.modelCinematic != null) {
+				if (viewer.modelCinematic.isDone()) {
+					viewer.endModelCinematic();
+				}
+				else if (!fullScreenCinematic) {
+					viewer.modelCinematic.placeWorldCamera();
+				}
+			}
 			viewer.startFrame();
 			worldScene.startFrame();
-			if (viewer.modelCinematic != null) {
-				if (!viewer.modelCinematic.isDone()) {
-					viewer.modelCinematic.render();
-					return;
-				}
-				viewer.endModelCinematic();
+			if (fullScreenCinematic && (viewer.modelCinematic != null)) {
+				viewer.modelCinematic.render();
+				return;
 			}
 			if (!viewer.worldHidden && (viewer.skyInstance != null)) {
 				renderSky(viewer);
@@ -229,5 +235,6 @@ final class MapViewerUpdate {
 				}
 			}
 		}
-	}
+	}
+
 }

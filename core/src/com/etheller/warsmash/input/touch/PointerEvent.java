@@ -45,6 +45,6 @@ public final class PointerEvent {
 	@Override
 	public String toString() {
 		return this.action + " " + this.tool + " #" + this.pointerId + " " + (int) this.x + "," + (int) this.y
-				+ " buttons=" + this.buttons;
+				+ " buttons=" + this.buttons + " touchMajor=" + this.touchMajor;
 	}
 }

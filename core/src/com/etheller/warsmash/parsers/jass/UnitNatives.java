@@ -338,14 +338,14 @@ final class UnitNatives extends CommonNatives {
 		// IsUnitInvisible is simply "not visible", also for units in fog or black mask.
 		jassProgramVisitor.getJassNativeManager().createNative("IsUnitVisible",
 				(arguments, globalScope, triggerScope) -> {
-					final CUnit whichUnit = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
+					final CUnit whichUnit = inGame(nullable(arguments, 0, ObjectJassValueVisitor.<CUnit>getInstance()));
 					final CPlayer whichPlayer = nullable(arguments, 1, ObjectJassValueVisitor.getInstance());
 					return BooleanJassValue.of((whichUnit != null) && (whichPlayer != null)
 							&& isUnitVisibleToPlayer(whichUnit, whichPlayer));
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("IsUnitInvisible",
 				(arguments, globalScope, triggerScope) -> {
-					final CUnit whichUnit = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
+					final CUnit whichUnit = inGame(nullable(arguments, 0, ObjectJassValueVisitor.<CUnit>getInstance()));
 					final CPlayer whichPlayer = nullable(arguments, 1, ObjectJassValueVisitor.getInstance());
 					return BooleanJassValue.of((whichUnit != null) && (whichPlayer != null)
 							&& !isUnitVisibleToPlayer(whichUnit, whichPlayer));
@@ -386,10 +386,13 @@ final class UnitNatives extends CommonNatives {
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("IsUnitDetected",
 				(arguments, globalScope, triggerScope) -> {
-					final CUnit whichUnit = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
+					final CUnit whichUnit = inGame(nullable(arguments, 0, ObjectJassValueVisitor.<CUnit>getInstance()));
 					final CPlayer whichPlayer = nullable(arguments, 1, ObjectJassValueVisitor.getInstance());
-					return BooleanJassValue.of((whichUnit != null) && (whichPlayer != null)
-							&& whichUnit.isVisible(this.simulation, whichPlayer.getId()));
+					// Measured on 1.29: only an invisible, living unit reads as detected, and a reveal on it counts
+					// even where the player's fog hides it.
+					return BooleanJassValue.of((whichUnit != null) && (whichPlayer != null) && !whichUnit.isDead()
+							&& (whichUnit.isRevealedTo(whichPlayer.getId()) || ((whichUnit.getInvisLevels() > 0)
+									&& whichUnit.isVisible(this.simulation, whichPlayer.getId()))));
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("UnitInstantReturnResources",
 				(arguments, globalScope, triggerScope) -> {
@@ -1247,8 +1250,10 @@ final class UnitNatives extends CommonNatives {
 					final CUnit otherUnit = nullable(arguments, 1, ObjectJassValueVisitor.getInstance());
 					final Double distance = arguments.get(2).visit(RealJassValueVisitor.getInstance());
 
+					// Measured on 1.29: the collision sizes of both units count, not only the first one's.
 					if ((whichUnit != null) && (otherUnit != null) && (distance != null)
-							&& (whichUnit.distance(otherUnit.getX(), otherUnit.getY()) <= distance)) {
+							&& ((whichUnit.distance(otherUnit.getX(), otherUnit.getY())
+									- otherUnit.getUnitType().getCollisionSize()) <= distance)) {
 						return new BooleanJassValue(true);
 					}
 
@@ -1257,8 +1262,8 @@ final class UnitNatives extends CommonNatives {
 		jassProgramVisitor.getJassNativeManager().createNative("IsUnitInRangeXY",
 				(arguments, globalScope, triggerScope) -> {
 					final CUnit whichUnit = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
-					final Double x = arguments.get(1).visit(ObjectJassValueVisitor.getInstance());
-					final Double y = arguments.get(2).visit(ObjectJassValueVisitor.getInstance());
+					final Double x = arguments.get(1).visit(RealJassValueVisitor.getInstance());
+					final Double y = arguments.get(2).visit(RealJassValueVisitor.getInstance());
 					final Double distance = arguments.get(3).visit(RealJassValueVisitor.getInstance());
 
 					if ((whichUnit != null) && (x != null) && (y != null) && (distance != null)
@@ -1460,6 +1465,9 @@ final class UnitNatives extends CommonNatives {
 						// 1.29: a paused or stunned unit reads
 						// stunned.
 						orderId = OrderIds.stunned;
+					}
+					else if ((whichUnit != null) && whichUnit.isWalkingToPost()) {
+												orderId = OrderIds.move;
 					}
 					else if ((whichUnit != null) && (whichUnit.getCurrentOrder() != null)) {
 						orderId = whichUnit.getCurrentOrder().getOrderId();

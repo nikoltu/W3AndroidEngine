@@ -71,6 +71,11 @@ final class AbilityNatives extends CommonNatives {
 						// inventory alias).
 						if (abilityId.equals(INVENTORY_CODE)
 								&& (whichWidget.getFirstAbilityOfType(CAbilityInventory.class) != null)) {
+							return IntegerJassValue.of(leveledLevel(whichWidget.getInventoryData()));
+						}
+						// Measured: a rooted ancient (and one whose Root was removed) still reads its move ability.
+						if (abilityId.equals(MOVE_CODE) && whichWidget.isBuilding()
+								&& (whichWidget.getUnitType().getSpeed() > 0)) {
 							return IntegerJassValue.of(1);
 						}
 						final int illusionLevel = whichWidget.getIllusionAbilityLevel(rawcode);
@@ -84,7 +89,7 @@ final class AbilityNatives extends CommonNatives {
 						return IntegerJassValue.of(1);
 					}
 					if (ability instanceof CLevelingAbility) {
-						return IntegerJassValue.of(Math.max(1, ((CLevelingAbility) ability).getLevel()));
+						return IntegerJassValue.of(leveledLevel((CLevelingAbility) ability));
 					}
 					return IntegerJassValue.of(scriptLevel(ability));
 				});
@@ -108,33 +113,34 @@ final class AbilityNatives extends CommonNatives {
 					final CUnit whichWidget = arguments.get(0).visit(ObjectJassValueVisitor.getInstance());
 					final int rawcode = arguments.get(1).visit(IntegerJassValueVisitor.getInstance());
 					final War3ID war3id = new War3ID(rawcode);
-					final CAbility found = whichWidget.getAbilityByRawcode(war3id);
-					if ((found == null) && war3id.equals(CUnitData.ALARM_ABILITY_ID)) {
-						return IntegerJassValue.ZERO;
-					}
+					final CAbility found = findAbility(whichWidget, war3id);
 					if (found == null) {
-						final CAbility created = this.simulation.getAbilityData().createAbility(war3id,
-								this.simulation.getHandleIdAllocator().createId());
-						if (created == null) {
-							return IntegerJassValue.ZERO;
-						}
-						whichWidget.add(this.simulation, created);
-						// TODO below code is very stupid!!
-						return IntegerJassValue.of(1);
+						// Measured: raising an ability the unit lacks adds nothing and reads 0, whether or not the
+						// data knows it.
+						return IntegerJassValue.ZERO;
 					}
 					final int levelCount = this.simulation.getAbilityData().getLevelCount(war3id);
 					if (!(found instanceof CLevelingAbility)) {
-						// Measured: a built-in ability goes up only below the data's level count (0 for most).
+						// Measured: a built-in ability reads one level past the data's level count at most (attack
+						// and move, with no levels in the data, stay at 1).
+						// An ability the data has no row for (the production queue) counts as one level.
 						final int level = scriptLevel(found);
-						if ((found instanceof AbstractCAbility) && (level < levelCount)) {
+						if ((found instanceof AbstractCAbility) && (level <= ((levelCount < 0) ? 1 : levelCount))) {
 							((AbstractCAbility) found).setScriptLevel(level + 1);
 							return IntegerJassValue.of(level + 1);
 						}
 						return IntegerJassValue.of(level);
 					}
 					final CLevelingAbility ability = (CLevelingAbility) found;
-					if ((levelCount > 0) && (ability.getLevel() >= levelCount)) {
-						return IntegerJassValue.of(ability.getLevel());
+					final int shown = leveledLevel(ability);
+					if ((levelCount >= 0) && (ability.getLevel() >= Math.max(levelCount, 1))) {
+						// Measured: the original reads one level past the data's level count. The engine's level data
+						// ends at the count, so that last step is only a reported level.
+						if ((found instanceof AbstractCAbility) && (shown <= levelCount)) {
+							((AbstractCAbility) found).setScriptLevel(shown + 1);
+							return IntegerJassValue.of(shown + 1);
+						}
+						return IntegerJassValue.of(shown);
 					}
 					final int newLevel = ability.getLevel() + 1;
 					ability.setLevel(this.simulation, whichWidget, newLevel);
@@ -146,18 +152,31 @@ final class AbilityNatives extends CommonNatives {
 					final int rawcode = arguments.get(1).visit(IntegerJassValueVisitor.getInstance());
 					final int newLevel = arguments.get(2).visit(IntegerJassValueVisitor.getInstance());
 					final War3ID war3id = new War3ID(rawcode);
-					final CAbility found = whichUnit.getAbilityByRawcode(war3id);
+					final CAbility found = findAbility(whichUnit, war3id);
 					if (found == null) {
 						// Measured: a missing alarm reads 0, it cannot be added by script.
 						return IntegerJassValue.of(war3id.equals(CUnitData.ALARM_ABILITY_ID) ? 0 : newLevel);
 					}
 					// Measured: the level is capped at the data's level count, so a built-in ability whose data has
-					// no levels (attack, move) reads 0 afterwards.
+					// no levels (attack, move) reads 0 afterwards. An ability the data has no row for (the production
+					// queue) is a single level that cannot be set below 1.
 					final int levelCount = this.simulation.getAbilityData().getLevelCount(war3id);
-					final int level = levelCount >= 0 ? Math.min(newLevel, levelCount) : newLevel;
+					final int level;
+					if (levelCount >= 0) {
+						level = Math.min(newLevel, levelCount);
+					}
+					else if (found instanceof CLevelingAbility) {
+						level = newLevel;
+					}
+					else {
+						level = 1;
+					}
 					if (found instanceof CLevelingAbility) {
 						final int leveled = Math.max(1, level);
 						((CLevelingAbility) found).setLevel(this.simulation, whichUnit, leveled);
+						if (found instanceof AbstractCAbility) {
+							((AbstractCAbility) found).setScriptLevel(1);
+						}
 						// A spell also loads the new level's mana cost, cooldown and effect numbers.
 						if ((found instanceof CAbilitySpell) || (found instanceof AbilityBuilderAbility)) {
 							final CAbilityType<?> leveledType = this.simulation.getAbilityData().getAbilityType(war3id);
@@ -191,7 +210,8 @@ final class AbilityNatives extends CommonNatives {
 						return BooleanJassValue.FALSE;
 					}
 					final CAbility existingAbility = whichUnit.getAbilityByRawcode(rawcode);
-					if (existingAbility != null) {
+					if ((existingAbility != null)
+							|| (rawcode.equals(INVENTORY_CODE) && (whichUnit.getInventoryData() != null))) {
 						return BooleanJassValue.FALSE;
 					}
 					// Measured: an ability the data knows is added even where the engine has no behaviour for it
@@ -199,6 +219,13 @@ final class AbilityNatives extends CommonNatives {
 					final int abilityHandleId = this.simulation.getHandleIdAllocator().createId();
 					final CAbility ability = abilityTypeTmp != null ? abilityTypeTmp.createAbility(abilityHandleId)
 							: this.simulation.getAbilityData().createAbility(rawcode, abilityHandleId);
+					if (ability instanceof CAbilityInventory) {
+						// Measured: a unit has one inventory; adding the other alias replaces the one it has.
+						final CAbilityInventory previous = whichUnit.getInventoryData();
+						if (previous != null) {
+							whichUnit.remove(this.simulation, previous);
+						}
+					}
 					whichUnit.add(this.simulation, ability);
 					return BooleanJassValue.TRUE;
 				});
@@ -211,7 +238,7 @@ final class AbilityNatives extends CommonNatives {
 					}
 					final War3ID rawcode = new War3ID(abilityId);
 
-					final CAbility abil = whichUnit.getAbilityByRawcode(rawcode);
+					final CAbility abil = findAbility(whichUnit, rawcode);
 					if (abil != null) {
 						whichUnit.remove(this.simulation, abil);
 						return BooleanJassValue.TRUE;
@@ -431,6 +458,22 @@ final class AbilityNatives extends CommonNatives {
 					final CAbility ability = arguments.get(0).visit(ObjectJassValueVisitor.getInstance());
 					return new StringJassValue(ability.getClass().getSimpleName());
 				});
+	}
+
+	/** The unit's ability by rawcode; a unit inventory (alias Aihn) answers to the plain inventory code too. */
+	private static CAbility findAbility(final CUnit unit, final War3ID rawcode) {
+		final CAbility found = unit.getAbilityByRawcode(rawcode);
+		if ((found == null) && rawcode.equals(INVENTORY_CODE)) {
+			return unit.getInventoryData();
+		}
+		return found;
+	}
+
+	// A leveling ability's own level, or the one past its data that IncUnitAbilityLevel can report.
+	static int leveledLevel(final CLevelingAbility ability) {
+		final int level = Math.max(1, ability.getLevel());
+		return (ability instanceof AbstractCAbility) ? Math.max(level, ((AbstractCAbility) ability).getScriptLevel())
+				: level;
 	}
 
 	static int scriptLevel(final CAbility ability) {

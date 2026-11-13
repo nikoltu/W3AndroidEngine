@@ -52,44 +52,6 @@ final class OrderNatives extends CommonNatives {
 	}
 
 	private void registerUnitOrders() {
-		jassProgramVisitor.getJassNativeManager().createNative("IssuePointOrderLoc",
-				(arguments, globalScope, triggerScope) -> {
-					final CUnit whichUnit = arguments.get(0).visit(ObjectJassValueVisitor.getInstance());
-					if (whichUnit == null) {
-						return BooleanJassValue.FALSE;
-					}
-					final String orderString = arguments.get(1).visit(StringJassValueVisitor.getInstance());
-					final AbilityPointTarget whichLocation = arguments.get(2)
-							.visit(ObjectJassValueVisitor.getInstance());
-					final CPlayerUnitOrderExecutor defaultPlayerUnitOrderExecutor = this.simulation
-							.getDefaultPlayerUnitOrderExecutor(whichUnit.getPlayerIndex());
-					final BooleanAbilityActivationReceiver activationReceiver = BooleanAbilityActivationReceiver.INSTANCE;
-					final int orderId = OrderIdUtils.getOrderId(orderString);
-					int abilityHandleId = 0;
-					AbilityPointTarget targetAsPoint = new AbilityPointTarget(whichLocation.x, whichLocation.y);
-					for (final CAbility ability : whichUnit.getAbilities()) {
-						if (isHeldItemAbility(whichUnit, ability)) {
-							continue;
-						}
-						ability.checkCanUse(this.simulation, whichUnit,
-								whichUnit.getPlayerIndex(), orderId, false, activationReceiver.reset());
-						if (activationReceiver.isOk()) {
-							final PointAbilityTargetCheckReceiver targetReceiver = PointAbilityTargetCheckReceiver.INSTANCE;
-							ability.checkCanTarget(this.simulation, whichUnit,
-									whichUnit.getPlayerIndex(), orderId, false, targetAsPoint,
-									targetReceiver.reset());
-							if (targetReceiver.getTarget() != null) {
-								targetAsPoint = targetReceiver.getTarget();
-								abilityHandleId = ability.getHandleId();
-							}
-						}
-					}
-					if (abilityHandleId != 0) {
-						defaultPlayerUnitOrderExecutor.issuePointOrder(whichUnit.getHandleId(), abilityHandleId,
-								orderId, targetAsPoint.x, targetAsPoint.y, false);
-					}
-					return BooleanJassValue.of(abilityHandleId != 0);
-				});
 		final JassFunction issuePointOrderById = (arguments, globalScope, triggerScope) -> {
 			final CUnit whichUnit = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
 			final int orderId = arguments.get(1).visit(IntegerJassValueVisitor.getInstance());
@@ -97,8 +59,10 @@ final class OrderNatives extends CommonNatives {
 					orderId, arguments.get(2).visit(RealJassValueVisitor.getInstance()).floatValue(),
 					arguments.get(3).visit(RealJassValueVisitor.getInstance()).floatValue());
 			// Measured on 1.29: a worker given a building's id as a point order starts to build it, but the native
-			// reports false; IssueBuildOrderById reports true.
-			return BooleanJassValue.of(issued && !isUnitTypeId(orderId));
+			// reports false; IssueBuildOrderById reports true. The AI's move (851988) is carried out and reports
+			// false too, and so is a smart order on a point.
+			return BooleanJassValue.of(issued && !isUnitTypeId(orderId) && (orderId != OrderIds.AImove)
+					&& (orderId != OrderIds.smart));
 		};
 		jassProgramVisitor.getJassNativeManager().createNative("IssuePointOrderById", issuePointOrderById);
 		jassProgramVisitor.getJassNativeManager().createNative("IssuePointOrder",
@@ -107,6 +71,19 @@ final class OrderNatives extends CommonNatives {
 					return issuePointOrderById.call(Arrays.asList(arguments.get(0),
 							IntegerJassValue.of(OrderIdUtils.getOrderId(orderString)), arguments.get(2),
 							arguments.get(3)), globalScope, triggerScope);
+				});
+		jassProgramVisitor.getJassNativeManager().createNative("IssuePointOrderLoc",
+				(arguments, globalScope, triggerScope) -> {
+					final AbilityPointTarget whichLocation = arguments.get(2)
+							.visit(ObjectJassValueVisitor.getInstance());
+					if (whichLocation == null) {
+						return BooleanJassValue.FALSE;
+					}
+					final String orderString = arguments.get(1).visit(StringJassValueVisitor.getInstance());
+					return issuePointOrderById.call(Arrays.asList(arguments.get(0),
+							IntegerJassValue.of(OrderIdUtils.getOrderId(orderString)),
+							new RealJassValue(whichLocation.x), new RealJassValue(whichLocation.y)), globalScope,
+							triggerScope);
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("IssuePointOrderByIdLoc",
 				(arguments, globalScope, triggerScope) -> {

@@ -208,6 +208,18 @@ public class CAbilityHarvest extends AbstractGenericSingleIconActiveAbility {
 	}
 
 	@Override
+	public void checkCanTarget(final CSimulation game, final CUnit unit, final int playerIndex, final int orderId,
+			final boolean autoOrder, final CWidget target, final AbilityTargetCheckReceiver<CWidget> receiver) {
+		if (orderId == OrderIds.harvest) {
+			// The base order turns into return-resources while a load is carried, but a harvest order still
+			// stands then: one queued while the worker was inside the mine is taken on leaving it, load in hand.
+			innerCheckCanTarget(game, unit, orderId, target, receiver);
+			return;
+		}
+		super.checkCanTarget(game, unit, playerIndex, orderId, autoOrder, target, receiver);
+	}
+
+	@Override
 	protected void innerCheckCanTarget(final CSimulation game, final CUnit unit, final int orderId,
 			final CWidget target, final AbilityTargetCheckReceiver<CWidget> receiver) {
 		if (target instanceof CUnit) {
@@ -216,6 +228,11 @@ public class CAbilityHarvest extends AbstractGenericSingleIconActiveAbility {
 				return;
 			}
 			final CUnit targetUnit = (CUnit) target;
+			if (targetUnit.isHidden()) {
+				// A start mine an Entangle replaced stays in the world hidden; the original refuses it.
+				receiver.targetCheckFailed(CommandStringErrorKeys.MUST_TARGET_RESOURCES);
+				return;
+			}
 			for (final CAbility ability : targetUnit.getAbilities()) {
 				if (ability instanceof CAbilityGoldMinable) {
 					receiver.targetOk(target);

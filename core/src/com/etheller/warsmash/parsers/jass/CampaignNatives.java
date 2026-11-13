@@ -315,6 +315,23 @@ final class CampaignNatives {
 			this.viewer.playModelCinematic(string(arguments, 0));
 			return null;
 		});
+		add("BlzPlayModelCinematicGameAtPosition", (arguments, globalScope, triggerScope) -> {
+			this.viewer.playModelCinematicAtPosition(string(arguments, 0), real(arguments, 1), real(arguments, 2),
+					real(arguments, 3), real(arguments, 4));
+			return null;
+		});
+		add("BlzPreloadModelCinematicGame", (arguments, globalScope, triggerScope) -> BooleanJassValue
+				.of(this.viewer.preloadModelCinematic(string(arguments, 0))));
+		add("BlzGetModelCinematicGameShotCount", (arguments, globalScope, triggerScope) -> IntegerJassValue
+				.of(this.viewer.getModelCinematicShotCount()));
+		add("BlzGetModelCinematicGameCurrentShot", (arguments, globalScope, triggerScope) -> IntegerJassValue
+				.of(this.viewer.getModelCinematicCurrentShot()));
+		add("BlzGetModelCinematicGameRemainingTime", (arguments, globalScope, triggerScope) -> RealJassValue
+				.of(this.viewer.getModelCinematicRemainingTime()));
+		add("BlzSetCinematicEnabledDE", (arguments, globalScope, triggerScope) -> {
+			this.viewer.setModelCinematicsEnabled(bool(arguments, 0));
+			return null;
+		});
 		add("PlayCinematic", (arguments, globalScope, triggerScope) -> {
 			this.simulation.queueCinematic(string(arguments, 0));
 			return null;

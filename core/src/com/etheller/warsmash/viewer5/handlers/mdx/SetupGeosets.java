@@ -1,5 +1,7 @@
 package com.etheller.warsmash.viewer5.handlers.mdx;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -42,7 +44,7 @@ public class SetupGeosets {
 					}
 
 					if ((geoset.skin != null) && isHdMaterial(model, geoset)) {
-						skinBytes += vertices * 8;
+						skinBytes += vertices * (needsWideSkin(geoset) ? WIDE_SKIN_STRIDE : 8);
 
 						batchTypes[i] = SkinningType.Skin;
 					}
@@ -102,6 +104,7 @@ public class SetupGeosets {
 					final float[] tangents = geoset.getTangents();
 					final int[] faces = geoset.getFaces();
 					int[] skin = null;
+					boolean wideSkin = false;
 					final int vertices = geoset.getVertices().length / 3;
 
 					int maxBones;
@@ -121,8 +124,9 @@ public class SetupGeosets {
 					if (batchType == SkinningType.Skin) {
 						skin = new int[geoset.skin.length];
 						for (int j = 0; j < geoset.skin.length; j++) {
-							skin[j] = geoset.skin[j];
+							skin[j] = geoset.skin[j] & 0xFFFF;
 						}
+						wideSkin = needsWideSkin(geoset);
 					}
 					else if (geoset.skin != null) {
 						skin = skinToVertexGroups(geoset.skin, vertices);
@@ -174,6 +178,7 @@ public class SetupGeosets {
 					final Geoset vGeoset = new Geoset(model, model.getGeosets().size(), i, positionOffset,
 							normalOffset, uvOffset, tangentOffset, skinOffset, faceOffset, vertices, faces.length,
 							openGLSkinType, skinStride, boneCountOffsetBytes, unselectable, geoset);
+					vGeoset.wideSkin = wideSkin;
 
 					model.getGeosets().add(vGeoset);
 
@@ -212,9 +217,21 @@ public class SetupGeosets {
 					}
 
 					// Skin.
-					gl.glBufferSubData(GL20.GL_ARRAY_BUFFER, skinOffset, skin.length * (bigNodeSpace ? 4 : 1),
-							bigNodeSpace ? RenderMathUtils.wrap(skin) : RenderMathUtils.wrapAsBytes(skin));
-					skinOffset += skin.length * (bigNodeSpace ? 4 : 1);
+					if (wideSkin) {
+						final ByteBuffer wide = wideSkinBytes(skin);
+						gl.glBufferSubData(GL20.GL_ARRAY_BUFFER, skinOffset, wide.capacity(), wide);
+						skinOffset += wide.capacity();
+					}
+					else if (batchType == SkinningType.Skin) {
+						gl.glBufferSubData(GL20.GL_ARRAY_BUFFER, skinOffset, skin.length,
+								RenderMathUtils.wrapAsBytes(skin));
+						skinOffset += skin.length;
+					}
+					else {
+						gl.glBufferSubData(GL20.GL_ARRAY_BUFFER, skinOffset, skin.length * (bigNodeSpace ? 4 : 1),
+								bigNodeSpace ? RenderMathUtils.wrap(skin) : RenderMathUtils.wrapAsBytes(skin));
+						skinOffset += skin.length * (bigNodeSpace ? 4 : 1);
+					}
 
 					// Faces.
 					gl.glBufferSubData(GL20.GL_ELEMENT_ARRAY_BUFFER, faceOffset, faces.length * 2,
@@ -226,6 +243,42 @@ public class SetupGeosets {
 		}
 	}
 
+
+	/**
+	 * Bytes per vertex of a wide HD skin: four bone indices as unsigned shorts, then four weights as bytes.
+	 */
+	static final int WIDE_SKIN_STRIDE = 12;
+
+	/**
+	 * The HD skin keeps a bone index in one byte, which cannot address the bones of a model with more than 255 of them.
+	 * Only the geosets that really use such an index take the wider layout.
+	 */
+	private static boolean needsWideSkin(final MdlxGeoset geoset) {
+		final short[] skin = geoset.skin;
+		for (int in = 0; in < skin.length; in += 8) {
+			for (int j = 0; j < 4; j++) {
+				if ((skin[in + j] & 0xFFFF) > 255) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	private static ByteBuffer wideSkinBytes(final int[] skin) {
+		final ByteBuffer buffer = ByteBuffer.allocateDirect((skin.length / 8) * WIDE_SKIN_STRIDE)
+				.order(ByteOrder.nativeOrder());
+		for (int in = 0; in < skin.length; in += 8) {
+			for (int j = 0; j < 4; j++) {
+				buffer.putShort((short) skin[in + j]);
+			}
+			for (int j = 4; j < 8; j++) {
+				buffer.put((byte) skin[in + j]);
+			}
+		}
+		buffer.clear();
+		return buffer;
+	}
 
 	private static boolean isHdMaterial(final MdxModel model, final MdlxGeoset geoset) {
 		return "Shader_HD_DefaultUnit".equals(model.materials.get((int) geoset.getMaterialId()).shader);
@@ -246,7 +299,7 @@ public class SetupGeosets {
 				total += skin[in + 4 + j] & 0xFF;
 			}
 			if (total == 0) {
-				groups[out] = (skin[in] & 0xFF) + 1;
+				groups[out] = (skin[in] & 0xFFFF) + 1;
 				groups[out + slots] = 1;
 				continue;
 			}
@@ -256,7 +309,7 @@ public class SetupGeosets {
 				weightSoFar += skin[in + 4 + j] & 0xFF;
 				final int end = Math.round(((float) weightSoFar * slots) / total);
 				while (used < end) {
-					groups[out + used++] = (skin[in + j] & 0xFF) + 1;
+					groups[out + used++] = (skin[in + j] & 0xFFFF) + 1;
 				}
 			}
 			groups[out + slots] = used;

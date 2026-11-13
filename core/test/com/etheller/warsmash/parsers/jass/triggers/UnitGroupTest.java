@@ -40,6 +40,28 @@ class UnitGroupTest {
 	}
 
 	@Test
+	void unitsMadeBeforeTheStartComeAfterLaterOnesGroupedByType() {
+		final int[] typeA = { 5 };
+		final int[] typeB = { 3 };
+		final CUnit a1 = unit(10);
+		final CUnit b1 = unit(11);
+		final CUnit a2 = unit(12);
+		final CUnit b2 = unit(13);
+		final CUnit later = unit(20);
+		a1.setStartCreation(0, typeA);
+		b1.setStartCreation(1, typeB);
+		a2.setStartCreation(2, typeA);
+		b2.setStartCreation(3, typeB);
+		typeA[0] = 4;
+		typeB[0] = 3;
+		final UnitGroup group = new UnitGroup(1);
+		for (final CUnit unit : new CUnit[] { b2, a2, later, b1, a1 }) {
+			group.add(unit);
+		}
+		assertEquals(Arrays.asList(20, 10, 12, 11, 13), handleIds(group));
+	}
+
+	@Test
 	void addAllKeepsTheSameOrder() {
 		final UnitGroup group = new UnitGroup(1);
 		group.add(unit(104));

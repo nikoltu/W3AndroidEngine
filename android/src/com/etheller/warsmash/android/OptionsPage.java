@@ -192,7 +192,9 @@ final class OptionsPage extends LauncherViews {
 	private void touchRows(final LinearLayout rows, final EngineSettings engine) {
 		touchRow(rows, R.string.options_tap_slop, engine, "TapSlopDp", 10, 4, 24, R.string.options_dp);
 		touchRow(rows, R.string.options_long_press, engine, "LongPressMs", 300, 200, 800, R.string.options_ms);
-		touchRow(rows, R.string.options_palm, engine, "PalmTouchMajorDp", 40, 20, 80, R.string.options_dp);
+		checkRow(rows, R.string.options_palm_on, !"Off".equalsIgnoreCase(engine.touch("PalmRejection", "")),
+				on -> engine.setTouch("PalmRejection", on ? "Auto" : "Off"));
+		touchRow(rows, R.string.options_palm, engine, "PalmTouchMajorDp", 96, 20, 400, R.string.options_dp);
 		touchRow(rows, R.string.options_tap_reach, engine, "GhostTapRadiusDp", 48, 16, 96, R.string.options_dp);
 		checkRow(rows, R.string.options_pen_fingers, "Allow".equalsIgnoreCase(engine.touch("PenFingerPolicy", "")),
 				on -> engine.setTouch("PenFingerPolicy", on ? "Allow" : "Ignore"));

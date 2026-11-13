@@ -197,8 +197,11 @@ public class AndroidLauncher extends AndroidApplication {
 					TouchSettings.fromIni(touchSettings, getResources().getDisplayMetrics().density),
 					SystemClock::uptimeMillis,
 					(touchSettings != null) && (touchSettings.getFieldValue("ShowTouchDebug") != 0));
+			router.setPenCapable(AndroidPointerSource.hasStylus());
 			TouchInputRouter.install(router);
-			this.pointerSource = new AndroidPointerSource(router);
+			this.pointerSource = new AndroidPointerSource(router,
+					AndroidPointerSource.touchMajorScale(getResources().getDisplayMetrics().widthPixels,
+							getResources().getDisplayMetrics().heightPixels));
 		}
 		loadExtensions(new File(getCacheDir(), "sounds"));
 		this.moviePlayer = (movies, done) -> runOnUiThread(() -> {

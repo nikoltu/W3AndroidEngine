@@ -1,5 +1,6 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.neutral.seawitch;
 
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.CAreaTargetVisibility;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -67,7 +68,7 @@ public class CAbilityForkedLightning extends CAbilityTargetSpellBase {
 		simulation.getWorldCollision().enumUnitsInRange(originX, originY, searchRadius, (enumUnit) -> {
 			if ((enumUnit != primary) && isInCone(enumUnit, originX, originY, dirX, dirY)
 					&& !enumUnit.isUnitAlly(simulation.getPlayer(caster.getPlayerIndex()))
-					&& enumUnit.canBeTargetedBy(simulation, caster, false, getTargetsAllowed(),
+					&& enumUnit.canBeAreaTargetedBy(simulation, caster, CAreaTargetVisibility.NOT_HIDDEN_GHOST, getTargetsAllowed(),
 							BooleanAbilityTargetCheckReceiver.<CWidget>getInstance().reset())) {
 				candidates.add(enumUnit);
 			}

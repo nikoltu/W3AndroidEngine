@@ -4,6 +4,7 @@ import java.util.EnumSet;
 
 import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.util.WarsmashConstants;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CReleaseCheats;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CWidget;
@@ -76,7 +77,8 @@ public class CAbilityImmolation extends AbstractGenericSingleIconNoSmartActiveAb
 	public void onTick(final CSimulation game, final CUnit unit) {
 		if (this.active) {
 			// Measured: the drain is spread over every tick of the interval, not charged at its start.
-			final float drain = (this.manaDrainedPerSecond * WarsmashConstants.SIMULATION_STEP_TIME) / this.duration;
+			final float drain = CReleaseCheats.isManaFree(game, unit) ? 0f
+					: (this.manaDrainedPerSecond * WarsmashConstants.SIMULATION_STEP_TIME) / this.duration;
 			if (unit.getMana() >= drain) {
 				unit.setMana(unit.getMana() - drain);
 			}
@@ -94,7 +96,7 @@ public class CAbilityImmolation extends AbstractGenericSingleIconNoSmartActiveAb
 			return false;
 		}
 		else if (!this.active && (orderId == OrderIds.immolation)) {
-			if (caster.chargeMana(chargedManaCost())) {
+			if (caster.chargeMana(CReleaseCheats.manaCost(game, caster, chargedManaCost()))) {
 				activate(game, caster);
 			}
 			return false;
@@ -163,7 +165,8 @@ public class CAbilityImmolation extends AbstractGenericSingleIconNoSmartActiveAb
 	@Override
 	protected void innerCheckCanUse(final CSimulation game, final CUnit unit, final int playerIndex, final int orderId,
 			final AbilityActivationReceiver receiver) {
-		if (!this.active && (unit.getMana() < (chargedManaCost() + this.bufferManaRequired))) {
+		if (!this.active && !CReleaseCheats.isManaFree(game, unit)
+				&& (unit.getMana() < (chargedManaCost() + this.bufferManaRequired))) {
 			receiver.activationCheckFailed(CommandStringErrorKeys.NOT_ENOUGH_MANA);
 		}
 		else {

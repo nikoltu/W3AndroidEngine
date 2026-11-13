@@ -337,7 +337,6 @@ public class OrderIds {
 	public static final int mount = 852469;
 	public static final int mounthippogryph = 852143;
 	public static final int move = 851986;
-	public static final int moveAI = 851988;
 	public static final int nagabuild = 852467;
 	public static final int neutraldetectaoe = 852023;
 	public static final int neutralinteract = 852566;

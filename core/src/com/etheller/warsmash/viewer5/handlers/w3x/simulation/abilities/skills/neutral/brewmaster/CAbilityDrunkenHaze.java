@@ -1,5 +1,6 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.neutral.brewmaster;
 
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.CAreaTargetVisibility;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -83,7 +84,7 @@ public class CAbilityDrunkenHaze extends CAbilityTargetSpellBase {
 		final List<CUnit> drenched = new ArrayList<>();
 		game.getWorldCollision().enumUnitsInRange(x, y, this.areaOfEffect, (enumUnit) -> {
 			if (enumUnit.canReach(x, y, this.areaOfEffect)
-					&& enumUnit.canBeTargetedBy(game, caster, false, getTargetsAllowed(),
+					&& enumUnit.canBeAreaTargetedBy(game, caster, CAreaTargetVisibility.ANY, getTargetsAllowed(),
 							BooleanAbilityTargetCheckReceiver.<CWidget>getInstance().reset())) {
 				drenched.add(enumUnit);
 			}

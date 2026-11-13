@@ -41,7 +41,10 @@ public class CAbilityAbilityBuilderActivePointTarget extends CAbilityAbilityBuil
 
 	@Override
 	public CBehavior begin(CSimulation game, CUnit caster, int playerIndex, int orderId, boolean autoOrder, CWidget target) {
-		return null;
+		if (target.visit(AbilityTargetVisitor.UNIT) == null) {
+			return null;
+		}
+		return begin(game, caster, playerIndex, orderId, autoOrder, new AbilityPointTarget(target.getX(), target.getY()));
 	}
 
 	@Override
@@ -65,6 +68,44 @@ public class CAbilityAbilityBuilderActivePointTarget extends CAbilityAbilityBuil
 		return null;
 	}
 	
+	/**
+	 * Measured: a ground spell also takes an order aimed at a unit (a script, the computer player) and is cast on the
+	 * ground where the unit stands.
+	 */
+	@Override
+	protected void innerCheckCanTarget(CSimulation game, CUnit unit, int orderId, CWidget target,
+			AbilityTargetCheckReceiver<CWidget> receiver) {
+		if (target.visit(AbilityTargetVisitor.UNIT) == null) {
+			receiver.orderIdNotAccepted();
+			return;
+		}
+		if (!innerCheckTargetTargetable(game, unit, target, receiver)) {
+			return;
+		}
+		innerCheckCanTarget(game, unit, orderId, new AbilityPointTarget(target.getX(), target.getY()),
+				new AbilityTargetCheckReceiver<AbilityPointTarget>() {
+					@Override
+					public void targetOk(final AbilityPointTarget point) {
+						receiver.targetOk(target);
+					}
+
+					@Override
+					public void notAnActiveAbility() {
+						receiver.notAnActiveAbility();
+					}
+
+					@Override
+					public void orderIdNotAccepted() {
+						receiver.orderIdNotAccepted();
+					}
+
+					@Override
+					public void targetCheckFailed(final String commandStringErrorKey) {
+						receiver.targetCheckFailed(commandStringErrorKey);
+					}
+				});
+	}
+
 	@Override
 	protected boolean innerCheckCanUseSpell(CSimulation game, CUnit unit, int orderId,
 			AbilityActivationReceiver receiver) {

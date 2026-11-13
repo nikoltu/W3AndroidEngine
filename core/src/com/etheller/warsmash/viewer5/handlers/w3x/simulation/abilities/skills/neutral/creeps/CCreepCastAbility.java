@@ -31,6 +31,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.attacks.CUni
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.orders.COrderNoTarget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.orders.OrderIds;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayer;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.timers.CTimer;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.BooleanAbilityActivationReceiver;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.BooleanAbilityTargetCheckReceiver;
 
@@ -48,6 +49,7 @@ public interface CCreepCastAbility {
 	// Measured on 1.29: a hero 160 to 250 from the group, out of the area, also keeps the Frost Revenant from casting.
 	float GROUP_CAST_HERO_AREA_FACTOR = 2;
 	float ATTACKER_SEARCH_RANGE = 1000;
+	int HIT_MEMORY_TICKS = CTimer.wholeSteps(2.0f);
 	float HEAL_EXTRA_REACH = 300;
 	float SELF_HEAL_LIFE_FRACTION = 0.55f;
 	// Attacks up to this range count as melee (Murloc Mutant 100, Furbolg 100, Footman 90).
@@ -455,6 +457,18 @@ public interface CCreepCastAbility {
 			return false;
 		});
 		CUnit target = best[0];
+		// Measured on 1.29: Flame Strike and Shadow Strike come only once an enemy has hurt the caster while at least
+		// two enemies are around, and go to the enemy behind his hardest recent hit (a hero before a footman), not to
+		// the nearest or to the one he attacks.
+		if ((orderId == OrderIds.flamestrike) || (orderId == OrderIds.shadowstrike)) {
+			final CUnit hurtBy = creep.getHeaviestHitBy(game.getGameTurnTick(), HIT_MEMORY_TICKS);
+			if ((hurtBy == null) || hurtBy.isDead() || hurtBy.isHidden() || hurtBy.isUnitAlly(player)
+					|| !creep.canReach(hurtBy, range) || !canTarget(game, creep, ability, orderId, hurtBy)
+					|| (countEnemiesAround(game, creep, player) < 2)) {
+				return false;
+			}
+			target = hurtBy;
+		}
 		if ((target == null) && creep.canReach(attackTarget, range)
 				&& (!onlyAttackers || isAttacking(game, attackTarget, player)) && isRuleTarget(rule, attackTarget)
 				&& canTarget(game, creep, ability, orderId, attackTarget)) {
@@ -466,6 +480,17 @@ public interface CCreepCastAbility {
 		// Carrion Swarm and Crushing Wave are aimed at a point here; 1.29 creeps aim them at the unit.
 		return creep.order(game, orderId, target, true)
 				|| creep.order(game, orderId, new AbilityPointTarget(target.getX(), target.getY()), true);
+	}
+
+	static int countEnemiesAround(final CSimulation game, final CUnit unit, final CPlayer player) {
+		final int[] count = { 0 };
+		game.getWorldCollision().enumUnitsInRange(unit.getX(), unit.getY(), ATTACKER_SEARCH_RANGE, (enumUnit) -> {
+			if (!enumUnit.isDead() && !enumUnit.isHidden() && !enumUnit.isUnitAlly(player)) {
+				count[0]++;
+			}
+			return false;
+		});
+		return count[0];
 	}
 
 	static boolean isRuleTarget(final Rule rule, final CUnit target) {

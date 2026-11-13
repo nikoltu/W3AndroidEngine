@@ -65,17 +65,18 @@ public class UnitGroup extends ArrayList<CUnit> implements CAllocatedHandle {
 	}
 
 	/**
-	 * Measured on 1.29: a group keeps its units by handle id, newest first, whatever the order
-	 * they were added in; ForGroup and FirstOfGroup follow it.
+	 * Measured on 1.29: a group keeps its units in a fixed order, whatever the order they were added in; ForGroup and
+	 * FirstOfGroup follow it. Units made after the game started come first, newest first (by handle id). Then come the
+	 * units made while the map was loading (the map's own units): grouped by unit type, the type of the unit made last
+	 * first, and inside a type in the order they were made.
 	 */
 	@Override
 	public boolean add(final CUnit unit) {
 		int index = super.size();
 		if (unit != null) {
-			final int handleId = unit.getHandleId();
 			for (int i = 0; i < super.size(); i++) {
 				final CUnit other = super.get(i);
-				if ((other == null) || (other.getHandleId() < handleId)) {
+				if ((other == null) || precedes(unit, other)) {
 					index = i;
 					break;
 				}
@@ -83,6 +84,23 @@ public class UnitGroup extends ArrayList<CUnit> implements CAllocatedHandle {
 		}
 		super.add(index, unit);
 		return true;
+	}
+
+	private static boolean precedes(final CUnit unit, final CUnit other) {
+		final boolean unitFromStart = unit.isMadeBeforeStart();
+		final boolean otherFromStart = other.isMadeBeforeStart();
+		if (unitFromStart != otherFromStart) {
+			return otherFromStart;
+		}
+		if (!unitFromStart) {
+			return other.getHandleId() < unit.getHandleId();
+		}
+		final int unitTypeLast = unit.getStartTypeLastIndex();
+		final int otherTypeLast = other.getStartTypeLastIndex();
+		if (unitTypeLast != otherTypeLast) {
+			return unitTypeLast > otherTypeLast;
+		}
+		return unit.getStartCreationIndex() < other.getStartCreationIndex();
 	}
 
 	@Override

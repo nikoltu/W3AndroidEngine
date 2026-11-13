@@ -165,19 +165,8 @@ public class CAbilityAttack extends AbstractCAbility {
 			receiver.targetOk(target);
 			break;
 		case OrderIds.attackground:
-			boolean allowAttackGround = false;
-			for (final CUnitAttack attack : unit.getCurrentAttacks()) {
-				if (attack.getWeaponType().isAttackGroundSupported()) {
-					allowAttackGround = true;
-					break;
-				}
-			}
-			if (allowAttackGround) {
-				receiver.targetOk(target);
-			}
-			else {
-				receiver.orderIdNotAccepted();
-			}
+			// Scripts can attack-ground with any attacker; one that cannot hit the ground just walks there.
+			receiver.targetOk(target);
 			break;
 		default:
 			receiver.orderIdNotAccepted();

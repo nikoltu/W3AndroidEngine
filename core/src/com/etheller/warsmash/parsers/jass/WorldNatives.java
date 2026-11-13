@@ -32,7 +32,6 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.state.CGameState;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.CFogState;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.SimulationRenderComponentWeather;
 import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Fog of war, visibility, weather, time of day, game state and cheats.
@@ -377,7 +376,6 @@ final class WorldNatives extends CommonNatives {
 						// Measured on 1.29: no modifier without a rect.
 						return fogmodifierType.getNullValue();
 					}
-					// TODO share vision thing will be busted after change of player alliance
 					final boolean sharedVision = arguments.get(3).visit(BooleanJassValueVisitor.getInstance());
 					final boolean afterUnits = arguments.get(4).visit(BooleanJassValueVisitor.getInstance());
 
@@ -386,23 +384,11 @@ final class WorldNatives extends CommonNatives {
 						return fogmodifierType.getNullValue();
 					}
 					fogModifier.setEnabled(false);
-					if (sharedVision) {
-						final List<CFogModifierJass> modifiers = new ArrayList<>();
-						for (int playerIndex = 0; playerIndex < this.simulation.getGameData().getMaxPlayers(); playerIndex++) {
-							if (player.hasAlliance(playerIndex, CAllianceType.SHARED_VISION)
-									|| player.hasAlliance(playerIndex, CAllianceType.SHARED_VISION_FORCED)) {
-								final CPlayer alliedPlayer = this.simulation.getPlayer(playerIndex);
-								alliedPlayer.addFogModifer(this.simulation, fogModifier, afterUnits);
-								modifiers.add(new CFogModifierJassSingle(alliedPlayer.getId(), fogModifier));
-							}
-						}
-						return newFogModifier(fogmodifierType, new CFogModifierJassMulti(modifiers));
-					}
-					else {
-						player.addFogModifer(this.simulation, fogModifier, afterUnits);
-						return newFogModifier(fogmodifierType,
-								new CFogModifierJassSingle(player.getId(), fogModifier));
-					}
+					// Measured on 1.29: a modifier belongs to its own player; allies get it through shared vision at each
+					// fog update, and only when the modifier is made with the shared vision flag.
+					fogModifier.setSharedVision(sharedVision);
+					player.addFogModifer(this.simulation, fogModifier, afterUnits);
+					return newFogModifier(fogmodifierType, new CFogModifierJassSingle(player.getId(), fogModifier));
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("CreateFogModifierRadius",
 				(arguments, globalScope, triggerScope) -> {
@@ -416,7 +402,6 @@ final class WorldNatives extends CommonNatives {
 					final float centerX = arguments.get(2).visit(RealJassValueVisitor.getInstance()).floatValue();
 					final float centerY = arguments.get(3).visit(RealJassValueVisitor.getInstance()).floatValue();
 					final float radius = arguments.get(4).visit(RealJassValueVisitor.getInstance()).floatValue();
-					// TODO share vision thing will be busted after change of player alliance
 					final boolean sharedVision = arguments.get(5).visit(BooleanJassValueVisitor.getInstance());
 					final boolean afterUnits = arguments.get(6).visit(BooleanJassValueVisitor.getInstance());
 
@@ -426,23 +411,11 @@ final class WorldNatives extends CommonNatives {
 						return fogmodifierType.getNullValue();
 					}
 					fogModifier.setEnabled(false);
-					if (sharedVision) {
-						final List<CFogModifierJass> modifiers = new ArrayList<>();
-						for (int playerIndex = 0; playerIndex < this.simulation.getGameData().getMaxPlayers(); playerIndex++) {
-							if (player.hasAlliance(playerIndex, CAllianceType.SHARED_VISION)
-									|| player.hasAlliance(playerIndex, CAllianceType.SHARED_VISION_FORCED)) {
-								final CPlayer alliedPlayer = this.simulation.getPlayer(playerIndex);
-								alliedPlayer.addFogModifer(this.simulation, fogModifier, afterUnits);
-								modifiers.add(new CFogModifierJassSingle(alliedPlayer.getId(), fogModifier));
-							}
-						}
-						return newFogModifier(fogmodifierType, new CFogModifierJassMulti(modifiers));
-					}
-					else {
-						player.addFogModifer(this.simulation, fogModifier, afterUnits);
-						return newFogModifier(fogmodifierType,
-								new CFogModifierJassSingle(player.getId(), fogModifier));
-					}
+					// Measured on 1.29: a modifier belongs to its own player; allies get it through shared vision at each
+					// fog update, and only when the modifier is made with the shared vision flag.
+					fogModifier.setSharedVision(sharedVision);
+					player.addFogModifer(this.simulation, fogModifier, afterUnits);
+					return newFogModifier(fogmodifierType, new CFogModifierJassSingle(player.getId(), fogModifier));
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("CreateFogModifierRadiusLoc",
 				(arguments, globalScope, triggerScope) -> {
@@ -459,7 +432,6 @@ final class WorldNatives extends CommonNatives {
 						return fogmodifierType.getNullValue();
 					}
 					final float radius = arguments.get(3).visit(RealJassValueVisitor.getInstance()).floatValue();
-					// TODO share vision thing will be busted after change of player alliance
 					final boolean sharedVision = arguments.get(4).visit(BooleanJassValueVisitor.getInstance());
 					final boolean afterUnits = arguments.get(5).visit(BooleanJassValueVisitor.getInstance());
 					final float centerX = center.x;
@@ -471,23 +443,11 @@ final class WorldNatives extends CommonNatives {
 						return fogmodifierType.getNullValue();
 					}
 					fogModifier.setEnabled(false);
-					if (sharedVision) {
-						final List<CFogModifierJass> modifiers = new ArrayList<>();
-						for (int playerIndex = 0; playerIndex < this.simulation.getGameData().getMaxPlayers(); playerIndex++) {
-							if (player.hasAlliance(playerIndex, CAllianceType.SHARED_VISION)
-									|| player.hasAlliance(playerIndex, CAllianceType.SHARED_VISION_FORCED)) {
-								final CPlayer alliedPlayer = this.simulation.getPlayer(playerIndex);
-								alliedPlayer.addFogModifer(this.simulation, fogModifier, afterUnits);
-								modifiers.add(new CFogModifierJassSingle(alliedPlayer.getId(), fogModifier));
-							}
-						}
-						return newFogModifier(fogmodifierType, new CFogModifierJassMulti(modifiers));
-					}
-					else {
-						player.addFogModifer(this.simulation, fogModifier, afterUnits);
-						return newFogModifier(fogmodifierType,
-								new CFogModifierJassSingle(player.getId(), fogModifier));
-					}
+					// Measured on 1.29: a modifier belongs to its own player; allies get it through shared vision at each
+					// fog update, and only when the modifier is made with the shared vision flag.
+					fogModifier.setSharedVision(sharedVision);
+					player.addFogModifer(this.simulation, fogModifier, afterUnits);
+					return newFogModifier(fogmodifierType, new CFogModifierJassSingle(player.getId(), fogModifier));
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("DestroyFogModifier",
 				(arguments, globalScope, triggerScope) -> {

@@ -86,6 +86,39 @@ final class CUnitAggro {
 		}
 	}
 
+	/**
+	 * Measured on 1.29: every unit that stands idle remembers the spot, and a fight it started by itself (it saw an
+	 * enemy or was hit) ends like a guard's: it goes back when it loses its target and gives up a chase on the same
+	 * limits. A fight it was ordered into has no limit.
+	 */
+	static void updatePost(final CUnit self, final CSimulation game) {
+		if ((self.moveBehavior == null) || self.isMovementDisabled()) {
+			return;
+		}
+		if (!self.aggro.postFight && (self.aggro.guardReturn == CUnit.GUARD_RETURN_NONE)) {
+			if ((self.orders.currentBehavior == self.orders.defaultBehavior) && (self.orders.defaultBehavior != null)
+					&& (self.orders.defaultBehavior != self.holdPositionBehavior)) {
+				self.aggro.postSet = true;
+				self.aggro.guardX = self.getX();
+				self.aggro.guardY = self.getY();
+				self.aggro.guardEngaged = false;
+				self.aggro.guardAwayTick = -1;
+			}
+			return;
+		}
+		if (self.aggro.postSet) {
+			updateGuard(self, game);
+		}
+	}
+
+	/** A fight a unit that stood idle took up by itself; it is left when the unit is ordered. */
+	static void beginPostFight(final CUnit self, final boolean fromIdle) {
+		if (fromIdle && self.aggro.postSet && !self.aggro.guarding
+				&& (self.orders.defaultBehavior != self.holdPositionBehavior)) {
+			self.aggro.postFight = true;
+		}
+	}
+
 	static double distanceFromGuardSpot(final CUnit self) {
 		return StrictMath.sqrt(self.distanceSquaredNoCollision(self.aggro.guardX, self.aggro.guardY));
 	}
@@ -93,6 +126,7 @@ final class CUnitAggro {
 	static void walkToGuardSpot(final CUnit self, final CSimulation game, final int kind, final float x, final float y) {
 		self.aggro.guardEngaged = false;
 		self.aggro.guardAwayTick = -1;
+		self.aggro.postFight = false;
 		self.beginBehavior(game, self.moveBehavior.reset(OrderIds.move, new AbilityPointTarget(x, y)), true);
 		self.aggro.guardReturn = kind;
 	}
@@ -115,6 +149,16 @@ final class CUnitAggro {
 	static final float FLEE_DISTANCE = 300f;
 
 	static final float CRITTER_FLEE_DISTANCE = 500f;
+
+	static final int HEAVIEST_HIT_MEMORY_TICKS = CTimer.wholeSteps(2.0f);
+
+	static void noteHit(final CUnit self, final int tick, final CUnit source, final float damage) {
+		if (((tick - self.aggro.heaviestHitTick) > HEAVIEST_HIT_MEMORY_TICKS) || (damage >= self.aggro.heaviestHitDamage)) {
+			self.aggro.heaviestHitBy = source;
+			self.aggro.heaviestHitDamage = damage;
+			self.aggro.heaviestHitTick = tick;
+		}
+	}
 
 	static void queueAttackBack(final CUnit self, final CSimulation simulation, final CUnit source, final boolean wasHit,
 			final boolean help) {
@@ -274,7 +318,9 @@ final class CUnitAggro {
 		final CBehavior chase = attackBehaviorForAtk.reset(simulation, OrderIds.attack, attack, source, disableMove,
 				CBehaviorAttackListener.DO_NOTHING);
 		attackBehaviorForAtk.setThroughFog(true);
+		final boolean fromIdle = isIdleForAttack(self) || isReturningFromLostTarget(self);
 		self.beginBehavior(simulation, chase, true);
+		beginPostFight(self, fromIdle);
 		return true;
 	}
 

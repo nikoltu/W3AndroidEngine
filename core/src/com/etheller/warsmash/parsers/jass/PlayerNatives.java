@@ -293,7 +293,7 @@ final class PlayerNatives extends CommonNatives {
 				(arguments, globalScope, triggerScope) -> {
 					final CPlayer player = arguments.get(0).visit(ObjectJassValueVisitor.getInstance());
 					final CPlayerGameResult result = arguments.get(1).visit(ObjectJassValueVisitor.getInstance());
-					if (player.getSlotState() != CPlayerSlotState.PLAYING) {
+					if ((player.getSlotState() != CPlayerSlotState.PLAYING) || (player.getRemovedResult() != null)) {
 						// The melee scripts remove an observer once more when the game ends, as a neutral result.
 						if (player.getRemovedResult() == null) {
 							player.setRemovedResult(result);
@@ -301,7 +301,10 @@ final class PlayerNatives extends CommonNatives {
 						return null;
 					}
 					player.setRemovedResult(result);
-					player.setSlotState(CPlayerSlotState.LEFT);
+					// Measured: a victory leaves the slot playing; a defeat or tie makes it left.
+					if (result != CPlayerGameResult.VICTORY) {
+						player.setSlotState(CPlayerSlotState.LEFT);
+					}
 					if (player.getId() != war3MapViewer.getLocalPlayerIndex()) {
 						final JassGameEventsWar3 event;
 						if (result == CPlayerGameResult.DEFEAT) {

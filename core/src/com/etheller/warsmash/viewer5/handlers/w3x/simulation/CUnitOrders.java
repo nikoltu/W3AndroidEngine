@@ -67,6 +67,10 @@ final class CUnitOrders {
 		if (self.isDead() || CAbilityMirrorImage.isHidingCaster(self)) {
 			return;
 		}
+		if (!autoOrder && !self.aggro.guarding) {
+			self.aggro.postFight = false;
+			self.aggro.guardReturn = CUnit.GUARD_RETURN_NONE;
+		}
 
 		if (order != null) {
 			final CAbility ability = game.getAbility(order.getAbilityHandleId());

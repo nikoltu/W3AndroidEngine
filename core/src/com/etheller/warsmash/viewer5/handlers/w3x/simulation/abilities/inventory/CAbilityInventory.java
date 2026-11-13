@@ -530,7 +530,7 @@ public class CAbilityInventory extends AbstractGenericNoIconAbility {
 	 */
 	public int giveItem(final CSimulation simulation, final CUnit hero, final CItem item, final int slotPreference,
 			final boolean playUserUISounds) {
-		if ((item != null) && !item.isDead() && !item.isHidden()) {
+		if ((item != null) && !item.isDead() && !item.isHidden() && isRequirementsMet(simulation, hero)) {
 			final CItemType itemType = item.getItemType();
 			if (this.canUseItems && itemType.isUseAutomaticallyWhenAcquired()) {
 				if (itemType.isActivelyUsed()) {

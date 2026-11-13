@@ -404,6 +404,15 @@ final class ItemNatives extends CommonNatives {
 				});
 	}
 
+	// A unit inventory gated by a research (the 2-slot unit one needs Backpack) is there but does not work until then.
+	private CAbilityInventory usableInventory(final CUnit unit) {
+		final CAbilityInventory inventory = (unit == null) ? null : unit.getInventoryData();
+		if ((inventory != null) && !inventory.isRequirementsMet(this.simulation, unit)) {
+			return null;
+		}
+		return inventory;
+	}
+
 	private void registerInventory() {
 		final HandleJassType itemType = type("item");
 
@@ -414,7 +423,7 @@ final class ItemNatives extends CommonNatives {
 
 					final CItem newItem = this.simulation.createItem(new War3ID(rawcode),
 							unit.getX(), unit.getY());
-					final CAbilityInventory inventoryData = unit.getInventoryData();
+					final CAbilityInventory inventoryData = usableInventory(unit);
 					if ((inventoryData != null) && (newItem != null)) {
 						inventoryData.giveItem(this.simulation, unit, newItem, false);
 					}
@@ -428,7 +437,7 @@ final class ItemNatives extends CommonNatives {
 
 					final CItem newItem = this.simulation.createItem(new War3ID(rawcode),
 							unit.getX(), unit.getY());
-					final CAbilityInventory inventoryData = unit.getInventoryData();
+					final CAbilityInventory inventoryData = usableInventory(unit);
 					if ((inventoryData != null) && (newItem != null)) {
 						inventoryData.giveItem(this.simulation, unit, newItem, slot, false);
 					}
@@ -440,15 +449,14 @@ final class ItemNatives extends CommonNatives {
 					final CUnit whichUnit = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
 					final CItem whichItem = nullable(arguments, 1, ObjectJassValueVisitor.getInstance());
 					final int slot = arguments.get(2).visit(IntegerJassValueVisitor.getInstance());
-					return BooleanJassValue.of((whichUnit != null) && (whichUnit.getInventoryData() != null)
-							&& whichUnit.getInventoryData().moveItemToSlot(whichItem, slot));
+					return BooleanJassValue.of((usableInventory(whichUnit) != null)
+							&& usableInventory(whichUnit).moveItemToSlot(whichItem, slot));
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("UnitRemoveItemFromSlot",
 				(arguments, globalScope, triggerScope) -> {
 					final CUnit whichUnit = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
 					final int slot = arguments.get(1).visit(IntegerJassValueVisitor.getInstance());
-					final CAbilityInventory inventoryData = whichUnit == null ? null
-							: whichUnit.getInventoryData();
+					final CAbilityInventory inventoryData = usableInventory(whichUnit);
 					if ((inventoryData == null) || (slot < 0) || (slot >= inventoryData.getItemCapacity())
 							|| (inventoryData.getItemInSlot(slot) == null)) {
 						return new HandleJassValue(itemType, null);
@@ -461,14 +469,14 @@ final class ItemNatives extends CommonNatives {
 		jassProgramVisitor.getJassNativeManager().createNative("UnitInventorySize",
 				(arguments, globalScope, triggerScope) -> {
 					final CUnit whichUnit = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
-					final CAbilityInventory inventoryData = whichUnit == null ? null : whichUnit.getInventoryData();
+					final CAbilityInventory inventoryData = usableInventory(whichUnit);
 					return IntegerJassValue.of(inventoryData == null ? 0 : inventoryData.getItemCapacity());
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("UnitAddItem",
 				(arguments, globalScope, triggerScope) -> {
 					final CUnit whichUnit = arguments.get(0).visit(ObjectJassValueVisitor.getInstance());
 					final CItem whichItem = arguments.get(1).visit(ObjectJassValueVisitor.getInstance());
-					final CAbilityInventory inventoryData = whichUnit == null ? null : whichUnit.getInventoryData();
+					final CAbilityInventory inventoryData = usableInventory(whichUnit);
 					if ((inventoryData == null) || (whichItem == null)) {
 						return BooleanJassValue.FALSE;
 					}
@@ -482,7 +490,7 @@ final class ItemNatives extends CommonNatives {
 					final CUnit whichUnit = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
 					final CItem whichItem = nullable(arguments, 1, ObjectJassValueVisitor.getInstance());
 					final CWidget target = nullable(arguments, 2, ObjectJassValueVisitor.getInstance());
-					final CAbilityInventory inventoryData = whichUnit == null ? null : whichUnit.getInventoryData();
+					final CAbilityInventory inventoryData = usableInventory(whichUnit);
 					if ((inventoryData == null) || (whichItem == null) || !(target instanceof CUnit)
 							|| (inventoryData.getSlot(whichItem) == -1) || whichUnit.isIllusion()) {
 						return BooleanJassValue.FALSE;
@@ -498,7 +506,7 @@ final class ItemNatives extends CommonNatives {
 					final CItem whichItem = nullable(arguments, 1, ObjectJassValueVisitor.getInstance());
 					final float x = arguments.get(2).visit(RealJassValueVisitor.getInstance()).floatValue();
 					final float y = arguments.get(3).visit(RealJassValueVisitor.getInstance()).floatValue();
-					final CAbilityInventory inventoryData = whichUnit == null ? null : whichUnit.getInventoryData();
+					final CAbilityInventory inventoryData = usableInventory(whichUnit);
 					if ((inventoryData == null) || (whichItem == null) || (inventoryData.getSlot(whichItem) == -1)
 							|| whichUnit.isIllusion()) {
 						return BooleanJassValue.FALSE;
@@ -512,7 +520,7 @@ final class ItemNatives extends CommonNatives {
 				(arguments, globalScope, triggerScope) -> {
 					final CUnit whichUnit = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
 					final CItem whichItem = nullable(arguments, 1, ObjectJassValueVisitor.getInstance());
-					final CAbilityInventory inventoryData = whichUnit == null ? null : whichUnit.getInventoryData();
+					final CAbilityInventory inventoryData = usableInventory(whichUnit);
 					if ((inventoryData != null) && (whichItem != null)) {
 						inventoryData.dropItem(this.simulation, whichUnit, whichItem, whichUnit.getX(),
 								whichUnit.getY(), true);
@@ -526,7 +534,7 @@ final class ItemNatives extends CommonNatives {
 					if (whichUnit == null) {
 						return new HandleJassValue(itemType, null);
 					}
-					final CAbilityInventory inventoryData = whichUnit.getInventoryData();
+					final CAbilityInventory inventoryData = usableInventory(whichUnit);
 					if (inventoryData != null) {
 						return new HandleJassValue(itemType, inventoryData.getItemInSlot(whichSlot));
 					}
@@ -536,14 +544,14 @@ final class ItemNatives extends CommonNatives {
 				(arguments, globalScope, triggerScope) -> {
 					final CUnit whichUnit = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
 					final CItem whichItem = nullable(arguments, 1, ObjectJassValueVisitor.getInstance());
-					final CAbilityInventory inventoryData = whichUnit == null ? null : whichUnit.getInventoryData();
+					final CAbilityInventory inventoryData = usableInventory(whichUnit);
 					return BooleanJassValue
 							.of((inventoryData != null) && (whichItem != null) && (inventoryData.getSlot(whichItem) != -1));
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("UnitInventoryCount",
 				(arguments, globalScope, triggerScope) -> {
 					final CUnit whichUnit = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
-					final CAbilityInventory inventoryData = whichUnit == null ? null : whichUnit.getInventoryData();
+					final CAbilityInventory inventoryData = usableInventory(whichUnit);
 					int count = 0;
 					if (inventoryData != null) {
 						for (int slot = 0; slot < inventoryData.getItemCapacity(); slot++) {

@@ -275,6 +275,9 @@ final class CUnitDamage {
 			}
 			self.aggro.lastCombatTick = simulation.getGameTurnTick();
 			self.aggro.lastHurtTick = self.aggro.lastCombatTick;
+			if ((source != null) && (source != self)) {
+				CUnitAggro.noteHit(self, simulation.getGameTurnTick(), source, trueDamage);
+			}
 			CUnitUpdate.wakeByHit(self, simulation);
 			if (source != null) {
 				source.aggro.lastCombatTick = self.aggro.lastCombatTick;

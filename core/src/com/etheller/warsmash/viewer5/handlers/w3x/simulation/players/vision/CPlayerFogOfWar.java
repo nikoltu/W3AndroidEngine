@@ -141,8 +141,33 @@ public class CPlayerFogOfWar {
 	private void setState(final int indexX, final int indexY, final byte fogOfWarState) {
 		final int writeIndex = (indexY * getWidth()) + indexX;
 		if ((writeIndex >= 0) && (writeIndex < this.fogOfWar.length)) {
+			if (this.privateCells != null) {
+				// A cell that is visible only through a modifier made without shared vision stays out of what
+				// allies get; a cell something else already shows stays shared.
+				if (this.writingPrivate && (fogOfWarState == 0)) {
+					if (this.fogOfWar[writeIndex] != 0) {
+						this.privateCells[writeIndex] = 1;
+						this.anyPrivateCells = true;
+					}
+				}
+				else {
+					this.privateCells[writeIndex] = 0;
+				}
+			}
 			this.fogOfWar[writeIndex] = fogOfWarState;
 		}
+	}
+
+	private byte[] privateCells;
+	private boolean writingPrivate;
+	private boolean anyPrivateCells;
+
+	/** Cells set from now on by a modifier made without shared vision (until set false). */
+	public void setPrivateWrite(final boolean privateWrite) {
+		if (privateWrite && (this.privateCells == null)) {
+			this.privateCells = new byte[this.fogOfWar.length];
+		}
+		this.writingPrivate = privateWrite;
 	}
 
 	public void setVisible(final PathingGrid pathingGrid, final float x, final float y, final CFogState fogOfWarState) {
@@ -154,10 +179,12 @@ public class CPlayerFogOfWar {
 	}
 
 	public void setFogStateRect(PathingGrid pathingGrid, Rectangle rectangle, CFogState fogOfWarState) {
-		final int xMin = pathingGrid.getFogOfWarIndexX((float) Math.floor(rectangle.x));
-		final int yMin = pathingGrid.getFogOfWarIndexY((float) Math.floor(rectangle.y));
-		final int xMax = pathingGrid.getFogOfWarIndexX((float) Math.ceil(rectangle.x + rectangle.width));
-		final int yMax = pathingGrid.getFogOfWarIndexY((float) Math.ceil(rectangle.y + rectangle.height));
+		// Measured on 1.29: the cells from the one holding the minimum edge up to, but not including, the one holding
+		// the maximum edge; a rect inside one cell covers nothing.
+		final int xMin = pathingGrid.getFogOfWarIndexX(rectangle.x);
+		final int yMin = pathingGrid.getFogOfWarIndexY(rectangle.y);
+		final int xMax = pathingGrid.getFogOfWarIndexX(rectangle.x + rectangle.width) - 1;
+		final int yMax = pathingGrid.getFogOfWarIndexY(rectangle.y + rectangle.height) - 1;
 		for (int i = xMin; i <= xMax; i += 1) {
 			for (int j = yMin; j <= yMax; j += 1) {
 				setVisible(i, j, fogOfWarState);
@@ -177,6 +204,9 @@ public class CPlayerFogOfWar {
 		if ((writeIndex >= 0) && (writeIndex < this.fogOfWar.length)) {
 			this.fogOfWar[writeIndex] = fogOfWarState.getMask();
 			this.detection[writeIndex] |= detectLevels;
+			if (this.privateCells != null) {
+				this.privateCells[writeIndex] = 0;
+			}
 		}
 	}
 
@@ -184,7 +214,8 @@ public class CPlayerFogOfWar {
 	// units of one player mostly stand within each other's sight, so the terrain and line of sight checks are skipped.
 	private boolean isAlreadyVisible(final int indexX, final int indexY) {
 		final int index = (indexY * this.width) + indexX;
-		return (index >= 0) && (index < this.fogOfWar.length) && (this.fogOfWar[index] == 0);
+		return (index >= 0) && (index < this.fogOfWar.length) && (this.fogOfWar[index] == 0)
+				&& ((this.privateCells == null) || (this.privateCells[index] == 0));
 	}
 
 	public void checkCardinalVision(final CSimulation game, final PathingGrid pathingGrid, final boolean flying,
@@ -200,6 +231,26 @@ public class CPlayerFogOfWar {
 		}
 	}
 
+	// The fog cell the viewing unit stands in: its own sight blockers do not hide what lies beyond it (1.29 sees out of a
+	// tree line it stands against), only the blockers of the cells the sight passes through.
+	private int viewerX = Integer.MIN_VALUE;
+	private int viewerY = Integer.MIN_VALUE;
+
+	public void setViewerCell(final int indexX, final int indexY) {
+		this.viewerX = indexX;
+		this.viewerY = indexY;
+	}
+
+	public void clearViewerCell() {
+		this.viewerX = Integer.MIN_VALUE;
+		this.viewerY = Integer.MIN_VALUE;
+	}
+
+	private boolean blocksSightFrom(final PathingGrid pathingGrid, final int indexX, final int indexY, final float x,
+			final float y) {
+		return ((indexX != this.viewerX) || (indexY != this.viewerY)) && pathingGrid.isBlockVision(x, y);
+	}
+
 	public void checkCardinalVision(final CSimulation game, final PathingGrid pathingGrid, final byte detections,
 			final boolean flying, final int dx, final int dy, final int dxp, final int dyp, final float dxf,
 			final float dyf, final float dxfp, final float dyfp, final int myZ) {
@@ -208,7 +259,7 @@ public class CPlayerFogOfWar {
 		}
 		if ((flying || game.isTerrainWater(dxf, dyf) || (myZ > game.getTerrainHeight(dxf, dyf))
 				|| (!game.isTerrainRomp(dxf, dyf) && (myZ == game.getTerrainHeight(dxf, dyf))))
-				&& (flying || !pathingGrid.isBlockVision(dxfp, dyfp)) && this.isVisible(game, dxp, dyp)) {
+				&& (flying || !blocksSightFrom(pathingGrid, dxp, dyp, dxfp, dyfp)) && this.isVisible(game, dxp, dyp)) {
 			this.setDetecting(dx, dy, CFogState.VISIBLE, detections);
 		}
 	}
@@ -221,7 +272,7 @@ public class CPlayerFogOfWar {
 		}
 		if ((flying || game.isTerrainWater(dxf, dyf) || (myZ > game.getTerrainHeight(dxf, dyf))
 				|| (!game.isTerrainRomp(dxf, dyf) && (myZ == game.getTerrainHeight(dxf, dyf))))
-				&& (flying || !pathingGrid.isBlockVision(dxfp, dyfp)) && this.isVisible(game, dxp, dyp)
+				&& (flying || !blocksSightFrom(pathingGrid, dxp, dyp, dxfp, dyfp)) && this.isVisible(game, dxp, dyp)
 				&& ((x == y)
 						|| ((x > y) && this.isVisible(game, dxp, dy)
 								&& (flying || !pathingGrid.isBlockVision(dxfp, dyf)))
@@ -239,7 +290,7 @@ public class CPlayerFogOfWar {
 		}
 		if ((flying || game.isTerrainWater(dxf, dyf) || (myZ > game.getTerrainHeight(dxf, dyf))
 				|| (!game.isTerrainRomp(dxf, dyf) && (myZ == game.getTerrainHeight(dxf, dyf))))
-				&& (flying || !pathingGrid.isBlockVision(dxfp, dyfp)) && this.isVisible(game, dxp, dyp)
+				&& (flying || !blocksSightFrom(pathingGrid, dxp, dyp, dxfp, dyfp)) && this.isVisible(game, dxp, dyp)
 				&& ((x == y)
 						|| ((x > y) && this.isVisible(game, dxp, dy)
 								&& (flying || !pathingGrid.isBlockVision(dxfp, dyf)))
@@ -257,6 +308,10 @@ public class CPlayerFogOfWar {
 			}
 		}
 		Arrays.fill(this.detection, (byte) 0);
+		if (this.anyPrivateCells) {
+			Arrays.fill(this.privateCells, (byte) 0);
+			this.anyPrivateCells = false;
+		}
 	}
 
 	// Shared vision passes on only what the giver's own units and modifiers see; copying the cells first keeps vision
@@ -271,6 +326,13 @@ public class CPlayerFogOfWar {
 		}
 		System.arraycopy(this.fogOfWar, 0, this.ownFogOfWar, 0, this.fogOfWar.length);
 		System.arraycopy(this.detection, 0, this.ownDetection, 0, this.detection.length);
+		if (this.anyPrivateCells) {
+			for (int i = 0; i < this.privateCells.length; i++) {
+				if (this.privateCells[i] != 0) {
+					this.ownFogOfWar[i] = 127;
+				}
+			}
+		}
 	}
 
 	public void addOwnVisionOf(final CPlayerFogOfWar giver) {
@@ -285,20 +347,52 @@ public class CPlayerFogOfWar {
 		}
 	}
 
-	public void setFogStateRadius(PathingGrid pathingGrid, float myX, float myY, float radius, CFogState state) {
-		final float radSq = radius * radius;
-		setVisible(pathingGrid.getFogOfWarIndexX(myX), pathingGrid.getFogOfWarIndexY(myY), state);
+	// Cells a radius modifier covers, measured on 1.29: only the cell of the centre and the radius in whole cells
+	// (floor) count, not where in the cell the centre is. From 3 cells the shape is the one of a unit's sight, except
+	// that the northernmost row is missing, so it spans one row more to the south. The two smaller radii are
+	// irregular and kept as measured, as offsets from the centre cell.
+	private static final int[][][] SMALL_RADIUS_CELLS = {
+			{},
+			{ { -1, 0 }, { 0, 0 }, { -1, -1 }, { 0, -1 } },
+			{ { 0, 2 }, { -2, 0 }, { -1, 0 }, { 0, 0 }, { 2, 0 }, { -1, -1 }, { 0, -1 }, { 0, -2 } } };
 
-		for (int y = 0; y <= (int) Math.floor(radius); y += 128) {
-			for (int x = 0; x <= (int) Math.floor(radius); x += 128) {
-				final float distance = (x * x) + (y * y);
-				if (distance <= radSq) {
-					setVisible(pathingGrid.getFogOfWarIndexX(myX - x), pathingGrid.getFogOfWarIndexY(myY - y), state);
-					setVisible(pathingGrid.getFogOfWarIndexX(myX - x), pathingGrid.getFogOfWarIndexY(myY + y), state);
-					setVisible(pathingGrid.getFogOfWarIndexX(myX + x), pathingGrid.getFogOfWarIndexY(myY - y), state);
-					setVisible(pathingGrid.getFogOfWarIndexX(myX + x), pathingGrid.getFogOfWarIndexY(myY + y), state);
-				}
+	public void setFogStateRadius(PathingGrid pathingGrid, float myX, float myY, float radius, CFogState state) {
+		if (!(radius >= GRID_STEP)) {
+			return;
+		}
+		final int cells = (int) Math.min(radius / GRID_STEP, 1 << 15);
+		final int centerX = pathingGrid.getFogOfWarIndexX(myX);
+		final int centerY = pathingGrid.getFogOfWarIndexY(myY);
+		if (cells < SMALL_RADIUS_CELLS.length) {
+			for (final int[] offset : SMALL_RADIUS_CELLS[cells]) {
+				setCell(centerX + offset[0], centerY + offset[1], state);
 			}
+			return;
+		}
+		final int rowMin = Math.max(-cells, -centerY);
+		final int rowMax = Math.min(cells - 1, (this.height - 1) - centerY);
+		final long radiusSq = (long) cells * cells;
+		for (int dy = rowMin; dy <= rowMax; dy++) {
+			final int near = Math.abs(dy);
+			// How far along the row isInSight still holds: past the row's own distance the reach of its rounded
+			// square root, inside it the distance up to which the cell at that column still reaches the row.
+			final double inner = radiusSq - ((near - 0.5) * (near - 0.5));
+			int reach = (int) Math.floor(Math.sqrt(inner));
+			if (reach >= near) {
+				reach = (int) Math.floor(Math.sqrt(radiusSq - ((long) near * near)) + 0.5);
+			}
+			final int fromX = Math.max(-reach, -centerX);
+			final int toX = Math.min(reach, (this.width - 1) - centerX);
+			final byte mask = state.getMask();
+			for (int dx = fromX; dx <= toX; dx++) {
+				setState(centerX + dx, centerY + dy, mask);
+			}
+		}
+	}
+
+	private void setCell(final int indexX, final int indexY, final CFogState state) {
+		if ((indexX >= 0) && (indexX < this.width) && (indexY >= 0) && (indexY < this.height)) {
+			setState(indexX, indexY, state.getMask());
 		}
 	}
 }

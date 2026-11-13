@@ -58,6 +58,10 @@ public class CBehaviorAttack extends CAbstractRangedBehavior {
 	private CUnitAttackSettings settings;
 	private boolean throughFog;
 
+	private float orderX;
+	private float orderY;
+	private boolean besideAtOrder;
+
 	public CUnitAttack getUnitAttack() {
 		return this.unitAttack;
 	}
@@ -77,6 +81,9 @@ public class CBehaviorAttack extends CAbstractRangedBehavior {
 		this.firstSwingWaitPending = false;
 		cancelSwingReady(game);
 		setDisableMove(disableMove);
+		this.orderX = this.unit.getX();
+		this.orderY = this.unit.getY();
+		this.besideAtOrder = true;
 		return super.innerReset(game, target);
 	}
 
@@ -133,12 +140,18 @@ public class CBehaviorAttack extends CAbstractRangedBehavior {
 			range += this.unitAttack.getRangeMotionBuffer();
 		}
 		// Measured on 1.29: a building is attacked from range plus both collision sizes off its centre in every
-		// direction; its pathing footprint adds no reach at the corners.
+		// direction; a unit that already stands with its footprint touching its pathing when ordered (at a corner
+		// too) attacks from there, while one walking up stops only in range.
 		final CUnit targetUnit = this.target.visit(AbilityTargetVisitor.UNIT);
 		final double distance = this.unit.distance(this.target);
-		final boolean reached = ((targetUnit != null) && targetUnit.isBuilding()) ? (distance <= range)
+		final boolean reached = ((targetUnit != null) && targetUnit.isBuilding())
+				? ((distance <= range) || (this.besideAtOrder && isAtOrderPoint() && this.unit.isBesideBuilding(targetUnit)))
 				: this.unit.canReach(this.target, range);
 		return reached && (distance >= this.unit.getUnitType().getMinimumAttackRange());
+	}
+
+	private boolean isAtOrderPoint() {
+		return StrictMath.hypot(this.unit.getX() - this.orderX, this.unit.getY() - this.orderY) < 1;
 	}
 
 	/** A chase that keeps its target while the fog hides it (attacking back an unseen attacker). */
@@ -320,6 +333,9 @@ public class CBehaviorAttack extends CAbstractRangedBehavior {
 		if (attackedUnit != null) {
 			attackedUnit.fireAttackedEvents(simulation, this.unit);
 		}
+		// Measured: every swing counts as an attack for effects that end when the unit attacks, so a unit that keeps
+		// swinging stays visible (Permanent Invisibility fades only after a gap in its attacks).
+		this.unit.fireBehaviorChangeEvent(simulation, this, true);
 		this.unit.getUnitAnimationListener().queueAnimation(PrimaryTag.STAND, SequenceUtils.READY, false);
 		if ((this.damagePointLaunchTime != 0)
 				&& this.damagePoint.check(simulation, this::launchAtDamagePoint)) {

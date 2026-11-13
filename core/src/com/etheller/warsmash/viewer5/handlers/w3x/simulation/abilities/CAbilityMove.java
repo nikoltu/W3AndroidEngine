@@ -42,6 +42,7 @@ public class CAbilityMove extends AbstractCAbility {
 		case OrderIds.smart:
 		case OrderIds.patrol:
 		case OrderIds.move:
+		case OrderIds.AImove:
 			if ((orderId == OrderIds.smart) && (target instanceof CUnit)
 					&& CAbilityAttack.isUnhittableEnemy(game, unit, (CUnit) target, receiver)) {
 				// Measured on 1.29: a smart order on an enemy no weapon can hit (a Footman on a flyer) is refused,
@@ -91,6 +92,7 @@ public class CAbilityMove extends AbstractCAbility {
 		switch (orderId) {
 		case OrderIds.smart:
 		case OrderIds.move:
+		case OrderIds.AImove:
 		case OrderIds.patrol:
 			receiver.targetOk(target);
 			break;
@@ -194,7 +196,7 @@ public class CAbilityMove extends AbstractCAbility {
 			if ((behavior == null) && targetUnit.isBuilding()) {
 				// Measured on 1.29: a structure is walked up to, as far as it lets the unit, not followed; any other
 				// unit is followed, an enemy too (without attacking it or anything else on the way).
-				behavior = caster.getMoveBehavior().reset(OrderIds.move,
+				behavior = caster.getMoveBehavior().reset(moveOrderId(orderId),
 						new AbilityPointTarget(targetUnit.getX(), targetUnit.getY()));
 			}
 			if (behavior == null) {
@@ -219,8 +221,15 @@ public class CAbilityMove extends AbstractCAbility {
 			return patrolBehavior;
 		}
 		else {
-			return caster.getMoveBehavior().reset(OrderIds.move, point);
+			return caster.getMoveBehavior().reset(moveOrderId(orderId), point);
 		}
+	}
+
+	/**
+	 * Measured on 1.29: the AI's own move (851988) walks as a move does, past enemies, and the unit reads that id.
+	 */
+	private static int moveOrderId(final int orderId) {
+		return orderId == OrderIds.AImove ? OrderIds.AImove : OrderIds.move;
 	}
 
 	@Override

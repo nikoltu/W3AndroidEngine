@@ -12,9 +12,47 @@ import com.etheller.warsmash.input.touch.TouchInputRouter;
  */
 final class AndroidPointerSource {
 	private final TouchInputRouter router;
+	private final float touchMajorScale;
 
-	AndroidPointerSource(final TouchInputRouter router) {
+	/**
+	 * @param touchMajorScale factor from the device's raw TOUCH_MAJOR units to screen pixels, see
+	 *                        {@link #touchMajorScale}
+	 */
+	AndroidPointerSource(final TouchInputRouter router, final float touchMajorScale) {
 		this.router = router;
+		this.touchMajorScale = touchMajorScale;
+	}
+
+	static boolean hasStylus() {
+		for (final int id : InputDevice.getDeviceIds()) {
+			final InputDevice device = InputDevice.getDevice(id);
+			if ((device != null) && ((device.getSources() & InputDevice.SOURCE_STYLUS) == InputDevice.SOURCE_STYLUS)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Some touch panels report TOUCH_MAJOR in raw sensor units whose range is far larger than the screen. When the
+	 * axis maximum exceeds the screen diagonal, scale so the maximum maps to the diagonal; otherwise values are
+	 * already pixels.
+	 */
+	static float touchMajorScale(final int widthPx, final int heightPx) {
+		final float diagonal = (float) Math.hypot(widthPx, heightPx);
+		float max = 0;
+		for (final int id : InputDevice.getDeviceIds()) {
+			final InputDevice device = InputDevice.getDevice(id);
+			if ((device != null)
+					&& ((device.getSources() & InputDevice.SOURCE_TOUCHSCREEN) == InputDevice.SOURCE_TOUCHSCREEN)) {
+				final InputDevice.MotionRange range = device.getMotionRange(MotionEvent.AXIS_TOUCH_MAJOR,
+						InputDevice.SOURCE_TOUCHSCREEN);
+				if (range != null) {
+					max = Math.max(max, range.getMax());
+				}
+			}
+		}
+		return (max > (diagonal * 1.5f)) ? (diagonal / max) : 1f;
 	}
 
 	/**
@@ -71,7 +109,7 @@ final class AndroidPointerSource {
 	private void post(final MotionEvent event, final int index, final PointerEvent.Action action) {
 		this.router.post(new PointerEvent(event.getPointerId(index), tool(event.getToolType(index)), action,
 				event.getX(index), event.getY(index), event.getButtonState(), event.getPressure(index),
-				event.getTouchMajor(index), 0, event.getEventTime()));
+				event.getTouchMajor(index) * this.touchMajorScale, 0, event.getEventTime()));
 	}
 
 	private static PointerEvent.Tool tool(final int toolType) {

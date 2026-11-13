@@ -68,7 +68,8 @@ final class AIHarvest {
 	 * from the last workers who got it, but they go on with their work. A request still short takes idle workers
 	 * first, then free workers already at that resource, then free workers at the other one; of those, one carrying
 	 * a load stops and waits for the next change of requests, which sends it off. Workers inside a
-	 * mine are passed over. Idle workers left without a job then mine gold.
+	 * mine are passed over, and so is the worker that was already mining when the script started. Idle workers left
+	 * without a job then mine gold.
 	 */
 	static void assignHarvesters(final AIController ai) {
 		final List<CUnit> workers = new ArrayList<>();
@@ -84,6 +85,15 @@ final class AIHarvest {
 		// done.
 		if (ai.harvestPassPending && ((ai.ticks - ai.harvestCallTick) >= SETTLE_TICKS)) {
 			ai.harvestPassPending = false;
+			if (!ai.harvestStarterChosen) {
+				ai.harvestStarterChosen = true;
+				for (final CUnit worker : workers) {
+					if (currentResource(worker) == GOLD) {
+						ai.harvestStarter = worker;
+						break;
+					}
+				}
+			}
 			dealJobs(ai, workers);
 			for (final CUnit worker : workers) {
 				if (!ai.harvestJobs.containsKey(worker) && !worker.isHidden() && isFree(worker)
@@ -156,8 +166,8 @@ final class AIHarvest {
 					if (countJobs(ai, resource, town) >= request[2]) {
 						break;
 					}
-					if (ai.harvestJobs.containsKey(worker) || worker.isHidden() || isBuilding(worker)
-							|| !canDo(ai, worker, resource, town)) {
+					if (ai.harvestJobs.containsKey(worker) || (worker == ai.harvestStarter) || worker.isHidden()
+							|| isBuilding(worker) || !canDo(ai, worker, resource, town)) {
 						continue;
 					}
 					final boolean idle = isFree(worker);

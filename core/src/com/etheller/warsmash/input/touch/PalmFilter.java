@@ -13,17 +13,46 @@ public final class PalmFilter {
 		IGNORE, ALLOW
 	}
 
+	/**
+	 * When the contact size limit is used: AUTO only on devices with a pen (or once a pen was seen), since a finger
+	 * alone is never a palm on a phone; ON always; OFF never.
+	 */
+	public enum SizeRejection {
+		AUTO, ON, OFF
+	}
+
 	private static final long PEN_GRACE_MILLIS = 500;
 
 	private final float palmTouchMajorPx;
 	private final PenFingerPolicy policy;
+	private final SizeRejection sizeRejection;
+	private boolean penCapable;
+	private boolean penSeen;
 	private final Set<Integer> dropped = new HashSet<>();
 	private boolean penActive;
 	private long penNearUntil;
 
 	public PalmFilter(final float palmTouchMajorPx, final PenFingerPolicy policy) {
+		this(palmTouchMajorPx, policy, SizeRejection.ON);
+	}
+
+	public PalmFilter(final float palmTouchMajorPx, final PenFingerPolicy policy, final SizeRejection sizeRejection) {
 		this.palmTouchMajorPx = palmTouchMajorPx;
 		this.policy = policy;
+		this.sizeRejection = sizeRejection;
+	}
+
+	public void setPenCapable(final boolean penCapable) {
+		this.penCapable = penCapable;
+	}
+
+	/** @return the contact size above which a finger is dropped as a palm right now, or infinity when none applies */
+	public float effectiveLimitPx() {
+		if ((this.sizeRejection == SizeRejection.OFF) || (this.palmTouchMajorPx <= 0)
+				|| ((this.sizeRejection == SizeRejection.AUTO) && !this.penCapable && !this.penSeen)) {
+			return Float.POSITIVE_INFINITY;
+		}
+		return this.palmTouchMajorPx;
 	}
 
 	/**
@@ -31,6 +60,9 @@ public final class PalmFilter {
 	 */
 	public boolean accept(final PointerEvent event) {
 		final boolean pen = (event.tool == PointerEvent.Tool.STYLUS) || (event.tool == PointerEvent.Tool.ERASER);
+		if (pen) {
+			this.penSeen = true;
+		}
 		switch (event.action) {
 		case HOVER_MOVE:
 			if (pen) {
@@ -48,7 +80,7 @@ public final class PalmFilter {
 				return true;
 			}
 			if (((this.policy == PenFingerPolicy.IGNORE) && isPenNear(event.timeMillis))
-					|| (event.touchMajor > this.palmTouchMajorPx)) {
+					|| (event.touchMajor > effectiveLimitPx())) {
 				this.dropped.add(event.pointerId);
 				return false;
 			}

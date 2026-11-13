@@ -970,6 +970,7 @@ public abstract class AbilityBuilderGsonBuilder {
 				.registerSubtype(ABActionCreateLightningEffect.class, "createLightningEffect")
 				.registerSubtype(ABActionRemoveLightningEffect.class, "removeLightningEffect")
 				.registerSubtype(ABActionCreateGroupEffectAtLocation.class, "createGroupEffectAtLocation")
+				.registerSubtype(ABActionRegisterHarmfulArea.class, "registerHarmfulArea")
 				.registerSubtype(ABActionCreateUberSplat.class, "createUberSplat")
 				
 				.registerSubtype(ABActionChainEffect.class, "chainEffect")

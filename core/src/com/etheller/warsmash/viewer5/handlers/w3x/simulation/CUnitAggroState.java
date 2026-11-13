@@ -14,8 +14,13 @@ final class CUnitAggroState {
 	float guardY;
 	int lastCombatTick;
 	int lastHurtTick = Integer.MIN_VALUE / 2;
+	CUnit heaviestHitBy;
+	float heaviestHitDamage;
+	int heaviestHitTick = Integer.MIN_VALUE / 2;
 	int guardReturn = CUnit.GUARD_RETURN_NONE;
 	boolean guardEngaged;
 	int guardAwayTick = -1;
 	boolean wanderer;
+	boolean postSet;
+	boolean postFight;
 }

@@ -30,6 +30,8 @@ public class Geoset {
 	public boolean hasObjectAnim;
 	private final int openGLSkinType;
 	private final int skinStride;
+	/** HD skin with 16 bit bone indices, for models with more than 255 bones. */
+	public boolean wideSkin;
 	private final int boneCountOffsetBytes;
 	public final boolean unselectable;
 	/**
@@ -172,8 +174,16 @@ public class Geoset {
 		shader.setVertexAttribute("a_tangent", 4, GL20.GL_FLOAT, false, 0, this.tangentOffset);
 
 		// TODO ghostwolf splits here and allows HD with non-skin, or SD with skin
-		shader.setVertexAttribute("a_bones", 4, GL20.GL_UNSIGNED_BYTE, false, 8, this.skinOffset);
-		shader.setVertexAttribute("a_weights", 4, GL20.GL_UNSIGNED_BYTE, true, 8, this.skinOffset + 4);
+		if (this.wideSkin) {
+			shader.setVertexAttribute("a_bones", 4, GL20.GL_UNSIGNED_SHORT, false, SetupGeosets.WIDE_SKIN_STRIDE,
+					this.skinOffset);
+			shader.setVertexAttribute("a_weights", 4, GL20.GL_UNSIGNED_BYTE, true, SetupGeosets.WIDE_SKIN_STRIDE,
+					this.skinOffset + 8);
+		}
+		else {
+			shader.setVertexAttribute("a_bones", 4, GL20.GL_UNSIGNED_BYTE, false, 8, this.skinOffset);
+			shader.setVertexAttribute("a_weights", 4, GL20.GL_UNSIGNED_BYTE, true, 8, this.skinOffset + 4);
+		}
 	}
 
 	private static final class Variants {

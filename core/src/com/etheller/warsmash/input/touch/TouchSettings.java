@@ -19,11 +19,13 @@ public final class TouchSettings {
 	public final float ghostTapRadiusPx;
 	public final float palmTouchMajorPx;
 	public final PalmFilter.PenFingerPolicy penFingerPolicy;
+	public final PalmFilter.SizeRejection palmRejection;
 
 	public TouchSettings(final float tapSlopPx, final float penSlopPx, final long tapMaxMs, final long longPressMs,
 			final long twoFingerWindowMs, final long twoFingerTapMs, final float pinchStartRatio,
 			final float pinchStepRatio, final float buildAimOffsetPx, final float ghostTapRadiusPx,
-			final float palmTouchMajorPx, final PalmFilter.PenFingerPolicy penFingerPolicy) {
+			final float palmTouchMajorPx, final PalmFilter.PenFingerPolicy penFingerPolicy,
+			final PalmFilter.SizeRejection palmRejection) {
 		this.tapSlopPx = tapSlopPx;
 		this.penSlopPx = penSlopPx;
 		this.tapMaxMs = tapMaxMs;
@@ -36,11 +38,12 @@ public final class TouchSettings {
 		this.ghostTapRadiusPx = ghostTapRadiusPx;
 		this.palmTouchMajorPx = palmTouchMajorPx;
 		this.penFingerPolicy = penFingerPolicy;
+		this.palmRejection = palmRejection;
 	}
 
 	public static TouchSettings defaults(final float density) {
 		return new TouchSettings(10 * density, 4 * density, 300, 300, 150, 250, 1.3f, 1.4f, 56 * density,
-				48 * density, 40 * density, PalmFilter.PenFingerPolicy.IGNORE);
+				48 * density, 96 * density, PalmFilter.PenFingerPolicy.IGNORE, PalmFilter.SizeRejection.AUTO);
 	}
 
 	public static TouchSettings fromIni(final Element touch, final float density) {
@@ -59,7 +62,21 @@ public final class TouchSettings {
 				dp(touch, "GhostTapRadiusDp", defaults.ghostTapRadiusPx, density),
 				dp(touch, "PalmTouchMajorDp", defaults.palmTouchMajorPx, density),
 				"Allow".equalsIgnoreCase(touch.getField("PenFingerPolicy")) ? PalmFilter.PenFingerPolicy.ALLOW
-						: PalmFilter.PenFingerPolicy.IGNORE);
+						: PalmFilter.PenFingerPolicy.IGNORE,
+				sizeRejection(touch.getField("PalmRejection"), defaults.palmRejection));
+	}
+
+	static PalmFilter.SizeRejection sizeRejection(final String value, final PalmFilter.SizeRejection fallback) {
+		if ("Off".equalsIgnoreCase(value)) {
+			return PalmFilter.SizeRejection.OFF;
+		}
+		if ("On".equalsIgnoreCase(value)) {
+			return PalmFilter.SizeRejection.ON;
+		}
+		if ("Auto".equalsIgnoreCase(value)) {
+			return PalmFilter.SizeRejection.AUTO;
+		}
+		return fallback;
 	}
 
 	private static float dp(final Element touch, final String key, final float fallbackPx, final float density) {

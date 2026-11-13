@@ -1,5 +1,6 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.neutral.seawitch;
 
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.CAreaTargetVisibility;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -85,7 +86,7 @@ public class CAbilityMonsoon extends CAbilityPointTargetSpellBase {
 				(enumUnit) -> {
 					if (enumUnit.canReach(this.centerX, this.centerY, this.areaOfEffect)
 							&& !enumUnit.isUnitAlly(simulation.getPlayer(caster.getPlayerIndex()))
-							&& enumUnit.canBeTargetedBy(simulation, caster, false, getTargetsAllowed(),
+							&& enumUnit.canBeAreaTargetedBy(simulation, caster, CAreaTargetVisibility.NOT_HIDDEN_GHOST, getTargetsAllowed(),
 									BooleanAbilityTargetCheckReceiver.<CWidget>getInstance().reset())) {
 						inArea.add(enumUnit);
 					}

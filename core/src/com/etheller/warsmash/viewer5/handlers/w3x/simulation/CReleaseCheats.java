@@ -415,7 +415,11 @@ public final class CReleaseCheats {
 
 	/** The mana a spell costs its caster: nothing while thereisnospoon is on. */
 	public static int manaCost(final CSimulation simulation, final CUnit caster, final int manaCost) {
-		return simulation.getPlayer(caster.getPlayerIndex()).hasCheat(NO_MANA_COST) ? 0 : manaCost;
+		return isManaFree(simulation, caster) ? 0 : manaCost;
+	}
+
+	public static boolean isManaFree(final CSimulation simulation, final CUnit caster) {
+		return simulation.getPlayer(caster.getPlayerIndex()).hasCheat(NO_MANA_COST);
 	}
 
 	public static boolean isNoDefeat(final CSimulation simulation) {

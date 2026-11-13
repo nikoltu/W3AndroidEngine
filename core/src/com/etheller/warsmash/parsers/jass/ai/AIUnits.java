@@ -86,6 +86,14 @@ final class AIUnits {
 		return (behavior == null) || (behavior == unit.getStopBehavior()) || (behavior instanceof CBehaviorHoldPosition);
 	}
 
+	/**
+	 * On its way with the AI's own move order, which walks past enemies without taking them on.
+	 */
+	static boolean isAIMoving(final CUnit unit) {
+		return !isIdle(unit) && (unit.getCurrentOrder() != null)
+				&& (unit.getCurrentOrder().getOrderId() == OrderIds.AImove);
+	}
+
 	static boolean isBuilding(final CUnit unit) {
 		final CBehavior behavior = unit.getCurrentBehavior();
 		return (behavior != null) && (behavior.getBehaviorCategory() == CBehaviorCategory.BUILD);
@@ -107,7 +115,7 @@ final class AIUnits {
 
 	static boolean requirementsUnlocked(final CPlayer player, final List<CUnitTypeRequirement> requirements) {
 		for (final CUnitTypeRequirement requirement : requirements) {
-			if (player.getTechtreeUnlocked(requirement.getRequirement()) < requirement.getRequiredLevel()) {
+			if (!player.isRequirementMet(requirement.getRequirement(), requirement.getRequiredLevel())) {
 				return false;
 			}
 		}

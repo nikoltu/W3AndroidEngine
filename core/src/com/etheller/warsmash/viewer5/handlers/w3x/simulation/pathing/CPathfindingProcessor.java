@@ -208,11 +208,12 @@ public class CPathfindingProcessor {
 		private final byte[] pathable;
 		private final int[] part;
 		/**
-		 * The pathing cells PathingGrid.isPathable samples for the grid points of each column and row (offsets -1, 0
-		 * and +1 collision sizes), -1 off the grid; the same float sums it makes, worked out once.
+		 * The first footprint column and row (PathingGrid.getFootprintCellX) of the grid points of each column and
+		 * row, worked out once.
 		 */
-		private final int[] sampleColumns;
-		private final int[] sampleRows;
+		private final int footprintCells;
+		private final int[] firstColumns;
+		private final int[] firstRows;
 		private int parts;
 		private int version;
 		private int lastUse;
@@ -227,21 +228,14 @@ public class CPathfindingProcessor {
 			this.pathable = new byte[this.width * this.height];
 			this.part = new int[this.width * this.height];
 			this.version = grid.getOverlayVersion();
-			this.sampleColumns = new int[this.width * 3];
+			this.footprintCells = PathingGrid.getFootprintCells(collisionSize);
+			this.firstColumns = new int[this.width];
 			for (int x = 0; x < this.width; x++) {
-				final float worldX = worldX(grid, x);
-				for (int i = -1; i <= 1; i++) {
-					final int cellX = grid.getCellX(worldX + (i * collisionSize));
-					this.sampleColumns[(x * 3) + i + 1] = (cellX >= 0) && (cellX < grid.getWidth()) ? cellX : -1;
-				}
+				this.firstColumns[x] = grid.getFootprintCellX(worldX(grid, x), this.footprintCells);
 			}
-			this.sampleRows = new int[this.height * 3];
+			this.firstRows = new int[this.height];
 			for (int y = 0; y < this.height; y++) {
-				final float worldY = worldY(grid, y);
-				for (int j = -1; j <= 1; j++) {
-					final int cellY = grid.getCellY(worldY + (j * collisionSize));
-					this.sampleRows[(y * 3) + j + 1] = (cellY >= 0) && (cellY < grid.getHeight()) ? cellY : -1;
-				}
+				this.firstRows[y] = grid.getFootprintCellY(worldY(grid, y), this.footprintCells);
 			}
 		}
 
@@ -260,17 +254,18 @@ public class CPathfindingProcessor {
 			}
 		}
 
-		/** PathingGrid.isPathable at a grid point, by the sample cells worked out up front. */
+		/** PathingGrid.isPathable at a grid point, by the footprint cells worked out up front. */
 		private boolean samplesPathable(final PathingGrid grid, final int x, final int y) {
-			if ((this.sampleColumns[(x * 3) + 1] < 0) || (this.sampleRows[(y * 3) + 1] < 0)) {
+			final int firstX = this.firstColumns[x];
+			final int firstY = this.firstRows[y];
+			final int cells = this.footprintCells;
+			if ((firstX < 0) || (firstY < 0) || ((firstX + cells) > grid.getWidth())
+					|| ((firstY + cells) > grid.getHeight())) {
 				return false;
 			}
-			for (int i = 0; i < 3; i++) {
-				final int cellX = this.sampleColumns[(x * 3) + i];
-				for (int j = 0; j < 3; j++) {
-					final int cellY = this.sampleRows[(y * 3) + j];
-					if ((cellX < 0) || (cellY < 0)
-							|| !this.movementType.isPathable(grid.getCellPathing(cellX, cellY))) {
+			for (int cellY = firstY; cellY < (firstY + cells); cellY++) {
+				for (int cellX = firstX; cellX < (firstX + cells); cellX++) {
+					if (!this.movementType.isPathable(grid.getCellPathing(cellX, cellY))) {
 						return false;
 					}
 				}
@@ -1262,20 +1257,17 @@ public class CPathfindingProcessor {
 	}
 
 	/**
-	 * The ground test of segmentClear, without gaps: the points PathingGrid.isPathable samples around the unit change
-	 * pathing cells only where one of them crosses a cell edge, so the line is tested at every such crossing and once
-	 * between each two. Fixed steps missed the corners of cells that stick into the line (diagonal fences, rows of
-	 * crates and trees); the unit then walked into one, stopped and searched again.
+	 * The ground test of segmentClear, without gaps: the cells under the unit (PathingGrid.getFootprintCells) change
+	 * only where its position crosses a cell edge, so the line is tested at every such crossing and once between each
+	 * two. Fixed steps missed the corners of cells that stick into the line (diagonal fences, rows of crates and
+	 * trees); the unit then walked into one, stopped and searched again.
 	 */
 	private boolean segmentClearOfTerrain(final PathfindingJob job, final float x0, final float y0, final float dx,
 			final float dy) {
 		int count = 0;
 		final float collisionSize = job.collisionSize;
-		final int offsets = collisionSize == 0f ? 0 : 1;
-		for (int i = -offsets; i <= offsets; i++) {
-			count = addCellEdgeCrossings(count, x0 + (i * collisionSize), dx, true);
-			count = addCellEdgeCrossings(count, y0 + (i * collisionSize), dy, false);
-		}
+		count = addCellEdgeCrossings(count, x0, dx, true);
+		count = addCellEdgeCrossings(count, y0, dy, false);
 		count = addCrossing(count, 1f);
 		Arrays.sort(this.crossings, 0, count);
 		float previous = 0f;
@@ -1333,12 +1325,15 @@ public class CPathfindingProcessor {
 		double bestDistance = Double.MAX_VALUE;
 		double bestStartDistance = Double.MAX_VALUE;
 		int foundRing = -1;
+		final boolean toBuilding = (job.ignoreIntersectionsWithThisSecondUnit != null)
+				&& job.ignoreIntersectionsWithThisSecondUnit.isBuilding();
 		final float step = job.collisionSize > NEAREST_PATHABLE_FINE_STEP ? NEAREST_PATHABLE_STEP
 				: NEAREST_PATHABLE_FINE_STEP;
 		final int rings = (int) (NEAREST_PATHABLE_RADIUS / step);
 		for (int ring = 1; ring <= rings; ring++) {
-			// a point on the next ring can still be nearer than the corners of this one
-			if ((foundRing != -1) && (ring > (foundRing + 1))) {
+			// a point on the next rings can still be nearer than the corners of this one, its footprint (and so the
+			// distance measured) up to half a cell off the point
+			if ((foundRing != -1) && (ring > (foundRing + 2))) {
 				break;
 			}
 			for (int i = -ring; i <= ring; i++) {
@@ -1348,7 +1343,14 @@ public class CPathfindingProcessor {
 					}
 					final float x = job.goalX + (i * step);
 					final float y = job.goalY + (j * step);
-					final double distance = StrictMath.hypot(i * step, j * step);
+					// measured from the middle of the unit's footprint: by the point itself, a unit beside a building
+					// would be a cell nearer on its south and west sides and always walk round to them
+					final double distanceX = this.pathingGrid.getFootprintCenterX(x, job.collisionSize) - job.goalX;
+					final double distanceY = this.pathingGrid.getFootprintCenterY(y, job.collisionSize) - job.goalY;
+					// toward a building every spot of its first free ring is as near, a corner of it too: the one
+					// nearest the start is chosen, so a unit coming diagonally stops at the corner
+					final double distance = toBuilding ? Math.max(Math.abs(distanceX), Math.abs(distanceY))
+							: StrictMath.hypot(distanceX, distanceY);
 					if (distance > bestDistance) {
 						continue;
 					}

@@ -245,6 +245,20 @@ final class CUnitPlacement {
 		return distance <= range;
 	}
 
+	/**
+	 * Whether the cells a unit stands on touch the pathing of a building, also at its corners. Measured: a unit that
+	 * stands diagonally off a corner of a building attacks it from there, though that is past the reach from its
+	 * centre.
+	 */
+	static boolean isBesideBuilding(final CUnit self, final CUnit building) {
+		final ArgbImage buildingPathingPixelMap = building.getUnitType().getBuildingPathingPixelMap();
+		if (buildingPathingPixelMap == null) {
+			return false;
+		}
+		return canReachToPathing(self, 0f, building.getFacing(), buildingPathingPixelMap, building.getX(),
+				building.getY(), 3f);
+	}
+
 	static boolean canReach(final CUnit self, final float x, final float y, final float range) {
 		return self.distance(x, y) <= range; // TODO use dist squared for performance
 	}
@@ -272,10 +286,18 @@ final class CUnitPlacement {
 		final int relativeGridX = (int) Math.floor(relativeOffsetX / 32f) + (gridWidth / 2);
 		final int relativeGridY = (int) Math.floor(relativeOffsetY / 32f) + (gridHeight / 2);
 		final int rangeInCells = (int) Math.floor(range / 32f) + 1;
-		int minCheckX = relativeGridX - rangeInCells;
-		int minCheckY = relativeGridY - rangeInCells;
-		int maxCheckX = relativeGridX + rangeInCells;
-		int maxCheckY = relativeGridY + rangeInCells;
+		// Measured: a ground unit reaches from the cells it stands on (PathingGrid.getFootprintCells), not from the cell
+		// of its point: a worker on a corner of a building, its square diagonal to the building's corner cell, delivers
+		// there as one beside a side does.
+		final int footprint = footprintCells(self);
+		final int firstX = relativeGridX - (footprint / 2);
+		final int firstY = relativeGridY - (footprint / 2);
+		final int lastX = (firstX + footprint) - 1;
+		final int lastY = (firstY + footprint) - 1;
+		int minCheckX = firstX - rangeInCells;
+		int minCheckY = firstY - rangeInCells;
+		int maxCheckX = lastX + rangeInCells;
+		int maxCheckY = lastY + rangeInCells;
 		if ((minCheckX < gridWidth) && (maxCheckX >= 0)) {
 			if ((minCheckY < gridHeight) && (maxCheckY >= 0)) {
 				if (minCheckX < 0) {
@@ -294,7 +316,13 @@ final class CUnitPlacement {
 					for (int checkY = minCheckY; checkY <= maxCheckY; checkY++) {
 						final int dx = relativeGridX - checkX;
 						final int dy = relativeGridY - checkY;
-						if (((dx * dx) + (dy * dy)) <= rangeInCellsSquare) {
+						final int fx = Math.max(0, Math.max(firstX - checkX, checkX - lastX));
+						final int fy = Math.max(0, Math.max(firstY - checkY, checkY - lastY));
+						// a point of the footprint within the reach (a footprint cell diagonal to the building's
+						// corner cell counts as one cell off both ways)
+						final boolean near = (((dx * dx) + (dy * dy)) <= rangeInCellsSquare)
+								|| (((fx * fx) + (fy * fy)) <= (rangeInCellsSquare - 1));
+						if (near) {
 							if (((getRGBFromPixelData(self, buildingPathingPixelMap, checkX, checkY, rotation)
 									& 0xFF0000) >>> 16) > 127) {
 								return true;
@@ -305,6 +333,14 @@ final class CUnitPlacement {
 			}
 		}
 		return false;
+	}
+
+	/** The cells a ground unit stands on in each direction; flyers and unit types without collision stand on one. */
+	private static int footprintCells(final CUnit self) {
+		if (self.getMovementType() == MovementType.FLY) {
+			return 1;
+		}
+		return PathingGrid.getFootprintCells(self.getUnitType().getCollisionSize());
 	}
 
 	static int getRGBFromPixelData(final CUnit self, final ArgbImage buildingPathingPixelMap, final int checkX, final int checkY,

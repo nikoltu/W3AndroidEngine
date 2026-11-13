@@ -32,6 +32,8 @@ import java.util.Locale;
  * Text tags, messages, interface and cinematic state, preloading and game end.
  */
 final class InterfaceNatives extends CommonNatives {
+	/** The original game cuts a Preload line to this many characters in the file PreloadGenEnd writes. */
+	private static final int PRELOAD_LINE_LIMIT = 259;
 	private List<String> preloadGenLines;
 	/**
 	 * Reforged dialogue text carries FaceFX analysis tags (["Happy" type=lt easein=0.25]...[/"Happy"]); the curves
@@ -256,7 +258,8 @@ final class InterfaceNatives extends CommonNatives {
 				// Preload lists also name sounds and Reforged-only formats (.tif, .pkfx) that
 				// have no viewer handler; sounds are loaded on demand when played.
 				if ((filename != null) && (InterfaceNatives.this.preloadGenLines != null)) {
-					InterfaceNatives.this.preloadGenLines.add(filename);
+					InterfaceNatives.this.preloadGenLines.add(filename.length() > PRELOAD_LINE_LIMIT
+							? filename.substring(0, PRELOAD_LINE_LIMIT) : filename);
 				}
 				if ((filename != null) && hasViewerHandler(war3MapViewer, filename.trim())
 						&& hasOwnFile(war3MapViewer, filename.trim())) {

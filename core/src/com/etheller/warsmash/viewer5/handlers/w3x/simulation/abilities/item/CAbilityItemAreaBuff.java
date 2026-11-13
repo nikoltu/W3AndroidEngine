@@ -13,6 +13,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.definitions.impl.AbilityFields;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.definitions.impl.AbstractCAbilityTypeDefinition;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.CBehavior;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.CAreaTargetVisibility;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.CEffectType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.unit.NonStackingStatBuff;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.unit.NonStackingStatBuffType;
@@ -69,7 +70,7 @@ public class CAbilityItemAreaBuff extends AbstractCAbilityItemInstantUse {
 			return false;
 		}
 		game.getWorldCollision().enumUnitsInRange(caster.getX(), caster.getY(), this.areaOfEffect, (enumUnit) -> {
-			if (enumUnit.canBeTargetedBy(game, caster, false, getTargetsAllowed(),
+			if (enumUnit.canBeAreaTargetedBy(game, caster, CAreaTargetVisibility.ANY, getTargetsAllowed(),
 					BooleanAbilityTargetCheckReceiver.<CWidget>getInstance().reset())) {
 				applyBuff(game, enumUnit);
 				if (this.life > 0) {

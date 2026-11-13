@@ -13,6 +13,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbility;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.util.CBuffTimedLife;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityPointTarget;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityTarget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.inventory.CAbilityInventory;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.CBehaviorAttack;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.inventory.CBehaviorGetItem;
@@ -184,7 +185,7 @@ final class AIDefense {
 		final float x = ai.defenseCaptain.getHomeX();
 		final float y = ai.defenseCaptain.getHomeY();
 		ai.guardPositions.put(unit, new float[] { x, y });
-		unit.order(ai.simulation, OrderIds.move, new AbilityPointTarget(x, y));
+		unit.order(ai.simulation, OrderIds.AImove, new AbilityPointTarget(x, y));
 	}
 
 	/**
@@ -252,12 +253,16 @@ final class AIDefense {
 		defenders.removeIf((unit) -> !ai.isArmyUnit(unit));
 		if (ai.threat != null) {
 			// Measured: the defenders attack-move halfway from their home to the threat, so they take on what comes
-			// within reach there and leave idle creeps further out alone.
+			// within reach there and leave idle creeps further out alone. Ones still on their way to the defense
+			// home go to that point with the AI move instead and attack-move once they stand.
 			final AbilityPointTarget target = new AbilityPointTarget(
 					(ai.defenseCaptain.getHomeX() + ai.threat.getX()) / 2,
 					(ai.defenseCaptain.getHomeY() + ai.threat.getY()) / 2);
 			for (final CUnit unit : defenders) {
-				if (!(unit.getCurrentBehavior() instanceof CBehaviorAttack)) {
+				if (AIUnits.isAIMoving(unit)) {
+					redirectAIMove(ai, unit, target);
+				}
+				else if (!(unit.getCurrentBehavior() instanceof CBehaviorAttack)) {
 					unit.order(ai.simulation, OrderIds.attack, target);
 				}
 			}
@@ -274,8 +279,16 @@ final class AIDefense {
 			final float[] place = ai.guardPositions.get(unit);
 			if ((place != null) && AIUnits.isIdle(unit)
 					&& (distance(unit.getX(), unit.getY(), place[0], place[1]) > GUARD_RETURN_DISTANCE)) {
-				unit.order(ai.simulation, OrderIds.attack, new AbilityPointTarget(place[0], place[1]));
+				// Measured: back home with the AI move, walking past enemies.
+				unit.order(ai.simulation, OrderIds.AImove, new AbilityPointTarget(place[0], place[1]));
 			}
+		}
+	}
+
+	private static void redirectAIMove(final AIController ai, final CUnit unit, final AbilityPointTarget target) {
+		final AbilityTarget current = unit.getCurrentOrder().getTarget(ai.simulation);
+		if ((current == null) || (distance(current.getX(), current.getY(), target.x, target.y) > 1f)) {
+			unit.order(ai.simulation, OrderIds.AImove, target);
 		}
 	}
 

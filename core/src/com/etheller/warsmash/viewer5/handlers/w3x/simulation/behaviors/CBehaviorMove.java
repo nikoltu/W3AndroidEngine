@@ -56,6 +56,12 @@ public class CBehaviorMove implements CBehavior {
 	static final float MOVE_END_DISTANCE = 14.5f;
 	private static final float MOVE_END_STEP_TIME = 0.03f;
 	private static final int APPROACH_SEARCH_CELLS = 65536;
+	/**
+	 * Measured on 1.29: a group order over a long way takes its lanes within about a thousand units and then walks one
+	 * path side by side, instead of every unit finding its own way to its own far slot.
+	 */
+	private static final float SHARED_ROUTE_MIN_DISTANCE = 1500f;
+	private static final float LANE_FORM_DISTANCE = 1000f;
 
 	private static final Rectangle tempRect = new Rectangle();
 	private final CUnit unit;
@@ -93,6 +99,10 @@ public class CBehaviorMove implements CBehavior {
 	private int resetCount;
 	private boolean takenOver;
 	private int blockedNearTargetTicks;
+	private float laneX;
+	private float laneY;
+	private CPathPoint sharedGoal;
+	private boolean sharedRouteOff;
 
 	public CBehaviorMove reset(final int highlightOrderId, final AbilityTarget target) {
 		if (!continuesSameMove(highlightOrderId, target)) {
@@ -100,6 +110,8 @@ public class CBehaviorMove implements CBehavior {
 		}
 		this.rangedBehavior = null;
 		this.group = null;
+		this.laneX = 0;
+		this.laneY = 0;
 		resetDisableCollision(false);
 		this.resetCount++;
 		return this;
@@ -140,6 +152,8 @@ public class CBehaviorMove implements CBehavior {
 		target.visit(this.targetVisitingResetter.reset(highlightOrderId));
 		this.rangedBehavior = rangedBehavior;
 		this.group = null;
+		this.laneX = 0;
+		this.laneY = 0;
 		resetDisableCollision(disableCollision);
 		this.resetCount++;
 		return this;
@@ -165,6 +179,100 @@ public class CBehaviorMove implements CBehavior {
 		this.group = group;
 	}
 
+	/** The point this walk heads for, when it is a plain walk to a point (a slot of a group order). */
+	CPathPoint getPointGoal() {
+		return ((this.followUnit == null) && (this.rangedBehavior == null)) ? this.target : null;
+	}
+
+	/** Where the unit's slot lies from the point its group was sent to. */
+	void setLane(final float laneX, final float laneY) {
+		this.laneX = laneX;
+		this.laneY = laneY;
+	}
+
+	/**
+	 * The goal a path is searched for: a unit of a group walking a long way takes the group's point, so that the
+	 * units share their way and step aside into their lanes along it.
+	 */
+	private CPathPoint searchGoal() {
+		if ((this.group == null) || this.sharedRouteOff || (this.followUnit != null) || (this.rangedBehavior != null)) {
+			return this.target;
+		}
+		if (this.sharedGoal == null) {
+			if (this.unit.distance(this.target.x, this.target.y) < SHARED_ROUTE_MIN_DISTANCE) {
+				this.sharedRouteOff = true;
+				return this.target;
+			}
+			this.sharedGoal = new CPathPoint(this.target.x - this.laneX, this.target.y - this.laneY);
+		}
+		return this.sharedGoal;
+	}
+
+	/**
+	 * Moves the waypoints of the path to the group's point over to the unit's lane: the lane is taken up over the first
+	 * thousand units of the way, and the path ends at the unit's own slot. Points the lane would put into terrain stay
+	 * on the shared path. Returns null when the slot itself cannot be walked to.
+	 */
+	private List<CPathPoint> shiftToLane(final List<CPathPoint> waypoints, final CSimulation simulation) {
+		final PathingGrid pathingGrid = simulation.getPathingGrid();
+		MovementType movementType = this.unit.getMovementType();
+		if (movementType == null) {
+			movementType = MovementType.DISABLED;
+		}
+		final float collisionSize = this.unit.getUnitType().getCollisionSize();
+		final List<CPathPoint> shifted = new ArrayList<>(waypoints.size() + 1);
+		float rawX = this.unit.getX();
+		float rawY = this.unit.getY();
+		float fromX = rawX;
+		float fromY = rawY;
+		float walked = 0;
+		for (int i = 0; i < waypoints.size(); i++) {
+			final CPathPoint point = waypoints.get(i);
+			final boolean last = i == (waypoints.size() - 1);
+			final float segment = (float) StrictMath.hypot(point.x - rawX, point.y - rawY);
+			if (!last && (walked < LANE_FORM_DISTANCE) && ((walked + segment) > LANE_FORM_DISTANCE)) {
+				final float t = (LANE_FORM_DISTANCE - walked) / segment;
+				final float laneStartX = rawX + ((point.x - rawX) * t) + this.laneX;
+				final float laneStartY = rawY + ((point.y - rawY) * t) + this.laneY;
+				if (pathingGrid.isPathable(laneStartX, laneStartY, movementType, collisionSize)
+						&& pathingGrid.isPathableFrom(fromX, fromY, laneStartX, laneStartY, movementType, collisionSize)) {
+					shifted.add(new CPathPoint(laneStartX, laneStartY));
+					fromX = laneStartX;
+					fromY = laneStartY;
+				}
+			}
+			walked += segment;
+			rawX = point.x;
+			rawY = point.y;
+			if (last) {
+				final float endX = point.x + this.laneX;
+				final float endY = point.y + this.laneY;
+				if (!pathingGrid.isPathable(endX, endY, movementType, collisionSize)) {
+					return null;
+				}
+				shifted.add(new CPathPoint(this.target.x, this.target.y));
+				break;
+			}
+			final float formed = Math.min(1f, walked / LANE_FORM_DISTANCE);
+			float chosenX = point.x;
+			float chosenY = point.y;
+			for (final float scale : new float[] { formed, formed / 2 }) {
+				final float candidateX = point.x + (this.laneX * scale);
+				final float candidateY = point.y + (this.laneY * scale);
+				if (pathingGrid.isPathable(candidateX, candidateY, movementType, collisionSize) && pathingGrid
+						.isPathableFrom(fromX, fromY, candidateX, candidateY, movementType, collisionSize)) {
+					chosenX = candidateX;
+					chosenY = candidateY;
+					break;
+				}
+			}
+			shifted.add(new CPathPoint(chosenX, chosenY));
+			fromX = chosenX;
+			fromY = chosenY;
+		}
+		return shifted;
+	}
+
 	private void resetDisableCollision(final boolean disableCollision) {
 		final boolean previousCollisionState = this.disableCollision;
 		this.disableCollision = disableCollision;
@@ -183,6 +291,8 @@ public class CBehaviorMove implements CBehavior {
 				this.unit.getUnitType().getCollisionSize()) ? CPathfindingProcessor.GridMapping.CORNERS
 						: CPathfindingProcessor.GridMapping.CELLS;
 		this.target = new CPathPoint(targetX, targetY);
+		this.sharedGoal = null;
+		this.sharedRouteOff = false;
 		this.path = null;
 		this.searchCycles = 0;
 		this.followUnit = null;
@@ -204,6 +314,8 @@ public class CBehaviorMove implements CBehavior {
 				this.unit.getUnitType().getCollisionSize()) ? CPathfindingProcessor.GridMapping.CORNERS
 						: CPathfindingProcessor.GridMapping.CELLS;
 		this.target = new CPathPoint(followUnit.getX(), followUnit.getY());
+		this.sharedGoal = null;
+		this.sharedRouteOff = false;
 		this.path = null;
 		this.searchCycles = 0;
 		this.followUnit = followUnit;
@@ -226,10 +338,13 @@ public class CBehaviorMove implements CBehavior {
 	/**
 	 * The last leg of a path to a followed unit heads for the unit itself, which may have moved on. A Way Gate does
 	 * not move and its last path point already lies by its edge: heading for its centre instead runs the unit into the
-	 * gate's own pathing, and it stands there until it paths again (1.29 walks on into the gate without a stop).
+	 * gate's own pathing, and it stands there until it paths again (1.29 walks on into the gate without a stop). The
+	 * same holds for any building when the path ends short of it: the last point is the free spot nearest to it, and a
+	 * unit that stands by a corner of the building would only be sent into its wall.
 	 */
 	private boolean isLastLegToFollowedUnit() {
 		return (this.followUnit != null) && (this.path.size() == 1)
+				&& (this.pathReachesGoal || !this.followUnit.isBuilding())
 				&& !((this.rangedBehavior instanceof CBehaviorMoveThroughWayGate) && this.followUnit.isBuilding());
 	}
 
@@ -290,7 +405,7 @@ public class CBehaviorMove implements CBehavior {
 					this.target.x = this.followUnit.getX();
 					this.target.y = this.followUnit.getY();
 				}
-				simulation.findNaiveSlowPath(this.unit, this.followUnit, startFloatingX, startFloatingY, this.target,
+				simulation.findNaiveSlowPath(this.unit, this.followUnit, startFloatingX, startFloatingY, searchGoal(),
 						movementType, collisionSize, true, this);
 				this.pathfindingActive = true;
 				this.firstPathfindJob = true;
@@ -790,9 +905,23 @@ public class CBehaviorMove implements CBehavior {
 	 */
 	public void pathFound(final CPathPoint searchedGoal, final List<CPathPoint> waypoints, final boolean reachesGoal,
 			final CSimulation simulation) {
-		if (searchedGoal != this.target) {
+		if ((searchedGoal != this.target) && ((searchedGoal != this.sharedGoal) || (this.sharedGoal == null))) {
 			this.pathfindingActive = false;
 			this.followSearch = false;
+			return;
+		}
+		if (searchedGoal == this.sharedGoal) {
+			final List<CPathPoint> lanePath = reachesGoal && !waypoints.isEmpty() ? shiftToLane(waypoints, simulation)
+					: null;
+			if (lanePath == null) {
+				// the slot or the shared way is no good: this unit finds its own way to its slot
+				this.sharedRouteOff = true;
+				this.pathfindingActive = false;
+				this.followSearch = false;
+				this.path = null;
+				return;
+			}
+			pathFound(lanePath, true, simulation);
 			return;
 		}
 		pathFound(waypoints, reachesGoal, simulation);

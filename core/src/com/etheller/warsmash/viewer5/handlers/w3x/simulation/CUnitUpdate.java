@@ -49,8 +49,7 @@ final class CUnitUpdate {
 	static final float DRAWN_FACING_SNAP = 0.1f;
 
 	static void updateDrawnFacing(final CUnit self, final double time) {
-		final int tick = (int) StrictMath.floor(((time - WarsmashConstants.SIMULATION_STEP_TIME) / DRAWN_FACING_TICK)
-				+ 1e-6);
+		final int tick = (int) StrictMath.floor((time / DRAWN_FACING_TICK) + 1e-6);
 		if (Float.isNaN(self.stats.drawnFacing) || (self.stats.drawnFacingTick == Integer.MIN_VALUE)) {
 			if (Float.isNaN(self.stats.drawnFacing)) {
 				self.stats.drawnFacing = self.facing;
@@ -143,6 +142,9 @@ final class CUnitUpdate {
 		if (self.aggro.guarding && !self.isDead()) {
 			CUnitAggro.updateGuard(self, game);
 			updateNightSleep(self, game);
+		}
+		else if (!self.isDead()) {
+			CUnitAggro.updatePost(self, game);
 		}
 		if (self.isDead()) {
 			if (!self.death.falseDeath) {

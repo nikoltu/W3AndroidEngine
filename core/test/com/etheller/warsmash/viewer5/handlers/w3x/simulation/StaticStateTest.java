@@ -34,6 +34,7 @@ import com.etheller.warsmash.viewer5.handlers.mdx.MdxHandler;
 import com.etheller.warsmash.viewer5.handlers.w3x.War3MapViewer;
 import com.etheller.warsmash.viewer5.handlers.w3x.save.SavedGame;
 import com.etheller.warsmash.viewer5.handlers.w3x.ui.dialog.CScriptDialog;
+import com.hiveworkshop.rms.parsers.mdlx.AnimationMap;
 
 /**
  * The simulation and the script runtime keep a game's state in that game's objects, so a second game in the same
@@ -55,6 +56,8 @@ class StaticStateTest {
 			// What the checksum keeps hashed of seldom changing objects until the game is closed; the game never reads
 			// it.
 			"simulation.SimulationChecksum#GAME_LINES",
+			// A fixed cell table for the smallest fog radii; never written.
+			"simulation.players.vision.CPlayerFogOfWar#SMALL_RADIUS_CELLS",
 			// The player profile: its files, campaign progress and game caches as saved on disk.
 			"simulation.campaign.CSaveStorage#profile", "simulation.campaign.CSaveStorage#lastBackgroundWrite",
 			"simulation.campaign.CCampaignProgress#campaignList", "simulation.campaign.CCampaignProgress#loaded",
@@ -193,6 +196,83 @@ class StaticStateTest {
 			"w3x.rendersim.RenderImage#nextKey", "w3x.rendersim.RenderUbersplat#nextKey", "w3x.ui.GameOptions#current",
 			"mdx.MdxModel#reportedStreamConversion"));
 
+	private static final Set<String> PROCESS_ALLOWED = new HashSet<>(Arrays.asList(
+			// Process-wide caches bounded by their key space or their size: the build info, the CASC mounts and parsed
+			// aliases, the data folder listings (one per data folder), the shared field names and values of object data
+			// (cleared past a size).
+			"core.BuildInfo#current", "core.datasources.CascDataSource$Mount#MOUNTS",
+			"core.datasources.CascDataSource$Mount#extractFolderCleared", "core.datasources.CascDataSource#PARSED_ALIASES",
+			"core.datasources.FolderDataSource#INDEXES", "core.units.HashedGameObject#SHARED_KEYS",
+			"core.units.HashedGameObject#SHARED_VALUES",
+			// State of the graphics device, the render thread and the platform, set up when a GL context or an activity
+			// starts; scratch of the render thread; the open resource scopes of the screens.
+			"core.GammaOverlay#white", "core.GammaOverlay#whiteContext", "core.GammaOverlay#whiteGeneration",
+			"core.util.GraphicsContext#generation", "core.parsers.fdf.frames.StringFrame#shapeRenderer",
+			"core.viewer5.gl.Extensions#angleInstancedArrays", "core.viewer5.gl.Extensions#dynamicShadowExtension",
+			"core.viewer5.gl.Extensions#wireframeExtension", "core.viewer5.gl.Extensions#audio",
+			"core.viewer5.gl.Extensions#GL_LINE", "core.viewer5.gl.Extensions#GL_FILL", "core.WarsmashGdxGame#VAO",
+			"core.WarsmashPreviewApplication#VAO", "core.util.RenderMathUtils#sqlerpHeap1",
+			"core.util.RenderMathUtils#sqlerpHeap2", "core.util.SessionResources#OPEN",
+			// Touch input of the one screen and the player's finger; owned by the input code, not by a game.
+			"core.input.touch.OnscreenKeyboard#coveredHeightPixels", "core.input.touch.TouchInputRouter#installed",
+			"core.input.touch.VirtualCursor#active", "core.input.touch.VirtualCursor#x", "core.input.touch.VirtualCursor#y",
+			"core.input.touch.VirtualCursor#fingerInput", "core.input.touch.VirtualCursor#touchDevice",
+			"core.input.touch.VirtualModifiers#shift",
+			// The launcher's log sink, and what its data folder check remembers of the folder.
+			"core.launcher.LauncherLog#sink", "core.launcher.DataFolderCheck#DESCRIPTIONS",
+			"core.launcher.DataFolderCheck#READABILITY", "core.launcher.DataFolderCheck#OPENED_FILES",
+			"core.launcher.HotkeyCatalog#BUILD_COMMANDS",
+			// Counters of the performance report; only counted when the switch is set, and not a game's state.
+			"core.util.PerfStats#ENABLED", "core.util.PerfStats#checkedLocalFile", "core.util.PerfStats#TOTALS",
+			"core.util.PerfStats#STEP_TOTALS", "core.util.PerfStats#FRAME_SECTIONS", "core.util.PerfStats#WORST_SECTIONS",
+			"core.util.PerfStats#stepStart", "core.util.PerfStats#frameStart", "core.util.PerfStats#sectionStart",
+			"core.util.PerfStats#frames", "core.util.PerfStats#frameTotal", "core.util.PerfStats#worstFrame",
+			"core.util.PerfStats#reportStart", "core.util.PerfStats#simulationSteps", "core.util.PerfStats#pathJobs",
+			"core.util.PerfStats#pathIterations", "core.util.PerfStats#interfaceDraws",
+			// The engine's settings, read from the ini of the data source the menu and the launcher use (see
+			// gameDataConstantsAreNotReadInGame).
+			"core.util.WarsmashConstants#MAX_PLAYERS", "core.util.WarsmashConstants#GAME_VERSION",
+			"core.util.WarsmashConstants#MODEL_DETAIL_PARTICLE_FACTOR", "core.util.WarsmashConstants#CATCH_CURSOR",
+			"core.util.WarsmashConstants#FULL_SCREEN_MENU_BACKDROP",
+			"core.util.WarsmashConstants#FIX_FLAT_FILES_TILESET_LOADING", "core.util.WarsmashConstants#ENABLE_MUSIC",
+			"core.util.WarsmashConstants#LOAD_UNITS_FROM_WORLDEDIT_DATA",
+			"core.util.WarsmashConstants#CRASH_ON_INCOMPATIBLE_132_FEATURES", "core.util.WarsmashConstants#INPUT_HOTKEY_MODE",
+			"core.util.WarsmashConstants#PARSE_REIGN_OF_CHAOS_BETA_MODELS_INSTEAD",
+			"core.util.WarsmashConstants#USE_NINE_ITEM_INVENTORY", "core.util.WarsmashConstants#RACE_MANAGER",
+			"core.util.WarsmashConstants#DEFAULT_JASS_FILE_LIST", "core.util.WarsmashConstants#JASS_FILE_LIST",
+			"core.util.WarsmashConstants#ABILITY_COMPATIBILITY",
+			// Tables, arrays and sets filled once when the class loads and never written again (object data field lists,
+			// launcher menus and names, skin art, anchor priorities, decoder tables, lookup maps).
+			"core.datasources.AssetPathFallback#GRAPHICS_PACKAGES", "core.datasources.GraphicsSettings#TEXTURE_SIZES",
+			"core.datasources.LayeredDataSource#OTHER_PICTURES", "core.launcher.CampaignResult#ROWS",
+			"core.launcher.CustomGame#SLOT_TYPES", "core.launcher.CustomGame#RACES", "core.launcher.CustomGame#OPTION_NAMES",
+			"core.launcher.CustomGame#OPTION_SHOWN", "core.launcher.CustomGame#COLOR_NAMES",
+			"core.launcher.CustomGame#PLAYER_COLORS", "core.launcher.CustomKeys#GRID",
+			"core.launcher.DataPackage#SET_FOLDERS", "core.launcher.EngineSettings#OWN_SECTIONS",
+			"core.launcher.HotkeyCatalog#HALLS", "core.launcher.HotkeyCatalog#RACE_NAMES", "core.launcher.HotkeyCatalog#BASE",
+			"core.launcher.LauncherKeys#DIFFICULTIES", "core.launcher.LauncherKeys#CAMPAIGN_MAPS",
+			"core.launcher.LauncherOptions#GRAPHICS", "core.launcher.LauncherOptions#GRAPHICS_SETS",
+			"core.launcher.LauncherOptions#TEXTURE_SIZES", "core.launcher.LauncherOptions#SOUND",
+			"core.launcher.LauncherOptions#GAMEPLAY", "core.launcher.SkinArt#RACE_SYMBOLS", "core.launcher.SkinArt#SCENES",
+			"core.launcher.SkinArt#STRING_FILES", "core.launcher.SkinArt#CLASSIC_PORTRAIT_RACES",
+			"core.launcher.SkinArt#CLASSIC_PORTRAITS", "core.launcher.SkinArt#EDGE_PLACES",
+			"core.parsers.fdf.frames.AbstractRenderableFrame#LEFT_ANCHOR_PRIORITY",
+			"core.parsers.fdf.frames.AbstractRenderableFrame#RIGHT_ANCHOR_PRIORITY",
+			"core.parsers.fdf.frames.AbstractRenderableFrame#CENTER_HORIZ_ANCHOR_PRIORITY",
+			"core.parsers.fdf.frames.AbstractRenderableFrame#CENTER_VERT_ANCHOR_PRIORITY",
+			"core.parsers.fdf.frames.AbstractRenderableFrame#TOP_ANCHOR_PRIORITY",
+			"core.parsers.fdf.frames.AbstractRenderableFrame#BOTTOM_ANCHOR_PRIORITY", "core.StartupLoadingView#CHANNEL",
+			"core.StartupLoadingView#GLASS", "core.units.custom.War3ObjectDataChangeset#UNIT_ID_SET",
+			"core.units.custom.War3ObjectDataChangeset#ABILITY_ID_SET",
+			"core.units.manager.MutableObjectData#CATEGORY_FIELDS",
+			"core.units.manager.MutableObjectData#FIELD_SETTINGS_FIELDS", "core.units.StandardObjectData#CLASSIC_QUALITIES",
+			"core.units.StandardObjectData#CLASSIC_FALLBACK_QUALITIES", "core.units.StandardObjectData#GRAPHICS_FIELDS",
+			"core.util.DataSourceFileHandle#SOUND_EXTENSIONS", "core.util.RenderMathUtils#EMPTY_FLOAT_ARRAY",
+			"core.util.RenderMathUtils#FLOAT_VEC3_ZERO", "core.util.RenderMathUtils#FLOAT_QUAT_DEFAULT",
+			"core.util.RenderMathUtils#FLOAT_VEC3_ONE", "core.viewer5.handlers.blp.JpegDecoder#ZIGZAG",
+			"core.viewer5.handlers.blp.JpegDecoder#IDCT_COSINES", "core.WarsmashGdxMenuScreen#STARTUP_STEP_WEIGHTS",
+			"hive.lang.Hex#HEX_DIGITS", "hive.lang.Hex#CHAR_VALUES", "hive.rms.parsers.mdlx.AnimationMap#ID_TO_TAG"));
+
 	@Test
 	void gameStateIsNotStatic() throws Exception {
 		final List<String> found = new ArrayList<>();
@@ -240,6 +320,33 @@ class StaticStateTest {
 		stale.removeAll(found);
 		assertEquals(Collections.emptyList(), stale, "allowed but no longer found: remove from the list");
 		assertTrue(found.size() > 5, "the class folders were not found: " + found);
+	}
+
+	/**
+	 * Everything else of the engine (data sources, object data, launcher, utilities, graphics device, model parsers)
+	 * is process-wide by nature: it is read by the menu, the launcher and every game in turn. What is static there is
+	 * reviewed by group: caches bounded by their key space or their size, state of the graphics device and the
+	 * platform, the player's settings, and tables filled once. Nothing in it may hold a game, a simulation or a map.
+	 */
+	@Test
+	void processStateIsReviewed() throws Exception {
+		final List<String> found = new ArrayList<>();
+		final List<String> covered = Arrays.asList("com.etheller.warsmash.viewer5.handlers.w3x.",
+				"com.etheller.warsmash.viewer5.handlers.mdx.", "com.etheller.warsmash.parsers.jass.",
+				"com.etheller.warsmash.movie.");
+		scan(WarsmashConstants.class, "com.etheller.warsmash", "core", covered, found);
+		scan(AnimationMap.class, "com.hiveworkshop", "hive", Collections.emptyList(), found);
+		final List<String> unexpected = new ArrayList<>();
+		for (final String field : found) {
+			if (!PROCESS_ALLOWED.contains(field)) {
+				unexpected.add(field);
+			}
+		}
+		assertEquals(Collections.emptyList(), unexpected);
+		final List<String> stale = new ArrayList<>(PROCESS_ALLOWED);
+		stale.removeAll(found);
+		assertEquals(Collections.emptyList(), stale, "allowed but no longer found: remove from the list");
+		assertTrue(found.size() > 20, "the class folders were not found: " + found);
 	}
 
 	/**

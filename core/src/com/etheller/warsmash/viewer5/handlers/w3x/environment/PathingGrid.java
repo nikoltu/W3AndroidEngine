@@ -379,6 +379,39 @@ public class PathingGrid {
 		return pathingType.isPathable(getPathing(x, y));
 	}
 
+	/**
+	 * Measured: a unit stands on a square of n x n pathing cells, n = floor(collision / 16) + 1 (collision 16 and 31:
+	 * 2, 32: 3, 48: 4), laid out from the cell that holds its position: that cell and (n - 1) / 2 cells toward +x and
+	 * +y, n / 2 cells toward -x and -y. A Footman can stand right below or left of a wall, but keeps a cell above or
+	 * right of it; with an odd n the square is centred on the cell.
+	 */
+	public static int getFootprintCells(final float collisionSize) {
+		return collisionSize == 0f ? 1 : (int) (collisionSize / 16f) + 1;
+	}
+
+	/** The first (lowest) footprint column of a unit at x; see getFootprintCells. */
+	public int getFootprintCellX(final float x, final int footprintCells) {
+		return (int) Math.floor((x - this.centerOffset[0]) / 32.0f) - (footprintCells / 2);
+	}
+
+	public int getFootprintCellY(final float y, final int footprintCells) {
+		return (int) Math.floor((y - this.centerOffset[1]) / 32.0f) - (footprintCells / 2);
+	}
+
+	/**
+	 * The middle of the footprint of a unit at x: the lower left corner of its cell for an even number of cells, the
+	 * cell centre for an odd one.
+	 */
+	public float getFootprintCenterX(final float x, final float collisionSize) {
+		final int cells = getFootprintCells(collisionSize);
+		return (getFootprintCellX(x, cells) * 32f) + this.centerOffset[0] + (cells * 16f);
+	}
+
+	public float getFootprintCenterY(final float y, final float collisionSize) {
+		final int cells = getFootprintCells(collisionSize);
+		return (getFootprintCellY(y, cells) * 32f) + this.centerOffset[1] + (cells * 16f);
+	}
+
 	public boolean isPathable(final float unitX, final float unitY, final MovementType pathingType,
 			final float collisionSize) {
 		if (collisionSize == 0f) {
@@ -387,12 +420,16 @@ public class PathingGrid {
 			}
 			return pathingType.isPathable(getPathing(unitX, unitY));
 		}
-		for (int i = -1; i <= 1; i++) {
-			for (int j = -1; j <= 1; j++) {
-				final float unitPathingX = unitX + (i * collisionSize);
-				final float unitPathingY = unitY + (j * collisionSize);
-				if (!contains(unitPathingX, unitPathingY)
-						|| !pathingType.isPathable(getPathing(unitPathingX, unitPathingY))) {
+		final int cells = getFootprintCells(collisionSize);
+		final int firstX = getFootprintCellX(unitX, cells);
+		final int firstY = getFootprintCellY(unitY, cells);
+		if ((firstX < 0) || (firstY < 0) || ((firstX + cells) > this.pathingGridSizes[0])
+				|| ((firstY + cells) > this.pathingGridSizes[1])) {
+			return false;
+		}
+		for (int cellY = firstY; cellY < (firstY + cells); cellY++) {
+			for (int cellX = firstX; cellX < (firstX + cells); cellX++) {
+				if (!pathingType.isPathable(getCellPathing(cellX, cellY))) {
 					return false;
 				}
 			}
@@ -413,20 +450,21 @@ public class PathingGrid {
 		if ((collisionSize == 0f) || isPathable(fromX, fromY, pathingType, collisionSize)) {
 			return false;
 		}
-		for (int i = -1; i <= 1; i++) {
-			for (int j = -1; j <= 1; j++) {
-				final float unitPathingX = unitX + (i * collisionSize);
-				final float unitPathingY = unitY + (j * collisionSize);
-				if (!contains(unitPathingX, unitPathingY)) {
+		final int cells = getFootprintCells(collisionSize);
+		final int firstX = getFootprintCellX(unitX, cells);
+		final int firstY = getFootprintCellY(unitY, cells);
+		if ((firstX < 0) || (firstY < 0) || ((firstX + cells) > this.pathingGridSizes[0])
+				|| ((firstY + cells) > this.pathingGridSizes[1])) {
+			return false;
+		}
+		final int fromFirstX = getFootprintCellX(fromX, cells);
+		final int fromFirstY = getFootprintCellY(fromY, cells);
+		for (int cellY = firstY; cellY < (firstY + cells); cellY++) {
+			for (int cellX = firstX; cellX < (firstX + cells); cellX++) {
+				if (!pathingType.isPathable(getCellPathing(cellX, cellY))
+						&& ((cellX < fromFirstX) || (cellX >= (fromFirstX + cells)) || (cellY < fromFirstY)
+								|| (cellY >= (fromFirstY + cells)))) {
 					return false;
-				}
-				if (!pathingType.isPathable(getPathing(unitPathingX, unitPathingY))) {
-					final float fromPathingX = fromX + (i * collisionSize);
-					final float fromPathingY = fromY + (j * collisionSize);
-					if (contains(fromPathingX, fromPathingY)
-							&& pathingType.isPathable(getPathing(fromPathingX, fromPathingY))) {
-						return false;
-					}
 				}
 			}
 		}

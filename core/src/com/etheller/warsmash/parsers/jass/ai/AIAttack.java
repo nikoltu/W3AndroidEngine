@@ -4,6 +4,7 @@ import static com.etheller.warsmash.parsers.jass.ai.AIUnits.distance;
 import static com.etheller.warsmash.parsers.jass.ai.AIUnits.isIdle;
 import static com.etheller.warsmash.parsers.jass.ai.AIZeppelins.isAboard;
 
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
@@ -16,6 +17,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.CBehavior;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.CBehaviorAttack;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.CBehaviorMove;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.CGroupMove;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.orders.OrderIds;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayer;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.timers.CTimer;
@@ -26,10 +28,13 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.timers.CTimer;
  */
 final class AIAttack {
 	private static final float HOME_RADIUS = 900f;
-	private static final float GOAL_REACHED_RADIUS = 200f;
+	private static final float GOAL_REACHED_RADIUS = 500f;
 	private static final float STAGE_REACHED_RADIUS = 250f;
 	private static final int STAGE_WAIT_TICKS = 70;
 	private static final float GATHER_RADIUS = 400f;
+	private static final float ENGAGE_RADIUS = 340f;
+	private static final float CREEP_ENGAGE_RADIUS = 550f;
+	private static final float ATTACKER_RADIUS = 1200f;
 	private static final int GIVE_UP_TICKS = CTimer.wholeSteps(60);
 	private static final War3ID[] SIEGE_UNITS = { War3ID.fromString("ushd"), War3ID.fromString("umtw"),
 			War3ID.fromString("hmtm"), War3ID.fromString("hmtt"), War3ID.fromString("ebal"),
@@ -227,6 +232,51 @@ final class AIAttack {
 		return false;
 	}
 
+	/**
+	 * Measured: the group marches with the AI move, which walks past enemies. Enemy units beside the way are left
+	 * alone (one 230 from the group's centre was taken on, ones 365 and 640 away were not); a creep camp about 500
+	 * from the centre was taken on. Once it fights, the members still marching are switched to attack-move.
+	 */
+	private static boolean isEngaged(final AIController ai) {
+		final AICaptain attack = ai.attackCaptain;
+		final List<CUnit> members = attack.getMembers();
+		if (members.isEmpty()) {
+			return false;
+		}
+		for (final CUnit unit : members) {
+			if (unit.getCurrentBehavior() instanceof CBehaviorAttack) {
+				return true;
+			}
+		}
+		final float x = attack.getCenterX();
+		final float y = attack.getCenterY();
+		if (enemyNear(ai, x, y, ENGAGE_RADIUS) != null) {
+			return true;
+		}
+		final boolean[] creep = new boolean[1];
+		ai.simulation.getWorldCollision().enumUnitsInRange(x, y, CREEP_ENGAGE_RADIUS, (unit) -> {
+			if (ai.isEnemy(unit) && ai.simulation.isNeutralAggressive(unit.getPlayerIndex())
+					&& unit.isVisible(ai.simulation, ai.playerIndex)) {
+				creep[0] = true;
+				return true;
+			}
+			return false;
+		});
+		if (creep[0]) {
+			return true;
+		}
+		final boolean[] attacked = new boolean[1];
+		ai.simulation.getWorldCollision().enumUnitsInRange(x, y, ATTACKER_RADIUS, (unit) -> {
+			if (ai.isEnemy(unit) && (unit.getCurrentBehavior() instanceof CBehaviorAttack)
+					&& members.contains(((CBehaviorAttack) unit.getCurrentBehavior()).getTarget())) {
+				attacked[0] = true;
+				return true;
+			}
+			return false;
+		});
+		return attacked[0];
+	}
+
 	private static CUnit enemyNear(final AIController ai, final float x, final float y, final float radius) {
 		final CUnit[] found = new CUnit[1];
 		ai.simulation.getWorldCollision().enumUnitsInRange(x, y, radius, (unit) -> {
@@ -267,11 +317,30 @@ final class AIAttack {
 	}
 
 	static void captainGoHome(final AIController ai) {
+		goHome(ai, OrderIds.AImove);
+	}
+
+	private static void goHome(final AIController ai, final int orderId) {
 		ai.attackCaptain.clearGoal();
-		for (final CUnit unit : ai.attackCaptain.getMembers()) {
-			unit.order(ai.simulation, OrderIds.move,
-					new AbilityPointTarget(ai.attackCaptain.getHomeX(), ai.attackCaptain.getHomeY()));
-		}
+		ai.gatherOrdered.addAll(orderGroup(ai, ai.attackCaptain.getMembers(), orderId, ai.attackCaptain.getHomeX(),
+				ai.attackCaptain.getHomeY()));
+	}
+
+	/**
+	 * Measured: the captain's group takes a gather, retreat or home order together, each unit going for its place in
+	 * a formation around the point, as a player's group does.
+	 */
+	private static List<CUnit> orderGroup(final AIController ai, final List<CUnit> members, final int orderId,
+			final float x, final float y) {
+		final List<CUnit> taken = new ArrayList<>();
+		CGroupMove.order(ai.simulation, new ArrayList<>(members), orderId, x, y, (unit, slotX, slotY) -> {
+			if (unit.order(ai.simulation, orderId, new AbilityPointTarget(slotX, slotY))) {
+				taken.add(unit);
+				return true;
+			}
+			return false;
+		});
+		return taken;
 	}
 
 	static boolean suicidePlayer(final AIController ai, final CPlayer target, final boolean checkFull,
@@ -378,7 +447,14 @@ final class AIAttack {
 				&& (distance(attack.getCenterX(), attack.getCenterY(), attack.getGoalX(),
 						attack.getGoalY()) < GOAL_REACHED_RADIUS)
 				&& !isCaptainInCombat(ai, true)) {
-			captainGoHome(ai);
+			// Measured: a group that has reached a point goal walks home with the plain move.
+			goHome(ai, OrderIds.move);
+		}
+		// Measured: a group that took on enemies on its way and has finished them does not go on to its goal; it
+		// retreats home at once.
+		if (attack.hasGoal() && !attack.getMembers().isEmpty() && (ai.fightGeneration == attack.getGeneration())
+				&& !isEngaged(ai) && !isCaptainInCombat(ai, true)) {
+			retreat(ai);
 		}
 		if (attack.hasGoal()) {
 			checkStuck(ai);
@@ -388,16 +464,17 @@ final class AIAttack {
 		}
 		else if (!attack.isRetreating()) {
 			ai.gatherOrdered.retainAll(attack.getMembers());
+			final List<CUnit> gathering = new ArrayList<>();
 			for (final CUnit unit : attack.getMembers()) {
-				if ((distance(unit.getX(), unit.getY(), home.x, home.y) < GATHER_RADIUS)
-						|| (unit.getCurrentBehavior() instanceof CBehaviorAttack)) {
+				if (unit.getCurrentBehavior() instanceof CBehaviorAttack) {
 					continue;
 				}
-				if ((!ai.gatherOrdered.contains(unit) || isIdle(unit))
-						&& unit.order(ai.simulation, OrderIds.attack, home)) {
-					ai.gatherOrdered.add(unit);
+				if (!ai.gatherOrdered.contains(unit) || (isIdle(unit)
+						&& (distance(unit.getX(), unit.getY(), home.x, home.y) >= GATHER_RADIUS))) {
+					gathering.add(unit);
 				}
 			}
+			ai.gatherOrdered.addAll(orderGroup(ai, gathering, OrderIds.AImove, home.x, home.y));
 		}
 		if (attack.hasGoal()) {
 			ai.gatherOrdered.clear();
@@ -473,10 +550,7 @@ final class AIAttack {
 		attack.clearGoal();
 		attack.setRetreating(true);
 		ai.retreatTick = ai.ticks;
-		final AbilityPointTarget home = new AbilityPointTarget(attack.getHomeX(), attack.getHomeY());
-		for (final CUnit unit : attack.getMembers()) {
-			unit.order(ai.simulation, OrderIds.move, home);
-		}
+		orderGroup(ai, attack.getMembers(), OrderIds.move, attack.getHomeX(), attack.getHomeY());
 	}
 
 	private static void driveAttackCaptain(final AIController ai) {
@@ -489,6 +563,12 @@ final class AIAttack {
 		final boolean footReachable = ai.simulation.getPathingGrid().isPathable(goal.x, goal.y,
 				MovementType.FOOT);
 		final AbilityPointTarget home = new AbilityPointTarget(attack.getHomeX(), attack.getHomeY());
+		final boolean engaged = isEngaged(ai);
+		if (engaged) {
+			ai.fightGeneration = attack.getGeneration();
+		}
+		final List<CUnit> toGoal = new ArrayList<>();
+		final List<CUnit> toHome = new ArrayList<>();
 		for (final CUnit unit : attack.getMembers()) {
 			if (isAboard(ai, unit)) {
 				continue;
@@ -505,20 +585,25 @@ final class AIAttack {
 					continue;
 				}
 			}
-			if (!attack.needsOrder(unit) && !isIdle(unit)) {
+			final boolean amphibiousHome = !ai.amphibious && !footReachable && isAmphibious(unit);
+			if (!attack.needsOrder(unit) && !isIdle(unit)
+					&& !(engaged && !amphibiousHome && AIUnits.isAIMoving(unit))) {
 				continue;
 			}
 			ai.orderedTargets.remove(unit);
-			if (!ai.amphibious && !footReachable && isAmphibious(unit)) {
-				if (unit.order(ai.simulation, OrderIds.move, home)) {
-					attack.markOrdered(unit);
-				}
-				continue;
-			}
-			if (unit.order(ai.simulation, OrderIds.attack, goal)) {
-				attack.markOrdered(unit);
-			}
-			else if (unit.order(ai.simulation, OrderIds.move, goal)) {
+			(amphibiousHome ? toHome : toGoal).add(unit);
+		}
+		for (final CUnit unit : orderGroup(ai, toHome, OrderIds.AImove, home.x, home.y)) {
+			attack.markOrdered(unit);
+		}
+		final int goalOrder = engaged ? OrderIds.attack : OrderIds.AImove;
+		final List<CUnit> taken = orderGroup(ai, toGoal, goalOrder, goal.x, goal.y);
+		for (final CUnit unit : taken) {
+			attack.markOrdered(unit);
+		}
+		if (goalOrder != OrderIds.AImove) {
+			toGoal.removeAll(taken);
+			for (final CUnit unit : orderGroup(ai, toGoal, OrderIds.AImove, goal.x, goal.y)) {
 				attack.markOrdered(unit);
 			}
 		}

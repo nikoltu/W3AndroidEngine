@@ -20,6 +20,11 @@ public class CCircleFogModifier extends CFogModifier {
 	}
 
 	@Override
+	public boolean isSharedWithAllies() {
+		return isSharedVision();
+	}
+
+	@Override
 	public void setEnabled(final boolean enabled) {
 		this.enabled = enabled;
 	}

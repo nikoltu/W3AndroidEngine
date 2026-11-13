@@ -38,6 +38,8 @@ public class CAbilityBlizzard extends CAbilityPointTargetSpellBase implements CC
 	// Measured on 1.29: creeps rain fire on a group of at least two enemies.
 	private static final int CREEP_CAST_MINIMUM_TARGETS = 2;
 	private static final float WAVE_DAMAGE_DELAY = 0.9f;
+	// Measured on 1.29: a computer player's unit leaves the area this long after the spell starts.
+	private static final float HARMFUL_AREA_REACTION_DELAY = 1.7f;
 	// Measured on 1.29: the hit buff lasts more than 0.9 and less than 1 second.
 	private static final float HIT_BUFF_DURATION = 0.95f;
 
@@ -108,6 +110,8 @@ public class CAbilityBlizzard extends CAbilityPointTargetSpellBase implements CC
 		this.damageTick = -1;
 		this.nextWaveTick = tick;
 		this.channelEndTick = tick + ticks(this.waveDelay * this.waveCount);
+		simulation.getHarmfulAreas().add(simulation, caster, target.getX(), target.getY(), this.areaOfEffect,
+				HARMFUL_AREA_REACTION_DELAY, (this.waveDelay * this.waveCount) + WAVE_DAMAGE_DELAY);
 		return true;
 	}
 
@@ -153,7 +157,7 @@ public class CAbilityBlizzard extends CAbilityPointTargetSpellBase implements CC
 					@Override
 					public boolean call(final CUnit possibleTarget) {
 						if (possibleTarget.canReach(target, CAbilityBlizzard.this.areaOfEffect)
-								&& possibleTarget.canBeAreaTargetedBy(simulation, caster, CAreaTargetVisibility.ANY,
+								&& possibleTarget.canBeAreaTargetedBy(simulation, caster, CAreaTargetVisibility.NOT_HIDDEN_GHOST,
 										getTargetsAllowed(),
 										BooleanAbilityTargetCheckReceiver.<CWidget>getInstance().reset())
 								&& !hasHitBuff(possibleTarget)) {

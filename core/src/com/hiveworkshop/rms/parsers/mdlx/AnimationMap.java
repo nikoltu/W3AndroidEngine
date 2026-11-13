@@ -1,5 +1,6 @@
 package com.hiveworkshop.rms.parsers.mdlx;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -292,11 +293,13 @@ public enum AnimationMap {
 		return this.war3id;
 	}
 
-	public static final Map<War3ID, AnimationMap> ID_TO_TAG = new HashMap<>();
+	public static final Map<War3ID, AnimationMap> ID_TO_TAG;
 
 	static {
+		final Map<War3ID, AnimationMap> idToTag = new HashMap<>();
 		for (final AnimationMap tag : AnimationMap.values()) {
-			ID_TO_TAG.put(tag.getWar3id(), tag);
+			idToTag.put(tag.getWar3id(), tag);
 		}
+		ID_TO_TAG = Collections.unmodifiableMap(idToTag);
 	}
 }

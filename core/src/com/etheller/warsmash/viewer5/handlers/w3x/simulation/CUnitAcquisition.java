@@ -528,7 +528,9 @@ final class CUnitAcquisition {
 				final CBehavior attack = source.getAttackBehavior().reset(game, OrderIds.attack,
 						this.nearestTargetAttack, target, this.disableMove, CBehaviorAttackListener.DO_NOTHING);
 				source.getAttackBehavior().delayFirstSwing(game);
+				final boolean fromIdle = CUnitAggro.isIdleForAttack(source);
 				source.beginBehavior(game, attack, true);
+				CUnitAggro.beginPostFight(source, fromIdle);
 				this.foundAnyTarget = true;
 				source.fireAcquiredTargetEvents(game, target);
 				source.alertCreeps(game, target);
@@ -553,6 +555,7 @@ final class CUnitAcquisition {
 						&& !unit.isUnitType(CUnitTypeJass.SLEEPING)) {
 					for (final CUnitAttack attack : this.source.getCurrentAttacks()) {
 						if (this.source.canReach(unit, this.attackRangeOnly ? attack.getRange() : this.source.acquisitionRange)
+								&& (this.attackRangeOnly || !isTooFarForCreep(this.game, this.source, unit))
 								&& unit.canBeTargetedBy(this.game, this.source, attack.getTargetsAllowed())
 								&& (this.source.distance(unit) >= this.source.getUnitType().getMinimumAttackRange())) {
 							if (!(unit.isUnitType(CUnitTypeJass.ETHEREAL)
@@ -578,6 +581,16 @@ final class CUnitAcquisition {
 			}
 			return false;
 		}
+	}
+
+	// Measured (1.29): an idle unit takes a Neutral Hostile unit that is not paused (a creep, at its camp or alone) only within
+	// half its acquisition range, counted between the centers; any other enemy, and a paused creep, within the whole range.
+	static final float CREEP_ACQUIRE_FRACTION = 0.5f;
+
+	static boolean isTooFarForCreep(final CSimulation game, final CUnit source, final CUnit target) {
+		return game.isNeutralAggressive(target.getPlayerIndex()) && !target.isPaused()
+				&& (StrictMath.sqrt(source.distanceSquaredNoCollision(target.getX(), target.getY())) > (source.acquisitionRange
+						* CREEP_ACQUIRE_FRACTION));
 	}
 
 	/**

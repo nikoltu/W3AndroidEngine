@@ -1,6 +1,7 @@
 package com.etheller.warsmash.units.manager;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -266,38 +267,42 @@ public final class MutableObjectData {
 	private static final War3ID UPGRADE_EDITOR_SUFFIX = War3ID.fromString("gnsf");
 	private static final War3ID HERO_PROPER_NAMES = War3ID.fromString("upro");
 
-	private static final Set<War3ID> CATEGORY_FIELDS = new HashSet<>();
-	private static final Set<War3ID> FIELD_SETTINGS_FIELDS = new HashSet<>();
+	private static final Set<War3ID> CATEGORY_FIELDS;
+	private static final Set<War3ID> FIELD_SETTINGS_FIELDS;
 
 	static {
+		final Set<War3ID> categoryFields = new HashSet<>();
+		final Set<War3ID> fieldSettingsFields = new HashSet<>();
 		// categorizing - I thought these would be changeFlags value "c", but no luck
-		CATEGORY_FIELDS.add(War3ID.fromString("ubdg")); // is a building
-		CATEGORY_FIELDS.add(War3ID.fromString("uspe")); // categorize special
-		CATEGORY_FIELDS.add(War3ID.fromString("ucam")); // categorize campaign
-		CATEGORY_FIELDS.add(War3ID.fromString("urac")); // race
-		CATEGORY_FIELDS.add(War3ID.fromString("uine")); // in editor
-		CATEGORY_FIELDS.add(War3ID.fromString("ucls")); // sort string (not a real field, fanmade)
+		categoryFields.add(War3ID.fromString("ubdg")); // is a building
+		categoryFields.add(War3ID.fromString("uspe")); // categorize special
+		categoryFields.add(War3ID.fromString("ucam")); // categorize campaign
+		categoryFields.add(War3ID.fromString("urac")); // race
+		categoryFields.add(War3ID.fromString("uine")); // in editor
+		categoryFields.add(War3ID.fromString("ucls")); // sort string (not a real field, fanmade)
 
-		CATEGORY_FIELDS.add(War3ID.fromString("icla")); // item class
+		categoryFields.add(War3ID.fromString("icla")); // item class
 
-		CATEGORY_FIELDS.add(War3ID.fromString("bcat")); // destructible category
+		categoryFields.add(War3ID.fromString("bcat")); // destructible category
 
-		CATEGORY_FIELDS.add(War3ID.fromString("dcat")); // doodad category
+		categoryFields.add(War3ID.fromString("dcat")); // doodad category
 
-		CATEGORY_FIELDS.add(War3ID.fromString("aher")); // hero ability
-		CATEGORY_FIELDS.add(War3ID.fromString("aite")); // item ability
-		CATEGORY_FIELDS.add(War3ID.fromString("arac")); // ability race
+		categoryFields.add(War3ID.fromString("aher")); // hero ability
+		categoryFields.add(War3ID.fromString("aite")); // item ability
+		categoryFields.add(War3ID.fromString("arac")); // ability race
 
-		CATEGORY_FIELDS.add(War3ID.fromString("frac")); // buff race
-		CATEGORY_FIELDS.add(War3ID.fromString("feff")); // is effect
+		categoryFields.add(War3ID.fromString("frac")); // buff race
+		categoryFields.add(War3ID.fromString("feff")); // is effect
 
-		CATEGORY_FIELDS.add(War3ID.fromString("grac")); // upgrade race
+		categoryFields.add(War3ID.fromString("grac")); // upgrade race
 		// field structure fields - doesn't seem to be changeFlags 's' like you might
 		// hope
-		FIELD_SETTINGS_FIELDS.add(War3ID.fromString("ubdg")); // unit is a builder
-		FIELD_SETTINGS_FIELDS.add(War3ID.fromString("dvar")); // doodad variations
-		FIELD_SETTINGS_FIELDS.add(War3ID.fromString("alev")); // ability level
-		FIELD_SETTINGS_FIELDS.add(War3ID.fromString("glvl")); // upgrade max level
+		fieldSettingsFields.add(War3ID.fromString("ubdg")); // unit is a builder
+		fieldSettingsFields.add(War3ID.fromString("dvar")); // doodad variations
+		fieldSettingsFields.add(War3ID.fromString("alev")); // ability level
+		fieldSettingsFields.add(War3ID.fromString("glvl")); // upgrade max level
+		CATEGORY_FIELDS = Collections.unmodifiableSet(categoryFields);
+		FIELD_SETTINGS_FIELDS = Collections.unmodifiableSet(fieldSettingsFields);
 	}
 
 	public final class MutableGameObject {

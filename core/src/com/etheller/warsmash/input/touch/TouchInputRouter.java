@@ -31,9 +31,13 @@ public final class TouchInputRouter {
 	public TouchInputRouter(final TouchSettings settings, final LongSupplier clock, final boolean debugLog) {
 		this.adapter = new RtsTouchAdapter(settings, debugLog);
 		this.recognizer = new GestureRecognizer(settings, this.adapter);
-		this.palmFilter = new PalmFilter(settings.palmTouchMajorPx, settings.penFingerPolicy);
+		this.palmFilter = new PalmFilter(settings.palmTouchMajorPx, settings.penFingerPolicy, settings.palmRejection);
 		this.clock = clock;
 		this.debugLog = debugLog;
+	}
+
+	public void setPenCapable(final boolean penCapable) {
+		this.palmFilter.setPenCapable(penCapable);
 	}
 
 	public static void install(final TouchInputRouter router) {
@@ -96,7 +100,7 @@ public final class TouchInputRouter {
 	private void dispatch(final PointerEvent event) {
 		if (!this.palmFilter.accept(event)) {
 			if (this.debugLog && (event.action == PointerEvent.Action.DOWN)) {
-				Gdx.app.log(LOG_TAG, "dropped as palm or finger near pen: " + event);
+				Gdx.app.log(LOG_TAG, "dropped as palm or finger near pen (limit " + this.palmFilter.effectiveLimitPx() + "): " + event);
 			}
 			return;
 		}

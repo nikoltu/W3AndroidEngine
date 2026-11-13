@@ -21,10 +21,7 @@ public class CPlayerStateEvent extends CPlayerEvent {
 		return this.state;
 	}
 
-	/**
-	 * The event fires when the state starts to meet the limit, not on every change while it does.
-	 */
-	public boolean isCrossed(final double before, final double after) {
-		return !this.limit.isMatching(before) && this.limit.isMatching(after);
+	public boolean isMatching(final double value) {
+		return this.limit.isMatching(value);
 	}
 }

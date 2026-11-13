@@ -7,6 +7,7 @@ import java.util.List;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.orders.OrderIds;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.pathing.CPathPoint;
 
 /**
  * A point order given to several units at once. Measured on 1.29: the units do not all head for the clicked point;
@@ -27,7 +28,8 @@ public final class CGroupMove {
 	}
 
 	public static boolean usesFormation(final int orderId) {
-		return (orderId == OrderIds.move) || (orderId == OrderIds.smart) || (orderId == OrderIds.attack);
+		return (orderId == OrderIds.move) || (orderId == OrderIds.smart) || (orderId == OrderIds.attack)
+				|| (orderId == OrderIds.AImove);
 	}
 
 	public static boolean canTakeSlot(final CUnit unit) {
@@ -64,8 +66,24 @@ public final class CGroupMove {
 			return;
 		}
 		final CGroupMove group = new CGroupMove(moving);
+		float pointX = 0;
+		float pointY = 0;
+		int pointWalkers = 0;
 		for (final CUnit unit : moving) {
-			unit.getMoveBehavior().setGroup(group);
+			final CPathPoint goal = unit.getMoveBehavior().getPointGoal();
+			if (goal != null) {
+				pointX += goal.x;
+				pointY += goal.y;
+				pointWalkers++;
+			}
+		}
+		for (final CUnit unit : moving) {
+			final CBehaviorMove move = unit.getMoveBehavior();
+			move.setGroup(group);
+			final CPathPoint goal = move.getPointGoal();
+			if ((goal != null) && (pointWalkers > 1)) {
+				move.setLane(goal.x - (pointX / pointWalkers), goal.y - (pointY / pointWalkers));
+			}
 		}
 	}
 

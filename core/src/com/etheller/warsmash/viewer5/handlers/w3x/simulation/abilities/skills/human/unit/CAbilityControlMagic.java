@@ -2,6 +2,7 @@ package com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.h
 
 import com.etheller.warsmash.units.GameObject;
 import com.etheller.warsmash.util.War3ID;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CReleaseCheats;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CWidget;
@@ -41,11 +42,12 @@ public class CAbilityControlMagic extends CAbilityTargetSpellBase {
 		this.buffId = AbstractCAbilityTypeDefinition.getBuffId(worldEditorAbility, level);
 	}
 
-	private int controlCost(final CUnit target) {
-		if (!this.chargeForCurrentLife) {
-			return getManaCost();
+	private int controlCost(final CSimulation game, final CUnit caster, final CUnit target) {
+		int cost = getManaCost();
+		if (this.chargeForCurrentLife) {
+			cost += (int) Math.ceil(target.getLife() * this.manaPerSummonedHitPoint);
 		}
-		return getManaCost() + (int) Math.ceil(target.getLife() * this.manaPerSummonedHitPoint);
+		return CReleaseCheats.manaCost(game, caster, cost);
 	}
 
 	@Override
@@ -55,7 +57,7 @@ public class CAbilityControlMagic extends CAbilityTargetSpellBase {
 		if ((targetUnit == null) || !targetUnit.isUnitType(CUnitTypeJass.SUMMONED) || targetUnit.isHero()) {
 			receiver.targetCheckFailed(CommandStringErrorKeys.MUST_TARGET_SUMMONED_UNITS);
 		}
-		else if (unit.getMana() < controlCost(targetUnit)) {
+		else if (unit.getMana() < controlCost(game, unit, targetUnit)) {
 			receiver.targetCheckFailed(CommandStringErrorKeys.NOT_ENOUGH_MANA);
 		}
 		else {
@@ -69,7 +71,8 @@ public class CAbilityControlMagic extends CAbilityTargetSpellBase {
 		if ((targetUnit == null) || targetUnit.isDead()) {
 			return false;
 		}
-		final int extraCost = controlCost(targetUnit) - getManaCost();
+		final int extraCost = controlCost(simulation, caster, targetUnit)
+				- CReleaseCheats.manaCost(simulation, caster, getManaCost());
 		if (extraCost > 0) {
 			if (!caster.chargeMana(extraCost)) {
 				return false;

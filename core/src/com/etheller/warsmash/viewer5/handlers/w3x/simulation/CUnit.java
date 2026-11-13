@@ -188,6 +188,10 @@ public class CUnit extends CWidget {
 	final List<Trigger> onTickTriggers = new ArrayList<>();
 
 	CUnitType unitType;
+	/** Which unit made before the game started this is, counting from 0. */
+	private int startCreationIndex;
+	/** The index of the last unit of this unit's type made before the game started; null for a unit made later. */
+	private int[] startTypeLastIndex;
 
 
 	final EnumSet<CUnitClassification> classifications = EnumSet.noneOf(CUnitClassification.class);
@@ -762,6 +766,9 @@ public class CUnit extends CWidget {
 	}
 
 	void tryCreepCast(final CSimulation game) {
+		if (!game.isNeutralAggressive(this.playerIndex)) {
+			game.getHarmfulAreas().stepOut(game, this);
+		}
 		CUnitAcquisition.tryCreepCast(this, game);
 	}
 
@@ -778,6 +785,11 @@ public class CUnit extends CWidget {
 	/** Whether the spell with this order was already cast by the creep rules and is cast only once. */
 	public boolean hasCastOnce(final int orderId) {
 		return (this.acquisition.creepCastOnce != null) && this.acquisition.creepCastOnce.contains(orderId);
+	}
+
+	/** The unit behind the hardest hit this one took in the last given number of ticks. */
+	public CUnit getHeaviestHitBy(final int tick, final int withinTicks) {
+		return ((tick - this.aggro.heaviestHitTick) <= withinTicks) ? this.aggro.heaviestHitBy : null;
 	}
 
 	public void markCastOnce(final int orderId) {
@@ -971,6 +983,23 @@ public class CUnit extends CWidget {
 
 	public int getFakePlayerIndex() {
 		return this.fakePlayerIndex;
+	}
+
+	public void setStartCreation(final int index, final int[] typeLastIndex) {
+		this.startCreationIndex = index;
+		this.startTypeLastIndex = typeLastIndex;
+	}
+
+	public boolean isMadeBeforeStart() {
+		return this.startTypeLastIndex != null;
+	}
+
+	public int getStartCreationIndex() {
+		return this.startCreationIndex;
+	}
+
+	public int getStartTypeLastIndex() {
+		return this.startTypeLastIndex[0];
 	}
 
 	public CUnitType getUnitType() {
@@ -1324,6 +1353,10 @@ public class CUnit extends CWidget {
 
 	public boolean canReach(final float x, final float y, final float range) {
 		return CUnitPlacement.canReach(this, x, y, range);
+	}
+
+	public boolean isBesideBuilding(final CUnit building) {
+		return CUnitPlacement.isBesideBuilding(this, building);
 	}
 
 	public boolean canReachToPathing(final float range, final float rotationForPathing,
@@ -1909,6 +1942,12 @@ public class CUnit extends CWidget {
 
 	public Queue<COrder> getOrderQueue() {
 		return this.orders.orderQueue;
+	}
+
+	/** 1.29: a unit that gave up a chase reads move on its way back; one that lost its target reads 0. */
+	public boolean isWalkingToPost() {
+		return (this.aggro.guardReturn == GUARD_RETURN_GIVE_UP) && (this.orders.currentBehavior == this.moveBehavior)
+				&& (this.moveBehavior != null) && (this.moveBehavior.getRangedBehavior() == null);
 	}
 
 	public COrder getCurrentOrder() {
@@ -2731,6 +2770,30 @@ public class CUnit extends CWidget {
 
 	public boolean isVisible(final CSimulation simulation, final int toPlayerIndex) {
 		return CUnitVisibility.isVisible(this, simulation, toPlayerIndex);
+	}
+
+	/**
+	 * True while a revealing effect (Dust of Appearance) detects this invisible unit for the player. A paused unit
+	 * that gave up its Ghost invisibility is still the invisible unit the effect was cast on.
+	 */
+	public boolean isRevealedTo(final int toPlayerIndex) {
+		if ((this.visibility.detections & (1 << toPlayerIndex)) == 0) {
+			return false;
+		}
+		if (this.visibility.invisLevels != 0) {
+			return true;
+		}
+		if (!this.paused) {
+			return false;
+		}
+		for (int i = 0, n = this.stateModBuffs.size(); i < n; i++) {
+			final StateModBuff buff = this.stateModBuffs.get(i);
+			if ((buff.getBuffType() == StateModBuffType.INVISIBLE) && (buff.getValue() != 0)
+					&& ((buff.getValue() & StateModBuff.INVISIBLE_UNLESS_PAUSED) != 0)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	public boolean hasUniqueFlag(String flag) {

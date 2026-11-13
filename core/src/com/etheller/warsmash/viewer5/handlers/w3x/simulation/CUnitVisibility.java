@@ -9,6 +9,8 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CAllianceTy
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayer;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.vision.CPlayerFogOfWar;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.CFogState;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.unit.StateModBuff;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.unit.StateModBuffType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.AbilityTargetCheckReceiver;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.CommandStringErrorKeys;
 
@@ -208,6 +210,12 @@ final class CUnitVisibility {
 		switch (visibility) {
 		case VISIBLE:
 			return canBeTargetedBy(self, simulation, source, true, targetsAllowed, receiver);
+		case NOT_HIDDEN_GHOST:
+			if (isGhostInvisible(self) && isHiddenByInvisibility(self, simulation, source.getPlayerIndex())) {
+				receiver.targetCheckFailed(CommandStringErrorKeys.MUST_TARGET_A_UNIT_WITH_THIS_ACTION);
+				return false;
+			}
+			return canBeTargetedBy(self, simulation, source, false, targetsAllowed, receiver);
 		case NOT_INVISIBLE:
 			if (isHiddenByInvisibility(self, simulation, source.getPlayerIndex())) {
 				receiver.targetCheckFailed(CommandStringErrorKeys.MUST_TARGET_A_UNIT_WITH_THIS_ACTION);
@@ -217,6 +225,23 @@ final class CUnitVisibility {
 		default:
 			return canBeTargetedBy(self, simulation, source, false, targetsAllowed, receiver);
 		}
+	}
+
+	/**
+	 * True while the unit is invisible through the Ghost ability, which a paused unit gives up.
+	 */
+	private static boolean isGhostInvisible(final CUnit self) {
+		if (self.paused) {
+			return false;
+		}
+		for (int i = 0, n = self.stateModBuffs.size(); i < n; i++) {
+			final StateModBuff buff = self.stateModBuffs.get(i);
+			if ((buff.getBuffType() == StateModBuffType.INVISIBLE) && (buff.getValue() != 0)
+					&& ((buff.getValue() & StateModBuff.INVISIBLE_UNLESS_PAUSED) != 0)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -275,6 +300,7 @@ final class CUnitVisibility {
 				// within its cell: the cell centre hides far more than 1.29 does, and the offset made it depend on the step.
 				final float cellX = pathingGrid.getFogOfWarSampleX(myXi);
 				final float cellY = pathingGrid.getFogOfWarSampleY(myYi);
+				fogOfWar.setViewerCell(myXi, myYi);
 				for (int a = 1; a <= sightCells; a++) {
 					detections = 0;
 					for (int d = 0, dn = self.visibility.detectorLevels.size(); d < dn; d++) {
@@ -331,6 +357,7 @@ final class CUnitVisibility {
 						}
 					}
 				}
+				fogOfWar.clearViewerCell();
 			}
 		}
 	}

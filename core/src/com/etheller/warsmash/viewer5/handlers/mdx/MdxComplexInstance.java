@@ -128,7 +128,7 @@ public class MdxComplexInstance extends ModelInstance {
 
 		// A shared typed array for all world matrices of the internal nodes.
 		this.worldMatrices = ((List<Matrix4>) sharedNodeData[1]).toArray(new Matrix4[0]);
-		this.worldMatricesCopyHeap = ByteBuffer.allocateDirect(16 * this.worldMatrices.length * 4)
+		this.worldMatricesCopyHeap = ByteBuffer.allocateDirect(boneTextureTexels(this.worldMatrices.length) * 16)
 				.order(ByteOrder.nativeOrder()).asFloatBuffer();
 		this.worldMatricesCopyArray = new float[16 * this.worldMatrices.length];
 
@@ -539,6 +539,14 @@ public class MdxComplexInstance extends ModelInstance {
 		}
 	}
 
+	private static int boneTextureTexels(final int bones) {
+		final int texels = bones * 4;
+		if (texels <= BoneAtlas.WIDTH) {
+			return texels;
+		}
+		return ((texels + BoneAtlas.WIDTH - 1) / BoneAtlas.WIDTH) * BoneAtlas.WIDTH;
+	}
+
 	public void updateBoneTexture() {
 		if (this.hasBones) {
 			final float[] copy = this.worldMatricesCopyArray;
@@ -591,8 +599,11 @@ public class MdxComplexInstance extends ModelInstance {
 		}
 		else {
 			if (this.boneTexture == null) {
-				this.boneTexture = new DataTexture(this.model.viewer.gl, 4,
-						((MdxModel) this.model).bones.size() * 4, 1);
+				// A model with many bones takes several rows: a single row of 4 texels per bone is wider than the
+				// largest texture of some phones.
+				final int texels = boneTextureTexels(((MdxModel) this.model).bones.size());
+				this.boneTexture = new DataTexture(this.model.viewer.gl, 4, Math.min(texels, BoneAtlas.WIDTH),
+						texels / Math.min(texels, BoneAtlas.WIDTH));
 				this.model.viewer.trackDataTexture(this.boneTexture);
 			}
 			if (this.boneTextureStale) {

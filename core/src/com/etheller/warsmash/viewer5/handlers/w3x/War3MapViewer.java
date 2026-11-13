@@ -225,6 +225,8 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 	Scene skyScene;
 	MdxComplexInstance skyInstance;
 	ModelCinematic modelCinematic;
+	private ModelCinematic.Timeline modelCinematicTimeline;
+	private boolean modelCinematicsEnabled = true;
 	final List<UnitIndicator> unitIndicators = new ArrayList<>();
 	public List<RenderDoodad> decals = new ArrayList<>();
 	private int fogDoodadTicks;
@@ -1187,8 +1189,53 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 
 	/** PlayModelCinematic: a new one replaces the one still playing. */
 	public void playModelCinematic(final String path) {
+		playModelCinematic(path, false, 0, 0, 0, 0);
+	}
+
+	/** BlzPlayModelCinematicGameAtPosition: the cinematic plays in the world, at the place, turned about the Z axis. */
+	public void playModelCinematicAtPosition(final String path, final float x, final float y, final float z,
+			final float rotationDegrees) {
+		playModelCinematic(path, true, x, y, z, rotationDegrees);
+	}
+
+	private void playModelCinematic(final String path, final boolean inGame, final float x, final float y,
+			final float z, final float rotationDegrees) {
 		endModelCinematic();
-		this.modelCinematic = ModelCinematic.play(this, path);
+		this.modelCinematicTimeline = null;
+		if (!this.modelCinematicsEnabled) {
+			return;
+		}
+		this.modelCinematic = ModelCinematic.play(this, path, inGame, x, y, z, rotationDegrees);
+		if (this.modelCinematic != null) {
+			this.modelCinematicTimeline = this.modelCinematic.getTimeline();
+		}
+	}
+
+	/** BlzPreloadModelCinematicGame: loads the model so it plays without a pause. */
+	public boolean preloadModelCinematic(final String path) {
+		return ModelCinematic.load(this, path) != null;
+	}
+
+	/** BlzSetCinematicEnabledDE: while it is off, model cinematics are not played. */
+	public void setModelCinematicsEnabled(final boolean enabled) {
+		this.modelCinematicsEnabled = enabled;
+		if (!enabled) {
+			endModelCinematic();
+		}
+	}
+
+	public int getModelCinematicShotCount() {
+		return this.modelCinematicTimeline == null ? 0 : this.modelCinematicTimeline.getShotCount();
+	}
+
+	public int getModelCinematicCurrentShot() {
+		return this.modelCinematicTimeline == null ? 0
+				: this.modelCinematicTimeline.getCurrentShot(this.simulation.getGameTurnTick());
+	}
+
+	public float getModelCinematicRemainingTime() {
+		return this.modelCinematicTimeline == null ? 0f
+				: this.modelCinematicTimeline.getRemainingSeconds(this.simulation.getGameTurnTick());
 	}
 
 	/** @return whether a model cinematic was playing, now skipped */

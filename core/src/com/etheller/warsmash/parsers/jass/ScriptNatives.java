@@ -15,6 +15,7 @@ import com.etheller.interpreter.ast.value.visitor.RealJassValueVisitor;
 import com.etheller.interpreter.ast.value.visitor.StringJassValueVisitor;
 import com.etheller.warsmash.parsers.jass.Jass2.CommonEnvironment;
 import com.etheller.warsmash.units.GameObject;
+import com.etheller.warsmash.util.JassRandom;
 import com.etheller.warsmash.util.RawcodeUtils;
 import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.ability.ItemUI;
@@ -24,7 +25,6 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnitType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.COrderButton.JassOrderButtonType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.COrderButton;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.CVersion;
-import java.util.Random;
 
 /**
  * Natives for object ids and names, handle ids, bit operations, versions, rawcodes and random numbers.
@@ -164,21 +164,13 @@ final class ScriptNatives extends CommonNatives {
 				(arguments, globalScope, triggerScope) -> {
 					final float lowBound = arguments.get(0).visit(RealJassValueVisitor.getInstance()).floatValue();
 					final float highBound = arguments.get(1).visit(RealJassValueVisitor.getInstance()).floatValue();
-					// 1.29 adds the size of the range to the first bound, so (10, 1) gives 10 to 19.
-					return RealJassValue.of(
-							(simulation.getSeededRandom().nextFloat() * Math.abs(highBound - lowBound)) + lowBound);
+					return RealJassValue.of(JassRandom.nextReal(simulation.getSeededRandom(), lowBound, highBound));
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("GetRandomInt",
 				(arguments, globalScope, triggerScope) -> {
 					final int lowBound = arguments.get(0).visit(IntegerJassValueVisitor.getInstance());
 					final int highBound = arguments.get(1).visit(IntegerJassValueVisitor.getInstance());
-					// As in 1.29: the size of the range is |high - low| in 32 bits, added to the first bound, so (10, 1)
-					// gives 10 to 19 and (MinInt, MaxInt), whose difference wraps to -1, gives MinInt or MinInt + 1.
-					final long range = Math.abs((long) (highBound - lowBound)) + 1;
-					final Random random = simulation.getSeededRandom();
-					final long offset = range <= Integer.MAX_VALUE ? random.nextInt((int) range)
-							: Math.floorMod(random.nextLong(), range);
-					return IntegerJassValue.of((int) (lowBound + offset));
+					return IntegerJassValue.of(JassRandom.nextInt(simulation.getSeededRandom(), lowBound, highBound));
 				});
 	}
 }

@@ -1,5 +1,6 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.neutral.beastmaster;
 
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.CAreaTargetVisibility;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
@@ -131,7 +132,7 @@ public class CAbilityStampede extends CAbilityPointTargetSpellBase {
 			public boolean canHitTarget(final CSimulation game, final CWidget target) {
 				final CUnit unit = target.visit(AbilityTargetVisitor.UNIT);
 				return (unit != null) && !unit.isUnitAlly(game.getPlayer(caster.getPlayerIndex()))
-						&& unit.canBeTargetedBy(game, caster, false, getTargetsAllowed(),
+						&& unit.canBeAreaTargetedBy(game, caster, CAreaTargetVisibility.ANY, getTargetsAllowed(),
 								BooleanAbilityTargetCheckReceiver.<CWidget>getInstance().reset());
 			}
 
@@ -164,7 +165,7 @@ public class CAbilityStampede extends CAbilityPointTargetSpellBase {
 		simulation.getWorldCollision().enumUnitsInRange(x, y, this.damageRadius, (enumUnit) -> {
 			if (enumUnit.canReach(x, y, this.damageRadius)
 					&& !enumUnit.isUnitAlly(simulation.getPlayer(caster.getPlayerIndex()))
-					&& enumUnit.canBeTargetedBy(simulation, caster, false, getTargetsAllowed(),
+					&& enumUnit.canBeAreaTargetedBy(simulation, caster, CAreaTargetVisibility.ANY, getTargetsAllowed(),
 							BooleanAbilityTargetCheckReceiver.<CWidget>getInstance().reset())) {
 				targets.add(enumUnit);
 			}

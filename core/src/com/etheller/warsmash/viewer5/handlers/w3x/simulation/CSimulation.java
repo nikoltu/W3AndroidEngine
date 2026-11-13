@@ -98,6 +98,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CRace;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.state.CGameState;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CRaceManagerEntry;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CRacePreference;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.vision.CFogModifier;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.vision.CPlayerFogOfWar;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.vision.CUnitVisionFogModifier;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.quest.CQuestLog;
@@ -131,6 +132,9 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 	private final CUpgradeData upgradeData;
 	private final List<CUnit> units;
 	private final List<CUnit> newUnits;
+	private boolean started;
+	private int startUnitCount;
+	private final Map<War3ID, int[]> startTypeLastIndices = new HashMap<>();
 	private final List<CUnit> removedUnits;
 	private final List<CDestructable> destructables;
 	private final List<CDestructable> removedDestructables;
@@ -149,6 +153,7 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 	private final HandleIdAllocator handleIdAllocator;
 	private transient final SimulationRenderController simulationRenderController;
 	private int gameTurnTick = 0;
+	private boolean scriptStartPending = false;
 	private final PathingGrid pathingGrid;
 	private final CTerrainData terrainData;
 	private final CWorldCollision worldCollision;
@@ -160,6 +165,7 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 	private final GameDataConstants gameData;
 	private final CGameplayConstants gameplayConstants;
 	private final Random seededRandom;
+	private final CHarmfulAreas harmfulAreas = new CHarmfulAreas();
 	/**
 	 * Measured on 1.29: attack damage dice and the first swing's wait come from a random stream of their own, which
 	 * SetRandomSeed sets as well, so the script's GetRandomInt calls and critters' wandering do not change them. Null
@@ -397,7 +403,7 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 
 		final CTimer fogUpdateTimer = new FogUpdateTimer();
 		fogUpdateTimer.setRepeats(true);
-		fogUpdateTimer.setTimeoutTime(1.0f);
+		fogUpdateTimer.setTimeoutTime(CFogModifier.FOG_UPDATE_TIME);
 		fogUpdateTimer.start(this);
 	}
 	
@@ -530,6 +536,11 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 				this.handleIdAllocator, editorConfigHitPointPercent, editorConfigManaAmount);
 		this.newUnits.add(unit);
 		this.handleIdToUnit.put(unit.getHandleId(), unit);
+		if (!this.started) {
+			final int[] typeLast = this.startTypeLastIndices.computeIfAbsent(typeId, id -> new int[1]);
+			typeLast[0] = this.startUnitCount;
+			unit.setStartCreation(this.startUnitCount++, typeLast);
+		}
 		return unit;
 	}
 
@@ -646,6 +657,10 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 			}
 			createdUnit.setConstructing(constructing);
 			setupCreatedUnit(createdUnit);
+			// Measured on 1.29: making a unit that can attack takes one number from the combat random stream.
+			if (!createdUnit.getCurrentAttacks().isEmpty()) {
+				getCombatRandom().nextInt();
+			}
 			final float handicap = getPlayer(playerIndex).getHandicap();
 			if (handicap != 1f) {
 				createdUnit.setHandicap(handicap);
@@ -662,7 +677,9 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 			createdUnit.performDefaultBehavior(this);
 			// Fog is recomputed once a second; without this a script could not order a unit it just made against
 			// anything, because the new unit would not yet see its target.
-			updateFogOfWarOfNewUnit(createdUnit);
+			if (!this.deferNewUnitFog) {
+				updateFogOfWarOfNewUnit(createdUnit);
+			}
 			createdUnit.onCreatedNightSleep(this);
 			if (createdUnit.isHero()) {
 				heroCreateEvent(createdUnit);
@@ -792,6 +809,8 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 		return new Vector2(placeX, placeY);
 	}
 
+	private boolean deferNewUnitFog;
+
 	public CUnit createUnitSimple(final War3ID typeId, final int playerIndex, float x, float y,
 			final float facing) {
 		final CUnitType unitType = this.unitData.getUnitType(typeId);
@@ -812,7 +831,15 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 			y = place.y;
 			keepPlace = exact[0];
 		}
-		final CUnit newUnit = createUnit(typeId, playerIndex, x, y, facing);
+		// A unit that is nudged sees only from the spot it ends on; the spot it was asked for leaves no fogged cells (1.29).
+		this.deferNewUnitFog = !keepPlace;
+		final CUnit newUnit;
+		try {
+			newUnit = createUnit(typeId, playerIndex, x, y, facing);
+		}
+		finally {
+			this.deferNewUnitFog = false;
+		}
 		if (newUnit != null) {
 			final CPlayer player = getPlayer(playerIndex);
 			final CUnitType newUnitType = newUnit.getUnitType();
@@ -833,9 +860,7 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 			else {
 				newUnit.setPointAndCheckUnstuck(x, y, this);
 				// The unit sees from the spot it was nudged to, so a script can order it against what stands there.
-				if ((newUnit.getX() != x) || (newUnit.getY() != y)) {
-					updateFogOfWarOfNewUnit(newUnit);
-				}
+				updateFogOfWarOfNewUnit(newUnit);
 			}
 			if (silentEnter) {
 				this.regionManager.setSilentEnterUnit(null);
@@ -1101,6 +1126,8 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 		final long fogStart = System.nanoTime();
 		for (final CPlayer player : this.players) {
 			player.getFogOfWar().convertVisibleToFogged();
+		}
+		for (final CPlayer player : this.players) {
 			player.updateFogModifiers(this);
 		}
 		for (final CUnit unit : this.units) {
@@ -1187,8 +1214,20 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 				&& this.sharedVisions.containsKey((((long) unit.getHandleId()) << 8) | viewer.getId());
 	}
 
+	/**
+	 * The map script's main thread is queued and runs at the start of the first step, on game time 0 (1.29 starts the
+	 * script on its first step; the unit and timer clocks count from there).
+	 */
+	public void startScriptOnFirstStep() {
+		this.scriptStartPending = true;
+	}
+
 	public void update() {
 		PerfStats.stepMark();
+		if (this.scriptStartPending) {
+			this.scriptStartPending = false;
+			this.globalScope.runThreads();
+		}
 		updateSelections();
 		for (int i = this.unitInRangeEvents.size() - 1; i >= 0; i--) {
 			this.unitInRangeEvents.get(i).update(this);
@@ -1267,7 +1306,12 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 		this.onTickTriggers.removeAll(this.removedOnTickTriggers);
 		this.removedOnTickTriggers.clear();
 
-		this.globalScope.runThreads();
+		// The map's own units are made by the script that runs in the first step; a script that is still going after 
+		// a few steps does not count as the start of the map any more.
+		final boolean scriptsDone = this.globalScope.runThreads();
+		if (scriptsDone || (this.gameTurnTick >= 3)) {
+			this.started = true;
+		}
 		PerfStats.stepEnd(PerfStats.Step.JASS);
 		for (final CPlayer player : this.players) {
 			final JassAIEnvironment aiScript = player.getAiScript();
@@ -1577,6 +1621,10 @@ public class CSimulation implements CPlayerAPI, CFogMaskSettings {
 		}
 		final CPlayer player = getPlayer(playerIndex);
 		return (player != null) && (player.getController() == CMapControl.COMPUTER) && (player.getAiScript() == null);
+	}
+
+	public CHarmfulAreas getHarmfulAreas() {
+		return this.harmfulAreas;
 	}
 
 	public boolean isNeutralPassive(final int playerIndex) {

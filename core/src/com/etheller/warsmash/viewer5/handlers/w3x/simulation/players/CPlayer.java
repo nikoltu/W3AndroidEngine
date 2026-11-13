@@ -207,8 +207,10 @@ public class CPlayer extends CBasePlayer {
 	}
 
 	public void setGold(final int gold) {
+		final int before = this.gold;
 		this.gold = gold;
 		this.stateNotifier.goldChanged();
+		fireStateLimitEvents(CPlayerState.RESOURCE_GOLD, before, gold);
 	}
 
 	public void addGold(final int gold) {
@@ -216,8 +218,10 @@ public class CPlayer extends CBasePlayer {
 	}
 
 	public void setLumber(final int lumber) {
+		final int before = this.lumber;
 		this.lumber = lumber;
 		this.stateNotifier.lumberChanged();
+		fireStateLimitEvents(CPlayerState.RESOURCE_LUMBER, before, lumber);
 	}
 
 	/**
@@ -248,32 +252,40 @@ public class CPlayer extends CBasePlayer {
 	}
 
 	public void setHeroTokens(final int heroTokens) {
+		final int before = this.heroTokens;
 		this.heroTokens = heroTokens;
 		this.stateNotifier.heroTokensChanged();
+		fireStateLimitEvents(CPlayerState.RESOURCE_HERO_TOKENS, before, heroTokens);
 	}
 
 	public void setFoodCap(final int foodCap) {
 		final boolean raised = foodCap > this.foodCap;
+		final int before = this.foodCap;
 		this.foodCap = foodCap;
 		this.scores[CPlayerScore.FOOD_MAXPROD.ordinal()] = Math.max(this.scores[CPlayerScore.FOOD_MAXPROD.ordinal()],
 				Math.min(foodCap, this.foodCapCeiling));
 		this.stateNotifier.foodChanged();
+		fireStateLimitEvents(CPlayerState.RESOURCE_FOOD_CAP, before, foodCap);
 		if (raised) {
 			retryFoodWaiters();
 		}
 	}
 
 	public void setFoodCapCeiling(final int foodCapCeiling) {
+		final int before = this.foodCapCeiling;
 		this.foodCapCeiling = foodCapCeiling;
 		this.stateNotifier.foodChanged();
+		fireStateLimitEvents(CPlayerState.FOOD_CAP_CEILING, before, foodCapCeiling);
 	}
 
 	public void setFoodUsed(final int foodUsed) {
 		final boolean freed = foodUsed < this.foodUsed;
+		final int before = this.foodUsed;
 		this.foodUsed = foodUsed;
 		this.scores[CPlayerScore.FOOD_MAXUSED.ordinal()] = Math.max(this.scores[CPlayerScore.FOOD_MAXUSED.ordinal()],
 				foodUsed);
 		this.stateNotifier.foodChanged();
+		fireStateLimitEvents(CPlayerState.RESOURCE_FOOD_USED, before, foodUsed);
 		if (freed) {
 			retryFoodWaiters();
 		}
@@ -523,51 +535,44 @@ public class CPlayer extends CBasePlayer {
 	}
 
 	public void chargeFor(final CUnitType unitType) {
-		this.lumber -= unitType.getLumberCost();
-		this.gold -= unitType.getGoldCost();
-		this.stateNotifier.lumberChanged();
-		this.stateNotifier.goldChanged();
+		changeResources(-unitType.getGoldCost(), -unitType.getLumberCost());
 	}
 
 	public void chargeFor(final CUpgradeType upgradeType) {
 		final int unlockCount = getTechtreeUnlocked(upgradeType.getTypeId());
-		this.lumber -= upgradeType.getLumberCost(unlockCount);
-		this.gold -= upgradeType.getGoldCost(unlockCount);
-		this.stateNotifier.lumberChanged();
-		this.stateNotifier.goldChanged();
+		changeResources(-upgradeType.getGoldCost(unlockCount), -upgradeType.getLumberCost(unlockCount));
 	}
 
 	public boolean charge(final int gold, final int lumber) {
 		if ((this.lumber >= lumber) && (this.gold >= gold)) {
-			this.lumber -= lumber;
-			this.gold -= gold;
-			this.stateNotifier.lumberChanged();
-			this.stateNotifier.goldChanged();
+			changeResources(-gold, -lumber);
 			return true;
 		}
 		return false;
 	}
 
 	public void refundFor(final CUnitType unitType) {
-		this.lumber += unitType.getLumberCost();
-		this.gold += unitType.getGoldCost();
-		this.stateNotifier.lumberChanged();
-		this.stateNotifier.goldChanged();
+		changeResources(unitType.getGoldCost(), unitType.getLumberCost());
 	}
 
 	public void refundFor(final CUpgradeType upgradeType) {
 		final int unlockCount = getTechtreeUnlocked(upgradeType.getTypeId());
-		this.lumber += upgradeType.getLumberCost(unlockCount);
-		this.gold += upgradeType.getGoldCost(unlockCount);
-		this.stateNotifier.lumberChanged();
-		this.stateNotifier.goldChanged();
+		changeResources(upgradeType.getGoldCost(unlockCount), upgradeType.getLumberCost(unlockCount));
 	}
 
 	public void refund(final int gold, final int lumber) {
-		this.gold += gold;
-		this.lumber += lumber;
+		changeResources(gold, lumber);
+	}
+
+	private void changeResources(final int goldDelta, final int lumberDelta) {
+		final int goldBefore = this.gold;
+		final int lumberBefore = this.lumber;
+		this.lumber += lumberDelta;
+		this.gold += goldDelta;
 		this.stateNotifier.lumberChanged();
 		this.stateNotifier.goldChanged();
+		fireStateLimitEvents(CPlayerState.RESOURCE_LUMBER, lumberBefore, this.lumber);
+		fireStateLimitEvents(CPlayerState.RESOURCE_GOLD, goldBefore, this.gold);
 	}
 
 	public void setUnitFoodUsed(final CUnit unit, final int foodUsed) {
@@ -891,14 +896,36 @@ public class CPlayer extends CBasePlayer {
 	public void setPlayerState(final CSimulation simulation, final CPlayerState whichPlayerState, final int value) {
 		final int before = getPlayerState(simulation, whichPlayerState);
 		applyPlayerState(whichPlayerState, value);
-		final int after = getPlayerState(simulation, whichPlayerState);
+		switch (whichPlayerState) {
+		case RESOURCE_GOLD:
+		case RESOURCE_LUMBER:
+		case RESOURCE_HERO_TOKENS:
+		case RESOURCE_FOOD_CAP:
+		case RESOURCE_FOOD_USED:
+		case FOOD_CAP_CEILING:
+			// the setters fire the events
+			break;
+		default:
+			fireStateLimitEvents(whichPlayerState, before, getPlayerState(simulation, whichPlayerState));
+			break;
+		}
+	}
+
+	/**
+	 * Measured on 1.29: a player state event fires on every change of the state that leaves it meeting the limit, not
+	 * only when the state starts to meet it.
+	 */
+	private void fireStateLimitEvents(final CPlayerState state, final int before, final int after) {
+		if ((before == after) || (this.eventTypeToEvents == null)) {
+			return;
+		}
 		final List<CPlayerEvent> eventList = getEventList(JassGameEventsWar3.EVENT_PLAYER_STATE_LIMIT);
 		if (eventList != null) {
 			for (final CPlayerEvent event : new ArrayList<>(eventList)) {
 				final CPlayerStateEvent stateEvent = (CPlayerStateEvent) event;
-				if ((stateEvent.getState() == whichPlayerState) && stateEvent.isCrossed(before, after)) {
+				if ((stateEvent.getState() == state) && stateEvent.isMatching(after)) {
 					event.fire(this, CommonTriggerExecutionScope.playerStateLimitScope(event.getTrigger(), this,
-							whichPlayerState));
+							state));
 				}
 			}
 		}
@@ -1240,13 +1267,37 @@ public class CPlayer extends CBasePlayer {
 
 	public void updateFogModifiers(final CSimulation game) {
 		for (int i = this.fogModifiers.size() - 1; i >= 0; i--) {
-			this.fogModifiers.get(i).update(game, this, game.getPathingGrid(), this.fogOfWar);
+			final CFogModifier fogModifier = this.fogModifiers.get(i);
+			this.fogOfWar.setPrivateWrite(!fogModifier.isSharedVision());
+			fogModifier.update(game, this, game.getPathingGrid(), this.fogOfWar);
+			this.fogOfWar.setPrivateWrite(false);
+			updateFogModifierOfAllies(game, fogModifier);
 		}
 	}
 
 	public void updateFogModifiersAfterUnits(final CSimulation game) {
 		for (int i = this.fogModifiersAfterUnits.size() - 1; i >= 0; i--) {
-			this.fogModifiersAfterUnits.get(i).update(game, this, game.getPathingGrid(), this.fogOfWar);
+			final CFogModifier fogModifier = this.fogModifiersAfterUnits.get(i);
+			fogModifier.update(game, this, game.getPathingGrid(), this.fogOfWar);
+			updateFogModifierOfAllies(game, fogModifier);
+		}
+	}
+
+	// Measured on 1.29: a modifier made with the shared vision flag also acts on every player this one gives shared
+	// vision to at the time of the update, in its own phase of the update.
+	private void updateFogModifierOfAllies(final CSimulation game, final CFogModifier fogModifier) {
+		if (!fogModifier.isSharedWithAllies()) {
+			return;
+		}
+		for (int i = 0, n = game.getGameData().getMaxPlayers(); i < n; i++) {
+			if ((i != getId()) && (hasAlliance(i, CAllianceType.SHARED_VISION)
+					|| hasAlliance(i, CAllianceType.SHARED_VISION_FORCED))) {
+				final CPlayer ally = game.getPlayer(i);
+				if (ally == null) {
+					continue;
+				}
+				fogModifier.update(game, ally, game.getPathingGrid(), ally.getFogOfWar());
+			}
 		}
 	}
 

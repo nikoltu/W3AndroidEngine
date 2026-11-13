@@ -246,7 +246,7 @@ docs/images/            images used in this file
 
 ## Status and roadmap
 
-Current version: **v0.3.12**
+Current version: **v0.3.13**
 
 - **Custom games:** work end-to-end.
 - **Campaigns:** Reign of Chaos and The Frozen Throne can be completed to the end. Tweaking required.

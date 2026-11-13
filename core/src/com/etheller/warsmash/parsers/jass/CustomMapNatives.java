@@ -123,6 +123,11 @@ final class CustomMapNatives {
 				return IntegerJassValue.of(level);
 			}
 			final CLevelingAbility ability = (CLevelingAbility) found;
+			if (AbilityNatives.leveledLevel(ability) > ability.getLevel()) {
+				final int shown = AbilityNatives.leveledLevel(ability) - 1;
+				((AbstractCAbility) ability).setScriptLevel(shown);
+				return IntegerJassValue.of(shown);
+			}
 			final int newLevel = ability.getLevel() - 1;
 			if (newLevel < 1) {
 				return IntegerJassValue.of(ability.getLevel());

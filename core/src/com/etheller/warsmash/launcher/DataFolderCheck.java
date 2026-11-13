@@ -9,6 +9,7 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -33,7 +34,7 @@ public final class DataFolderCheck {
 
 	public static final String CLASSIC_PREFIXES = "war3.w3mod,war3.w3mod\\_deprecated.w3mod,war3.w3mod\\_locales\\enus.w3mod";
 
-	private static final Map<String, String> DESCRIPTIONS = new HashMap<>();
+	private static final Map<String, String> DESCRIPTIONS = Collections.synchronizedMap(new HashMap<>());
 	private static final Map<String, Readability> READABILITY = new HashMap<>();
 	/** Written last by the data packer into a folder it made. */
 	private static final String PACKER_MARKER = "w3-datapacker.txt";

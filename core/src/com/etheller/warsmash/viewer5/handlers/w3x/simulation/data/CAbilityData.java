@@ -758,6 +758,11 @@ public class CAbilityData {
 		if (gameObject == null) {
 			return -1;
 		}
+		final String levels = gameObject.getField(AbilityFields.LEVELS);
+		if ((levels == null) || levels.isEmpty()) {
+			// A rawcode the data holds no ability row for (the production queue).
+			return -1;
+		}
 		return gameObject.getFieldAsInteger(AbilityFields.LEVELS, 0);
 	}
 

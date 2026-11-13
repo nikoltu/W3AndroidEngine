@@ -145,6 +145,7 @@ Android will not install the release over this copy, because it is signed with a
     <string name="options_cine_portraits">Show portraits in cinematics</string>
     <string name="options_tap_slop">Tap tolerance</string>
     <string name="options_long_press">Long press time</string>
+    <string name="options_palm_on">Palm rejection (pen devices)</string>
     <string name="options_palm">Palm rejection size</string>
     <string name="options_tap_reach">Tap reach for small units</string>
     <string name="options_pen_fingers">Fingers work while the pen is used</string>

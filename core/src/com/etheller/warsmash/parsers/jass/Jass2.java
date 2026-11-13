@@ -638,6 +638,7 @@ public class Jass2 {
 						Collections.emptyList(), TriggerExecutionScope.EMPTY);
 				mainThread.setSleepEndsThread(true);
 				this.jassProgramVisitor.getGlobals().queueThread(mainThread);
+				this.simulation.startScriptOnFirstStep();
 			}
 			catch (final Exception exc) {
 				throw new JassException(this.jassProgramVisitor.getGlobals(),

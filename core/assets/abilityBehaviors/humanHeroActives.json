@@ -212,7 +212,21 @@
 					"type": "getAlias"
 				},
 				"effectType": "EFFECT"
-		}],
+			},{
+				"type": "registerHarmfulArea",
+				"location": {
+					"type": "getTargetedLocation"
+				},
+				"radius": {
+					"type": "getAbilityArea"
+				},
+				"delay": {
+					"type": "rawFloat",
+					"value": 1.5
+				},
+				"duration": {
+					"type": "getAbilityDuration"
+		}}],
 		"onChannelTick": [{
 			"type": "periodicExecute",
 			"periodicActions": [{

@@ -1,6 +1,5 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors;
 
-import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityTarget;
@@ -254,12 +253,11 @@ public abstract class CAbstractRangedBehavior implements CRangedBehavior {
 	}
 
 	/**
-	 * The first unit tick after the given game time. The ticks count from the start of the map script, which runs on
-	 * the first step.
+	 * The first unit tick after the given game time. The ticks count from the start of the map script, which is game
+	 * time 0.
 	 */
 	protected static double nextUnitTick(final double time) {
-		final double origin = WarsmashConstants.SIMULATION_STEP_TIME;
-		return origin + ((StrictMath.floor(((time - origin) / UNIT_TICK) + TIME_EPSILON) + 1) * UNIT_TICK);
+		return (StrictMath.floor((time / UNIT_TICK) + TIME_EPSILON) + 1) * UNIT_TICK;
 	}
 
 	/** True for casts, which turn and start as {@link #updateCastTurn} measures. */

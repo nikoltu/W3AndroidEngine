@@ -13,6 +13,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityTargetVisitor;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.definitions.impl.AbilityFields;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.definitions.impl.AbstractCAbilityTypeDefinition;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.CAreaTargetVisibility;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.CAttackType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.projectile.CAbilityCollisionProjectileListener;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.projectile.CProjectile;
@@ -90,7 +91,7 @@ public class CAbilityBreathOfFire extends CAbilityPointTargetSpellBase {
 					public boolean canHitTarget(final CSimulation game, final CWidget target) {
 						final CUnit unit = target.visit(AbilityTargetVisitor.UNIT);
 						return (unit != null) && !unit.isUnitAlly(game.getPlayer(caster.getPlayerIndex()))
-								&& unit.canBeTargetedBy(game, caster, false, getTargetsAllowed(),
+								&& unit.canBeAreaTargetedBy(game, caster, CAreaTargetVisibility.ANY, getTargetsAllowed(),
 										BooleanAbilityTargetCheckReceiver.<CWidget>getInstance().reset());
 					}
 

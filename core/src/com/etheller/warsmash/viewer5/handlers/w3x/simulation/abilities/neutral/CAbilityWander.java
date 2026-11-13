@@ -39,6 +39,8 @@ public class CAbilityWander extends AbstractCAbilityPassiveNoOrders implements C
 	@Override
 	public void onAdd(final CSimulation game, final CUnit unit) {
 		unit.markWanderer();
+		// Measured on 1.29: a critter takes one number from the script's random stream when it is made.
+		game.getSeededRandom().nextFloat();
 	}
 
 	@Override

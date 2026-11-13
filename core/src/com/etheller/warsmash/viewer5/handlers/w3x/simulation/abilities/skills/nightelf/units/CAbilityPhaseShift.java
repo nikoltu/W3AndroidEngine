@@ -2,6 +2,7 @@ package com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.n
 
 import com.etheller.warsmash.units.GameObject;
 import com.etheller.warsmash.util.War3ID;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CReleaseCheats;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CWidget;
@@ -85,7 +86,8 @@ public class CAbilityPhaseShift extends CAbilityNoTargetSpellBase
 	}
 
 	private void tryShift(final CSimulation game, final CUnit caster) {
-		if (isDisabled() || (getCooldownRemaining(game, caster) > 0) || (caster.getMana() < getManaCost())) {
+		final int manaCost = CReleaseCheats.manaCost(game, caster, getManaCost());
+		if (isDisabled() || (getCooldownRemaining(game, caster) > 0) || (caster.getMana() < manaCost)) {
 			return;
 		}
 		for (final CAbility ability : caster.getAbilities()) {
@@ -93,7 +95,7 @@ public class CAbilityPhaseShift extends CAbilityNoTargetSpellBase
 				return;
 			}
 		}
-		caster.chargeMana(getManaCost());
+		caster.chargeMana(manaCost);
 		caster.beginCooldown(game, getCode(), getCooldown());
 		game.createTemporarySpellEffectOnUnit(caster, getAlias(), CEffectType.SPECIAL);
 		game.unitSoundEffectEvent(caster, getAlias());

@@ -19,11 +19,17 @@ public abstract class HashedGameObject implements GameObject {
 	private static final ConcurrentHashMap<String, StringKey> SHARED_KEYS = new ConcurrentHashMap<>();
 	private static final ConcurrentHashMap<String, String> SHARED_VALUES = new ConcurrentHashMap<>();
 	private static final int MAX_SHARED_VALUE_LENGTH = 256;
+	// The tables live for the process and games of different maps add their own names and values; past this many
+	// entries they start over, which only costs the sharing, never correctness.
+	private static final int MAX_SHARED_ENTRIES = 1 << 18;
 
 	static StringKey sharedKey(final String field) {
 		final StringKey key = SHARED_KEYS.get(field);
 		if (key != null) {
 			return key;
+		}
+		if (SHARED_KEYS.size() > MAX_SHARED_ENTRIES) {
+			SHARED_KEYS.clear();
 		}
 		final StringKey newKey = new StringKey(field);
 		// Its cached hash is published with the key through the map, so every thread sees it.
@@ -35,6 +41,9 @@ public abstract class HashedGameObject implements GameObject {
 	static String sharedValue(final String value) {
 		if ((value == null) || (value.length() > MAX_SHARED_VALUE_LENGTH)) {
 			return value;
+		}
+		if (SHARED_VALUES.size() > MAX_SHARED_ENTRIES) {
+			SHARED_VALUES.clear();
 		}
 		final String existing = SHARED_VALUES.putIfAbsent(value, value);
 		return existing == null ? value : existing;
