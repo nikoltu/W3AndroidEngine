@@ -1791,22 +1791,25 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 	 */
 	public void prepareFirstFrame() {
 		this.dynamicShadowManager.prepare(this.webGL);
-		// A game with a simulation thread makes its first steps there, away from the frames.
-		if (!this.anyReady || NO_RENDER || (this.simThread != null) || (this.fastForwardTarget >= 0)
-				|| isReplayPlayback() || (this.simulation.getGameTurnTick() != 0)) {
+		// Without the thread's own steps (SERIAL) the frames are made as the steps are, so they are left to the frames.
+		if (!this.anyReady || NO_RENDER || ((this.simThread != null) && !this.simThread.isThreaded())
+				|| (this.fastForwardTarget >= 0) || isReplayPlayback() || (this.simulation.getGameTurnTick() != 0)) {
 			return;
 		}
 		final long start = System.nanoTime();
-		final int played = MapViewerUpdate.playOpeningSteps(this, OPENING_STEPS);
+		final int played = isSimulationThreaded() ? this.simThread.playOpeningSteps(OPENING_STEPS)
+				: MapViewerUpdate.playOpeningSteps(this, OPENING_STEPS);
 		if (played == 0) {
 			return;
 		}
 		// The loading time must not be played as game time on top of them.
 		this.openingStepsPlayed = true;
-		if ((this.soundsToPreload != null) && (this.simulation.getGameTurnTick() > 0)) {
+		if (this.soundsToPreload != null) {
 			final Collection<String> interfaceSoundKeys = this.soundsToPreload;
-			this.soundsToPreload = null;
-			MapViewerLoading.preloadSounds(this, interfaceSoundKeys);
+			// with the thread on, the units are read while it makes no step; else with the frames
+			if (tryWhileSimulationHeld(() -> MapViewerLoading.preloadSounds(this, interfaceSoundKeys))) {
+				this.soundsToPreload = null;
+			}
 		}
 		super.update(OPENING_UPDATE_SECONDS);
 		for (final RenderWidget unit : this.widgets.animated) {

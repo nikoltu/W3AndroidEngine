@@ -3,6 +3,7 @@ package com.etheller.warsmash.viewer5.handlers.w3x.simthread;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -29,6 +30,7 @@ public final class SerialSimThread implements SimThreadRunner {
 		this.thread = new Thread(this::loop, "warsmash-sim");
 		this.thread.setDaemon(true);
 		this.thread.start();
+		SimThreadGuard.threadsAlternate(true);
 	}
 
 	private void loop() {
@@ -124,9 +126,12 @@ public final class SerialSimThread implements SimThreadRunner {
 	 * A stand-in for the target of an interface type whose every call is made on the render thread (see
 	 * {@link #callOnRender}); for what the simulation reports to the interface directly.
 	 */
-	public <T> T onRender(final Class<T> type, final T target) {
+	public <T> T onRender(final Class<T> type, final T target, final Set<String> inPlace) {
 		final Object proxy = Proxy.newProxyInstance(type.getClassLoader(), new Class<?>[] { type },
 				(self, method, args) -> {
+					if (inPlace.contains(method.getName())) {
+						return invoke(method, target, args);
+					}
 					if (isSimThread()) {
 						SimThreadGuard.crossing("interface", type.getSimpleName() + "." + method.getName());
 					}

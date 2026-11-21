@@ -26,6 +26,7 @@ import com.etheller.warsmash.viewer5.handlers.mdx.SequenceLoopMode;
 import com.etheller.warsmash.viewer5.handlers.w3x.AnimationTokens.PrimaryTag;
 import com.etheller.warsmash.viewer5.handlers.w3x.AnimationTokens.SecondaryTag;
 import com.etheller.warsmash.viewer5.handlers.w3x.SequenceUtils;
+import com.etheller.warsmash.viewer5.handlers.w3x.simthread.SimThreadGuard;
 import com.etheller.warsmash.viewer5.handlers.w3x.camera.PortraitCameraManager;
 
 public class SpriteFrame2 extends AbstractUIFrame {
@@ -55,6 +56,7 @@ public class SpriteFrame2 extends AbstractUIFrame {
 	}
 
 	public void setModel(final MdxModel model) {
+		SimThreadGuard.assertGl();
 		if (this.instance != null) {
 			this.scene.removeInstance(this.instance);
 		}
@@ -179,24 +181,28 @@ public class SpriteFrame2 extends AbstractUIFrame {
 	}
 
 	public void setSequence(final int index) {
+		SimThreadGuard.assertGl();
 		if (this.instance != null) {
 			this.instance.setSequence(index);
 		}
 	}
 
 	public void setSequence(final String animationName) {
+		SimThreadGuard.assertGl();
 		if (this.instance != null) {
 			SequenceUtils.randomSequence(this.instance, animationName.toLowerCase(Locale.ROOT));
 		}
 	}
 
 	public void setSequence(final PrimaryTag animationName) {
+		SimThreadGuard.assertGl();
 		if (this.instance != null) {
 			SequenceUtils.randomSequence(this.instance, animationName);
 		}
 	}
 
 	public Sequence setSequence(final PrimaryTag animationName, final EnumSet<SecondaryTag> secondaryTags) {
+		SimThreadGuard.assertGl();
 		if (this.instance != null) {
 			return SequenceUtils.randomSequence(this.instance, animationName, secondaryTags, true);
 		}
@@ -255,24 +261,28 @@ public class SpriteFrame2 extends AbstractUIFrame {
 	}
 
 	public void setModelAlpha(final float alpha) {
+		SimThreadGuard.assertGl();
 		if (this.instance != null) {
 			this.instance.setVertexAlpha(alpha);
 		}
 	}
 
 	public void setModelScale(float scale) {
+		SimThreadGuard.assertGl();
 		if (this.instance != null) {
 			this.instance.setUniformScale(scale);
 		}
 	}
 
 	public void setTeamColor(int teamColorIndex) {
+		SimThreadGuard.assertGl();
 		if (this.instance != null) {
 			this.instance.setTeamColor(teamColorIndex);
 		}
 	}
 
 	public void setSequenceLoopMode(SequenceLoopMode alwaysLoop) {
+		SimThreadGuard.assertGl();
 		if (this.instance != null) {
 			this.instance.setSequenceLoopMode(alwaysLoop);
 		}

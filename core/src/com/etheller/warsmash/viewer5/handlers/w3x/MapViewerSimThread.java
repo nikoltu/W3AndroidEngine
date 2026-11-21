@@ -1,5 +1,6 @@
 package com.etheller.warsmash.viewer5.handlers.w3x;
 
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -232,9 +233,13 @@ final class MapViewerSimThread {
 		return this.localUi;
 	}
 
-	/** What the simulation tells the interface about a player's commands, said on the render thread. */
+	/**
+	 * What the simulation tells the interface about a player's commands, said on the render thread; the alerts about a
+	 * unit are said on the simulation thread, where the unit may be read, and hand the interface their result.
+	 */
 	CommandErrorListener onRender(final CommandErrorListener listener) {
-		return this.thread.onRender(CommandErrorListener.class, listener);
+		return this.thread.onRender(CommandErrorListener.class, listener,
+				new HashSet<>(Arrays.asList("unitAttacked", "heroDied")));
 	}
 
 	SimulationRenderController controller() {
@@ -490,7 +495,40 @@ final class MapViewerSimThread {
 		this.free.start();
 		this.free.grant(steps, Integer.MAX_VALUE);
 		this.free.awaitGranted();
-		playFrames(this.ring.publishedCount());
+		// the events read the units the steps made, which no step may change meanwhile
+		this.free.hold();
+		try {
+			playFrames(this.ring.publishedCount());
+		}
+		finally {
+			this.free.release();
+		}
+	}
+
+	/**
+	 * Render thread, behind the loading screen: the game's first steps are made on the simulation thread, which the
+	 * render thread waits for as it serves their calls. The frames they publish are kept for the presentation clock, which
+	 * starts at the newest one, and the peers of what they made are built before the screen is shown.
+	 *
+	 * @return the number of steps made
+	 */
+	int playOpeningSteps(final int count) {
+		this.free.start();
+		if ((this.writer != null) && (this.ring.publishedCount() == 0)) {
+			// the presentation clock needs the game as it was before the first step
+			this.free.run(() -> this.writer.onStepEnd(this.simulation));
+		}
+		this.presenting = true;
+		runGrantedSteps(count);
+		this.free.hold();
+		try {
+			this.peers.flush();
+		}
+		finally {
+			this.free.release();
+		}
+		final SimFrame newest = this.ring.latest();
+		return newest == null ? 0 : newest.tick;
 	}
 
 	/** Render thread: drops the steps not yet made (a skip ahead makes its own). */
@@ -623,6 +661,15 @@ final class MapViewerSimThread {
 
 
 	void shutdown() {
+		try {
+			stopThread();
+		}
+		finally {
+			SimThreadGuard.simulationStopped();
+		}
+	}
+
+	private void stopThread() {
 		if (this.free != null) {
 			final boolean ended = this.free.shutdown(STOP_WAIT_MILLIS);
 			Log.info("Sim thread stopped" + (ended ? "" : " (did not end in time)") + ", frames "

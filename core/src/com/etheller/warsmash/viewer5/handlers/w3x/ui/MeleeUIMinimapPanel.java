@@ -603,8 +603,11 @@ final class MeleeUIMinimapPanel {
 		final PresentationClock clock = this.ui.war3MapViewer.getPresentation();
 		if (clock != null) {
 			// The alert is judged on what the frames of the game say (the unit's place and owner, the players'
-			// relations); the live objects are only named by their handles.
-			unitAttackedFromFrame(clock, unit.getHandleId(), attacker.getHandleId());
+			// relations); the live objects are only named by their handles. Said where the simulation is, the
+			// judging is the interface's.
+			final int unitHandle = unit.getHandleId();
+			final int attackerHandle = attacker.getHandleId();
+			this.ui.afterSimulation(() -> unitAttackedFromFrame(clock, unitHandle, attackerHandle));
 			return;
 		}
 		final CSimulation simulation = this.ui.war3MapViewer.simulation;

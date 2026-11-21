@@ -295,7 +295,10 @@ final class MeleeUIControlGroups {
 		}
 	}
 
-	/** An enemy hurt the unit: a hero of the bar starts its alert. */
+	/**
+	 * An enemy hurt the unit: a hero of the bar starts its alert. Said where the simulation is, which is where the unit
+	 * is read; the bar's own state is only changed by the interface.
+	 */
 	void unitAttacked(final CUnit unit, final CUnit attacker) {
 		if (!unit.isHero() || unit.isIllusion() || (attacker == null) || (attacker.getPlayerIndex() == unit.getPlayerIndex())) {
 			return;
@@ -307,11 +310,14 @@ final class MeleeUIControlGroups {
 						&& !owner.hasAlliance(localPlayerIndex, CAllianceType.SHARED_CONTROL))) {
 			return;
 		}
-		final long now = TimeUtils.millis();
-		final Long start = this.heroAlertStarts.get(unit.getHandleId());
-		if ((start == null) || ((now - start) >= HERO_ALERT_MILLIS)) {
-			this.heroAlertStarts.put(unit.getHandleId(), now);
-		}
+		final int handleId = unit.getHandleId();
+		this.ui.afterSimulation(() -> {
+			final long now = TimeUtils.millis();
+			final Long start = this.heroAlertStarts.get(handleId);
+			if ((start == null) || ((now - start) >= HERO_ALERT_MILLIS)) {
+				this.heroAlertStarts.put(handleId, now);
+			}
+		});
 	}
 
 	private long heroAlertTime(final int hero, final long now) {

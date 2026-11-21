@@ -9,6 +9,7 @@ import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import com.etheller.warsmash.parsers.fdf.GameUI;
 import com.etheller.warsmash.parsers.fdf.datamodel.Vector4Definition;
+import com.etheller.warsmash.viewer5.handlers.w3x.simthread.SimThreadGuard;
 
 public class TextureFrame extends AbstractRenderableFrame {
 	public static final Vector4Definition DEFAULT_TEX_COORDS = new Vector4Definition(0, 1, 0, 1);
@@ -61,6 +62,7 @@ public class TextureFrame extends AbstractRenderableFrame {
 	}
 
 	public void setTexture(String file, final GameUI gameUI) {
+		SimThreadGuard.assertGl();
 		if (this.decorateFileNames) {
 			file = gameUI.trySkinField(file);
 		}
@@ -79,6 +81,7 @@ public class TextureFrame extends AbstractRenderableFrame {
 	}
 
 	public void setTexture(final Texture texture) {
+		SimThreadGuard.assertGl();
 		if (texture == null) {
 			this.texture = null;
 			this.ownsRegion = false;
@@ -108,6 +111,7 @@ public class TextureFrame extends AbstractRenderableFrame {
 	}
 
 	public void setTexture(final TextureRegion texture) {
+		SimThreadGuard.assertGl();
 		this.texture = texture;
 		this.ownsRegion = false;
 	}

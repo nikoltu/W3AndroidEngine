@@ -4,6 +4,7 @@ import com.badlogic.gdx.utils.viewport.Viewport;
 import com.etheller.warsmash.parsers.fdf.GameUI;
 import com.etheller.warsmash.parsers.fdf.datamodel.FramePoint;
 import com.etheller.warsmash.parsers.fdf.datamodel.Vector4Definition;
+import com.etheller.warsmash.viewer5.handlers.w3x.simthread.SimThreadGuard;
 
 public class SimpleStatusBarFrame extends AbstractUIFrame {
 	private final boolean decorateFileNames;
@@ -51,6 +52,7 @@ public class SimpleStatusBarFrame extends AbstractUIFrame {
 	}
 
 	public void setValue(final float value) {
+		SimThreadGuard.assertGl();
 		this.barFrame.setTexCoord(0, value, 0, 1);
 		this.barFrame.setWidth(((this.renderBounds.width - (this.barInset * 2)) * value));
 		this.lastValue = value;

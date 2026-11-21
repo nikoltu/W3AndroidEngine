@@ -33,6 +33,7 @@ public final class SimThreadGuard {
 	private static volatile Thread glThread;
 	private static volatile boolean renderOwnsSimulation;
 	private static volatile boolean renderHoldsSimulation;
+	private static volatile boolean threadsAlternate;
 
 	private static final class Violation {
 		final String role;
@@ -60,9 +61,19 @@ public final class SimThreadGuard {
 		glThread = thread;
 	}
 
+	/**
+	 * The game's simulation thread has ended: until the next game starts one, the render thread loads and takes apart
+	 * simulations alone.
+	 */
+	public static void simulationStopped() {
+		simThread = null;
+		threadsAlternate = false;
+	}
+
 	public static void reset() {
 		simThread = null;
 		glThread = null;
+		threadsAlternate = false;
 	}
 
 	/**
@@ -81,9 +92,18 @@ public final class SimThreadGuard {
 		renderHoldsSimulation = holds;
 	}
 
+	/**
+	 * Set for the whole run of {@link SimThreadMode#SERIAL}: the render thread hands each step over and waits for it, so
+	 * the two threads never run together and the render thread may read the simulation whenever it runs.
+	 */
+	public static void threadsAlternate(final boolean alternate) {
+		threadsAlternate = alternate;
+	}
+
 	/** Code that reads or writes simulation state. */
 	public static void assertSim() {
-		if (ENABLED && !((renderOwnsSimulation || renderHoldsSimulation) && (Thread.currentThread() == glThread))) {
+		if (ENABLED && !((renderOwnsSimulation || renderHoldsSimulation || threadsAlternate)
+				&& (Thread.currentThread() == glThread))) {
 			check(simThread, "simulation");
 		}
 	}

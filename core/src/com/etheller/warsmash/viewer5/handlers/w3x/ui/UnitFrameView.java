@@ -147,6 +147,14 @@ final class UnitFrameView {
 		return this.liveUnit.getSimulationUnit().getPlayerIndex();
 	}
 
+	/** A structure being built for the first time (not one that is upgrading). */
+	boolean isRising() {
+		if (this.units != null) {
+			return (this.units.flags[this.row] & UnitFrameState.RISING) != 0;
+		}
+		return this.liveUnit.getSimulationUnit().isConstructing();
+	}
+
 	boolean isBuilding() {
 		if (this.units != null) {
 			return (this.units.flags[this.row] & UnitFrameState.BUILDING) != 0;

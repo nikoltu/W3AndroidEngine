@@ -5,6 +5,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.ListIterator;
+import java.util.function.Supplier;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
@@ -113,7 +114,16 @@ final class MeleeUIInput {
 
 	private CUnitType unitTypeOf(final RenderUnit unit) {
 		final UnitFrameView view = this.ui.unitView;
-		return view.unit(unit) ? view.unitType() : unit.getSimulationUnit().getUnitType();
+		return view.unit(unit) ? view.unitType() : readSimulation(() -> unit.getSimulationUnit().getUnitType());
+	}
+
+	/** What the frame on screen does not tell of a unit (one made since) is read from the simulation between two steps. */
+	private <T> T readSimulation(final Supplier<T> read) {
+		final Object[] result = new Object[1];
+		this.ui.war3MapViewer.whileSimulationHeld(() -> result[0] = read.get());
+		@SuppressWarnings("unchecked")
+		final T value = (T) result[0];
+		return value;
 	}
 
 	/** The step the interface shows. */
@@ -1202,7 +1212,7 @@ final class MeleeUIInput {
 			final UnitFrameView selectedView = this.ui.unitView;
 			final boolean selectedInFrame = selectedView.unit(unit);
 			final int selectedOwner = selectedInFrame ? selectedView.ownerIndex()
-					: unit.getSimulationUnit().getPlayerIndex();
+					: readSimulation(() -> unit.getSimulationUnit().getPlayerIndex());
 			final CUnitRace selectedRace = unitTypeOf(unit).getRace();
 			if ((selectedOwner == this.ui.war3MapViewer.getLocalPlayerIndex())
 					|| (((selectedRace == CUnitRace.CRITTERS) || (selectedRace == CUnitRace.OTHER))
@@ -1211,7 +1221,8 @@ final class MeleeUIInput {
 					UnitSound ackSoundToPlay = unit.soundset.what;
 					int soundIndex;
 					final int pissedSoundCount = unit.soundset.pissed.getSoundCount();
-					if (unit.getSimulationUnit().isConstructing()) {
+					if (selectedInFrame ? selectedView.isRising()
+							: readSimulation(() -> unit.getSimulationUnit().isConstructing())) {
 						ackSoundToPlay = this.ui.war3MapViewer.getUiSounds()
 								.getSound(this.ui.rootFrame.getSkinField("ConstructingBuilding"));
 						soundIndex = (int) (Math.random() * ackSoundToPlay.getSoundCount());

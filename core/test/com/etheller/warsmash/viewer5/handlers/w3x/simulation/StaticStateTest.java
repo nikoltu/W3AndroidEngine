@@ -166,7 +166,7 @@ class StaticStateTest {
 
 	private static final Set<String> RENDER_ALLOWED = new HashSet<>(Arrays.asList(
 			"w3x.simthread.SimThreadGuard#simThread", "w3x.simthread.SimThreadGuard#glThread", "w3x.simthread.SimThreadGuard#renderOwnsSimulation",
-			"w3x.simthread.SimThreadGuard#renderHoldsSimulation", "w3x.simthread.SimThreadMode#current",
+			"w3x.simthread.SimThreadGuard#renderHoldsSimulation", "w3x.simthread.SimThreadGuard#threadsAlternate", "w3x.simthread.SimThreadMode#current",
 			// Debug list of calls that crossed threads, only filled with -Dwarsmash.simthread.guard=collect.
 			"w3x.simthread.SimThreadGuard#VIOLATIONS", "w3x.simthread.SimThreadGuard#CROSSINGS", "w3x.simthread.SimThreadGuard#lastReport", "w3x.simthread.SimThreadGuard#hookInstalled",
 			// Scratch objects of the render thread, filled and read within one call.

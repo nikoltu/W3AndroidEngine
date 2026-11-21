@@ -206,7 +206,7 @@ final class MapViewerEffects {
 
 			modelInstance.setScene(viewer.worldScene);
 			viewer.projectiles.add(new RenderAttackInstant(modelInstance, viewer,
-					(float) Math.toRadians(renderUnit.getSimulationUnit().getFacing())));
+					(float) Math.toRadians(renderUnit.getFacing())));
 		}
 	}
 
@@ -423,7 +423,7 @@ final class MapViewerEffects {
 						} else {
 							// TODO This is not consistent with War3, is it? Should look nice though.
 							modelInstance.setLocation(renderUnit.location);
-							yaw = (float) Math.toRadians(renderUnit.getSimulationUnit().getFacing());
+							yaw = (float) Math.toRadians(renderUnit.getFacing());
 						}
 					}
 				} else {

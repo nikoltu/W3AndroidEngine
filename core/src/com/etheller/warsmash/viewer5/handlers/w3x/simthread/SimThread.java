@@ -3,6 +3,7 @@ package com.etheller.warsmash.viewer5.handlers.w3x.simthread;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
@@ -375,9 +376,12 @@ public final class SimThread implements SimThreadRunner {
 	}
 
 	@Override
-	public <T> T onRender(final Class<T> type, final T target) {
+	public <T> T onRender(final Class<T> type, final T target, final Set<String> inPlace) {
 		final Object proxy = Proxy.newProxyInstance(type.getClassLoader(), new Class<?>[] { type },
 				(self, method, args) -> {
+					if (inPlace.contains(method.getName())) {
+						return invoke(method, target, args);
+					}
 					if (isSimThread()) {
 						SimThreadGuard.crossing("interface", type.getSimpleName() + "." + method.getName());
 					}

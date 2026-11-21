@@ -1236,7 +1236,12 @@ final class MeleeUICommands {
 		}
 	}
 
+	/** The flag is placed from the unit's rally point, read between two steps when the simulation has its own thread. */
 	void repositionRallyPoint(final CUnit simulationUnit) {
+		this.ui.war3MapViewer.whileSimulationHeld(() -> placeRallyPoint(simulationUnit));
+	}
+
+	private void placeRallyPoint(final CUnit simulationUnit) {
 		final AbilityTarget rallyPoint = simulationUnit.getRallyPoint();
 		if ((rallyPoint != null) && (simulationUnit.getFirstAbilityOfType(CAbilityRally.class) != null)) {
 			this.ui.rallyPointInstance.setTeamColor(
@@ -1263,6 +1268,10 @@ final class MeleeUICommands {
 	}
 
 	void repositionWaypointFlags(final CUnit simulationUnit) {
+		this.ui.war3MapViewer.whileSimulationHeld(() -> placeWaypointFlags(simulationUnit));
+	}
+
+	private void placeWaypointFlags(final CUnit simulationUnit) {
 		final Iterator<COrder> iterator;
 		int orderIndex = 0;
 		if (simulationUnit != null) {
