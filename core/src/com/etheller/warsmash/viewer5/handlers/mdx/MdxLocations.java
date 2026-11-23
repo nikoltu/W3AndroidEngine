@@ -38,6 +38,8 @@ final class MdxLocations {
 	final int teamColorMap;
 	final int environmentMap;
 	final int iblParams;
+	final int tone;
+	final int unlit;
 	final int eyePos;
 	final int fogColor;
 	final int fogParams;
@@ -84,6 +86,8 @@ final class MdxLocations {
 		this.teamColorMap = uniform(shader, "u_teamColorMap");
 		this.environmentMap = uniform(shader, "u_environmentMap");
 		this.iblParams = uniform(shader, "u_iblParams");
+		this.tone = uniform(shader, "u_tone");
+		this.unlit = uniform(shader, "u_unlit");
 		this.eyePos = uniform(shader, "u_eyePos");
 		this.fogColor = uniform(shader, "u_fogColor");
 		this.fogParams = uniform(shader, "u_fogParams");

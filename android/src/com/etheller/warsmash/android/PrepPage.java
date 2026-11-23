@@ -2,9 +2,15 @@ package com.etheller.warsmash.android;
 
 import static com.etheller.warsmash.launcher.LauncherKeys.KEY_SKIN;
 
+import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.nio.file.NoSuchFileException;
 
 import android.animation.ValueAnimator;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
@@ -14,7 +20,10 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
+import com.etheller.warsmash.launcher.DataContentCheck;
+import com.etheller.warsmash.launcher.DataFolderCheck;
 import com.etheller.warsmash.launcher.LauncherBoard;
 import com.etheller.warsmash.launcher.SkinArt;
 import com.etheller.warsmash.units.DataTable;
@@ -28,6 +37,10 @@ final class PrepPage extends LauncherViews {
 	private LauncherKit.BarDrawable prepBar;
 	private View prepBarView;
 	private View prepButtons;
+	private View prepRetry;
+	private View prepOther;
+	private float prepInner;
+	private float prepButtonW;
 	int prepDone;
 	int prepTotal;
 
@@ -81,10 +94,13 @@ final class PrepPage extends LauncherViews {
 
 		final FrameLayout buttons = new FrameLayout(this.activity);
 		final float buttonW = (inner - (b.tablet ? 32 : 24)) / 2;
-		place(buttons, button(getString(R.string.launcher_other_source), b.buttonH, b.buttonText,
-				view -> this.activity.openGameData()), 0, 0, buttonW, b.buttonH);
-		place(buttons, button(getString(R.string.data_folder_retry), b.buttonH, b.buttonText, view -> startPrep()),
-				inner - buttonW, 0, buttonW, b.buttonH);
+		this.prepInner = inner;
+		this.prepButtonW = buttonW;
+		this.prepOther = button(getString(R.string.launcher_other_source), b.buttonH, b.buttonText,
+				view -> this.activity.openGameData());
+		place(buttons, this.prepOther, 0, 0, buttonW, b.buttonH);
+		this.prepRetry = button(getString(R.string.data_folder_retry), b.buttonH, b.buttonText, view -> startPrep());
+		place(buttons, this.prepRetry, inner - buttonW, 0, buttonW, b.buttonH);
 		buttons.setVisibility(View.GONE);
 		place(panel, buttons, b.barInset, b.panelH - b.panelFrame - b.buttonH - (b.tablet ? 8 : 4), inner,
 				b.buttonH);
@@ -98,11 +114,24 @@ final class PrepPage extends LauncherViews {
 		this.prepButtons.setVisibility(View.GONE);
 		this.prepDetail.setTextColor(this.activity.art.text2());
 		this.prepDetail.setText(R.string.launcher_reading);
+		this.prepDetail.setSingleLine(true);
+		this.prepDetail.setOnLongClickListener(null);
+		this.prepDetail.setLongClickable(false);
 		final DataTable ini = this.activity.ini;
+		if (!DataFolderCheck.hasGameData(ini.get("DataSources"))) {
+			// Trying again cannot find a folder that moved or lost files, so only the choice of a source is offered.
+			prepFailed(new NoSuchFileException(sourceProblem(ini)));
+			return;
+		}
 		final SkinCache cache = this.activity.cache;
 		final boolean[] cancelled = this.activity.cancelled;
 		new Thread(() -> {
 			try {
+				// Listing a large folder can take seconds, so this is not done on the interface thread.
+				final String lacking = lackingFile(ini);
+				if (lacking != null) {
+					throw new NoSuchFileException(lacking);
+				}
 				cache.prepare(ini, (done, total, name) -> this.activity.runOnUiThread(() -> {
 					if (!this.activity.isFinishing() && (cache == this.activity.cache)) {
 						showStep(done, total, name);
@@ -140,10 +169,64 @@ final class PrepPage extends LauncherViews {
 	}
 
 	private void prepFailed(final Throwable error) {
+		boolean missing = false;
+		for (Throwable cause = error; (cause != null) && !missing; cause = cause.getCause()) {
+			missing = (cause instanceof NoSuchFileException) || (cause instanceof FileNotFoundException);
+		}
+		String message = error.getMessage() != null ? error.getMessage() : error.getClass().getSimpleName();
+		if (missing) {
+			message = getString(R.string.launcher_source_missing, message);
+		}
+		else {
+			message = getString(R.string.launcher_failed, message);
+		}
 		this.prepDetail.setTextColor(ERROR);
-		final String message = error.getMessage() != null ? error.getMessage() : error.getClass().getSimpleName();
-		this.prepDetail.setText(getString(R.string.launcher_failed, message));
+		this.prepDetail.setSingleLine(false);
+		this.prepDetail.setEllipsize(null);
+		this.prepDetail.setMaxLines(6);
+		this.prepDetail.setText(message);
+		final String copied = message;
+		this.prepDetail.setOnLongClickListener(view -> {
+			final ClipboardManager clipboard = (ClipboardManager) this.activity.getSystemService(Context.CLIPBOARD_SERVICE);
+			if (clipboard != null) {
+				clipboard.setPrimaryClip(ClipData.newPlainText("", copied));
+				Toast.makeText(this.activity, R.string.launcher_copied, Toast.LENGTH_SHORT).show();
+			}
+			return true;
+		});
+		// Another try reads the same missing file, so it is left out and the other source takes the whole row.
+		this.prepRetry.setVisibility(missing ? View.GONE : View.VISIBLE);
+		final ViewGroup.LayoutParams params = this.prepOther.getLayoutParams();
+		params.width = px(missing ? this.prepInner : this.prepButtonW);
+		this.prepOther.setLayoutParams(params);
 		this.prepButtons.setVisibility(View.VISIBLE);
+	}
+
+	private static String sourcePath(final DataTable ini) {
+		String path = ini.get("DataSources").getField("Path00");
+		if ((path.length() > 1) && path.startsWith("\"") && path.endsWith("\"")) {
+			path = path.substring(1, path.length() - 1);
+		}
+		return path;
+	}
+
+	/** A file that an extracted folder lacks and the launcher or the game cannot do without; null when none. */
+	private static String lackingFile(final DataTable ini) {
+		if (!"Folder".equalsIgnoreCase(ini.get("DataSources").getField("Type00"))) {
+			return null;
+		}
+		final File folder = new File(sourcePath(ini));
+		final String lacking = DataContentCheck.missingRequiredFile(DataFolderCheck.detect(folder), folder);
+		return lacking == null ? null : new File(folder, lacking.replace('\\', '/')).getPath();
+	}
+
+	/** The file of the configured source that the engine would open first and cannot find. */
+	private static String sourceProblem(final DataTable ini) {
+		final String path = sourcePath(ini);
+		final File folder = new File(path);
+		final boolean casc = "CASC".equalsIgnoreCase(ini.get("DataSources").getField("Type00"));
+		final String missing = casc && folder.isDirectory() ? DataFolderCheck.missingCascFile(folder) : null;
+		return missing == null ? path : new File(folder, missing).getPath();
 	}
 
 	/** The one transition of the launcher: Prep darkens to black and the next page lights up from it. */

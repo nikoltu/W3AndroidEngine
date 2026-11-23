@@ -231,6 +231,7 @@ public class DesktopLauncher {
 										? launcher.getInteger(LauncherKeys.KEY_TEXTURE_SIZE, 0)
 										: -1);
 					}
+					menuScreen.setLauncherPreferences(LauncherScreen.PREFERENCES);
 					menuScreen.setWaitForTap(finalWaitForTap);
 					if (finalLauncherMode) {
 						// As the Android launcher starts a game: no menu around it, and the end of the game closes the

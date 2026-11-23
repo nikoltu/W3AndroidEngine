@@ -35,16 +35,40 @@ final class EngineResources {
 	private EngineResources() {
 	}
 
+	/**
+	 * Unpacks after an update on a thread of its own at process start, so the first window does not wait for it; the
+	 * windows that need the resources call ensureCurrent, which waits for this one and finds the work done.
+	 */
+	static void prepareInBackground(final Context context) {
+		final Thread thread = new Thread(() -> {
+			try {
+				ensureCurrent(context);
+			}
+			catch (final IOException | RuntimeException e) {
+				// The window that needs the resources tries again and reports the failure.
+				Log.w(TAG, "Engine resources are not ready yet", e);
+			}
+		}, "EngineResources");
+		thread.setDaemon(true);
+		thread.start();
+	}
+
+	/** The app's folder on the shared storage; the private files when the system gives none (storage not mounted). */
+	static File appFolder(final Context context) {
+		final File external = context.getExternalFilesDir(null);
+		return external != null ? external : context.getFilesDir();
+	}
+
 	static File folder(final Context context) {
-		return new File(context.getExternalFilesDir(null), FOLDER);
+		return new File(appFolder(context), FOLDER);
 	}
 
 	/**
 	 * Unpacks the resources if the installed package differs from the one that last unpacked them, and removes files
 	 * that an earlier package unpacked but this one no longer ships.
 	 */
-	static void ensureCurrent(final Context context) throws IOException {
-		final File appFolder = context.getExternalFilesDir(null);
+	static synchronized void ensureCurrent(final Context context) throws IOException {
+		final File appFolder = appFolder(context);
 		final File target = new File(appFolder, FOLDER);
 		final File manifest = new File(appFolder, MANIFEST);
 		final String stamp = packageStamp(context);

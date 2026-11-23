@@ -25,6 +25,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.CommandStringE
 public class CAbilityCargoHold extends AbstractGenericNoIconAbility {
 	private int cargoCapacity;
 	private final List<CUnit> cargoUnits;
+	private int cargoVersion;
 	private float duration;
 	private final float castRange;
 	private float area;
@@ -248,11 +249,13 @@ public class CAbilityCargoHold extends AbstractGenericNoIconAbility {
 
 	public void addUnit(final CUnit cargoHoldUnit, final CUnit target) {
 		this.cargoUnits.add(target);
+		this.cargoVersion++;
 		target.setLoadedIn(cargoHoldUnit);
 	}
 
 	public CUnit removeUnitAtIndex(final CUnit cargoHoldUnit, final int index) {
 		final CUnit removed = this.cargoUnits.remove(index);
+		this.cargoVersion++;
 		removed.setLoadedIn(null);
 		return removed;
 	}
@@ -263,6 +266,10 @@ public class CAbilityCargoHold extends AbstractGenericNoIconAbility {
 
 	public boolean isEmpty() {
 		return this.cargoUnits.isEmpty();
+	}
+
+	public int getCargoVersion() {
+		return this.cargoVersion;
 	}
 
 	public int getCargoCount() {

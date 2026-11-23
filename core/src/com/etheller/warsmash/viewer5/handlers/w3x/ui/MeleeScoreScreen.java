@@ -152,6 +152,7 @@ public class MeleeScoreScreen {
 		final SpriteFrame raceArtFrame = (SpriteFrame) root.getFrameByName("ScoreScreenRaceArt", 0);
 		if (raceArt != null) {
 			root.setSpriteFrameModel(raceArtFrame, raceArt);
+			raceArtFrame.setSequence(0);
 		}
 		// The 2D interface is one layer of the UI scene; these models go behind it, as the frame order has them in
 		// the original, with the bars over the race art.

@@ -99,6 +99,11 @@ public class MeleeUIMinimap {
 				minimapFilledHeight);
 	}
 
+	/** The minimap frame's area in interface units. */
+	public Rectangle getDisplayArea() {
+		return this.minimap;
+	}
+
 	/** Where the minimap sits in the interface: a map script moves and resizes the minimap frame. */
 	public void setDisplayArea(final float x, final float y, final float width, final float height) {
 		if ((x != this.minimap.x) || (y != this.minimap.y) || (width != this.minimap.width)

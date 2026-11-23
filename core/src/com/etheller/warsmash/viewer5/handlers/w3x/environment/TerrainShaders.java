@@ -96,6 +96,16 @@ public class TerrainShaders {
 				"uniform sampler2DArray cliff_textures;\r\n" + //
 				"uniform sampler2D shadowMap;\r\n" + //
 				"uniform sampler2D fogOfWarMap;\r\n" + //
+				"    uniform vec2 u_fogTexel;\r\n" + //
+				"    float softFog(sampler2D map, vec2 uv) {\r\n" + //
+				"      vec2 t = u_fogTexel;\r\n" + //
+				"      float m = texture(map, uv).r * 0.25;\r\n" + //
+				"      m += (texture(map, uv + vec2(t.x, 0.0)).r + texture(map, uv - vec2(t.x, 0.0)).r\r\n" + //
+				"          + texture(map, uv + vec2(0.0, t.y)).r + texture(map, uv - vec2(0.0, t.y)).r) * 0.125;\r\n" + //
+				"      m += (texture(map, uv + t).r + texture(map, uv - t).r\r\n" + //
+				"          + texture(map, uv + vec2(t.x, -t.y)).r + texture(map, uv + vec2(-t.x, t.y)).r) * 0.0625;\r\n" + //
+				"      return m;\r\n" + //
+				"    }\r\n" + //
 				"\r\n" + //
 				"uniform bool show_lighting;\r\n" + //
 				"    uniform vec4 u_fogColor;\r\n" + //
@@ -114,7 +124,7 @@ public class TerrainShaders {
 				"	color = texture(cliff_textures, UV);\r\n" + //
 				"\r\n" + //
 				"   float shadow = texture(shadowMap, v_suv).r;\r\n" + //
-				"   float fogOfWarData = texture(fogOfWarMap, v_suv).r;\r\n" + //
+				"   float fogOfWarData = softFog(fogOfWarMap, v_suv);\r\n" + //
 				"   shadow = clamp(shadow + fogOfWarData, 0.0, 1.0);\r\n" + //
 				"   color.rgb *= (1.0 - shadow);\r\n" + //
 				"	if (show_lighting) {\r\n" + //
@@ -197,28 +207,23 @@ public class TerrainShaders {
 				"uniform bool show_pathing_map;\r\n" + //
 				"uniform bool show_lighting;\r\n" + //
 				"\r\n" + //
-				"uniform sampler2DArray sample0;\r\n" + //
-				"uniform sampler2DArray sample1;\r\n" + //
-				"uniform sampler2DArray sample2;\r\n" + //
-				"uniform sampler2DArray sample3;\r\n" + //
-				"uniform sampler2DArray sample4;\r\n" + //
-				"uniform sampler2DArray sample5;\r\n" + //
-				"uniform sampler2DArray sample6;\r\n" + //
-				"uniform sampler2DArray sample7;\r\n" + //
-				"uniform sampler2DArray sample8;\r\n" + //
-				"uniform sampler2DArray sample9;\r\n" + //
-				"uniform sampler2DArray sample10;\r\n" + //
-				"uniform sampler2DArray sample11;\r\n" + //
-				"uniform sampler2DArray sample12;\r\n" + //
-//				"uniform sampler2DArray sample13;\r\n" + //
-//				"uniform sampler2DArray sample14;\r\n" + //
-//				"uniform sampler2DArray sample15;\r\n" + //
-				"uniform sampler2DArray sample16;\r\n" + //
+				"uniform sampler2DArray groundBank0;\r\n" + //
+				"uniform sampler2DArray groundBank1;\r\n" + //
+				"uniform sampler2DArray groundBank2;\r\n" + //
+				"uniform int groundSlot[18];\r\n" + //
 				"\r\n" + //
-//				"layout (binding = 20) uniform usampler2D pathing_map_static;\r\n" + //
-//				"layout (binding = 21) uniform usampler2D pathing_map_dynamic;\r\n" + //
 				"uniform sampler2D shadowMap;\r\n" + //
 				"uniform sampler2D fogOfWarMap;\r\n" + //
+				"    uniform vec2 u_fogTexel;\r\n" + //
+				"    float softFog(sampler2D map, vec2 uv) {\r\n" + //
+				"      vec2 t = u_fogTexel;\r\n" + //
+				"      float m = texture(map, uv).r * 0.25;\r\n" + //
+				"      m += (texture(map, uv + vec2(t.x, 0.0)).r + texture(map, uv - vec2(t.x, 0.0)).r\r\n" + //
+				"          + texture(map, uv + vec2(0.0, t.y)).r + texture(map, uv - vec2(0.0, t.y)).r) * 0.125;\r\n" + //
+				"      m += (texture(map, uv + t).r + texture(map, uv - t).r\r\n" + //
+				"          + texture(map, uv + vec2(t.x, -t.y)).r + texture(map, uv + vec2(-t.x, t.y)).r) * 0.0625;\r\n" + //
+				"      return m;\r\n" + //
+				"    }\r\n" + //
 				"    uniform vec4 u_fogColor;\r\n" + //
 				"    uniform vec4 u_fogParams;\r\n    uniform vec4 u_fogHeight;\r\n    in float v_fogZ;\r\n" + //
 				"\r\n" + //
@@ -234,47 +239,21 @@ public class TerrainShaders {
 //				"layout (location = 1) out vec4 position;\r\n" + //
 				"\r\n" + //
 				"vec4 get_fragment(uint id, vec3 uv) {\r\n" + //
+				"	if (id >= 17u) {\r\n" + //
+				"		return vec4(0.0, 0.0, 0.0, 0.0);\r\n" + //
+				"	}\r\n" + //
 				"	vec2 dx = dFdx(uv.xy);\r\n" + //
 				"	vec2 dy = dFdy(uv.xy);\r\n" + //
-				"\r\n" + //
-				"	switch(id) {\r\n" + //
-				"		case 0u:\r\n" + //
-				"			return textureGrad(sample0, uv, dx, dy);\r\n" + //
-				"		case 1u:\r\n" + //
-				"			return textureGrad(sample1, uv, dx, dy);\r\n" + //
-				"		case 2u:\r\n" + //
-				"			return textureGrad(sample2, uv, dx, dy);\r\n" + //
-				"		case 3u:\r\n" + //
-				"			return textureGrad(sample3, uv, dx, dy);\r\n" + //
-				"		case 4u:\r\n" + //
-				"			return textureGrad(sample4, uv, dx, dy);\r\n" + //
-				"		case 5u:\r\n" + //
-				"			return textureGrad(sample5, uv, dx, dy);\r\n" + //
-				"		case 6u:\r\n" + //
-				"			return textureGrad(sample6, uv, dx, dy);\r\n" + //
-				"		case 7u:\r\n" + //
-				"			return textureGrad(sample7, uv, dx, dy);\r\n" + //
-				"		case 8u:\r\n" + //
-				"			return textureGrad(sample8, uv, dx, dy);\r\n" + //
-				"		case 9u:\r\n" + //
-				"			return textureGrad(sample9, uv, dx, dy);\r\n" + //
-				"		case 10u:\r\n" + //
-				"			return textureGrad(sample10, uv, dx, dy);\r\n" + //
-				"		case 11u:\r\n" + //
-				"			return textureGrad(sample11, uv, dx, dy);\r\n" + //
-				"		case 12u:\r\n" + //
-				"			return textureGrad(sample12, uv, dx, dy);\r\n" + //
-//				"		case 13u:\r\n" + //
-//				"			return textureGrad(sample13, uv, dx, dy);\r\n" + //
-//				"		case 14u:\r\n" + //
-//				"			return textureGrad(sample14, uv, dx, dy);\r\n" + //
-//				"		case 15u:\r\n" + //
-//				"			return textureGrad(sample15, uv, dx, dy);\r\n" + //
-				"		case 16u:\r\n" + //
-				"			return textureGrad(sample16, uv, dx, dy);\r\n" + //
-				"		case 17u:\r\n" + //
-				"			return vec4(0, 0, 0, 0);\r\n" + //
+				"	int slot = groundSlot[int(id)];\r\n" + //
+				"	int bank = slot / 6;\r\n" + //
+				"	vec3 at = vec3(uv.xy, uv.z + float((slot - bank * 6) * 32));\r\n" + //
+				"	if (bank == 0) {\r\n" + //
+				"		return textureGrad(groundBank0, at, dx, dy);\r\n" + //
 				"	}\r\n" + //
+				"	if (bank == 1) {\r\n" + //
+				"		return textureGrad(groundBank1, at, dx, dy);\r\n" + //
+				"	}\r\n" + //
+				"	return textureGrad(groundBank2, at, dx, dy);\r\n" + //
 				"}\r\n" + //
 				"\r\n" + //
 				"\r\n" + //
@@ -287,7 +266,7 @@ public class TerrainShaders {
 				"	color = color * color.a + get_fragment(texture_indices.r & 31u, vec3(UV, texture_indices.r >> 5)) * (1.0 - color.a);\r\n"
 				+ //
 				"   float shadow = texture(shadowMap, v_suv).r;\r\n" + //
-				"   float fogOfWarData = texture(fogOfWarMap, v_suv).r;\r\n" + //
+				"   float fogOfWarData = softFog(fogOfWarMap, v_suv);\r\n" + //
 				"   shadow = clamp(shadow + fogOfWarData, 0.0, 1.0);\r\n" + //
 //				"   float visibility = 1.0;\r\n" + //
 //				"   if ( texture2D(shadowMap, ShadowCoord.xy).z > ShadowCoord.z ) {\r\n" + //
@@ -393,6 +372,16 @@ public class TerrainShaders {
 				"uniform sampler2DArray water_textures;\r\n" + //
 				"uniform sampler2D water_exists_texture;\r\n" + //
 				"uniform sampler2D fogOfWarMap;\r\n" + //
+				"    uniform vec2 u_fogTexel;\r\n" + //
+				"    float softFog(sampler2D map, vec2 uv) {\r\n" + //
+				"      vec2 t = u_fogTexel;\r\n" + //
+				"      float m = texture(map, uv).r * 0.25;\r\n" + //
+				"      m += (texture(map, uv + vec2(t.x, 0.0)).r + texture(map, uv - vec2(t.x, 0.0)).r\r\n" + //
+				"          + texture(map, uv + vec2(0.0, t.y)).r + texture(map, uv - vec2(0.0, t.y)).r) * 0.125;\r\n" + //
+				"      m += (texture(map, uv + t).r + texture(map, uv - t).r\r\n" + //
+				"          + texture(map, uv + vec2(t.x, -t.y)).r + texture(map, uv + vec2(-t.x, t.y)).r) * 0.0625;\r\n" + //
+				"      return m;\r\n" + //
+				"    }\r\n" + //
 				"\r\n" + //
 				"\r\n" + //
 				"uniform int current_texture;\r\n" + //
@@ -411,7 +400,7 @@ public class TerrainShaders {
 				"void main() {\r\n" + //
 				"   vec2 d2 = min(position - mapBounds.xy, mapBounds.zw - position);\r\n" + //
 				"   float d1 = clamp(min(d2.x, d2.y) / 64.0 + 1.0, 0.0, 1.0) * 0.8 + 0.2;;\r\n" + //
-				"   float fogOfWarData = texture(fogOfWarMap, v_suv).r;\r\n" + //
+				"   float fogOfWarData = softFog(fogOfWarMap, v_suv);\r\n" + //
 				"	color = texture(water_textures, vec3(UV, current_texture)) * vec4(vertexColor.rgb * d1 * shadeColor * (1.0 - fogOfWarData), vertexColor.a);\r\n"
 				+ //
 				Shaders.fogSystem(false, null) + //

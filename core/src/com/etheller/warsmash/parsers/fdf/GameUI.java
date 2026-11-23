@@ -401,6 +401,27 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 		return this.skinData;
 	}
 
+	/** The engine's own string for the game's language only ("KEY_ESES"), or null when SmashStrings has none for it. */
+	public String smashLanguageString(final String key) {
+		final String name = key + "_" + GameLanguage.inGame().toUpperCase(Locale.ROOT);
+		final String text = this.templates.getDecoratedString(name);
+		return (text.equals(name) || text.isEmpty()) ? null : text;
+	}
+
+	/**
+	 * A string of the engine's own interface: the one SmashStrings has for the game's language under "KEY_ESES", else
+	 * the plain "KEY", else the English text, so that no language shows a key or nothing.
+	 */
+	public String smashString(final String key, final String english) {
+		for (final String name : new String[] { key + "_" + GameLanguage.inGame().toUpperCase(Locale.ROOT), key }) {
+			final String text = this.templates.getDecoratedString(name);
+			if (!text.equals(name) && !text.isEmpty()) {
+				return text;
+			}
+		}
+		return english;
+	}
+
 	/**
 	 * The key of a scripted dialog button string: UI\MiscUI.txt [Hotkeys] holds it under the string's name, as 'C',
 	 * since the string itself only paints the letter white.
@@ -1847,6 +1868,23 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 
 	public Texture loadTexture(final String path) {
 		return loadTexture(path, true);
+	}
+
+	/**
+	 * Lets frames that are created but never shown with this data (the Reforged cinematic backdrop in Classic
+	 * graphics) ask for a texture that is not there without a data error report.
+	 */
+	public void expectMissingTexture(final String skinField) {
+		final String path = trySkinField(skinField);
+		if ((path != null) && !path.isEmpty() && !path.equals(skinField) && !this.pathToTexture.containsKey(path)
+				&& !this.missingTextures.containsKey(path)) {
+			final String blp = path.substring(0, path.lastIndexOf('.') == -1 ? path.length() : path.lastIndexOf('.'))
+					+ ".blp";
+			if (!this.dataSource.has(path) && !this.dataSource.has(blp) && !this.dataSource
+					.has(blp.substring(0, blp.length() - 4) + ".dds")) {
+				this.missingTextures.put(path, null);
+			}
+		}
 	}
 
 	/**

@@ -200,13 +200,23 @@ public class CAbilityMoonWell extends CAbilitySpellBase implements CAutocastAbil
 	protected void innerCheckCanTarget(final CSimulation game, final CUnit unit, final int orderId,
 			final CWidget target, final AbilityTargetCheckReceiver<CWidget> receiver) {
 		if (target.canBeTargetedBy(game, unit, getTargetsAllowed(), receiver)) {
-			if (!unit.isMovementDisabled() || unit.canReach(target, getCastRange())) {
+			if (needsNothing(target)) {
+				// Measured (1.29): a unit with full life and no mana to fill is refused.
+				receiver.targetCheckFailed(CommandStringErrorKeys.ALREADY_AT_FULL_MANA_AND_HEALTH);
+			}
+			else if (!unit.isMovementDisabled() || unit.canReach(target, getCastRange())) {
 				receiver.targetOk(target);
 			}
 			else {
 				receiver.targetCheckFailed(CommandStringErrorKeys.TARGET_IS_OUTSIDE_RANGE);
 			}
 		}
+	}
+
+	private static boolean needsNothing(final CWidget target) {
+		final CUnit unitTarget = target.visit(AbilityTargetVisitor.UNIT);
+		return (unitTarget != null) && (unitTarget.getLife() >= unitTarget.getMaximumLife())
+				&& ((unitTarget.getMaximumMana() <= 0) || (unitTarget.getMana() >= unitTarget.getMaximumMana()));
 	}
 
 	@Override

@@ -1212,9 +1212,93 @@ public final class SavedObjectGraph {
 
 		public Reader(final Rules rules, final byte[] tableBytes, final DataInputStream bodies,
 				final int formatVersion) throws IOException {
+			this(rules, tableBytes, bodies, formatVersion, false);
+		}
+
+		/**
+		 * A reader that reads nothing of the objects yet: {@link #advance} does it in slices, a loading screen can
+		 * draw between.
+		 */
+		public static Reader incremental(final Rules rules, final byte[] tableBytes, final DataInputStream bodies,
+				final int formatVersion) throws IOException {
+			return new Reader(rules, tableBytes, bodies, formatVersion, true);
+		}
+
+		private DataInputStream tableIn;
+		private int nextAllocated = 1;
+		private int nextBody = 1;
+		private int rootId;
+		private boolean finishing;
+		private boolean rootRead;
+
+		private Reader(final Rules rules, final byte[] tableBytes, final DataInputStream bodies,
+				final int formatVersion, final boolean sliced) throws IOException {
 			this.rules = rules;
 			this.bodies = bodies;
-			readTable(new DataInputStream(new ByteArrayInputStream(tableBytes)), formatVersion);
+			this.tableIn = new DataInputStream(new ByteArrayInputStream(tableBytes));
+			readTable(this.tableIn, formatVersion);
+			if (!sliced) {
+				allocateSome(Long.MAX_VALUE);
+			}
+		}
+
+		private boolean allocateSome(final long end) throws IOException {
+			while (this.nextAllocated < this.objects.length) {
+				final int id = this.nextAllocated++;
+				final byte kind = this.tableIn.readByte();
+				this.kinds[id] = kind;
+				this.objects[id] = allocate(id, kind, this.tableIn);
+				if (((id & 31) == 0) && (System.nanoTime() >= end)) {
+					return false;
+				}
+			}
+			return true;
+		}
+
+		/**
+		 * Allocates the objects of the table, reads their bodies, in the order {@link #readRoot} does, for about
+		 * the time given, and when they are all read their deferred fills.
+		 *
+		 * @return whether the root is read
+		 */
+		public boolean advance(final long budgetNanos) throws IOException {
+			final long end = budgetNanos == Long.MAX_VALUE ? Long.MAX_VALUE : System.nanoTime() + budgetNanos;
+			if (!allocateSome(end)) {
+				return false;
+			}
+			if (this.nextBody == 1) {
+				this.rootId = this.bodies.readInt();
+			}
+			while (this.nextBody < this.objects.length) {
+				final int id = this.nextBody++;
+				readBody(id);
+				if (((id & 31) == 0) && (System.nanoTime() >= end)) {
+					return false;
+				}
+			}
+			if (!this.finishing) {
+				// What the bodies deferred is a slice of its own: its size is not known.
+				this.finishing = true;
+				if (budgetNanos != Long.MAX_VALUE) {
+					return false;
+				}
+			}
+			for (final Runnable fill : this.deferred) {
+				fill.run();
+			}
+			for (final Runnable hook : this.addedFieldHooks) {
+				hook.run();
+			}
+			this.rootRead = true;
+			return true;
+		}
+
+		/** The root of the objects {@link #advance} has read. */
+		public Object root() {
+			if (!this.rootRead) {
+				throw new IllegalStateException("The objects are not read");
+			}
+			return this.objects[this.rootId];
 		}
 
 		private void readTable(final DataInputStream in, final int formatVersion) throws IOException {
@@ -1232,11 +1316,6 @@ public final class SavedObjectGraph {
 					fieldNames[j] = in.readUTF();
 				}
 				this.classes[i] = newClassInfo(name, fieldNames, formatVersion);
-			}
-			for (int id = 1; id < count; id++) {
-				final byte kind = in.readByte();
-				this.kinds[id] = kind;
-				this.objects[id] = allocate(id, kind, in);
 			}
 		}
 
@@ -1351,17 +1430,9 @@ public final class SavedObjectGraph {
 		}
 
 		public Object readRoot() throws IOException {
-			final int rootId = this.bodies.readInt();
-			for (int id = 1; id < this.objects.length; id++) {
-				readBody(id);
+			while (!advance(Long.MAX_VALUE)) {
 			}
-			for (final Runnable fill : this.deferred) {
-				fill.run();
-			}
-			for (final Runnable hook : this.addedFieldHooks) {
-				hook.run();
-			}
-			return this.objects[rootId];
+			return root();
 		}
 
 		/** The objects of a type the save itself held (not the loading game's own, found by name). */

@@ -50,6 +50,9 @@ public class UnroundedAdvanceFontGenerator extends FreeTypeFontGenerator {
 				if ((c >= '0') && (c <= '9')) {
 					glyph.xadvance = Math.round((metrics.getWidth() / 64f) + (DIGIT_GAP_PER_SIZE * parameter.size))
 							+ parameter.spaceX;
+					// The advance counts from the outline's left edge, so the glyph is drawn from there too: with
+					// the font's own left bearing a "1" ends up against the next character and far from the last.
+					glyph.xoffset -= Math.round(metrics.getHoriBearingX() / 64f);
 				}
 				else {
 					glyph.xadvance = Math.round(metrics.getHoriAdvance() / 64f) + parameter.spaceX;

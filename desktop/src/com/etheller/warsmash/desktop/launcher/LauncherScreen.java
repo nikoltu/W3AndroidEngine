@@ -63,10 +63,12 @@ import com.etheller.warsmash.launcher.LaunchGuard;
 import com.etheller.warsmash.launcher.LaunchRequest;
 import com.etheller.warsmash.launcher.LauncherBoard;
 import com.etheller.warsmash.launcher.LauncherKeys;
+import com.etheller.warsmash.launcher.ProblemReport;
 import com.etheller.warsmash.launcher.LauncherLog;
 import com.etheller.warsmash.launcher.LauncherOptions;
 import com.etheller.warsmash.launcher.LauncherStore;
 import com.etheller.warsmash.launcher.LauncherStrings;
+import com.etheller.warsmash.launcher.LauncherText;
 import com.etheller.warsmash.launcher.Profiles;
 import com.etheller.warsmash.launcher.ProjectInfo;
 import com.etheller.warsmash.launcher.SharedDataSource;
@@ -76,6 +78,7 @@ import com.etheller.warsmash.launcher.UpdateCheck;
 import com.etheller.warsmash.movie.Movies;
 import com.etheller.warsmash.units.DataTable;
 import com.etheller.warsmash.util.DataSourceFileHandle;
+import com.etheller.warsmash.util.PerfStats;
 import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.viewer5.FogSettings;
 import com.etheller.warsmash.viewer5.handlers.w3x.replay.GameReplays;
@@ -102,10 +105,8 @@ public final class LauncherScreen implements Screen, InputProcessor {
 	public static final int MIN_WIDTH = 1280;
 	public static final int MIN_HEIGHT = 720;
 
-	private static final String[][] RAIL = { { "KEY_CAMPAIGN", "Campaign" },
-		{ "KEY_LOAD_SAVED_GAME", "Load Saved Game" }, { "KEY_VIEW_REPLAY", "View Replay" },
-		{ "KEY_CUSTOM_GAME", "Custom Games" }, { "KEY_LOCAL_AREA_NETWORK", "Local Area Network" },
-		{ "KEY_OPTIONS", "Options" }, { "KEY_HELP", "Help" } };
+	private static final String[] RAIL = { "KEY_CAMPAIGN", "KEY_LOAD_SAVED_GAME", "KEY_VIEW_REPLAY", "KEY_CUSTOM_GAME",
+		"KEY_LOCAL_AREA_NETWORK", "KEY_OPTIONS", "KEY_HELP" };
 	private static final int[] RAIL_KEYS = { Input.Keys.C, Input.Keys.L, Input.Keys.R, Input.Keys.U, Input.Keys.N,
 		Input.Keys.O, Input.Keys.H };
 	private static final boolean[] RAIL_OPEN = { true, true, true, true, true, true, true };
@@ -141,7 +142,9 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		LAN_NOTICE,
 		LAN_BLOCK,
 		LAN_LEAVE,
-		LAN_MAP
+		LAN_MAP,
+		UNLOCK_CAMPAIGN,
+		REPORT_MADE
 	}
 
 	private final WarsmashGdxMultiScreenGame game;
@@ -199,6 +202,12 @@ public final class LauncherScreen implements Screen, InputProcessor {
 	private int optionsTab;
 	/** What the radio rows of the shown options tab add to the row height, when their choices take a line of their own. */
 	private float optionsExtraH;
+	/** The campaigns the Debugging tab lists; null until read. */
+	private List<GameCatalog.UnlockEntry> unlockEntries;
+	private boolean readingUnlock;
+	private GameCatalog.UnlockEntry unlockAsked;
+	private boolean makingReport;
+	private ProblemReport.Result reportMade;
 	private int helpTab;
 	private String profileShown;
 	private final StringBuilder nameField = new StringBuilder();
@@ -236,16 +245,34 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		this.launcherPreferences = Gdx.app.getPreferences(PREFERENCES);
 		this.preferences = new DesktopStore(this.launcherPreferences);
 		this.engineStore = new DesktopStore(Gdx.app.getPreferences(Profiles.ENGINE_PREFERENCES));
+		useIni(ini, iniPath);
+		readStrings();
+		this.profiles = new Profiles(this.engineStore, this.preferences, this.saves);
+		this.lan = new LanPages(this);
+		openData();
+	}
+
+	/** The launcher's texts, in the game language where a translation of them exists. */
+	private void readStrings() {
 		try (InputStream in = LauncherScreen.class.getResourceAsStream("/strings.xml")) {
 			this.strings = new LauncherStrings(in);
 		}
 		catch (final IOException | RuntimeException e) {
 			throw new IllegalStateException("The launcher's texts are missing from the class path", e);
 		}
-		useIni(ini, iniPath);
-		this.profiles = new Profiles(this.engineStore, this.preferences, this.saves);
-		this.lan = new LanPages(this);
-		openData();
+		final String language = GameLanguage.configured(this.ini);
+		if (language.length() >= 2) {
+			try (InputStream in = LauncherScreen.class
+					.getResourceAsStream("/values-" + language.substring(0, 2).toLowerCase(Locale.ROOT) + "/strings.xml")) {
+				if (in != null) {
+					this.strings.overlay(in);
+				}
+			}
+			catch (final IOException | RuntimeException e) {
+				LauncherLog.w("The launcher's translation could not be read", e);
+			}
+		}
+		LauncherText.use(this.strings);
 	}
 
 	/** The configuration in use: the one given on the command line, else the game data the player chose here. */
@@ -270,7 +297,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		final Thread thread = new Thread(() -> {
 			try {
 				final DataSource opened = WarsmashGdxMapScreen.parseDataSources(ini);
-				final Map<String, String> read = GlueText.read(opened);
+				final Map<String, String> read = GlueText.read(ini, opened);
 				this.glue = read != null ? read : new HashMap<>();
 				// The catalog reads the same data on its own thread and closes it.
 				this.data = new SharedDataSource(opened);
@@ -309,6 +336,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 	private void editionChanged() {
 		this.catalog.setEdition(roc() ? LauncherKeys.EDITION_ROC : LauncherKeys.EDITION_TFT);
 		this.campaigns = null;
+		this.unlockEntries = null;
 		this.dataContent = null;
 		this.profileProgress = null;
 		this.catalog.campaigns(found -> this.campaigns = found);
@@ -317,6 +345,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 
 	private void readCatalog() {
 		this.campaigns = null;
+		this.unlockEntries = null;
 		this.maps = null;
 		this.saveList = null;
 		this.mapDetails = null;
@@ -372,6 +401,11 @@ public final class LauncherScreen implements Screen, InputProcessor {
 	String glue(final String key, final String fallback) {
 		final String value = this.glue.get(key.toUpperCase(Locale.ROOT));
 		return value != null ? value : fallback;
+	}
+
+	/** The game data's text for the key; when it has none, the launcher's own text in the game language. */
+	String glue(final String key) {
+		return glue(key, s("glue_" + key.toLowerCase(Locale.ROOT)));
 	}
 
 	private int uiPercent() {
@@ -690,6 +724,11 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		return "roc".equals(this.preferences.getString(LauncherKeys.KEY_EDITION, "tft"));
 	}
 
+	/** A campaign's background model skin field in the edition the campaign list is shown for. */
+	private String backdrop(final String background) {
+		return CampaignChoice.backdropField(background, roc() ? LauncherKeys.EDITION_ROC : LauncherKeys.EDITION_TFT);
+	}
+
 	// ---------------------------------------------------------------- pages
 
 	private void drawPage(final String[] scenes) {
@@ -791,13 +830,13 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		}
 		for (int i = 0; i < RAIL.length; i++) {
 			final float y = b.holderY + (i * b.holderPitch);
-			if (railEntry("rail" + i, glue(RAIL[i][0], RAIL[i][1]), y, i == selected, RAIL_OPEN[i],
+			if (railEntry("rail" + i, glue(RAIL[i]), y, i == selected, RAIL_OPEN[i],
 					(i == 4) && this.lan.lit())) {
 				railChosen(i);
 			}
 		}
 		if (b.quitY > 0) {
-			if (railEntry("quit", glue("KEY_QUIT", "Quit"), b.quitY, false, true, false)) {
+			if (railEntry("quit", glue("KEY_QUIT"), b.quitY, false, true, false)) {
 				this.dialog = Dialog.EXIT;
 			}
 		}
@@ -961,7 +1000,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		final float fr = b.frame;
 		final Banner next = banner();
 		// The Reforged scenes have their figures near the middle; the classic ones are framed on the model.
-		scenes[1] = scene(1, next.scene, this.art.reforged ? 0.3f : MODEL_FOCUS, next.background, null, next.fog, 0,
+		scenes[1] = scene(1, next.scene, this.art.reforged ? 0.3f : MODEL_FOCUS, backdrop(next.background), next.background, next.fog, 0,
 				bx + (fr / 2), fr / 2, bw - fr, b.height - fr, CampaignChoice.modelX(next.scene));
 		g.gradient(bx, b.height * 0.46f, bw, b.height * 0.38f, 0x00000000, 0xE6000000, true);
 		g.fill(bx, b.height * 0.84f, bw, b.height * 0.16f, 0xE6000000);
@@ -977,7 +1016,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 				g.palette.gold, Align.left);
 		g.lines(next.title, ix, by - (t ? 250 : 150), iw, t ? 140 : 84, t ? 60 : 34, g.palette.text, Align.left);
 		g.text(next.line, ix, by - (t ? 88 : 50), iw, t ? 40 : 28, t ? 30 : 20, g.palette.text2, Align.left);
-		if (g.button("continue", glue("CONTINUE", "Continue"), ix, by, iw, bh, t ? 44 : 30, Gui.TONE_NORMAL)) {
+		if (g.button("continue", glue("CONTINUE"), ix, by, iw, bh, t ? 44 : 30, Gui.TONE_NORMAL)) {
 			playClick();
 			continueCampaign();
 		}
@@ -1001,9 +1040,10 @@ public final class LauncherScreen implements Screen, InputProcessor {
 			final CampaignCatalog catalog = this.campaigns.catalog;
 			final CCampaignProgress.Snapshot progress = this.campaigns.progress;
 			final CampaignCatalog.Entry entry = CampaignChoice.playedCampaign(catalog, progress);
-			if ((entry != null) && !entry.getData().getMissions().isEmpty()) {
-				final List<CampaignMission> missions = entry.getData().getMissions();
-				final int mission = Math.max(0, CampaignChoice.furthestMission(entry, progress));
+			final boolean reforgedMaps = reforgedMaps();
+			if ((entry != null) && !entry.getMissions(reforgedMaps).isEmpty()) {
+				final List<CampaignMission> missions = entry.getMissions(reforgedMaps);
+				final int mission = Math.max(0, CampaignChoice.furthestMission(entry, progress, reforgedMaps));
 				next.entry = entry;
 				next.mission = mission;
 				next.scene = CampaignChoice.campaignScene(entry.getSection());
@@ -1062,7 +1102,8 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		}
 		final CampaignCatalog.Entry entry = chosenCampaign();
 		scenes[0] = scene(0, entry != null ? CampaignChoice.campaignScene(entry.getSection()) : "roc_prologue", 0.22f,
-				entry != null ? entry.getData().getBackground() : "TutorialBackdrop", null,
+				backdrop(entry != null ? entry.getData().getBackground() : "TutorialBackdrop"),
+				entry != null ? entry.getData().getBackground() : "TutorialBackdrop",
 				entry != null ? entry.getData().getBackgroundFogSettings() : null, 0, 0, 0, b.width, b.height, -1);
 		g.gradient(b.width * 0.4f, 0, b.width * 0.6f, b.height, 0x00000000, 0xC7000000, false);
 		if ((this.page == Page.MISSIONS) && (entry != null) && (this.campaignResult != null)) {
@@ -1272,8 +1313,15 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		final float dy = (t ? b.contentY + b.contentH : b.height - 8) - boxH;
 		final float dx = b.contentX;
 		final float innerW = boxW - (2 * inner);
-		if (this.campaigns.catalog.hasReforgedMaps()) {
+		final boolean versions = this.campaigns.catalog.hasReforgedMaps();
+		if (!versions && g.over(dx, dy, boxW, boxH)) {
+			g.tip(s("launcher_campaign_maps_missing_tip"));
+		}
+		if (versions) {
 			final float vy = dy - 24 - versionH;
+			if (g.over(dx, vy, boxW, versionH)) {
+				g.tip(s("launcher_campaign_maps_tip"));
+			}
 			g.edit(dx, vy, boxW, versionH, edge, 0);
 			g.text(glue("CAMPAIGN_VERSION", s("launcher_campaign_maps")), dx + inner, vy + inner, innerW, labelH, label,
 					g.palette.gold, Align.left);
@@ -1284,7 +1332,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 					choice -> this.profiles.setCampaignMaps(profile, LauncherKeys.CAMPAIGN_MAPS[choice][0]));
 		}
 		g.edit(dx, dy, boxW, boxH, edge, 0);
-		g.text(glue("SELECT_DIFFICULTY_LEVEL", "Difficulty Level:"), dx + inner, dy + inner, innerW, labelH, label,
+		g.text(glue("SELECT_DIFFICULTY_LEVEL"), dx + inner, dy + inner, innerW, labelH, label,
 				g.palette.gold, Align.left);
 		final String current = this.preferences.getString(LauncherKeys.KEY_DIFFICULTY,
 				LauncherKeys.DIFFICULTIES[0][0]);
@@ -1302,10 +1350,10 @@ public final class LauncherScreen implements Screen, InputProcessor {
 				g.palette.text, Align.left);
 	}
 
-	private String[] glueList(final String[][] table, final int keyColumn) {
+	String[] glueList(final String[][] table, final int keyColumn) {
 		final String[] labels = new String[table.length];
 		for (int i = 0; i < table.length; i++) {
-			labels[i] = glue(table[i][keyColumn], table[i][keyColumn + 1]);
+			labels[i] = glue(table[i][keyColumn]);
 		}
 		return labels;
 	}
@@ -1316,10 +1364,11 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		final boolean t = b.tablet;
 		final boolean reforged = this.art.reforged;
 		final CCampaignProgress.Snapshot progress = this.campaigns.progress;
-		final List<CampaignMission> missions = entry.getData().getMissions();
+		final boolean reforgedMaps = reforgedMaps();
+		final List<CampaignMission> missions = entry.getMissions(reforgedMaps);
 		int chosen = this.preferences.getInt(LauncherKeys.KEY_MISSION, -1);
 		if ((chosen < 0) || (chosen >= missions.size()) || !CampaignCatalog.isMissionOpen(entry, chosen, progress)) {
-			chosen = Math.max(0, CampaignChoice.furthestMission(entry, progress));
+			chosen = Math.max(0, CampaignChoice.furthestMission(entry, progress, reforgedMaps));
 		}
 		final float rowH = reforged ? (t ? 124 : 84) : (t ? 135 : 96);
 		final float w = t ? 924 : 600;
@@ -1357,7 +1406,8 @@ public final class LauncherScreen implements Screen, InputProcessor {
 			final boolean clicked;
 			final MapIssue issue = index < 0 ? MapIssue.NONE : missionIssue(entry, index);
 			if (reforged) {
-				final boolean won = (index >= 0) && CampaignCatalog.isMissionWon(entry, index, progress);
+				final boolean won = (index >= 0)
+						&& CampaignCatalog.isMissionWon(entry, index, progress, reforgedMaps);
 				clicked = chapterRow("m" + index + mission.getMissionName(), mission, isChosen,
 						index < 0 ? SkinArt.CHAPTER_CINEMATIC
 								: CampaignResult.chapterIcon(won,
@@ -1415,6 +1465,12 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		return GlueText.plain(glueText).toUpperCase(Locale.ROOT);
 	}
 
+	/** The size a text in small capitals is set in to fit the width: the size given, or smaller when it is too wide. */
+	private float fittedCaps(final String text, final float size, final float width) {
+		final float natural = this.gui.smallCapsWidth(text, size);
+		return natural <= width ? size : Math.max(size * 0.6f, (size * width) / natural);
+	}
+
 	/** The text size at most this one at which a line fits a width. */
 	private float fitted(final String text, final float size, final float width) {
 		final float natural = this.gui.width(text, size);
@@ -1450,6 +1506,9 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		final float right = listX() - (t ? 48 : 16);
 		final float y = b.contentY + ((b.contentH - shield - gap - menuH) * 0.5f);
 		g.image(version == 0 ? SkinArt.VERSION_REFORGED : SkinArt.VERSION_CLASSIC, left, y, shield, shield);
+		if (g.over(left, y, right - left, shield)) {
+			g.tip(s(versions ? "launcher_campaign_maps_tip" : "launcher_campaign_maps_missing_tip"));
+		}
 		final float tx = left + shield + (t ? 20 : 10);
 		final float textW = right - tx;
 		final String header = upper(glue(data.getHeader(), data.getHeader()));
@@ -1465,8 +1524,8 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		float mx = tx;
 		if (result != null) {
 			final float continueW = t ? 340 : 170;
-			final String[] button = CampaignResult.buttonLabel(result);
-			if (g.button("continue", upper(GlueText.plain(glue(button[0], button[1]))), mx, menuY, continueW, menuH, text,
+			final String button = CampaignResult.buttonLabel(result);
+			if (g.button("continue", upper(GlueText.plain(glue(button))), mx, menuY, continueW, menuH, text,
 					Gui.TONE_NORMAL)) {
 				playClick();
 				continueAfter(entry, result);
@@ -1499,7 +1558,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 			showPage(Page.LOAD);
 		}
 		if (g.over(mx, menuY, folderW, menuH)) {
-			g.tip(GlueText.plain(glue("KEY_LOAD_SAVED_GAME", "Load Saved Game")));
+			g.tip(GlueText.plain(glue("KEY_LOAD_SAVED_GAME")));
 		}
 		final float icon = menuH * 0.5f;
 		g.image(SkinArt.ICON_FOLDER_GOLD, mx + ((folderW - icon) / 2), menuY + ((menuH - icon) / 2), icon, icon);
@@ -1515,8 +1574,14 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		final LauncherBoard b = this.board;
 		final boolean t = b.tablet;
 		campaignBlock(entry, result);
-		final CampaignResult.Layout l = new CampaignResult.Layout(listX() + ((t ? 924 : 600) / 2f), b.width,
-				b.height);
+		final float centre = listX() + ((t ? 924 : 600) / 2f);
+		final String name = missionName(entry, result);
+		// A name wider than the banner goes on in a second line, which moves what follows.
+		final CampaignResult.Layout first = new CampaignResult.Layout(centre, b.width, b.height);
+		g.bold(true);
+		final List<String> nameLines = CampaignResult.nameLines(GlueText.plain(name),
+				line -> g.smallCapsWidth(line, first.nameSize), first.contentW);
+		final CampaignResult.Layout l = new CampaignResult.Layout(centre, b.width, b.height, nameLines.size());
 		// The banner falls in with its title; the numbers, the mission and the difficulty fade in after it.
 		if (this.resultShown != result) {
 			this.resultShown = result;
@@ -1526,10 +1591,9 @@ public final class LauncherScreen implements Screen, InputProcessor {
 				: ResultMotion.totalMillis();
 		final float fall = ResultMotion.bannerOffset(elapsed) * l.h;
 		final float shown = ResultMotion.contentAlpha(elapsed);
-		g.image(CampaignResult.banner(entry.getSection()), l.x, fall, l.w, l.h);
-		final String[] title = CampaignResult.title(result);
-		g.bold(true);
-		g.text(upper(glue(title[0], title[1])), l.contentX, l.titleY + fall, l.contentW, l.titleH, l.titleSize,
+		g.image(CampaignResult.banner(entry.getSection()), l.x, l.bannerY + fall, l.w, l.h);
+		final String title = CampaignResult.title(result);
+		g.smallCaps(glue(title), l.contentX, l.titleY + fall, l.contentW, l.titleH, l.titleSize,
 				0xFFFFFFFF, Align.center);
 		for (final float dividerY : l.dividerY) {
 			g.image(SkinArt.RESULT_DIVIDER, l.dividerX, dividerY, l.dividerW, l.dividerH, shown);
@@ -1539,9 +1603,12 @@ public final class LauncherScreen implements Screen, InputProcessor {
 			final int[] numbers = CampaignResult.numbers(result.score, i);
 			final float y = l.rowY[i];
 			g.image(row[0], l.iconX, y, l.icon, l.icon, shown);
-			g.text(upper(glue(row[1], row[2])), l.detailsX, y + l.headingY, l.columnW * 2, l.headingH, l.headingSize,
+			g.bold(true);
+			g.text(upper(glue(row[1])), l.detailsX, y + l.headingY, l.columnW * 2, l.headingH, l.headingSize,
 					faded(CampaignResult.HEADING_GOLD, shown), Align.left);
-			final String[] labels = { glue("SCORE", "Score"), glue(row[3], row[4]) };
+			// The labels and numbers are set in the lighter weight.
+			g.bold(false);
+			final String[] labels = { glue("SCORE"), glue(row[2]) };
 			for (int c = 0; c < 2; c++) {
 				final float x = l.detailsX + (c * l.columnW);
 				g.smallCaps(labels[c], x, y + l.labelY, l.columnW, l.labelH, l.labelSize,
@@ -1550,14 +1617,17 @@ public final class LauncherScreen implements Screen, InputProcessor {
 						faded(0xFFFFFFFF, shown), Align.left);
 			}
 		}
-		final String name = missionName(entry, result);
-		g.smallCaps(name, l.contentX, l.nameY, l.contentW, l.nameH, fitted(GlueText.plain(name), l.nameSize, l.contentW),
-				faded(0xFFFFFFFF, shown), Align.center);
+		g.bold(true);
+		for (int i = 0; i < nameLines.size(); i++) {
+			g.smallCaps(nameLines.get(i), l.contentX, l.nameY + (i * l.nameStep), l.contentW, l.nameH,
+					fittedCaps(nameLines.get(i), l.nameSize, l.contentW), faded(0xFFFFFFFF, shown), Align.center);
+		}
+		g.bold(false);
 		g.text(result.playTime(), l.contentX, l.durationY, l.contentW, l.durationH, l.durationSize,
 				faded(CampaignResult.HEADING_GOLD, shown), Align.center);
 		final String[] difficulty = CampaignResult.difficulty(result.difficulty);
 		if (difficulty != null) {
-			g.smallCaps(glue(difficulty[1], difficulty[2]), l.contentX, l.difficultyY, l.contentW, l.difficultyH,
+			g.smallCaps(glue(difficulty[1]), l.contentX, l.difficultyY, l.contentW, l.difficultyH,
 					l.difficultySize, faded(CampaignResult.LABEL_GREY, shown), Align.center);
 			g.image(difficulty[0], l.difficultyIconX, l.difficultyIconY, l.difficultyIcon, l.difficultyIcon, shown);
 		}
@@ -1587,8 +1657,8 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		final CampaignResult.ClassicLayout l = new CampaignResult.ClassicLayout(listX(), b.contentY, t ? 924 : 600,
 				bottom - b.contentY, b.pageFrame, b.buttonH);
 		g.panel(l.x, l.y, l.w, l.h, b.pageFrame);
-		final String[] title = CampaignResult.title(result);
-		g.text(glue(title[0], title[1]), l.contentX, l.titleY, l.contentW, l.titleH, l.titleSize, g.palette.gold,
+		final String title = CampaignResult.title(result);
+		g.text(glue(title), l.contentX, l.titleY, l.contentW, l.titleH, l.titleSize, g.palette.gold,
 				Align.center);
 		for (final float lineY : l.lineY) {
 			final int line = g.palette.line;
@@ -1600,10 +1670,10 @@ public final class LauncherScreen implements Screen, InputProcessor {
 			final String[] row = CampaignResult.ROWS[i];
 			final int[] numbers = CampaignResult.numbers(result.score, i);
 			final float y = l.rowY[i];
-			final String heading = glue(row[1], row[2]);
+			final String heading = glue(row[1]);
 			g.text(heading, l.contentX, y, l.headingW, l.rowH, fitted(GlueText.plain(heading), l.headingSize,
 					l.headingW), g.palette.gold, Align.left);
-			final String[] labels = { glue("SCORE", "Score"), glue(row[3], row[4]) };
+			final String[] labels = { glue("SCORE"), glue(row[2]) };
 			for (int c = 0; c < 2; c++) {
 				g.text(labels[c], l.columnX[c], y + l.labelY, l.columnW, l.labelH, l.labelSize, g.palette.text2,
 						Align.left);
@@ -1618,11 +1688,11 @@ public final class LauncherScreen implements Screen, InputProcessor {
 				Align.center);
 		final String[] difficulty = CampaignResult.difficulty(result.difficulty);
 		if (difficulty != null) {
-			g.text(glue(difficulty[1], difficulty[2]), l.contentX, l.difficultyY, l.contentW, l.difficultyH,
+			g.text(glue(difficulty[1]), l.contentX, l.difficultyY, l.contentW, l.difficultyH,
 					l.difficultySize, g.palette.text2, Align.center);
 		}
-		final String[] button = CampaignResult.buttonLabel(result);
-		if (g.button("continue", GlueText.plain(glue(button[0], button[1])), l.buttonX, l.buttonY, l.buttonW, l.buttonH,
+		final String button = CampaignResult.buttonLabel(result);
+		if (g.button("continue", GlueText.plain(glue(button)), l.buttonX, l.buttonY, l.buttonW, l.buttonH,
 				b.buttonText, Gui.TONE_NORMAL)) {
 			playClick();
 			continueAfter(entry, result);
@@ -1647,7 +1717,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		if (played < 0) {
 			return "";
 		}
-		final CampaignMission mission = entry.getData().getMissions().get(played);
+		final CampaignMission mission = entry.getMissions(true).get(played);
 		return glue(mission.getMissionName(), mission.getMissionName());
 	}
 
@@ -1655,7 +1725,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 	private void continueAfter(final CampaignCatalog.Entry entry, final GameResult result) {
 		final int played = CampaignResult.playedMission(this.campaigns.catalog, entry, result.map);
 		final int next = CampaignResult.continueMission(entry, this.campaigns.progress, played,
-				"victory".equals(result.result));
+				"victory".equals(result.result), reforgedMaps());
 		this.campaignResult = null;
 		if (next >= 0) {
 			launchMission(entry, next, Page.MISSIONS);
@@ -1713,6 +1783,11 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		return this.campaigns.issue(entry, mission, this.profiles.campaignMaps(this.profiles.current()));
 	}
 
+	/** Whether the current profile plays the Reforged campaign maps, whose mission lists the pages show. */
+	private boolean reforgedMaps() {
+		return this.campaigns.reforgedMaps(this.profiles.campaignMaps(this.profiles.current()));
+	}
+
 	private void launchMission(final CampaignCatalog.Entry entry, final int mission, final Page returnPage) {
 		final MapIssue issue = missionIssue(entry, mission);
 		if (issue != MapIssue.NONE) {
@@ -1761,8 +1836,8 @@ public final class LauncherScreen implements Screen, InputProcessor {
 						b.contentY + pf + 10, 392, 392);
 				final float tx = rx + 480;
 				g.text(mapTitle(details), tx, b.contentY + 50, mw - 490 - pf, 60, 42, g.palette.text, Align.left);
-				final String[][] facts = { { glue("SUGGESTED_PLAYERS", "Suggested Players:"), details.suggested },
-					{ glue("MAP_SIZE", "Map Size:"), details.size }, { glue("TILESET", "Tileset:"), details.tileset } };
+				final String[][] facts = { { glue("SUGGESTED_PLAYERS"), details.suggested },
+					{ glue("MAP_SIZE"), details.size }, { glue("TILESET"), details.tileset } };
 				for (int i = 0; i < facts.length; i++) {
 					g.text(facts[i][0], tx, b.contentY + 118 + (i * 46), 270, 46, 30, g.palette.gold, Align.left);
 					g.text(facts[i][1], tx + 279, b.contentY + 118 + (i * 46), mw - 490 - pf - 279, 46, 30,
@@ -1801,13 +1876,13 @@ public final class LauncherScreen implements Screen, InputProcessor {
 				this.dialog = Dialog.ADVANCED;
 			}
 		}
-		if (g.button("cancel", glue("CANCEL", "Cancel"), b.backX, b.backY, b.backW, b.backH, t ? 36 : 30,
+		if (g.button("cancel", glue("CANCEL"), b.backX, b.backY, b.backW, b.backH, t ? 36 : 30,
 				Gui.TONE_NORMAL)) {
 			playClick();
 			showPage(Page.HOME);
 		}
 		final float[] start = b.actionSlot(2);
-		if (g.button("start", glue("KEY_START_GAME", "Start Game"), start[0], b.backY, start[1], b.backH, t ? 36 : 30,
+		if (g.button("start", glue("KEY_START_GAME"), start[0], b.backY, start[1], b.backH, t ? 36 : 30,
 				details == null ? Gui.TONE_OFF : this.art.reforged ? Gui.TONE_CONFIRM : Gui.TONE_DOWN)) {
 			startCustom();
 		}
@@ -1903,7 +1978,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 					startWhenRead(entry.path);
 				}
 				if (((state & Gui.RIGHT) != 0) && !this.lanMapList) {
-					g.contextMenu("mapMenu", new String[] { glue("KEY_START_GAME", "Start Game") }, null,
+					g.contextMenu("mapMenu", new String[] { glue("KEY_START_GAME") }, null,
 							choice -> startWhenRead(entry.path));
 				}
 			}
@@ -1960,7 +2035,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 	private void advancedOptions(final float x, final float y, final float w, final float step, final float box,
 			final float size, final float titleSize) {
 		final Gui g = this.gui;
-		g.text(glue("ADVANCED_OPTIONS", "Advanced Options"), x, y, w, 48, titleSize, g.palette.gold, Align.left);
+		g.text(glue("ADVANCED_OPTIONS"), x, y, w, 48, titleSize, g.palette.gold, Align.left);
 		final String[] labels = optionLabels();
 		for (int i = 0; i < labels.length; i++) {
 			final int option = CustomGame.OPTION_SHOWN[i];
@@ -1975,9 +2050,9 @@ public final class LauncherScreen implements Screen, InputProcessor {
 	}
 
 	private String[] optionLabels() {
-		return new String[] { glue("LOCK_TEAMS", "Lock Teams"),
-			glue("FULL_SHARED_UNIT_CONTROL", s("game_shared_control")), glue("RANDOM_RACES", "Random Races"),
-			glue("RANDOM_HERO", "Random Hero") };
+		return new String[] { glue("LOCK_TEAMS"),
+			glue("FULL_SHARED_UNIT_CONTROL", s("game_shared_control")), glue("RANDOM_RACES"),
+			glue("RANDOM_HERO") };
 	}
 
 	private void slotRows(final GameCatalog.MapDetails details, final float x, final float top, final float w,
@@ -1989,8 +2064,8 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		final float[] widths = { available * 0.42f, available * 0.246f, available * 0.148f, available * 0.186f };
 		float rowsTop = top + 20;
 		if (headSize > 0) {
-			final String[] heads = { glue("PLAYERS", "Player"), glue("RACE", "Race"), glue("TEAM", "Team"),
-				glue("COLOR", "Color") };
+			final String[] heads = { glue("PLAYERS"), glue("RACE"), glue("TEAM"),
+				glue("COLOR") };
 			float hx = x;
 			for (int i = 0; i < heads.length; i++) {
 				g.text(heads[i], hx, top + 41, widths[i], 40, headSize, g.palette.gold, Align.left);
@@ -2030,8 +2105,8 @@ public final class LauncherScreen implements Screen, InputProcessor {
 						CustomGame.typeEditable(details, index), null, choice -> this.lobby.slotTypes[index] = choice);
 			}
 			cx += widths[0] + gap;
-			g.dropdown("race" + index, races, this.lobby.slotRaces[index], cx, y, widths[1], menuH, size, editable,
-					null, choice -> this.lobby.slotRaces[index] = choice);
+			g.dropdown("race" + index, races, this.lobby.slotRaces[index], cx, y, widths[1], menuH, size,
+					CustomGame.raceEditable(details, index), null, choice -> this.lobby.slotRaces[index] = choice);
 			cx += widths[1] + gap;
 			final int team = this.lobby.slotTeams[index] >= 0 ? this.lobby.slotTeams[index]
 					: CustomGame.defaultTeam(details, index);
@@ -2054,7 +2129,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 			return names;
 		}
 		final String[] names = new String[details.slots.size()];
-		final String format = glue("TEAM_FORMAT", "Team %d").replace("%s", "%d");
+		final String format = glue("TEAM_FORMAT").replace("%s", "%d");
 		for (int i = 0; i < names.length; i++) {
 			try {
 				names[i] = String.format(Locale.ROOT, format, i + 1);
@@ -2167,7 +2242,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 					}
 					else if ((state & Gui.RIGHT) != 0) {
 						g.contextMenu("saveMenu",
-								new String[] { glue("LOAD_GAME", "Load Game"), glue("DELETE", "Delete") },
+								new String[] { glue("LOAD_GAME"), glue("DELETE") },
 								new boolean[] { loadable, true }, choice -> {
 									if (choice == 0) {
 										launchGame(loadRequest(entry), Page.LOAD);
@@ -2199,9 +2274,9 @@ public final class LauncherScreen implements Screen, InputProcessor {
 						200, t ? 30 : 20, SkinArt.Palette.DANGER_TEXT, Align.center);
 			}
 			else {
-				final String[][] facts = { { glue("COLON_ELAPSED_TIME", "Elapsed Time:"),
+				final String[][] facts = { { glue("COLON_ELAPSED_TIME"),
 					CampaignChoice.elapsed(chosen.gameTime) },
-					{ glue("COLON_SAVED", "Saved:"), DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
+					{ glue("COLON_SAVED"), DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
 							.format(new Date(chosen.saved)) } };
 				for (int i = 0; i < facts.length; i++) {
 					final float fy = py + ph + (t ? 40 : 20) + (i * (t ? 48 : 34));
@@ -2219,13 +2294,13 @@ public final class LauncherScreen implements Screen, InputProcessor {
 			showPage(Page.HOME);
 		}
 		final float[] delete = b.actionSlot(1);
-		if (g.button("delete", glue("DELETE", "Delete"), delete[0], b.backY, delete[1], b.backH, size,
+		if (g.button("delete", glue("DELETE"), delete[0], b.backY, delete[1], b.backH, size,
 				chosen == null ? Gui.TONE_OFF : this.art.reforged ? Gui.TONE_DANGER : Gui.TONE_NORMAL)) {
 			this.dialog = Dialog.DELETE_SAVE;
 		}
 		final float[] load = b.actionSlot(2);
 		final boolean loadable = (chosen != null) && (chosen.loadability == SavedGame.Loadability.LOADABLE);
-		if (g.button("load", glue("LOAD_GAME", "Load Game"), load[0], b.backY, load[1], b.backH, size,
+		if (g.button("load", glue("LOAD_GAME"), load[0], b.backY, load[1], b.backH, size,
 				!loadable ? Gui.TONE_OFF : this.art.reforged ? Gui.TONE_CONFIRM : Gui.TONE_DOWN)) {
 			launchGame(loadRequest(chosen), Page.LOAD);
 		}
@@ -2273,8 +2348,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 	}
 
 	private String raceName(final GameCatalog.ReplayPlayer player) {
-		final String[] race = CustomGame.RACES[player.raceIndex()];
-		return glue(race[0], race[1]);
+		return glue(CustomGame.RACES[player.raceIndex()][0]);
 	}
 
 	/** Races as the list's second line names them: "Orc vs Human", or the number of players. */
@@ -2285,7 +2359,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		if (entry.players.size() == 2) {
 			return raceName(entry.players.get(0)) + " vs " + raceName(entry.players.get(1));
 		}
-		return entry.players.size() + " " + glue("PLAYERS", "players").toLowerCase(Locale.ROOT);
+		return entry.players.size() + " " + glue("PLAYERS").toLowerCase(Locale.ROOT);
 	}
 
 	private void startReplay(final GameCatalog.ReplayEntry entry) {
@@ -2361,8 +2435,8 @@ public final class LauncherScreen implements Screen, InputProcessor {
 					}
 					else if ((state & Gui.RIGHT) != 0) {
 						g.contextMenu("replayMenu",
-								new String[] { glue("KEY_VIEW_REPLAY", "View Replay"), s("replay_rename"),
-									glue("DELETE", "Delete") },
+								new String[] { glue("KEY_VIEW_REPLAY"), s("replay_rename"),
+									glue("DELETE") },
 								new boolean[] { playable, true, true }, choice -> {
 									if (choice == 0) {
 										startReplay(entry);
@@ -2390,14 +2464,14 @@ public final class LauncherScreen implements Screen, InputProcessor {
 			showPage(Page.HOME);
 		}
 		final float[] delete = b.actionSlot(1);
-		if (g.button("delete", glue("DELETE", "Delete"), delete[0], b.backY, delete[1], b.backH, size,
+		if (g.button("delete", glue("DELETE"), delete[0], b.backY, delete[1], b.backH, size,
 				chosen == null ? Gui.TONE_OFF : this.art.reforged ? Gui.TONE_DANGER : Gui.TONE_NORMAL)) {
 			this.dialog = Dialog.DELETE_REPLAY;
 		}
 		final float[] view = b.actionSlot(2);
 		final boolean playable = (chosen != null) && (chosen.playable() || chosen.canTryAnyway());
-		final String viewLabel = this.art.reforged ? glue("WATCH_REPLAY", "Watch")
-				: glue("KEY_VIEW_REPLAY", "View Replay");
+		final String viewLabel = this.art.reforged ? glue("WATCH_REPLAY")
+				: glue("KEY_VIEW_REPLAY");
 		if (g.button("view", viewLabel, view[0], b.backY, view[1], b.backH, size,
 				!playable ? Gui.TONE_OFF : this.art.reforged ? Gui.TONE_CONFIRM : Gui.TONE_DOWN)) {
 			startReplay(chosen);
@@ -2460,7 +2534,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 			final String why = chosen.warcraft ? s("replay_warcraft")
 					: chosen.otherVersion ? glue("REPLAY_CONFIRM_DESC", s("replay_other_version"))
 							: s("replay_unplayable").replace("%1$s", chosen.unplayable);
-			g.lines(glue("REPLAY_CONFIRM", "Incompatible Replay!") + "\n" + why, factsX, y + (step * 0.3f), factsW,
+			g.lines(glue("REPLAY_CONFIRM") + "\n" + why, factsX, y + (step * 0.3f), factsW,
 					step * 3, size, SkinArt.Palette.DANGER_TEXT, Align.left);
 			y += step * 3.3f;
 		}
@@ -2480,7 +2554,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 			g.fill(playersX, y + ((step - square) / 2), square, square,
 					CustomGame.PLAYER_COLORS[Math.abs(player.color) % CustomGame.PLAYER_COLORS.length]);
 			final String name = player.name != null ? player.name
-					: s("replay_computer") + " (" + glue("PLAYER", "Player") + " " + (player.slot + 1) + ")";
+					: s("replay_computer") + " (" + glue("PLAYER") + " " + (player.slot + 1) + ")";
 			final boolean symbol = player.raceIndex() > 0;
 			g.text(name, playersX + square + 14, y, (playersW * 0.6f) - (symbol ? size * 1.5f : 0), step, size,
 					g.palette.text, Align.left);
@@ -2537,7 +2611,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		final float buttonH = t ? 112 : 96;
 		final float by = (y + h) - edge - 20 - buttonH;
 		boolean close = false;
-		if (g.button("renameReplayCancel", glue("CANCEL", "Cancel"), (x + w) - edge - 20 - (2 * buttonW) - 32, by,
+		if (g.button("renameReplayCancel", glue("CANCEL"), (x + w) - edge - 20 - (2 * buttonW) - 32, by,
 				buttonW, buttonH, t ? 40 : 30, Gui.TONE_NORMAL)) {
 			close = true;
 		}
@@ -2578,7 +2652,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 	private float tabsRow(final String[] names, final int selected, final java.util.function.IntConsumer chosen) {
 		final Gui g = this.gui;
 		final LauncherBoard b = this.board;
-		final int n = 6;
+		final int n = Math.max(6, names.length);
 		final float tabW = (b.contentW - ((n - 1) * b.tabGap)) / n;
 		for (int i = 0; i < names.length; i++) {
 			if (g.button("tab" + i, names[i], b.contentX + (i * (tabW + b.tabGap)), b.contentY, tabW, b.tabH, b.tabText,
@@ -2592,8 +2666,17 @@ public final class LauncherScreen implements Screen, InputProcessor {
 
 	/** A row of the options panel: the line above it and the gold label. */
 	private float optionRow(final float x, final float y, final float w, final int index, final String label) {
+		return optionRow(x, y, w, index, label, null);
+	}
+
+	/** @param tip shown on hover over the row, or null for a row with nothing to explain */
+	private float optionRow(final float x, final float y, final float w, final int index, final String label,
+			final String tip) {
 		final Gui g = this.gui;
 		final LauncherBoard b = this.board;
+		if ((tip != null) && g.over(x, y, w, b.rowH)) {
+			g.tip(tip);
+		}
 		if (index > 0) {
 			g.fill(x, y, w, 2, 0x14FFFFFF);
 		}
@@ -2608,7 +2691,8 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		final boolean t = b.tablet;
 		final float pf = b.pageFrame;
 		final float top = tabsRow(new String[] { s("options_graphics"), s("options_sound"), s("options_gameplay"),
-			s("options_controls"), s("options_game_data"), s("options_about") }, this.optionsTab,
+			s("options_controls"), s("options_game_data"), s("options_about"), s("options_debugging") },
+				this.optionsTab,
 				tab -> this.optionsTab = tab);
 		if (this.optionsTab != 3) {
 			this.capturing = null;
@@ -2662,7 +2746,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 						if (router != null) {
 							router.setPenButton(button);
 						}
-					}));
+					}, s("options_pen_note")));
 			rows.add(infoRow(rowY, index, x, w, controlX, s("options_profile"), this.profiles.current()));
 			break;
 		case 3:
@@ -2700,6 +2784,13 @@ public final class LauncherScreen implements Screen, InputProcessor {
 				});
 			}
 			break;
+		case 6:
+			rows.add(checkRow(rowY, index, x, w, controlX, s("options_perf_log"),
+					PerfStats.isSwitchedOn(perfFolder()), on -> PerfStats.setSwitch(perfFolder(), on),
+					s("options_perf_note")));
+			reportRows(rows, rowY, index, x, w, controlX);
+			unlockRows(rows, rowY, index, x, w, controlX);
+			break;
 		default:
 			graphicsRows(rows, rowY, index, x, w, controlX, engine);
 			break;
@@ -2719,6 +2810,174 @@ public final class LauncherScreen implements Screen, InputProcessor {
 			playClick();
 			showPage(Page.HOME);
 		}
+	}
+
+	/** Where the performance log switch file lives: the folder the game runs in. */
+	private static java.io.File perfFolder() {
+		return new java.io.File(System.getProperty("user.dir"));
+	}
+
+	/**
+	 * Campaigns the player opens by hand when the progress got stuck: one switch per campaign of the game data. Only a
+	 * separate flag is kept, so the progress and the saves are the player's own whether the switch is on or off.
+	 */
+	private void unlockRows(final List<Runnable> rows, final float[] rowY, final int[] index, final float x,
+			final float w, final float controlX) {
+		final int headingAt = index[0]++;
+		rows.add(() -> {
+			final LauncherBoard b = this.board;
+			if (headingAt > 0) {
+				this.gui.fill(x, rowY[0], w, 2, 0x14FFFFFF);
+			}
+			this.gui.text(s("options_unlock_campaigns"), x + b.labelX, rowY[0], w - (2 * b.labelX), b.rowH, b.body,
+					this.gui.palette.text2, Align.left);
+			if ((this.unlockEntries == null) || this.unlockEntries.isEmpty()) {
+				this.gui.text(s("options_unlock_none"), controlX, rowY[0], (x + w) - controlX - 20, b.rowH, b.body,
+						SkinArt.Palette.DISABLED, Align.left);
+			}
+			if (this.gui.over(x, rowY[0], w, b.rowH)) {
+				this.gui.tip(s("options_unlock_note"));
+			}
+			rowY[0] += b.rowH;
+		});
+		if (this.unlockEntries == null) {
+			if (!this.readingUnlock) {
+				this.readingUnlock = true;
+				this.catalog.unlockEntries(found -> {
+					this.unlockEntries = found != null ? found : Collections.emptyList();
+					this.readingUnlock = false;
+				});
+			}
+			return;
+		}
+		for (final GameCatalog.UnlockEntry entry : this.unlockEntries) {
+			rows.add(checkRow(rowY, index, x, w, controlX, glue(entry.name, entry.name), entry.unlocked, on -> {
+				if (!on || this.preferences.getBoolean(LauncherKeys.KEY_UNLOCK_ASKED, false)) {
+					setUnlocked(entry, on);
+				}
+				else {
+					this.unlockAsked = entry;
+					this.dialog = Dialog.UNLOCK_CAMPAIGN;
+				}
+			}));
+		}
+	}
+
+	/**
+	 * Report a Bug: one zip with everything the bug needs, written beside the replays and shown in its folder
+	 * on request.
+	 */
+	private void reportRows(final List<Runnable> rows, final float[] rowY, final int[] index, final float x,
+			final float w, final float controlX) {
+		final int consentAt = index[0]++;
+		rows.add(() -> {
+			final LauncherBoard b = this.board;
+			if (consentAt > 0) {
+				this.gui.fill(x, rowY[0], w, 2, 0x14FFFFFF);
+			}
+			this.gui.text(s("options_report_consent"), x + b.labelX, rowY[0], w - (2 * b.labelX), b.rowH, b.small,
+					this.gui.palette.text2, Align.center);
+			rowY[0] += b.rowH;
+		});
+		final int makeAt = index[0]++;
+		rows.add(() -> {
+			final LauncherBoard b = this.board;
+			optionRow(x, rowY[0], w, makeAt, s("options_report"), s("options_report_note"));
+			if (this.gui.button("reportMake", s(this.makingReport ? "options_report_making" : "options_report_make"),
+					controlX, rowY[0] + 8, b.tablet ? 300 : 220, b.rowH - 16, b.tablet ? 32 : 24,
+					this.makingReport ? Gui.TONE_OFF : Gui.TONE_NORMAL) && !this.makingReport) {
+				playClick();
+				makeReport();
+			}
+			rowY[0] += b.rowH;
+		});
+	}
+
+	/** What the computer knows goes in here; the catalog adds the game's part and writes the zip. */
+	private void makeReport() {
+		this.makingReport = true;
+		final ProblemReport.Request request = new ProblemReport.Request();
+		request.time = System.currentTimeMillis();
+		final BuildInfo build = BuildInfo.current();
+		request.facts.put("App version", build.getVersionName());
+		request.facts.put("Commit", build.getBuildId());
+		request.facts.put("Device", System.getProperty("os.name") + " " + System.getProperty("os.version") + " ("
+				+ System.getProperty("os.arch") + "), Java " + System.getProperty("java.version"));
+		request.facts.put("GPU", Gdx.gl.glGetString(GL20.GL_RENDERER) + " (" + Gdx.gl.glGetString(GL20.GL_VENDOR)
+				+ ", " + Gdx.gl.glGetString(GL20.GL_VERSION) + ")");
+		request.facts.put("Graphics", "set=" + graphicsSet() + ", textureSize=" + shownTextureSize()
+				+ ", renderScale=" + renderScalePercent() + ", skin=" + (this.art.reforged ? "Reforged" : "Classic"));
+		final String simulationThread = System.getProperty("warsmash.simthread");
+		if (simulationThread != null) {
+			request.facts.put("Simulation thread", simulationThread);
+		}
+		request.appLog = runLog();
+		request.appLogName = "the log of this run";
+		this.catalog.problemReport(request, new File(this.saves.getAbsoluteFile().getParentFile(), "Reports"),
+				java.time.ZoneId.systemDefault(), result -> {
+					this.makingReport = false;
+					this.reportMade = result;
+					if (result == null) {
+						this.messageTitle = s("options_report");
+						this.messageLine = s("options_report_failed");
+						this.dialog = Dialog.MESSAGE;
+					}
+					else {
+						LauncherLog.i("Problem report written to " + result.file.getAbsolutePath());
+						this.dialog = Dialog.REPORT_MADE;
+					}
+				});
+	}
+
+	/** The engine's own log files of this run (the newest of each kind in Logs), standard output first. */
+	private static List<String> runLog() {
+		final List<String> lines = new ArrayList<>();
+		for (final String suffix : new String[] { ".out.log", ".err.log" }) {
+			final File[] logs = new File("Logs").listFiles((dir, name) -> name.endsWith(suffix));
+			File newest = null;
+			if (logs != null) {
+				for (final File log : logs) {
+					if ((newest == null) || (log.lastModified() > newest.lastModified())) {
+						newest = log;
+					}
+				}
+			}
+			if (newest == null) {
+				continue;
+			}
+			lines.add("--- " + newest.getName());
+			try {
+				lines.addAll(java.nio.file.Files.readAllLines(newest.toPath(), java.nio.charset.StandardCharsets.UTF_8));
+			}
+			catch (final IOException | RuntimeException e) {
+				lines.add("The log could not be read: " + e);
+			}
+		}
+		return lines;
+	}
+
+	/** The report's folder with the report chosen in it, where the platform can do that. */
+	private static void revealReport(final File report) {
+		try {
+			if (System.getProperty("os.name", "").toLowerCase(Locale.ROOT).startsWith("windows")) {
+				new ProcessBuilder("explorer.exe", "/select," + report.getAbsolutePath()).start();
+			}
+			else if (java.awt.Desktop.isDesktopSupported()) {
+				java.awt.Desktop.getDesktop().open(report.getAbsoluteFile().getParentFile());
+			}
+		}
+		catch (final IOException | RuntimeException | LinkageError e) {
+			LauncherLog.w("Unable to show the problem report's folder", e);
+		}
+	}
+
+	/** Keeps the choice beside the profile; the campaign screens read the progress anew. */
+	private void setUnlocked(final GameCatalog.UnlockEntry entry, final boolean on) {
+		this.catalog.setCampaignUnlocked(entry.section, on, kept -> {
+			this.unlockEntries = null;
+			this.campaigns = null;
+			this.catalog.campaigns(found -> this.campaigns = found);
+		});
 	}
 
 	private void engineRows(final List<Runnable> rows, final float[] rowY, final int[] index, final float x,
@@ -2749,9 +3008,15 @@ public final class LauncherScreen implements Screen, InputProcessor {
 	private Runnable checkRow(final float[] rowY, final int[] index, final float x, final float w,
 			final float controlX, final String label, final boolean value,
 			final java.util.function.Consumer<Boolean> changed) {
+		return checkRow(rowY, index, x, w, controlX, label, value, changed, null);
+	}
+
+	private Runnable checkRow(final float[] rowY, final int[] index, final float x, final float w,
+			final float controlX, final String label, final boolean value,
+			final java.util.function.Consumer<Boolean> changed, final String tip) {
 		final int at = index[0]++;
 		return () -> {
-			final float cy = optionRow(x, rowY[0], w, at, label);
+			final float cy = optionRow(x, rowY[0], w, at, label, tip);
 			if (this.gui.check("check" + label, controlX, cy, this.board.control, value)) {
 				playClick();
 				changed.accept(!value);
@@ -2763,6 +3028,12 @@ public final class LauncherScreen implements Screen, InputProcessor {
 	private Runnable radioRow(final float[] rowY, final int[] index, final float x, final float w,
 			final float controlX, final String label, final String[] choices, final boolean[] enabled,
 			final int selected, final java.util.function.IntConsumer changed) {
+		return radioRow(rowY, index, x, w, controlX, label, choices, enabled, selected, changed, null);
+	}
+
+	private Runnable radioRow(final float[] rowY, final int[] index, final float x, final float w,
+			final float controlX, final String label, final String[] choices, final boolean[] enabled,
+			final int selected, final java.util.function.IntConsumer changed, final String tip) {
 		final int at = index[0]++;
 		final LauncherBoard b = this.board;
 		final float[] names = new float[choices.length];
@@ -2779,9 +3050,12 @@ public final class LauncherScreen implements Screen, InputProcessor {
 				}
 				this.gui.text(label, x + b.labelX, y, w - b.labelX - 20, places.labelH, b.body,
 						this.gui.palette.gold, Align.left);
+				if ((tip != null) && this.gui.over(x, y, w, places.height)) {
+					this.gui.tip(tip);
+				}
 			}
 			else {
-				optionRow(x, y, w, at, label);
+				optionRow(x, y, w, at, label, tip);
 			}
 			final float cy = y + places.choicesY + ((b.rowH - b.control) / 2);
 			for (int j = 0; j < choices.length; j++) {
@@ -2838,10 +3112,15 @@ public final class LauncherScreen implements Screen, InputProcessor {
 
 	private Runnable infoRow(final float[] rowY, final int[] index, final float x, final float w,
 			final float controlX, final String label, final String value) {
+		return infoRow(rowY, index, x, w, controlX, label, value, null);
+	}
+
+	private Runnable infoRow(final float[] rowY, final int[] index, final float x, final float w,
+			final float controlX, final String label, final String value, final String tip) {
 		final int at = index[0]++;
 		return () -> {
 			final LauncherBoard b = this.board;
-			optionRow(x, rowY[0], w, at, label);
+			optionRow(x, rowY[0], w, at, label, tip);
 			final boolean cut = this.gui.text(value, controlX, rowY[0], (x + w) - controlX - 20, b.rowH, b.body,
 					this.gui.palette.text, Align.left);
 			if (cut && this.gui.over(controlX, rowY[0], (x + w) - controlX, b.rowH)) {
@@ -2987,6 +3266,9 @@ public final class LauncherScreen implements Screen, InputProcessor {
 
 		final float headH = 80 * k;
 		g.text(s("controls_layout"), x0, y0, (360 * k) + 60, headH, big, g.palette.gold, Align.left);
+		if (g.over(x0, y0, (360 * k) + 60, headH)) {
+			g.tip(s("controls_layout_tip"));
+		}
 		final float radio = b.control * (t ? 0.9f : 0.8f);
 		final String[] layouts = { s("controls_classic"), s("controls_grid") };
 		for (int j = 0; j < layouts.length; j++) {
@@ -3026,8 +3308,8 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		final float raceW = Math.min(t ? 300 : 200, ((right - x0) - ((races.size() - 1) * 12)) / races.size());
 		this.keysRace = Math.max(0, Math.min(races.size() - 1, this.keysRace));
 		for (int i = 0; i < races.size(); i++) {
-			final String[] name = races.get(i).name;
-			if (g.button("race" + i, name == null ? s("controls_common") : glue(name[0], name[1]),
+			final String name = races.get(i).name;
+			if (g.button("race" + i, name == null ? s("controls_common") : glue(name),
 					x0 + (i * (raceW + 12)), raceY, raceW, raceH, t ? 30 : 21,
 					i == this.keysRace ? Gui.TONE_DOWN : Gui.TONE_NORMAL) && (i != this.keysRace)) {
 				playClick();
@@ -3242,12 +3524,8 @@ public final class LauncherScreen implements Screen, InputProcessor {
 				}
 				list.append(entry.getKey()).append(" \u2013 ").append(String.join(" / ", entry.getValue()));
 			}
-			g.lines(s("controls_conflict").replace("%1$s", list), kx, noteY, kw, inner - noteY, small, 0xFFFF8A7A,
-					Align.left);
-		}
-		else {
-			g.lines(s(keys.grid() ? "controls_line_grid" : "controls_line_classic"), kx, noteY, kw, inner - noteY,
-					small, g.palette.text2, Align.left);
+			g.text(s("controls_conflict").replace("%1$s", list), kx, noteY, kw, small * 1.6f, small, g.palette.text,
+					Align.center);
 		}
 	}
 
@@ -3379,11 +3657,12 @@ public final class LauncherScreen implements Screen, InputProcessor {
 			}
 			final String current = GameLanguage.configured(this.ini).isEmpty() ? locale : GameLanguage.configured(this.ini);
 			rows.add(radioRow(rowY, index, x, w, controlX, s("options_language"), names, null,
-					Math.max(0, languages.indexOf(current)), choice -> useLanguage(languages.get(choice))));
+					Math.max(0, languages.indexOf(current)), choice -> useLanguage(languages.get(choice)),
+					s("options_language_note")));
 		}
 		else {
 			rows.add(infoRow(rowY, index, x, w, controlX, s("options_locale"),
-					locale.isEmpty() ? s("options_not_stated") : locale));
+					locale.isEmpty() ? s("options_not_stated") : locale, s("options_locale_note")));
 		}
 		if (!casc && (folder != null)) {
 			rows.add(infoRow(rowY, index, x, w, controlX, s("options_files"), filesText(kind, folder)));
@@ -3775,6 +4054,8 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		case NO_CLASSIC_LANGUAGE:
 			return this.strings.get("data_folder_import_no_classic_language", name,
 					GameLanguage.displayName(failure.file));
+		case NOT_WRITABLE:
+			return this.strings.get("data_folder_import_not_writable", name);
 		case CANCELLED:
 			return s("data_folder_import_cancelled");
 		case IO:
@@ -3799,6 +4080,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		this.ini = ini;
 		this.iniFile = file;
 		WarsmashConstants.loadConstants(ini.get("Emulator"), ini);
+		readStrings();
 		this.data = null;
 		this.hotkeys = null;
 		this.readingHotkeys = false;
@@ -3895,8 +4177,8 @@ public final class LauncherScreen implements Screen, InputProcessor {
 				}
 				else if ((state & Gui.RIGHT) != 0) {
 					g.contextMenu("profileMenu",
-							new String[] { glue("SELECT", "Select"), s("profile_change_portrait"), s("profile_rename"),
-								glue("DELETE", "Delete") },
+							new String[] { glue("SELECT"), s("profile_change_portrait"), s("profile_rename"),
+								glue("DELETE") },
 							new boolean[] { true, true, true, names.size() > 1 }, choice -> {
 								switch (choice) {
 								case 0:
@@ -3926,7 +4208,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		g.field("newName", this.nameField, lx, fy, fieldW, fieldH, Math.max(36 * k, 22), Profiles.MAX_NAME,
 				s("profile_name"));
 		final Profiles.NameProblem problem = this.profiles.check(this.nameField.toString(), null);
-		if (g.button("add", glue("ADD", "Add"), lx + fieldW + 16, fy, addW, fieldH, Math.max(34 * k, 22),
+		if (g.button("add", glue("ADD"), lx + fieldW + 16, fy, addW, fieldH, Math.max(34 * k, 22),
 				problem == Profiles.NameProblem.NONE ? Gui.TONE_NORMAL : Gui.TONE_OFF)
 				|| ((problem == Profiles.NameProblem.NONE) && "newName".equals(g.focus)
 						&& this.gui.keys.contains(Input.Keys.ENTER))) {
@@ -3968,12 +4250,12 @@ public final class LauncherScreen implements Screen, InputProcessor {
 			showPage(Page.HOME);
 		}
 		final float[] delete = b.actionSlot(1);
-		if (g.button("deleteProfile", glue("DELETE", "Delete"), delete[0], b.backY, delete[1], b.backH, size,
+		if (g.button("deleteProfile", glue("DELETE"), delete[0], b.backY, delete[1], b.backH, size,
 				names.size() < 2 ? Gui.TONE_OFF : this.art.reforged ? Gui.TONE_DANGER : Gui.TONE_NORMAL)) {
 			this.dialog = Dialog.DELETE_PROFILE;
 		}
 		final float[] select = b.actionSlot(2);
-		if (g.button("select", glue("SELECT", "Select"), select[0], b.backY, select[1], b.backH, size,
+		if (g.button("select", glue("SELECT"), select[0], b.backY, select[1], b.backH, size,
 				this.art.reforged ? Gui.TONE_CONFIRM : Gui.TONE_DOWN)) {
 			selectProfile(shown);
 		}
@@ -4042,13 +4324,15 @@ public final class LauncherScreen implements Screen, InputProcessor {
 				if (entry == null) {
 					continue;
 				}
-				final int furthest = CampaignChoice.furthestMission(entry, progress);
+				final boolean reforgedMaps = this.campaigns.reforgedMaps(this.profiles.campaignMaps(name));
+				final List<CampaignMission> missions = entry.getMissions(reforgedMaps);
+				final int furthest = CampaignChoice.furthestMission(entry, progress, reforgedMaps);
 				final boolean started = CampaignChoice.started(entry, progress);
 				final String value = !started ? s("profile_not_started")
-						: CampaignCatalog.isCompleted(entry, progress) ? s("profile_completed")
+						: CampaignCatalog.isCompleted(entry, progress, reforgedMaps) ? s("profile_completed")
 								: furthest < 0 ? ""
-										: GlueText.plain(glue(menu.getMissions().get(furthest).getHeader(),
-												menu.getMissions().get(furthest).getHeader()));
+										: GlueText.plain(glue(missions.get(furthest).getHeader(),
+												missions.get(furthest).getHeader()));
 				g.text(CampaignChoice.shortCampaign(GlueText.plain(glue(menu.getHeader(), menu.getHeader()))),
 						x + (14 * k), y, 250 * k, step, rowSize, g.palette.text, Align.left);
 				g.text(value, x + (250 * k), y, columnW - (250 * k), step, rowSize, g.palette.text, Align.left);
@@ -4076,10 +4360,8 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		}
 		final String[][] facts = { { s("profile_games_played"), Integer.toString(games) },
 			{ s("profile_wins"), wins + " (" + (games == 0 ? 0 : Math.round((wins * 100f) / games)) + " %)" },
-			{ s("profile_favourite"), favourite < 0 ? "\u2014" : glue(CustomGame.RACES[favourite][0],
-					CustomGame.RACES[favourite][1]) },
-			{ s("profile_most_wins"), mostWins < 0 ? "\u2014" : glue(CustomGame.RACES[mostWins][0],
-					CustomGame.RACES[mostWins][1]) } };
+			{ s("profile_favourite"), favourite < 0 ? "\u2014" : glue(CustomGame.RACES[favourite][0]) },
+			{ s("profile_most_wins"), mostWins < 0 ? "\u2014" : glue(CustomGame.RACES[mostWins][0]) } };
 		for (int i = 0; i < facts.length; i++) {
 			final float fy = top + (60 * k) + (i * step);
 			g.text(facts[i][0], sx + (14 * k), fy, 230 * k, step, rowSize, g.palette.text2, Align.left);
@@ -4107,6 +4389,31 @@ public final class LauncherScreen implements Screen, InputProcessor {
 			question(this.messageTitle, this.messageLine, new String[] { s("game_ok") }, choice -> {
 			}, 0);
 			break;
+		case REPORT_MADE: {
+			final ProblemReport.Result made = this.reportMade;
+			String line = made == null ? "" : s("options_report_saved").replace("%1$s", made.file.getAbsolutePath());
+			if ((made != null) && !made.leftOut.isEmpty()) {
+				line += "\n" + s("options_report_left_out").replace("%1$s", String.join("; ", made.leftOut));
+			}
+			question(s("options_report"), line, new String[] { s("options_report_ok"), s("options_report_show") },
+					choice -> {
+						if ((choice == 1) && (made != null)) {
+							revealReport(made.file);
+						}
+					}, 0);
+			break;
+		}
+		case UNLOCK_CAMPAIGN: {
+			final GameCatalog.UnlockEntry entry = this.unlockAsked;
+			question(s("unlock_title"), s("unlock_line"), new String[] { s("unlock_cancel"), s("unlock_turn_on") },
+					choice -> {
+						if ((choice == 1) && (entry != null)) {
+							this.preferences.edit().putBoolean(LauncherKeys.KEY_UNLOCK_ASKED, true).apply();
+							setUnlocked(entry, true);
+						}
+					}, 0);
+			break;
+		}
 		case DELETE_SAVE: {
 			final GameCatalog.SaveEntry entry = this.saveList == null ? null : chosenSave();
 			question(s("game_delete_save").replace("%1$s", entry == null ? "" : entry.name), "",
@@ -4162,7 +4469,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		case TRY_REPLAY: {
 			final GameCatalog.ReplayEntry entry = this.triedReplay;
 			// The original asks before it plays a replay of another version, ignoring the recorded checksums.
-			question(glue("REPLAY_CONFIRM", "Incompatible Replay!"),
+			question(glue("REPLAY_CONFIRM"),
 					glue("REPLAY_CONFIRM_DESC", s("replay_other_version")),
 					new String[] { s("game_no"), s("game_yes") }, choice -> {
 						if ((choice == 1) && (entry != null)) {
@@ -4292,7 +4599,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		final float buttonH = t ? 112 : 96;
 		final float by = (y + h) - edge - 20 - buttonH;
 		boolean close = false;
-		if (g.button("renameCancel", glue("CANCEL", "Cancel"), (x + w) - edge - 20 - (2 * buttonW) - 32, by, buttonW,
+		if (g.button("renameCancel", glue("CANCEL"), (x + w) - edge - 20 - (2 * buttonW) - 32, by, buttonW,
 				buttonH, t ? 40 : 30, Gui.TONE_NORMAL)) {
 			close = true;
 		}

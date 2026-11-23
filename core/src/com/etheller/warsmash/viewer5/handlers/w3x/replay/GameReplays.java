@@ -14,6 +14,7 @@ import com.etheller.warsmash.BuildInfo;
 import com.etheller.warsmash.datasources.DataSource;
 import com.etheller.warsmash.datasources.GraphicsSet;
 import com.etheller.warsmash.datasources.GraphicsSettings;
+import com.etheller.warsmash.launcher.MapFiles;
 import com.etheller.warsmash.launcher.StorageRoot;
 import com.etheller.warsmash.units.DataTable;
 import com.etheller.warsmash.util.Log;
@@ -36,7 +37,8 @@ public final class GameReplays {
 	public static final String FOLDER = "Replay";
 	public static final String EXTENSION = ".wsr";
 	public static final String LAST_REPLAY = "LastReplay";
-	private static final String TEMP_REPLAY = "TempReplay";
+	/** The replay of the game going on, or of one that was cut off (a crash). */
+	public static final String TEMP_REPLAY = "TempReplay";
 	/**
 	 * -Dwarsmash.replay.record=&lt;file&gt;: every game that is not a loaded save is recorded straight into that file,
 	 * campaign missions too; a test reads it even when its process was ended in the middle of the game.
@@ -54,6 +56,15 @@ public final class GameReplays {
 	 * game data), as the player's "try anyway" does.
 	 */
 	public static final String FORCE_PROPERTY = "warsmash.replay.force";
+	/**
+	 * -Dwarsmash.replay.look=&lt;x&gt;,&lt;y&gt;: once a playback reached its skipto step, the camera looks there (a
+	 * problem report's marked moment).
+	 */
+	public static final String LOOK_PROPERTY = "warsmash.replay.look";
+	/** -Dwarsmash.replay.select=&lt;handle&gt;,...: the units selected once the skipto step is reached. */
+	public static final String SELECT_PROPERTY = "warsmash.replay.select";
+	/** -Dwarsmash.replay.pause=true: the playback pauses once the skipto step is reached. */
+	public static final String PAUSE_PROPERTY = "warsmash.replay.pause";
 	/** -Dwarsmash.replay.exit=true: the program ends with the playback. */
 	public static final String EXIT_PROPERTY = "warsmash.replay.exit";
 	/** -Dwarsmash.version=&lt;version&gt;: stands for the engine's own version; a replay of another one is refused. */
@@ -85,6 +96,47 @@ public final class GameReplays {
 	public static final int CHECKSUM_INTERVAL = 20;
 
 	private GameReplays() {
+	}
+
+	/** Where {@link #LOOK_PROPERTY} points the camera, or null. */
+	public static float[] lookAt() {
+		final String value = System.getProperty(LOOK_PROPERTY);
+		if ((value == null) || value.isEmpty()) {
+			return null;
+		}
+		final String[] parts = value.split(",");
+		if (parts.length != 2) {
+			return null;
+		}
+		try {
+			return new float[] { Float.parseFloat(parts[0].trim()), Float.parseFloat(parts[1].trim()) };
+		}
+		catch (final NumberFormatException e) {
+			return null;
+		}
+	}
+
+	/** The unit handles {@link #SELECT_PROPERTY} names, or null. */
+	public static int[] selectAtMoment() {
+		final String value = System.getProperty(SELECT_PROPERTY);
+		if ((value == null) || value.trim().isEmpty()) {
+			return null;
+		}
+		final String[] parts = value.split(",");
+		final int[] handles = new int[parts.length];
+		try {
+			for (int i = 0; i < parts.length; i++) {
+				handles[i] = Integer.parseInt(parts[i].trim());
+			}
+		}
+		catch (final NumberFormatException e) {
+			return null;
+		}
+		return handles;
+	}
+
+	public static boolean pauseAtMoment() {
+		return Boolean.getBoolean(PAUSE_PROPERTY);
 	}
 
 	public static String engineVersion() {
@@ -326,9 +378,12 @@ public final class GameReplays {
 	public static long[] mapChecksum(final DataSource dataSource, final String mapFile) throws IOException {
 		final CRC32 crc = new CRC32();
 		long size = 0;
-		try (InputStream in = mapFile.startsWith("/") || !dataSource.has(mapFile)
-				? new FileInputStream(new File(mapFile))
-				: dataSource.getResourceAsStream(mapFile)) {
+		final boolean device = MapFiles.isAbsolute(mapFile) || !dataSource.has(mapFile);
+		final File file = device ? MapFiles.find(mapFile) : null;
+		if (device && (file == null)) {
+			throw new IOException("no such map");
+		}
+		try (InputStream in = device ? new FileInputStream(file) : dataSource.getResourceAsStream(mapFile)) {
 			if (in == null) {
 				throw new IOException("no such map");
 			}

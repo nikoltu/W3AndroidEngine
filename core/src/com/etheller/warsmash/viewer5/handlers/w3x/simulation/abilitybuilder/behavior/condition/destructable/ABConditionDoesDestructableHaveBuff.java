@@ -17,7 +17,7 @@ public class ABConditionDoesDestructableHaveBuff extends ABCondition {
 	@Override
 	public Boolean callback(CSimulation game, CUnit caster, Map<String, Object> localStore, final int castId) {
 		CDestructable theDestructable = dest.callback(game, caster, localStore, castId);
-		if (theDestructable != null) {
+		if ((theDestructable != null) && (theDestructable.getBuffs() != null)) {
 			for (CDestructableBuff ability : theDestructable.getBuffs()) {
 					if ((ability).getAlias() == id.callback(game, caster, localStore, castId)) {
 						return true;

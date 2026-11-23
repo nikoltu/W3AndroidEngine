@@ -100,7 +100,7 @@ public enum MapIssue {
 		if (named != NONE) {
 			return named;
 		}
-		if (missingCounts && !path.startsWith("/") && !data.has(path) && !new File(path).exists()) {
+		if (missingCounts && !MapFiles.isAbsolute(path) && !data.has(path) && !new File(path).exists()) {
 			return MISSING;
 		}
 		final War3Map map;

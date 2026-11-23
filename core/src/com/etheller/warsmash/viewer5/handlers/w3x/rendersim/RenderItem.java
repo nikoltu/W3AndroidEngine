@@ -1,5 +1,6 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.rendersim;
 
+import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.math.Quaternion;
 import com.badlogic.gdx.math.Vector3;
 import com.etheller.warsmash.util.RenderMathUtils;
@@ -81,6 +82,21 @@ public class RenderItem implements RenderWidget {
 		}
 
 		this.instance = instance;
+	}
+
+	public void onRemove(final War3MapViewer map) {
+		if (this.shadow != null) {
+			this.shadow.destroy(Gdx.gl30, map.terrain.centerOffset);
+			this.shadow = null;
+		}
+		if (this.selectionCircle != null) {
+			this.selectionCircle.destroy(Gdx.gl30, map.terrain.centerOffset);
+			this.selectionCircle = null;
+		}
+		if (this.selectionPreviewHighlight != null) {
+			this.selectionPreviewHighlight.destroy(Gdx.gl30, map.terrain.centerOffset);
+			this.selectionPreviewHighlight = null;
+		}
 	}
 
 	@Override

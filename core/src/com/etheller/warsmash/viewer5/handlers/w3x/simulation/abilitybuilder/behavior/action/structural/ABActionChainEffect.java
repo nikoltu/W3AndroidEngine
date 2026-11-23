@@ -38,6 +38,11 @@ public class ABActionChainEffect implements ABAction {
 	private ABFloatCallback range;
 	private ABIntegerCallback bounces;
 	private ABFloatCallback bounceDelay;
+	/**
+	 * The first target is hit this long after the cast (a step less than the measured time, the timer starts in the
+	 * step of the effect itself); a target removed from the game by then ends the chain.
+	 */
+	private ABFloatCallback firstHitDelay;
 
 	private ABBooleanCallback allowMultipleBouncesPerUnit;
 
@@ -66,6 +71,35 @@ public class ABActionChainEffect implements ABAction {
 			}
 		}
 
+		float firstDelay = 0;
+		if (firstHitDelay != null) {
+			final Float delay = firstHitDelay.callback(game, caster, localStore, castId);
+			if (delay != null) {
+				firstDelay = delay;
+			}
+		}
+		if (firstDelay > 0) {
+			final Set<CUnit> chainHitUnits = hitUnits;
+			final boolean chainMultiBounce = multiBounce;
+			final CTimer runner = new CTimer() {
+				@Override
+				public void onFire(final CSimulation simulation) {
+					if (!originUnitTarget.isRemovedFromGame()) {
+						hitFirstTarget(game, caster, localStore, castId, originUnitTarget, chainMultiBounce,
+								chainHitUnits);
+					}
+				}
+			};
+			runner.setTimeoutTime(firstDelay);
+			runner.start(game);
+		}
+		else {
+			hitFirstTarget(game, caster, localStore, castId, originUnitTarget, multiBounce, hitUnits);
+		}
+	}
+
+	private void hitFirstTarget(final CSimulation game, final CUnit caster, final Map<String, Object> localStore,
+			final int castId, final CUnit originUnitTarget, final boolean multiBounce, final Set<CUnit> hitUnits) {
 		localStore.put(ABLocalStoreKeys.CHAINUNIT + castId, originUnitTarget);
 		for (ABAction iterationAction : actions) {
 			iterationAction.runAction(game, caster, localStore, castId);
@@ -74,7 +108,6 @@ public class ABActionChainEffect implements ABAction {
 
 		startPerformJump(game, caster, localStore, castId, originUnitTarget, multiBounce, hitUnits,
 				bounces.callback(game, caster, localStore, castId));
-
 	}
 
 	private void startPerformJump(final CSimulation game, final CUnit caster, final Map<String, Object> localStore,

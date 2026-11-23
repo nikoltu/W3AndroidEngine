@@ -18,6 +18,8 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.CBehavior
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.CBehaviorMoveThroughWayGate;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.CBehaviorPatrol;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.orders.OrderIds;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CAllianceType;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.unit.CUnitTypeJass;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.AbilityActivationReceiver;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.AbilityTargetCheckReceiver;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.CommandStringErrorKeys;
@@ -49,6 +51,17 @@ public class CAbilityMove extends AbstractCAbility {
 				// not taken as a follow.
 				break;
 			}
+			if ((orderId == OrderIds.smart) && (target instanceof CUnit) && isEtherealAttacker(unit)
+					&& !game.getPlayer(unit.getPlayerIndex()).hasAlliance(((CUnit) target).getPlayerIndex(),
+							CAllianceType.PASSIVE)) {
+				// Measured on 1.29: an ethereal unit that has a weapon takes no smart order on an enemy (it could
+				// not attack it) and no follow either.
+				break;
+			}
+			if ((orderId == OrderIds.smart) && (target instanceof CUnit) && ((CUnit) target).isDead()) {
+				// Measured on 1.29: a smart order on a corpse is refused.
+				break;
+			}
 			if ((target instanceof CUnit) && (target != unit)) {
 				receiver.targetOk(target);
 			}
@@ -72,7 +85,7 @@ public class CAbilityMove extends AbstractCAbility {
 		case OrderIds.attack:
 			// Measured on 1.29: a unit without an attack (Goblin Sapper, or one whose 'Aatk' a script removed) takes
 			// an attack order on a unit or a destructable and walks up to it.
-			if (hasNoAttack(unit) && (target != unit)) {
+			if ((hasNoAttack(unit) || isEtherealAttacker(unit)) && (target != unit)) {
 				receiver.targetOk(target);
 			}
 			else {
@@ -122,6 +135,10 @@ public class CAbilityMove extends AbstractCAbility {
 			receiver.orderIdNotAccepted();
 			break;
 		}
+	}
+
+	private static boolean isEtherealAttacker(final CUnit unit) {
+		return unit.isUnitType(CUnitTypeJass.ETHEREAL) && (unit.getUnitType().getAttacksEnabled() != 0);
 	}
 
 	private static boolean hasNoAttack(final CUnit unit) {

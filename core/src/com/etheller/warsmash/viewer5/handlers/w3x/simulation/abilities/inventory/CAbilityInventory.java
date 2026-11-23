@@ -41,10 +41,10 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.CommandStringE
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.ExternStringMsgAbilityActivationReceiver;
 
 public class CAbilityInventory extends AbstractGenericNoIconAbility {
-	private final boolean canDropItems;
-	private final boolean canGetItems;
-	private final boolean canUseItems;
-	private final boolean dropItemsOnDeath;
+	private boolean canDropItems;
+	private boolean canGetItems;
+	private boolean canUseItems;
+	private boolean dropItemsOnDeath;
 	private final List<CUnitTypeRequirement> requirements;
 	private final CItem[] itemsHeld;
 	private final List<CAbility>[] itemsHeldAbilities;
@@ -235,8 +235,38 @@ public class CAbilityInventory extends AbstractGenericNoIconAbility {
 
 	}
 
+	/** What the level data of the ability allows; the slots and what they hold stay as they are. */
+	public void setPermissions(final boolean canDropItems, final boolean canGetItems, final boolean canUseItems,
+			final boolean dropItemsOnDeath) {
+		this.canDropItems = canDropItems;
+		this.canGetItems = canGetItems;
+		this.canUseItems = canUseItems;
+		this.dropItemsOnDeath = dropItemsOnDeath;
+	}
+
 	public int getItemCapacity() {
 		return this.itemsHeld.length;
+	}
+
+	/**
+	 * Whether picking this item up would succeed: a free slot, room in a stack of the same type, or a powerup that is used on
+	 * pickup and never takes a slot.
+	 */
+	public boolean hasRoomFor(final CItem item) {
+		if (item.isUseAutomaticallyWhenAcquired()) {
+			return true;
+		}
+		final int stackMax = item.getStackMax();
+		for (final CItem held : this.itemsHeld) {
+			if (held == null) {
+				return true;
+			}
+			if ((stackMax > 0) && (item.getCharges() > 0) && held.getTypeId().equals(item.getTypeId())
+					&& (held.getCharges() < stackMax)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	public CItem getItemInSlot(final int slotIndex) {
@@ -259,11 +289,18 @@ public class CAbilityInventory extends AbstractGenericNoIconAbility {
 		return null;
 	}
 
-	/** Whether the ability is one of the abilities of an item held in this inventory. */
+	/** Whether the ability is one of the abilities of an item carried or worn in this inventory. */
 	public boolean isHeldItemAbility(final CAbility ability) {
 		for (final List<CAbility> slotAbilities : this.itemsHeldAbilities) {
 			if (slotAbilities.contains(ability)) {
 				return true;
+			}
+		}
+		if (this.loadoutAbilities != null) {
+			for (final List<CAbility> slotAbilities : this.loadoutAbilities) {
+				if ((slotAbilities != null) && slotAbilities.contains(ability)) {
+					return true;
+				}
 			}
 		}
 		return false;
@@ -358,11 +395,15 @@ public class CAbilityInventory extends AbstractGenericNoIconAbility {
 			if (target instanceof CItem) {
 				if (this.canGetItems && !isDisabled()) {
 					final CItem targetItem = (CItem) target;
-					if (!targetItem.isHidden()) {
-						receiver.targetOk(target);
+					if (targetItem.isHidden()) {
+						receiver.orderIdNotAccepted();
+					}
+					else if (!hasRoomFor(targetItem)) {
+						// Measured on 1.29: with no room the order is refused at once, the unit does not walk there.
+						receiver.targetCheckFailed(CommandStringErrorKeys.INVENTORY_IS_FULL);
 					}
 					else {
-						receiver.orderIdNotAccepted();
+						receiver.targetOk(target);
 					}
 				}
 				else {

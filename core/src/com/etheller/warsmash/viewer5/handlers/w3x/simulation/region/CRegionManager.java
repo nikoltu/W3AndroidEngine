@@ -19,7 +19,7 @@ public class CRegionManager {
 	private transient CUnit silentEnterUnit;
 
 	public CRegionManager(final Rectangle entireMapBounds, final PathingGrid pathingGrid) {
-		this.regionTree = new Quadtree<>(entireMapBounds);
+		this.regionTree = new Quadtree<>(entireMapBounds, true);
 		this.cellRegions = new List[pathingGrid.getHeight()][pathingGrid.getWidth()];
 		this.pathingGrid = pathingGrid;
 	}

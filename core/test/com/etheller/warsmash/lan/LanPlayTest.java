@@ -177,6 +177,40 @@ class LanPlayTest {
 	}
 
 	@Test
+	void anAbsentOpponentThatIsStillLoadingIsWaitedForNotClaimable() {
+		final LanPlay play = play(setup(1, false), 2);
+		play.onLoadProgress(1, 40);
+		play.onPresence(1, LanProtocol.PRESENCE_ABSENT);
+		assertEquals("Host is still loading the game.", play.pollMessage());
+		LanPlay.Window w = play.window();
+		assertNotNull(w);
+		assertTrue(w.loading);
+		assertFalse(w.absentOnly);
+		assertEquals(-1, w.claimInSeconds);
+		assertEquals(-1, w.continueInSeconds);
+		assertEquals(40, w.rows.get(0).loadPercent);
+		this.now += 10000;
+		play.onLoadProgress(1, 55);
+		assertEquals(55, play.window().rows.get(0).loadPercent);
+		play.onLoadProgress(1, 100);
+		w = play.window();
+		assertNotNull(w);
+		assertTrue(w.absentOnly, "a player that has loaded and is still absent is gone");
+	}
+
+	@Test
+	void aLoaderThatFallsSilentIsAbsentAgain() {
+		final LanPlay play = play(setup(1, false), 2);
+		play.onLoadProgress(1, 40);
+		play.onPresence(1, LanProtocol.PRESENCE_ABSENT);
+		this.now += LanPlay.LOAD_REPORT_FRESH_MS + 1;
+		final LanPlay.Window w = play.window();
+		assertNotNull(w);
+		assertFalse(w.loading);
+		assertTrue(w.absentOnly);
+	}
+
+	@Test
 	void turnsThatStopWithoutAWordMakeTheHostTheOneWaitedFor() {
 		final LanPlay play = play(setup(1, false), 2);
 		play.starved();

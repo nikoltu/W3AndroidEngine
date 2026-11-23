@@ -6,7 +6,9 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 
+import android.Manifest;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
@@ -16,6 +18,7 @@ import android.provider.Settings;
 import android.util.Log;
 
 import com.etheller.warsmash.launcher.CustomContent;
+import com.etheller.warsmash.launcher.StorageTree;
 
 /**
  * The player's content folder on Android: it is picked with the system's folder picker, which grants the app a
@@ -26,6 +29,7 @@ import com.etheller.warsmash.launcher.CustomContent;
 final class CustomContentActions {
 	static final int REQUEST_FOLDER = 7301;
 	static final int REQUEST_MAP = 7302;
+	static final int REQUEST_STORAGE = 7303;
 	private static final String TAG = LauncherActivity.TAG;
 	private static final String KEY_TREE = "customContentTree";
 
@@ -44,6 +48,9 @@ final class CustomContentActions {
 		final Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
 		intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
 				| Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION | Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
+		// Pickers of Android 8 to 10 keep the internal storage out of the list unless asked.
+		intent.putExtra("android.content.extra.SHOW_ADVANCED", true);
+		intent.putExtra("android.provider.extra.SHOW_ADVANCED", true);
 		this.activity.startActivityForResult(intent, REQUEST_FOLDER);
 	}
 
@@ -59,22 +66,24 @@ final class CustomContentActions {
 			// Some pickers offer no lasting permission; the folder is read as a path, which does not need it.
 			Log.w(TAG, "No lasting permission for " + tree, e);
 		}
-		File folder = null;
-		try {
-			folder = DataFolderActivity.folderOfTree(tree);
-		}
-		catch (final IllegalArgumentException e) {
-			Log.w(TAG, "Not a folder of the device storage: " + tree, e);
-		}
-		if (folder == null) {
+		final StorageTree.Result result = DataFolderActivity.resolveTree(tree);
+		if (!result.ok()) {
+			Log.w(TAG, "Not a folder of the device storage: " + tree + " " + result.problem);
 			this.activity.dialogs.showMessage(getString(R.string.options_custom_choose),
-					getString(R.string.custom_folder_unusable));
+					DataFolderActivity.treeProblemText(this.activity, result.problem));
 			return;
 		}
-		use(folder);
+		use(result.folder);
 	}
 
 	private void use(final File folder) {
+		if ((Build.VERSION.SDK_INT < Build.VERSION_CODES.R) && lacksStoragePermission() && !isInAppFolder(folder)) {
+			// The folder is made once the permission is given.
+			new EngineSettings(this.activity).setCustomFolder(folder);
+			this.activity.requestPermissions(new String[] { Manifest.permission.READ_EXTERNAL_STORAGE,
+				Manifest.permission.WRITE_EXTERNAL_STORAGE }, REQUEST_STORAGE);
+			return;
+		}
 		if (needsAllFilesAccess() && !isInAppFolder(folder)) {
 			// The folder is made once the access is given, when the engine configuration is read the next time.
 			new EngineSettings(this.activity).setCustomFolder(folder);
@@ -93,6 +102,24 @@ final class CustomContentActions {
 		new EngineSettings(this.activity).setCustomFolder(folder);
 		this.activity.reloadContent();
 		this.activity.optionsPage.showOptions(OptionsPage.TAB_GAME_DATA);
+	}
+
+	/** The player answered the storage permission asked for a content folder (Android 6 to 10). */
+	void storageAnswered() {
+		final File folder = folder();
+		if (folder == null) {
+			return;
+		}
+		if (lacksStoragePermission()) {
+			this.activity.dialogs.showMessage(getString(R.string.options_custom_choose),
+					getString(R.string.custom_folder_storage_denied));
+			return;
+		}
+		use(folder);
+	}
+
+	private boolean lacksStoragePermission() {
+		return this.activity.checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED;
 	}
 
 	/** Goes back to using only the game data. The folder and what is in it stay as they are. */
@@ -115,7 +142,7 @@ final class CustomContentActions {
 	void mapChosen(final Uri uri) {
 		final String name = displayName(uri);
 		final File chosen = folder();
-		final File root = chosen != null ? chosen : new File(this.activity.getExternalFilesDir(null), "custom");
+		final File root = chosen != null ? chosen : new File(EngineResources.appFolder(this.activity), "custom");
 		if (chosen == null) {
 			root.mkdirs();
 		}
@@ -203,7 +230,7 @@ final class CustomContentActions {
 
 	/** The app's own folder is readable and writable without "All files access". */
 	private boolean isInAppFolder(final File folder) {
-		final File app = this.activity.getExternalFilesDir(null);
+		final File app = EngineResources.appFolder(this.activity);
 		final String path = folder.getAbsolutePath();
 		return (app != null) && (path.equals(app.getAbsolutePath()) || path.startsWith(app.getAbsolutePath() + File.separator));
 	}

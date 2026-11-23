@@ -156,6 +156,9 @@ public final class JpegDecoder {
 		}
 	}
 
+	/** The most pixels a frame may hold; a BLP holds at most 2^24 and a JPEG beside it is no larger. */
+	private static final int MAX_PIXELS = 1 << 26;
+
 	public static JpegDecoder decode(final byte[] data) throws IOException {
 		final int[][] quantizationTables = new int[4][];
 		final HuffmanTable[] dcTables = new HuffmanTable[4];
@@ -166,7 +169,7 @@ public final class JpegDecoder {
 		int restartInterval = 0;
 		boolean progressive = false;
 		int position = 2;
-		if (((data[0] & 0xFF) != 0xFF) || ((data[1] & 0xFF) != 0xD8)) {
+		if ((data.length < 4) || ((data[0] & 0xFF) != 0xFF) || ((data[1] & 0xFF) != 0xD8)) {
 			throw new IOException("Not a JPEG stream");
 		}
 		while (position < data.length) {
@@ -209,6 +212,12 @@ public final class JpegDecoder {
 				height = ((data[offset + 1] & 0xFF) << 8) | (data[offset + 2] & 0xFF);
 				width = ((data[offset + 3] & 0xFF) << 8) | (data[offset + 4] & 0xFF);
 				final int componentCount = data[offset + 5] & 0xFF;
+				// the frame sizes the decoder's buffers, so a damaged header must not be taken as it is
+				if ((width <= 0) || (height <= 0) || (((long) width * height) > MAX_PIXELS) || (componentCount < 1)
+						|| (componentCount > 4)) {
+					throw new IOException("Bad JPEG frame " + width + "x" + height + " with " + componentCount
+							+ " components");
+				}
 				components = new Component[componentCount];
 				for (int i = 0; i < componentCount; i++) {
 					final Component component = new Component();

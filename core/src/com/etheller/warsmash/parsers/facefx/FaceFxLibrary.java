@@ -2,9 +2,16 @@ package com.etheller.warsmash.parsers.facefx;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.WeakHashMap;
 
 import com.etheller.warsmash.datasources.DataSource;
 
@@ -17,12 +24,33 @@ public final class FaceFxLibrary {
 	private static final String ACTOR_EXTENSION = ".facefx_ingame";
 	private static final String PORTRAIT_SUFFIX = "_portrait";
 
+	/**
+	 * The animsets of each game data, by the data's graphics independent view: every map played on the same data lists
+	 * the same ones, and listing them through a map's data took a frame of almost half a second at the end of every
+	 * loading screen with spoken lines.
+	 */
+	private static final Map<DataSource, List<String>> GAME_ANIMSETS = new WeakHashMap<>();
+
 	private final DataSource data;
+	private final DataSource gameData;
+	private final DataSource mapData;
 	private final Map<String, FaceFxActor> actors = new HashMap<>();
 	private FaceFxAnimIndex index;
 
 	public FaceFxLibrary(final DataSource data) {
+		this(data, null, null);
+	}
+
+	/**
+	 * @param data     the map's data, which the files are read from
+	 * @param gameData the game data under the map, whose animsets are listed once for all the maps played on it; null
+	 *                 to list them through the map's data
+	 * @param mapData  the map's own files, listed for the animsets a map brings along; null for none
+	 */
+	public FaceFxLibrary(final DataSource data, final DataSource gameData, final DataSource mapData) {
 		this.data = data;
+		this.gameData = gameData;
+		this.mapData = mapData;
 	}
 
 	/**
@@ -93,11 +121,41 @@ public final class FaceFxLibrary {
 
 	private synchronized FaceFxAnimIndex index() {
 		if (this.index == null) {
-			this.index = new FaceFxAnimIndex(
-					this.data.getListfileByExtension(FaceFxAnimIndex.ANIMSET_EXTENSION),
-					this::read);
+			this.index = new FaceFxAnimIndex(listAnimsets(), this::read);
 		}
 		return this.index;
+	}
+
+	/** The animsets of the map's data, the game's first. */
+	Collection<String> listAnimsets() {
+		if (this.gameData == null) {
+			return this.data.getListfileByExtension(FaceFxAnimIndex.ANIMSET_EXTENSION);
+		}
+		final List<String> game = gameAnimsets(this.gameData);
+		if (this.mapData == null) {
+			return game;
+		}
+		// In the order the map's data has them: the game's files, then the map's.
+		final List<String> listed = new ArrayList<>(game);
+		listed.addAll(this.mapData.getListfileByExtension(FaceFxAnimIndex.ANIMSET_EXTENSION));
+		return listed;
+	}
+
+	/** The logical paths of the game data's animsets, listed at the first map played on that data. */
+	static List<String> gameAnimsets(final DataSource gameData) {
+		final DataSource key = gameData.graphicsIndependent();
+		synchronized (GAME_ANIMSETS) {
+			List<String> animsets = GAME_ANIMSETS.get(key);
+			if (animsets == null) {
+				final Set<String> logical = new LinkedHashSet<>();
+				for (final String path : gameData.getListfileByExtension(FaceFxAnimIndex.ANIMSET_EXTENSION)) {
+					logical.add(FaceFxAnimIndex.logicalPath(path));
+				}
+				animsets = Collections.unmodifiableList(new ArrayList<>(logical));
+				GAME_ANIMSETS.put(key, animsets);
+			}
+			return animsets;
+		}
 	}
 
 	private byte[] read(final String path) throws IOException {

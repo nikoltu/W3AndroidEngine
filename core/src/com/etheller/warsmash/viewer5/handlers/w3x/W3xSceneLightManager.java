@@ -16,6 +16,11 @@ public interface W3xSceneLightManager {
 		return 1f;
 	}
 
+	/** Wrap of the diffuse light, gain, where the highlights start to be compressed, and a flat fill; none when null. */
+	public default float[] getHdTone() {
+		return null;
+	}
+
 	/** The share of the specular highlights (direct and environment map) the HD materials get in this scene. */
 	public default float getHdSpecularScale() {
 		return 1f;

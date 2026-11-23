@@ -54,7 +54,7 @@ public class RenderUnit implements RenderWidget {
 	public final float[] location = new float[3];
 	public float selectionScale;
 	public UnitSoundset soundset;
-	public MdxModel portraitModel;
+	private RenderUnitType portraitType;
 	public int playerIndex;
 	private final CUnit simulationUnit;
 	public static final int LANDMARK_NONE = 0;
@@ -134,12 +134,16 @@ public class RenderUnit implements RenderWidget {
 
 	}
 
+	public MdxModel getPortraitModel() {
+		return this.portraitType == null ? null : this.portraitType.getPortraitModel();
+	}
+
 	public void resetRenderUnit(final War3MapViewer map, final float x, final float y, final float z,
 			final int playerIndex, final CUnit simulationUnit, final RenderUnitType typeData, boolean updatePortrait,
 			final BuildingShadow buildingShadow, final float selectionCircleScaleFactor, final float animationWalkSpeed,
 			final float animationRunSpeed, final float scalingValue) {
 		if (updatePortrait) {
-			this.portraitModel = typeData.getPortraitModel();
+			this.portraitType = typeData;
 		}
 		this.typeData = typeData;
 		this.specialArtModel = typeData.getSpecialArtModel();
@@ -450,8 +454,10 @@ public class RenderUnit implements RenderWidget {
 				: this.simulationUnit.isBoneCorpse();
 		final boolean building = fromFrame ? (frameFlags & UnitFrameState.BUILDING) != 0
 				: this.simulationUnit.isBuilding();
-		this.instance.groundShadow = !dead && (building ? map.getDynamicShadowManager().isSceneShadows()
-				: this.typeData.getRenderShadowType() != null);
+		// With scene shadows a corpse is geometry lying on the ground and keeps casting until it is gone.
+		this.instance.groundShadow = building ? !dead && map.getDynamicShadowManager().isSceneShadows()
+				: (!dead || map.getDynamicShadowManager().isSceneShadows())
+						&& this.typeData.getRenderShadowType() != null;
 		if (dead) {
 			if (!this.dead) {
 				this.unitAnimationListenerImpl.playAnimation(true, PrimaryTag.DEATH, SequenceUtils.EMPTY, 1.0f, true);

@@ -18,9 +18,31 @@ public class Quadtree<T> {
 	private boolean leaf = true;
 	private final NodeAdder nodeAdder = new NodeAdder();
 	private final UniqueNodeAdder uniqueNodeAdder = new UniqueNodeAdder();
+	private final boolean keepCoveringLeaves;
 
 	public Quadtree(final Rectangle bounds) {
+		this(bounds, false);
+	}
+
+	/**
+	 * @param keepCoveringLeaves whether a leaf whose objects all cover the whole of it stays a leaf, however many they
+	 *                           are: its quarters would each hold the same list, and a few map-wide rects (regions
+	 *                           of a map script) split the tree to its full depth, hundreds of thousands of nodes.
+	 *                           A walk meets the objects in the same order either way, only not more than once per
+	 *                           leaf.
+	 */
+	public Quadtree(final Rectangle bounds, final boolean keepCoveringLeaves) {
 		this.bounds = bounds;
+		this.keepCoveringLeaves = keepCoveringLeaves;
+	}
+
+	/** How many nodes (leaves and splits) the tree has. */
+	public int nodeCount() {
+		if (this.leaf) {
+			return 1;
+		}
+		return 1 + this.northeast.nodeCount() + this.northwest.nodeCount() + this.southwest.nodeCount()
+				+ this.southeast.nodeCount();
 	}
 
 	public void add(final T object, final Rectangle bounds) {
@@ -85,6 +107,27 @@ public class Quadtree<T> {
 		}
 	}
 
+	/** Tests the objects of the leaves that meet the bounds, each with its own bounds, which the tester checks. */
+	public interface NodeTester<T> {
+		boolean test(T object, Rectangle objectBounds);
+	}
+
+	public boolean intersectNodes(final Rectangle bounds, final NodeTester<T> tester) {
+		if (this.leaf) {
+			for (int i = 0; i < this.nodes.size; i++) {
+				final Node<T> node = this.nodes.get(i);
+				if (tester.test(node.object, node.bounds)) {
+					return true;
+				}
+			}
+			return false;
+		}
+		return (this.northeast.bounds.overlaps(bounds) && this.northeast.intersectNodes(bounds, tester))
+				|| (this.northwest.bounds.overlaps(bounds) && this.northwest.intersectNodes(bounds, tester))
+				|| (this.southwest.bounds.overlaps(bounds) && this.southwest.intersectNodes(bounds, tester))
+				|| (this.southeast.bounds.overlaps(bounds) && this.southeast.intersectNodes(bounds, tester));
+	}
+
 	public boolean intersect(final float x, final float y, final QuadtreeIntersector<T> intersector) {
 		if (this.leaf) {
 			for (int i = 0; i < this.nodes.size; i++) {
@@ -133,7 +176,7 @@ public class Quadtree<T> {
 			return;
 		}
 		if (this.leaf) {
-			if ((this.nodes.size >= SPLIT_THRESHOLD) && (depth < MAX_DEPTH)) {
+			if ((this.nodes.size >= SPLIT_THRESHOLD) && (depth < MAX_DEPTH) && !allCover(node)) {
 				split(depth);
 				// then dont return and add as a nonleaf
 			}
@@ -164,6 +207,25 @@ public class Quadtree<T> {
 		}
 	}
 
+	/** Whether this leaf keeps its objects although it is full, see {@link #Quadtree(Rectangle, boolean)}. */
+	private boolean allCover(final Node<T> added) {
+		if (!this.keepCoveringLeaves || !covers(added.bounds)) {
+			return false;
+		}
+		for (int i = 0; i < this.nodes.size; i++) {
+			if (!covers(this.nodes.get(i).bounds)) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	private boolean covers(final Rectangle objectBounds) {
+		return (objectBounds.x <= this.bounds.x) && (objectBounds.y <= this.bounds.y)
+				&& ((objectBounds.x + objectBounds.width) >= (this.bounds.x + this.bounds.width))
+				&& ((objectBounds.y + objectBounds.height) >= (this.bounds.y + this.bounds.height));
+	}
+
 	private void split(final int depth) {
 		final int splitDepth = depth + 1;
 		final float halfWidth = this.bounds.width / 2;
@@ -172,10 +234,11 @@ public class Quadtree<T> {
 		final float halfHeight = this.bounds.height / 2;
 		final float y = this.bounds.y;
 		final float yMidpoint = y + halfHeight;
-		this.northeast = new Quadtree<>(new Rectangle(xMidpoint, yMidpoint, halfWidth, halfHeight));
-		this.northwest = new Quadtree<>(new Rectangle(x, yMidpoint, halfWidth, halfHeight));
-		this.southwest = new Quadtree<>(new Rectangle(x, y, halfWidth, halfHeight));
-		this.southeast = new Quadtree<>(new Rectangle(xMidpoint, y, halfWidth, halfHeight));
+		this.northeast = new Quadtree<>(new Rectangle(xMidpoint, yMidpoint, halfWidth, halfHeight),
+				this.keepCoveringLeaves);
+		this.northwest = new Quadtree<>(new Rectangle(x, yMidpoint, halfWidth, halfHeight), this.keepCoveringLeaves);
+		this.southwest = new Quadtree<>(new Rectangle(x, y, halfWidth, halfHeight), this.keepCoveringLeaves);
+		this.southeast = new Quadtree<>(new Rectangle(xMidpoint, y, halfWidth, halfHeight), this.keepCoveringLeaves);
 		this.leaf = false;
 		this.nodes.forEach(this.nodeAdder.reset(splitDepth));
 		this.nodes.clear();

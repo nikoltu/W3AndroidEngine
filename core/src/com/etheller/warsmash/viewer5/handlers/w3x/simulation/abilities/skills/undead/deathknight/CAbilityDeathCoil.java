@@ -90,13 +90,7 @@ public class CAbilityDeathCoil extends CAbilityTargetSpellBase {
 					@Override
 					public void onHit(final CSimulation game, CProjectile projectile, final AbilityTarget abilTarget) {
 						final CUnit targetUnit = target.visit(AbilityTargetVisitor.UNIT);
-						if (targetUnit != null) {
-							if (targetUnit.getPlayerIndex() != caster.getPlayerIndex()) {
-								// 1.29: a coil reaching another player's unit first hits it for 0 (a damaged
-								// event), also before it heals.
-								targetUnit.damage(simulation, caster, DAMAGE_FLAGS, CAttackType.SPELLS,
-										CDamageType.DEATH, null, 0);
-							}
+						if ((targetUnit != null) && !targetUnit.isRemovedFromGame()) {
 							if (!targetUnit.isUnitType(CUnitTypeJass.UNDEAD)) {
 								targetUnit.damage(simulation, caster, DAMAGE_FLAGS, CAttackType.SPELLS, CDamageType.DEATH, null,
 										healAmount * .5f);

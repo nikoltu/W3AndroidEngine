@@ -90,7 +90,8 @@ public final class LanOverlay {
 	/** What decides which frames the window has; the texts change under the same frames. */
 	static String layoutOf(final LanPlay.Window window) {
 		return (window.cannotSync ? "sync" : window.rejoinPercent >= 0 ? "rejoin"
-				: window.migrating ? "migrating" : window.hostLost ? "host" : window.absentOnly ? "absent" : "wait")
+				: window.migrating ? "migrating" : window.hostLost ? "host" : window.loading ? "loading"
+						: window.absentOnly ? "absent" : "wait")
 				+ ":" + window.rows.size() + ":"
 				+ (window.continueInSeconds >= 0) + ":" + (window.claimInSeconds >= 0);
 	}
@@ -122,6 +123,14 @@ public final class LanOverlay {
 		}
 		if (window.hostLost) {
 			return "The host has left the game.|nThe game cannot go on.";
+		}
+		if (window.loading) {
+			b.append("Waiting for players to load...");
+			for (final LanPlay.Row row : window.rows) {
+				b.append("|n|cff").append(MeleeChat.playerTextHex(row.color)).append(row.name).append("|r - loading - ")
+						.append(row.loadPercent).append(" %");
+			}
+			return b.toString();
 		}
 		if (window.absentOnly) {
 			return "Your opponents are absent.";

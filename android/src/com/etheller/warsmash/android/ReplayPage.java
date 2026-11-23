@@ -54,11 +54,11 @@ final class ReplayPage extends LauncherViews {
 		final TextView note = text(getString(R.string.game_loading_list), b.body, this.activity.art.text2());
 		place(listPanel, note, frame, frame, listW - (2 * frame), -1);
 		action(view, 0, glueLabel("BACK", getString(R.string.launcher_back)), v -> this.activity.homePage.showHome());
-		this.deleteReplayButton = action(view, 1, glueLabel("DELETE", "Delete"), v -> askDeleteReplay());
+		this.deleteReplayButton = action(view, 1, glueLabel("DELETE"), v -> askDeleteReplay());
 		this.deleteReplayButton.setTone(LauncherKit.GlueButton.TONE_DANGER);
 		this.viewReplayButton = action(view, 2,
-				this.activity.art.reforged() ? glueLabel("WATCH_REPLAY", "Watch")
-				: glueLabel("KEY_VIEW_REPLAY", "View Replay"),
+				this.activity.art.reforged() ? glueLabel("WATCH_REPLAY")
+				: glueLabel("KEY_VIEW_REPLAY"),
 				v -> startReplay());
 		this.viewReplayButton.setTone(LauncherKit.GlueButton.TONE_CONFIRM);
 		this.deleteReplayButton.setEnabled(false);
@@ -95,7 +95,7 @@ final class ReplayPage extends LauncherViews {
 	}
 
 	private String raceName(final GameCatalog.ReplayPlayer player) {
-		return glue(RACES[player.raceIndex()][0], RACES[player.raceIndex()][1]);
+		return glue(RACES[player.raceIndex()][0]);
 	}
 
 	/** Races as the list's second line names them: "Orc vs Human", or the number of players. */
@@ -106,7 +106,7 @@ final class ReplayPage extends LauncherViews {
 		if (entry.players.size() == 2) {
 			return raceName(entry.players.get(0)) + " vs " + raceName(entry.players.get(1));
 		}
-		return entry.players.size() + " " + glue("PLAYERS", "players").toLowerCase(Locale.ROOT);
+		return entry.players.size() + " " + glue("PLAYERS").toLowerCase(Locale.ROOT);
 	}
 
 	private void fillReplays(final FrameLayout listPanel, final float rowW) {
@@ -238,7 +238,7 @@ final class ReplayPage extends LauncherViews {
 			final String why = entry.warcraft ? getString(R.string.replay_warcraft)
 					: entry.otherVersion ? glue("REPLAY_CONFIRM_DESC", getString(R.string.replay_other_version))
 							: getString(R.string.replay_unplayable, entry.unplayable);
-			final TextView reason = lines(glue("REPLAY_CONFIRM", "Incompatible Replay!") + "\n" + why, size, ERROR,
+			final TextView reason = lines(glue("REPLAY_CONFIRM") + "\n" + why, size, ERROR,
 					4);
 			place(info, reason, factsX, y + (step * 0.3f), factsW, -1);
 			y += step * 3.5f;
@@ -257,7 +257,7 @@ final class ReplayPage extends LauncherViews {
 			color.setBackgroundColor(PLAYER_COLORS[Math.abs(player.color) % PLAYER_COLORS.length]);
 			place(info, color, playersX, y + ((step - square) / 2) - (size * 0.15f), square, square);
 			final String name = player.name != null ? player.name
-					: getString(R.string.replay_computer) + " (" + glue("PLAYER", "Player") + " " + (player.slot + 1)
+					: getString(R.string.replay_computer) + " (" + glue("PLAYER") + " " + (player.slot + 1)
 							+ ")";
 			final TextView shown = text(name, size, this.activity.art.text());
 			shown.setSingleLine(true);
@@ -319,7 +319,7 @@ final class ReplayPage extends LauncherViews {
 		}
 		else if (entry.canTryAnyway()) {
 			// The original asks before it plays a replay of another version, ignoring the recorded checksums.
-			this.activity.dialogs.showQuestion(glue("REPLAY_CONFIRM", "Incompatible Replay!") + "\n"
+			this.activity.dialogs.showQuestion(glue("REPLAY_CONFIRM") + "\n"
 					+ glue("REPLAY_CONFIRM_DESC", getString(R.string.replay_other_version)), null,
 					new CharSequence[] { glueLabel("NO", getString(R.string.game_no)),
 						glueLabel("YES", getString(R.string.game_yes)) },
@@ -353,7 +353,7 @@ final class ReplayPage extends LauncherViews {
 		place(box, path, inset, t ? 316 : 194, inner, -1);
 		final float buttonY = h - (t ? 72 : 28) - b.buttonH;
 		final float buttonW = t ? 400 : 320;
-		place(box, button(glueLabel("CANCEL", "Cancel"), b.buttonH, b.buttonText,
+		place(box, button(glueLabel("CANCEL"), b.buttonH, b.buttonText,
 				v -> this.activity.dialogs.closeDialog()),
 				w - inset - (2 * buttonW) - 24, buttonY, buttonW, b.buttonH);
 		final LauncherKit.GlueButton ok = button(glueLabel("OK", getString(R.string.game_ok)), b.buttonH,

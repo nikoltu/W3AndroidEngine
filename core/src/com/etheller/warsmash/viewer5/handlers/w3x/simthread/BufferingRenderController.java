@@ -313,6 +313,12 @@ public final class BufferingRenderController implements SimulationRenderControll
 	}
 
 	@Override
+	public void removeItem(final CItem item) {
+		begin(RenderCallCodes.ITEM_REMOVE).a = handle(item);
+		emit();
+	}
+
+	@Override
 	public CDestructable createDestructable(final War3ID typeId, final float x, final float y, final float facing,
 			final float scale, final int variation) {
 		final CDestructable destructable = this.factory.createDestructable(typeId, x, y, facing, scale, variation);
@@ -673,6 +679,14 @@ public final class BufferingRenderController implements SimulationRenderControll
 		event.a = handle(unit);
 		event.b = playerIndex;
 		event.c = this.factory.playerColor(playerIndex);
+		emit();
+	}
+
+	@Override
+	public void setUnitTeamColor(final CUnit unit, final int color) {
+		final RenderEvent event = begin(RenderCallCodes.UNIT_TEAM_COLOR);
+		event.a = handle(unit);
+		event.b = color;
 		emit();
 	}
 

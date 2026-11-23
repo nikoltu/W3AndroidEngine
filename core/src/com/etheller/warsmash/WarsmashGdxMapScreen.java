@@ -134,6 +134,16 @@ public class WarsmashGdxMapScreen implements InputProcessor, Screen, TouchTarget
 	private int deferredMoveY;
 	private int deferredDragPointer = -1;
 	private boolean scriptFailed;
+	/** A save that could not be loaded leaves the game as soon as it is shown. */
+	private boolean quitAtStart;
+	private MeleeToggleUI toggleUI;
+	private static final int SETUP_STEPS = 7;
+	private int setupStep;
+	private final long[] setupNanos = new long[SETUP_STEPS];
+	private int setupFrames;
+	private long longestSetupFrameNanos;
+	private Jass2.CommonLoad commonLoad;
+	private SavedGame.Loading savedGameLoading;
 	private static final float MAX_INTERFACE_FRAME_TIME = 3 * WarsmashConstants.SIMULATION_STEP_TIME;
 
 	public WarsmashGdxMapScreen(final War3MapViewer mapViewer, final WarsmashGdxMultiScreenGame screenManager,
@@ -161,6 +171,107 @@ public class WarsmashGdxMapScreen implements InputProcessor, Screen, TouchTarget
 		this.baseMeleeUI.quitMission();
 	}
 
+	/**
+	 * Sets up the game in steps, one a frame, while the menu still draws the loading screen: together they took a
+	 * frame of up to a second with nothing drawn. The game's first step waits for {@link #show()}, so nothing the
+	 * player could see or do comes between them.
+	 *
+	 * @return whether the setup is done and the screen can be shown
+	 */
+	public boolean setUpNext() {
+		if (this.setupStep >= SETUP_STEPS) {
+			return true;
+		}
+		final long start = System.nanoTime();
+		if (this.setupStep == 0) {
+			PerfStats.checkSwitchFile();
+			ImageUtils.beginUiTextureRecording();
+			this.sessionResources = SessionResources.begin();
+		}
+		else {
+			// What the menu makes in the frames between belongs to the menu.
+			SessionResources.resume(this.sessionResources);
+		}
+		boolean stepDone = true;
+		try {
+			switch (this.setupStep) {
+			case 0:
+				buildInterface();
+				break;
+			case 1: {
+				// The toggle's only interface is the melee one: its main, a slice a frame.
+				final long mainStart = System.nanoTime();
+				stepDone = this.baseMeleeUI.mainNext();
+				PerfStats.setupPart("interface main slice", mainStart);
+				if (!stepDone) {
+					break;
+				}
+				long part = System.nanoTime();
+				if (this.viewer.isScriptSpeakingLines()) {
+					this.baseMeleeUI.prepareLipSync();
+				}
+				PerfStats.setupPart("lip sync", part);
+				part = System.nanoTime();
+				this.toggleUI.setCurrentUI(0);
+				updateUIScene();
+				PerfStats.setupPart("update ui scene", part);
+				part = System.nanoTime();
+				resize(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
+				PerfStats.setupPart("resize", part);
+				break;
+			}
+			case 2:
+				try {
+					this.viewer.loadAfterUI();
+				}
+				catch (final IOException e) {
+					throw new RuntimeException(e);
+				}
+				break;
+			case 3:
+				if (this.commonLoad == null) {
+					this.commonLoad = new Jass2.CommonLoad(this.viewer.mapMpq, this.uiViewport, this.uiScene,
+							this.viewer, this.meleeUI, WarsmashConstants.JASS_FILE_LIST);
+				}
+				stepDone = this.commonLoad.next();
+				if (stepDone) {
+					this.commonEnv = this.commonLoad.getEnvironment();
+					this.commonLoad = null;
+				}
+				break;
+			case 4:
+				stepDone = startScriptNext();
+				break;
+			case 5:
+				this.viewer.preloadSoundsAtStart(this.baseMeleeUI.getInterfaceSoundKeys());
+				DataErrors.logReport("map start");
+				ImageUtils.endUiTextureRecording();
+				break;
+			default:
+				if ((this.viewer.getSavedGameToLoad() == null) && !this.scriptFailed) {
+					stepDone = this.viewer.prepareFirstFrameNext();
+				}
+				break;
+			}
+		}
+		finally {
+			SessionResources.end(this.sessionResources);
+		}
+		final long nanos = System.nanoTime() - start;
+		this.setupNanos[this.setupStep] += nanos;
+		this.setupFrames++;
+		this.longestSetupFrameNanos = Math.max(this.longestSetupFrameNanos, nanos);
+		if (stepDone) {
+			this.setupStep++;
+		}
+		return this.setupStep >= SETUP_STEPS;
+	}
+
+	/** Whether every setup step has run and {@link #show()} only switches to the game. */
+	public boolean isSetUp() {
+		return this.setupStep >= SETUP_STEPS;
+	}
+
 	/*
 	 * (non-Javadoc)
 	 *
@@ -169,20 +280,34 @@ public class WarsmashGdxMapScreen implements InputProcessor, Screen, TouchTarget
 	@Override
 	public void show() {
 		final long showStart = System.nanoTime();
-		ImageUtils.beginUiTextureRecording();
+		while (!setUpNext()) {
+		}
+		SessionResources.resume(this.sessionResources);
 		final ByteBuffer tempByteBuffer = ByteBuffer.allocateDirect(4);
 		tempByteBuffer.order(ByteOrder.LITTLE_ENDIAN);
 		final IntBuffer temp = tempByteBuffer.asIntBuffer();
-
-		this.sessionResources = SessionResources.begin();
 		this.vaoGl = Gdx.gl30;
 		this.vaoGl.glGenVertexArrays(1, temp);
 		this.previousVao = WarsmashGdxGame.VAO;
 		this.vao = temp.get(0);
 		WarsmashGdxGame.VAO = this.vao;
-
 		Gdx.gl30.glBindVertexArray(WarsmashGdxGame.VAO);
+		Gdx.gl30.glClearColor(0.0f, 0.0f, 0.0f, 1); // TODO remove white background
+		Gdx.gl30.glEnable(GL30.GL_SCISSOR_TEST);
 
+		Gdx.input.setInputProcessor(this);
+		// Android's Back would otherwise close the activity and drop the match without a word.
+		Gdx.input.setCatchKey(Input.Keys.BACK, true);
+		if (this.quitAtStart) {
+			Gdx.app.postRunnable(this.baseMeleeUI::quitMission);
+		}
+		this.menuScreen.releaseMenuTemplates();
+		this.menuScreen.releaseLoadingScreen();
+		this.menuScreen.releaseGameTextures();
+		PerfStats.showDone(showStart, this.setupNanos, this.setupFrames, this.longestSetupFrameNanos);
+	}
+
+	private void buildInterface() {
 		final String renderer = Gdx.gl.glGetString(GL20.GL_RENDERER);
 		Log.warn("Renderer: " + renderer);
 
@@ -204,8 +329,6 @@ public class WarsmashGdxMapScreen implements InputProcessor, Screen, TouchTarget
 		}
 
 		Log.info("Loaded");
-		Gdx.gl30.glClearColor(0.0f, 0.0f, 0.0f, 1); // TODO remove white background
-		Gdx.gl30.glEnable(GL30.GL_SCISSOR_TEST);
 
 		final Scene portraitScene = this.viewer.addPortraitScene();
 		this.uiScene = this.viewer.addSimpleScene();
@@ -248,10 +371,6 @@ public class WarsmashGdxMapScreen implements InputProcessor, Screen, TouchTarget
 
 		this.solidGreenTexture = ImageUtils.getAnyExtensionTexture(this.viewer.dataSource,
 				"ReplaceableTextures\\TeamColor\\TeamColor06.blp");
-
-		Gdx.input.setInputProcessor(this);
-		// Android's Back would otherwise close the activity and drop the match without a word.
-		Gdx.input.setCatchKey(Input.Keys.BACK, true);
 
 		this.shapeRenderer = new ShapeRenderer();
 
@@ -307,7 +426,8 @@ public class WarsmashGdxMapScreen implements InputProcessor, Screen, TouchTarget
 							gameEndListener.gameEnded(result);
 							return;
 						}
-						WarsmashGdxMapScreen.this.menuScreen.onReturnFromGame(exit.isCampaignSelectScreenForced());
+						WarsmashGdxMapScreen.this.menuScreen.onReturnFromGame(exit.isCampaignSelectScreenForced(),
+								(exit.getNextReplay() != null) || exit.hasNextLevel());
 						WarsmashGdxMapScreen.this.screenManager.setScreen(WarsmashGdxMapScreen.this.menuScreen);
 						if (WarsmashGdxMapScreen.this.scriptFailed) {
 							WarsmashGdxMapScreen.this.menuScreen.showMapLoadError();
@@ -326,8 +446,8 @@ public class WarsmashGdxMapScreen implements InputProcessor, Screen, TouchTarget
 		baseMeleeUI.setResultShownOutside(this.menuScreen.showsResultOutside());
 		baseMeleeUI.setReforgedSkin(this.menuScreen.isReforgedLoadingScreens());
 		this.baseMeleeUI = baseMeleeUI;
-		final MeleeToggleUI toggleUI = new MeleeToggleUI(baseMeleeUI, Arrays.asList(baseMeleeUI));
-		this.meleeUI = toggleUI;
+		this.toggleUI = new MeleeToggleUI(baseMeleeUI, Arrays.asList(baseMeleeUI));
+		this.meleeUI = this.toggleUI;
 		this.viewer.getCommandErrorListener().setDelegate(this.meleeUI);
 		final LibGDXContentLayerModel libgdxContentModel = new LibGDXContentLayerModel(null, this.viewer, "",
 				this.viewer.mapPathSolver, "");
@@ -340,38 +460,29 @@ public class WarsmashGdxMapScreen implements InputProcessor, Screen, TouchTarget
 		modalContentInstance.modal = true;
 		modalContentInstance.setLocation(0f, 0f, 0.5f);
 		modalContentInstance.setScene(this.uiScene);
-		final long t1 = System.nanoTime();
-		this.meleeUI.main();
-		if (this.viewer.isScriptSpeakingLines()) {
-			this.baseMeleeUI.prepareLipSync();
-		}
-		final long t2 = System.nanoTime();
-		toggleUI.setCurrentUI(0);
+	}
 
-		updateUIScene();
-
-		resize(width, height);
-
-		try {
-			this.viewer.loadAfterUI();
-		}
-		catch (final IOException e) {
-			throw new RuntimeException(e);
-		}
-		final long t3 = System.nanoTime();
-		this.commonEnv = Jass2.loadCommon(this.viewer.mapMpq, this.uiViewport, this.uiScene, this.viewer, this.meleeUI,
-				WarsmashConstants.JASS_FILE_LIST);
+	/**
+	 * Loads the save the game starts from, or runs the map script's main, a slice at a time.
+	 *
+	 * @return whether that is done
+	 */
+	private boolean startScriptNext() {
 		final FileHandle savedGame = this.viewer.getSavedGameToLoad();
 		if (savedGame != null) {
 			try {
-				this.commonEnv.loadSavedGame(this.viewer, savedGame);
+				if (this.savedGameLoading == null) {
+					this.savedGameLoading = this.commonEnv.beginSavedGameLoad(this.viewer, savedGame);
+				}
+				return this.savedGameLoading.next();
 			}
 			catch (final IOException e) {
 				// Nothing of the save has been applied yet. Starting the map instead would pass for a load, so the
 				// game goes back to the menu, which tells why.
 				Log.error("Could not load the saved game " + savedGame.name() + ": " + e.getMessage());
 				SavedGame.loadFailed(savedGame, e);
-				Gdx.app.postRunnable(this.baseMeleeUI::quitMission);
+				this.quitAtStart = true;
+				return true;
 			}
 			catch (final RuntimeException e) {
 				// Past the point where the map's own state was replaced nothing can be started again, so the game
@@ -379,34 +490,39 @@ public class WarsmashGdxMapScreen implements InputProcessor, Screen, TouchTarget
 				Log.error("Could not finish loading the saved game " + savedGame.name());
 				Log.error(e);
 				SavedGame.loadFailed(savedGame, new IOException("Could not load the saved game", e));
-				Gdx.app.postRunnable(this.baseMeleeUI::quitMission);
+				this.quitAtStart = true;
+				return true;
 			}
 		}
 		else if (this.commonEnv.getScriptError() != null) {
 			// The original game shows an error for a map whose script does not compile and does not play it.
 			Log.error("The map's script does not compile: " + this.commonEnv.getScriptError().getMessage());
 			this.scriptFailed = true;
-			Gdx.app.postRunnable(this.baseMeleeUI::quitMission);
+			this.quitAtStart = true;
 		}
 		else {
 			this.commonEnv.main();
 		}
-		final long t4 = System.nanoTime();
-		this.viewer.preloadSoundsAtStart(this.baseMeleeUI.getInterfaceSoundKeys());
-		this.menuScreen.releaseMenuTemplates();
-		this.menuScreen.releaseLoadingScreen();
-		DataErrors.logReport("map start");
-		ImageUtils.endUiTextureRecording();
-		if ((savedGame == null) && !this.scriptFailed) {
-			this.viewer.prepareFirstFrame();
-		}
-		PerfStats.showDone(showStart, t1, t2, t3, t4);
+		return true;
 	}
 
 	public static DataSource parseDataSources(final DataTable warsmashIni) {
+		return parseDataSources(warsmashIni, GameLanguage.configured(warsmashIni), true);
+	}
+
+	/**
+	 * The data sources in a language of the caller's choice, which leaves the language the running game and the skin
+	 * read in as it is: for text that is wanted in a language besides the chosen one.
+	 */
+	public static DataSource parseDataSources(final DataTable warsmashIni, final String language) {
+		return parseDataSources(warsmashIni, GameLanguage.canonical(language), false);
+	}
+
+	private static DataSource parseDataSources(final DataTable warsmashIni, final String language,
+			final boolean noteLanguage) {
 		final List<DataSourceDescriptor> dataSourcesList = new ArrayList<>();
 		final List<String> allCascPrefixes = new ArrayList<>();
-		parseDataSourceDescriptors(warsmashIni, dataSourcesList, allCascPrefixes);
+		parseDataSourceDescriptors(warsmashIni, dataSourcesList, allCascPrefixes, language, noteLanguage);
 		final DataSource baseCompoundDataSource = new CompoundDataSourceDescriptor(dataSourcesList).createDataSource();
 
 		final List<DataSource> subdirDataSourcesList = new ArrayList<>();
@@ -420,10 +536,18 @@ public class WarsmashGdxMapScreen implements InputProcessor, Screen, TouchTarget
 
 	public static void parseDataSourceDescriptors(final DataTable warsmashIni,
 			final List<DataSourceDescriptor> dataSourcesList, final List<String> allCascPrefixes) {
+		parseDataSourceDescriptors(warsmashIni, dataSourcesList, allCascPrefixes, GameLanguage.configured(warsmashIni),
+				true);
+	}
+
+	private static void parseDataSourceDescriptors(final DataTable warsmashIni,
+			final List<DataSourceDescriptor> dataSourcesList, final List<String> allCascPrefixes,
+			final String language, final boolean noteLanguage) {
 		final Element dataSourcesConfig = warsmashIni.get("DataSources");
-		final String language = GameLanguage.configured(warsmashIni);
-		GameLanguage.useForSkin(language);
-		GameLanguage.useInGame(warsmashIni);
+		if (noteLanguage) {
+			GameLanguage.useForSkin(language);
+			GameLanguage.useInGame(warsmashIni);
+		}
 		for (int i = 0; i < dataSourcesConfig.size(); i++) {
 			final String numberText = (i < 10 ? "0" : "") + i;
 			final String type = dataSourcesConfig.getField("Type" + numberText);

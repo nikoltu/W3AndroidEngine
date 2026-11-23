@@ -79,7 +79,7 @@ final class MapViewerUpdate {
 			viewer.fastForwardSteps++;
 			viewer.runTurnCompleted();
 			MapViewerSaves.runPendingSaveRequests(viewer);
-			if (viewer.isGamePaused() || (System.nanoTime() >= frameEnd)) {
+			if (viewer.isGamePausedOnSimulation() || (System.nanoTime() >= frameEnd)) {
 				break;
 			}
 		}
@@ -104,7 +104,7 @@ final class MapViewerUpdate {
 	 */
 	static int playOpeningSteps(final War3MapViewer viewer, final int count) {
 		int played = 0;
-		while ((played < count) && !viewer.gameEnded && !viewer.worldHidden && !viewer.isGamePaused()
+		while ((played < count) && !viewer.gameEnded && !viewer.worldHidden && !viewer.isGamePausedOnSimulation()
 				&& (viewer.gameTurnManager.getLatestCompletedTurn() >= viewer.simulation.getGameTurnTick())) {
 			viewer.simulation.update();
 			viewer.gameTurnManager.turnCompleted(viewer.simulation.getGameTurnTick());
@@ -120,7 +120,7 @@ final class MapViewerUpdate {
 			stepThreadedWithoutRender(viewer);
 			return;
 		}
-		if (viewer.isGamePaused()) {
+		if (viewer.isGamePausedOnSimulation()) {
 			MapViewerSaves.runPendingSaveRequests(viewer);
 			viewer.runWhilePaused();
 			return;
@@ -130,9 +130,9 @@ final class MapViewerUpdate {
 		}
 		viewer.updateTime += Gdx.graphics.getRawDeltaTime() * viewer.timeScale;
 		while ((viewer.updateTime >= WarsmashConstants.SIMULATION_STEP_TIME) && !viewer.gameEnded
-				&& !viewer.isGamePaused()
+				&& !viewer.isGamePausedOnSimulation()
 				&& (viewer.gameTurnManager.getLatestCompletedTurn() >= viewer.simulation.getGameTurnTick())
-				&& !viewer.isGamePaused()) {
+				&& !viewer.isGamePausedOnSimulation()) {
 			viewer.updateTime -= WarsmashConstants.SIMULATION_STEP_TIME;
 			viewer.runSimulationUpdate();
 			viewer.runTurnCompleted();
@@ -149,7 +149,7 @@ final class MapViewerUpdate {
 	 * to do meanwhile. A pause, a turn not there yet or the game's end stop them there, as the loop above does here.
 	 */
 	private static void stepThreadedWithoutRender(final War3MapViewer viewer) {
-		if (viewer.isGamePaused() || viewer.worldHidden || viewer.gameEnded) {
+		if (viewer.isGamePausedOnSimulation() || viewer.worldHidden || viewer.gameEnded) {
 			viewer.runGrantedSteps(0);
 			return;
 		}

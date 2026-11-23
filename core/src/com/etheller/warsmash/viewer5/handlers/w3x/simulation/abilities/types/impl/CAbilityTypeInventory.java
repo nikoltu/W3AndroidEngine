@@ -31,7 +31,11 @@ public class CAbilityTypeInventory extends CAbilityType<CAbilityTypeInventoryLev
 		final CAbilityTypeInventoryLevelData levelData = getLevelData(existingAbility, level - 1);
 		final CLevelingAbility heroAbility = (existingAbility);
 
-		// TODO ignores fields
+		// The number of slots is the unit's own and is not changed by a level.
+		if (existingAbility instanceof CAbilityInventory) {
+			((CAbilityInventory) existingAbility).setPermissions(levelData.isCanDropItems(), levelData.isCanGetItems(),
+					levelData.isCanUseItems(), levelData.isDropItemsOnDeath());
+		}
 
 		heroAbility.setLevel(game, unit, level);
 

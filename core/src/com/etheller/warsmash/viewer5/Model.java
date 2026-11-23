@@ -1,7 +1,9 @@
 package com.etheller.warsmash.viewer5;
 
 import java.io.InputStream;
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 
@@ -19,6 +21,19 @@ public abstract class Model<HANDLER extends ModelHandler> extends HandlerResourc
 	/** Whether a step of the model's build is running now. */
 	boolean stepping;
 	long buildNanos;
+	/** The size of the file its helper has read, 0 until then. */
+	private volatile long preparedFileBytes;
+	/** How many times the viewer was asked for this model, and how many of those asked on behalf of a releasable holder. */
+	private int loadRequests;
+	private int holderLoads;
+	/** The releasable holders (see {@link #claim}) that have it now. */
+	private int holders;
+	/** Instances made before the model's instances were followed; such a model is never let go. */
+	private int untrackedInstances;
+	/** The instances made since they are followed, which stop counting once nothing refers to them. */
+	private List<WeakReference<ModelInstance>> trackedInstances;
+	private boolean instanceMade;
+	private int pruneAt = 64;
 
 	public Model(final HANDLER handler, final ModelViewer viewer, final String extension, final PathSolver pathSolver,
 			final String fetchUrl) {
@@ -50,6 +65,7 @@ public abstract class Model<HANDLER extends ModelHandler> extends HandlerResourc
 
 	private ModelInstance addUnfinishedInstance(final int type) {
 		final ModelInstance instance = createInstance(type);
+		followInstance(instance);
 
 		if (this.ok) {
 			instance.load();
@@ -64,6 +80,74 @@ public abstract class Model<HANDLER extends ModelHandler> extends HandlerResourc
 		}
 
 		return instance;
+	}
+
+	private synchronized void followInstance(final ModelInstance instance) {
+		if (this.trackedInstances == null) {
+			this.untrackedInstances++;
+			return;
+		}
+		if (this.trackedInstances.size() >= this.pruneAt) {
+			pruneInstances();
+			this.pruneAt = Math.max(64, this.trackedInstances.size() * 2);
+		}
+		this.trackedInstances.add(new WeakReference<>(instance));
+		this.instanceMade = true;
+	}
+
+	private void pruneInstances() {
+		for (final Iterator<WeakReference<ModelInstance>> it = this.trackedInstances.iterator(); it.hasNext();) {
+			if (it.next().get() == null) {
+				it.remove();
+			}
+		}
+	}
+
+	/** Counts a request of the viewer for this model; one that comes from a holder is then {@link #claim}ed. */
+	synchronized void requested() {
+		this.loadRequests++;
+	}
+
+	/**
+	 * Marks the model as held by something that can let go of it (see {@link #release}) and answers for the load it
+	 * just asked of the viewer. From the first claim on, the instances made of the model are followed.
+	 */
+	public synchronized void claim() {
+		this.holderLoads++;
+		this.holders++;
+		if (this.trackedInstances == null) {
+			this.trackedInstances = new ArrayList<>();
+		}
+	}
+
+	/** Lets go of one claim; true when nothing else holds the model and it may be evicted if it is idle. */
+	public synchronized boolean release() {
+		this.holders--;
+		return this.holders <= 0;
+	}
+
+	/**
+	 * Whether the model is built and nothing but claims ever asked for it or made an instance of it, so that when no
+	 * instance of it is alive it can be rebuilt from its file by whoever claimed it.
+	 */
+	public synchronized boolean isReleasable() {
+		return this.ok && !this.pending && !this.stepping && (this.trackedInstances != null)
+				&& (this.untrackedInstances == 0) && (this.loadRequests == this.holderLoads)
+				&& !"".equals(this.fetchUrl);
+	}
+
+	/** Whether an instance of the model was made since it was claimed: a model only loaded ahead of its first unit was not shown yet. */
+	public synchronized boolean hasBeenShown() {
+		return this.instanceMade;
+	}
+
+	/** Whether an instance of the model that is still referred to exists, or one made when it was not followed. */
+	public synchronized boolean hasLiveInstances() {
+		if ((this.trackedInstances == null) || (this.untrackedInstances > 0)) {
+			return true;
+		}
+		pruneInstances();
+		return !this.trackedInstances.isEmpty() || !this.preloadedInstances.isEmpty();
 	}
 
 	/**
@@ -92,6 +176,15 @@ public abstract class Model<HANDLER extends ModelHandler> extends HandlerResourc
 	 */
 	protected boolean prepareLater(final InputStream src, final ExecutorService executor) {
 		return false;
+	}
+
+	/** Called by the helper once it has read the file, which tells the viewer how much its result holds. */
+	protected void setPreparedFileBytes(final long bytes) {
+		this.preparedFileBytes = Math.max(1, bytes);
+	}
+
+	long getPreparedFileBytes() {
+		return this.preparedFileBytes;
 	}
 
 	/** Whether the helper of a pending model is done, so that building it does not wait. */

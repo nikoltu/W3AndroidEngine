@@ -13,17 +13,25 @@ import android.os.ParcelFileDescriptor;
 import android.provider.OpenableColumns;
 
 import com.etheller.warsmash.launcher.CrashReport;
+import com.etheller.warsmash.launcher.ProblemReport;
 
-/** Gives the share sheet read access to the crash logs and log snapshots of the app's private files, and to nothing else. */
+/**
+ * Gives the share sheet read access to the crash logs, log snapshots and problem reports of the app's private files, and
+ * to nothing else.
+ */
 public final class CrashLogProvider extends ContentProvider {
 	static Uri uri(final Context context, final String name) {
 		return new Uri.Builder().scheme("content").authority(context.getPackageName() + ".crashlogs").appendPath(name)
 				.build();
 	}
 
+	static String type(final String name) {
+		return ProblemReport.isReport(name) ? "application/zip" : "text/plain";
+	}
+
 	private File fileOf(final Uri uri) throws FileNotFoundException {
 		final String name = uri.getLastPathSegment();
-		if (!CrashReport.isShareable(name)) {
+		if (!CrashReport.isShareable(name) && !ProblemReport.isReport(name)) {
 			throw new FileNotFoundException(String.valueOf(uri));
 		}
 		final File file = new File(CrashLogs.privateFolder(getContext()), name);
@@ -69,7 +77,7 @@ public final class CrashLogProvider extends ContentProvider {
 
 	@Override
 	public String getType(final Uri uri) {
-		return "text/plain";
+		return type(uri.getLastPathSegment());
 	}
 
 	@Override

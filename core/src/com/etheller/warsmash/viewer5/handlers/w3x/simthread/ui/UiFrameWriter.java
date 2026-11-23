@@ -631,7 +631,7 @@ public final class UiFrameWriter {
 				d.queueTips[0] = constructingUI.getToolTip();
 				d.queueUberTips[0] = constructingUI.getUberTip();
 			}
-			d.queueProgress = Math.min(unit.getConstructionProgress() / unit.getUnitType().getBuildTime(), 0.99f);
+			d.queueProgress = Math.min(unit.getConstructionProgress() / unit.getConstructionDuration(game), 0.99f);
 			final CUnit worker = unit.getWorker();
 			if ((worker != null) && !unit.isConstructionConsumesWorker() && !unit.isConstructingPaused()) {
 				final UnitIconUI workerUI = this.abilityDataUI.getUnitUI(worker.getTypeId());

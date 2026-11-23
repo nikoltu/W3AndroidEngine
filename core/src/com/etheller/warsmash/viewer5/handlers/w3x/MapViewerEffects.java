@@ -368,6 +368,46 @@ final class MapViewerEffects {
 		return effectAttachmentUI;
 	}
 
+	/**
+	 * Puts an effect on the unit's attachment point that best fits the names, or where the unit stands, turned as it
+	 * faces, when it has none.
+	 *
+	 * @return the yaw the effect is given, 0 on a point
+	 */
+	private static float attachToUnit(final RenderUnit renderUnit, final MdxComplexInstance modelInstance,
+			final List<String> attachPointNames) {
+		final MdxModel model = (MdxModel) renderUnit.instance.model;
+		model.finishPending();
+		int index = -1;
+		int bestFitAttachmentNameLength = Integer.MAX_VALUE;
+		for (int i = 0; i < model.attachments.size(); i++) {
+			final Attachment attachment = model.attachments.get(i);
+			boolean match = true;
+			for (final String attachmentPointNameToken : attachPointNames) {
+				if (!attachment.getName().contains(attachmentPointNameToken)) {
+					match = false;
+				}
+			}
+			final int attachmentNameLength = attachment.getName().length();
+			if (match && (attachmentNameLength < bestFitAttachmentNameLength)) {
+				index = i;
+				bestFitAttachmentNameLength = attachmentNameLength;
+			}
+		}
+		if (index != -1) {
+			final MdxNode attachment = renderUnit.instance.getAttachment(index);
+			modelInstance.setParent(attachment);
+			modelInstance.setLocation(0, 0, 0);
+			return 0;
+		}
+		// TODO This is not consistent with War3, is it? Should look nice though.
+		modelInstance.setParent(null);
+		modelInstance.setLocation(renderUnit.location);
+		final float yaw = (float) Math.toRadians(renderUnit.getFacing());
+		modelInstance.localRotation.setFromAxisRad(0, 0, 1, yaw);
+		return yaw;
+	}
+
 	static RenderSpellEffect addSpecialEffectTarget(final War3MapViewer viewer, final String modelName, final CWidget targetWidget,
 			final String attachPointName) {
 		return addSpecialEffectTarget(viewer, modelName, targetWidget, Arrays.asList(attachPointName.split("\\s+")));
@@ -380,6 +420,10 @@ final class MapViewerEffects {
 				attachPointNames = War3MapViewer.ORIGIN_STRING_LIST;
 			}
 			final RenderUnit renderUnit = viewer.unitToRenderPeer.get(targetWidget);
+			if ((renderUnit == null) && ((CUnit) targetWidget).isRemovedFromGame()) {
+				// A unit that left the game has no model to put an effect on.
+				return null;
+			}
 			if (renderUnit == null) {
 				final NullPointerException nullPointerException = new NullPointerException(
 						"renderUnit is null! targetWidget is \"" + ((CUnit) targetWidget).getUnitType().getName()
@@ -396,35 +440,25 @@ final class MapViewerEffects {
 				float yaw = 0;
 				if (renderUnit != null) {
 					modelInstance.setTeamColor(renderUnit.playerIndex);
-					{
-						final MdxModel model = (MdxModel) renderUnit.instance.model;
-						model.finishPending();
-						int index = -1;
-						int bestFitAttachmentNameLength = Integer.MAX_VALUE;
-						for (int i = 0; i < model.attachments.size(); i++) {
-							final Attachment attachment = model.attachments.get(i);
-							boolean match = true;
-							for (final String attachmentPointNameToken : attachPointNames) {
-								if (!attachment.getName().contains(attachmentPointNameToken)) {
-									match = false;
-								}
+					final MdxComplexInstance unitInstance = renderUnit.instance;
+					if (unitInstance.isWaiting()) {
+						// The attachment points are in the unit's model, which is still being read: the effect goes
+						// with the unit until then and onto its point when the model is built, instead of the model
+						// being built in this frame (units that come with auras, many at once from a script).
+						modelInstance.setParent(unitInstance);
+						modelInstance.setLocation(0, 0, 0);
+						final List<String> points = attachPointNames;
+						final Runnable before = unitInstance.modelLoadedObserver;
+						unitInstance.modelLoadedObserver = () -> {
+							if (before != null) {
+								before.run();
 							}
-							final int attachmentNameLength = attachment.getName().length();
-							if (match && (attachmentNameLength < bestFitAttachmentNameLength)) {
-								index = i;
-								bestFitAttachmentNameLength = attachmentNameLength;
+							if (modelInstance.scene != null) {
+								attachToUnit(renderUnit, modelInstance, points);
 							}
-						}
-						if (index != -1) {
-							modelInstance.detach();
-							final MdxNode attachment = renderUnit.instance.getAttachment(index);
-							modelInstance.setParent(attachment);
-							modelInstance.setLocation(0, 0, 0);
-						} else {
-							// TODO This is not consistent with War3, is it? Should look nice though.
-							modelInstance.setLocation(renderUnit.location);
-							yaw = (float) Math.toRadians(renderUnit.getFacing());
-						}
+						};
+					} else {
+						yaw = attachToUnit(renderUnit, modelInstance, attachPointNames);
 					}
 				} else {
 					modelInstance.setLocation(0, 0, 0);
@@ -448,6 +482,9 @@ final class MapViewerEffects {
 			}
 			final RenderDestructable renderDest = viewer.destructableToRenderPeer.get(targetWidget);
 
+			if ((renderDest == null) && ((CDestructable) targetWidget).isRemovedFromGame()) {
+				return null;
+			}
 			if (renderDest == null) {
 				final NullPointerException nullPointerException = new NullPointerException(
 						"renderDest is null! targetWidget is \""

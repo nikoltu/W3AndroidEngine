@@ -35,9 +35,10 @@ public class CHarmfulAreas {
 		private final int firstHurtTick;
 		private final int endTick;
 		private final boolean hurtOnly;
+		private final boolean stay;
 
 		private Area(final CUnit source, final float x, final float y, final float radius, final int hurtTick,
-				final int endTick, final boolean hurtOnly) {
+				final int endTick, final boolean hurtOnly, final boolean stay) {
 			this.source = source;
 			this.x = x;
 			this.y = y;
@@ -46,6 +47,7 @@ public class CHarmfulAreas {
 			this.firstHurtTick = hurtTick - 1;
 			this.endTick = endTick;
 			this.hurtOnly = hurtOnly;
+			this.stay = stay;
 		}
 	}
 
@@ -55,10 +57,12 @@ public class CHarmfulAreas {
 		private float directionY;
 		private boolean escaping;
 		private boolean returning;
+		private boolean stopped;
 		private int returnTick;
 		private float homeX;
 		private float homeY;
 		private int restoreSpeed = -1;
+		private boolean speedRaised;
 	}
 
 	private final List<Area> areas = new ArrayList<>();
@@ -76,10 +80,19 @@ public class CHarmfulAreas {
 	 */
 	public Area add(final CSimulation game, final CUnit source, final float x, final float y, final float radius,
 			final float hurtDelay, final float duration, final boolean hurtOnly) {
+		return add(game, source, x, y, radius, hurtDelay, duration, hurtOnly, false);
+	}
+
+	/**
+	 * Measured on 1.29: the rocks of a Volcano are answered by an attack on its caster and send nobody away, so a
+	 * stay area counts as hurting for that answer but never makes a unit step out.
+	 */
+	public Area add(final CSimulation game, final CUnit source, final float x, final float y, final float radius,
+			final float hurtDelay, final float duration, final boolean hurtOnly, final boolean stay) {
 		final int tick = game.getGameTurnTick();
 		// A unit that is hit answers the hit on its next update, so the area sends nobody away before that.
 		final Area area = new Area(source, x, y, radius, tick + CTimer.wholeSteps(hurtDelay) + 1,
-				tick + CTimer.wholeSteps(duration), hurtOnly);
+				tick + CTimer.wholeSteps(duration), hurtOnly, stay);
 		this.areas.add(area);
 		return area;
 	}
@@ -133,7 +146,7 @@ public class CHarmfulAreas {
 				// caster that is only ordered to stop leaves it).
 				iterator.remove();
 			}
-			else if ((tick >= area.hurtTick) && (inside == null)
+			else if ((tick >= area.hurtTick) && (inside == null) && !area.stay
 					&& (!area.hurtOnly || (unit.aggro.lastHurtTick >= area.firstHurtTick))
 					&& ((StrictMath.hypot(unit.getX() - area.x, unit.getY() - area.y)
 							- unit.getUnitType().getCollisionSize()) <= area.radius)) {
@@ -144,6 +157,16 @@ public class CHarmfulAreas {
 		final boolean idle = (behavior == null) || (behavior.getBehaviorCategory() == CBehaviorCategory.IDLE);
 		if (inside == null) {
 			if (escape != null) {
+				if (escape.escaping && !escape.returning && idle && escape.stopped) {
+					// Measured: a script's stop ends the run without the walk back; the unit stays where it stopped
+					// and a later run goes on from the same place. Only the home is kept; the speed raised for the
+					// run is given back now.
+					if (escape.speedRaised) {
+						escape.speedRaised = false;
+						unit.setSpeed(escape.restoreSpeed);
+					}
+					return;
+				}
 				if (escape.escaping && !escape.returning && idle) {
 					// Measured: a unit that walked the whole way out walks back to where it stood.
 					escape.returning = true;
@@ -152,7 +175,7 @@ public class CHarmfulAreas {
 				}
 				else if (!escape.escaping || !(escape.escaping && (behavior != null)
 						&& (behavior.getBehaviorCategory() == CBehaviorCategory.MOVEMENT))) {
-					if (escape.restoreSpeed >= 0) {
+					if (escape.speedRaised) {
 						unit.setSpeed(escape.restoreSpeed);
 					}
 					this.escapes.remove(unit);
@@ -180,24 +203,58 @@ public class CHarmfulAreas {
 			current.returning = false;
 			current.escaping = false;
 		}
-		if (current.escaping && (behavior != null) && (behavior.getBehaviorCategory() == CBehaviorCategory.MOVEMENT)) {
+		if (current.escaping && !current.stopped && (behavior != null)
+				&& (behavior.getBehaviorCategory() == CBehaviorCategory.MOVEMENT)) {
 			return;
 		}
+		float fromX = unit.getX() - inside.source.getX();
+		float fromY = unit.getY() - inside.source.getY();
+		if (inside.source == unit) {
+			fromX = inside.x - unit.getX();
+			fromY = inside.y - unit.getY();
+		}
+		beginEscape(game, unit, current, fromX, fromY);
+	}
+
+	/**
+	 * Measured on 1.29: a computer player's unit without an AI script that is hit by something it cannot hit back (an
+	 * unreachable or invulnerable attacker, a spell's caster) runs the same 700 away from it and walks back when
+	 * it is out of reach, instead of the short run of a unit of a human player.
+	 */
+	public void runFrom(final CSimulation game, final CUnit unit, final CUnit source) {
+		final int tick = game.getGameTurnTick();
+		Escape current = this.escapes.get(unit);
+		if (current == null) {
+			current = new Escape();
+			this.escapes.put(unit, current);
+		}
+		current.nextThinkTick = tick + THINK_TICKS;
+		if (current.returning) {
+			current.returning = false;
+			current.escaping = false;
+		}
+		final CBehavior behavior = unit.getCurrentBehavior();
+		if (current.escaping && !current.stopped && (behavior != null)
+				&& (behavior.getBehaviorCategory() == CBehaviorCategory.MOVEMENT)) {
+			return;
+		}
+		beginEscape(game, unit, current, unit.getX() - source.getX(), unit.getY() - source.getY());
+	}
+
+	/** A stop order given to a unit on its way out: it stays where it stopped without walking back. */
+	public void onStopped(final CUnit unit) {
+		final Escape current = this.escapes.get(unit);
+		if ((current != null) && current.escaping && !current.returning) {
+			current.stopped = true;
+		}
+	}
+
+	private void beginEscape(final CSimulation game, final CUnit unit, final Escape current, float fromX,
+			float fromY) {
 		if (!current.escaping) {
 			current.escaping = true;
-			// Measured: a unit whose speed was set to 0 still walks out of the area.
-			if ((unit.getSpeed() <= 0) && !unit.isMovementDisabled() && (unit.getUnitType().getSpeed() > 0)) {
-				current.restoreSpeed = unit.getSpeed();
-				unit.setSpeed(unit.getUnitType().getSpeed());
-			}
 			current.homeX = unit.getX();
 			current.homeY = unit.getY();
-			float fromX = unit.getX() - inside.source.getX();
-			float fromY = unit.getY() - inside.source.getY();
-			if (inside.source == unit) {
-				fromX = inside.x - unit.getX();
-				fromY = inside.y - unit.getY();
-			}
 			final float length = (float) StrictMath.hypot(fromX, fromY);
 			if (length < 1) {
 				fromX = (float) StrictMath.cos(Math.toRadians(unit.getFacing()));
@@ -209,6 +266,14 @@ public class CHarmfulAreas {
 			}
 			current.directionX = fromX;
 			current.directionY = fromY;
+		}
+		current.stopped = false;
+		// Measured: a unit whose speed was set to 0 still walks out of the area.
+		if (!current.speedRaised && (unit.getSpeed() <= 0) && !unit.isMovementDisabled()
+				&& (unit.getUnitType().getSpeed() > 0)) {
+			current.restoreSpeed = unit.getSpeed();
+			current.speedRaised = true;
+			unit.setSpeed(unit.getUnitType().getSpeed());
 		}
 		unit.order(game, OrderIds.move, new AbilityPointTarget(unit.getX() + (current.directionX * ESCAPE_DISTANCE),
 				unit.getY() + (current.directionY * ESCAPE_DISTANCE)), true);

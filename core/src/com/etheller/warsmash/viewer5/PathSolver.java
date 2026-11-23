@@ -15,17 +15,7 @@ public interface PathSolver {
 			if ((dotIndex == -1)) {
 				throw new IllegalStateException("unable to resolve: " + src);
 			}
-			return new SolvedPath(src, src.substring(dotIndex), true);
-		}
-	};
-	public static final PathSolver NOFETCH = new PathSolver() {
-		@Override
-		public SolvedPath solve(final String src, final Object solverParams) {
-			final int dotIndex = src.lastIndexOf('.');
-			if ((dotIndex == -1)) {
-				throw new IllegalStateException("unable to resolve: " + src);
-			}
-			return new SolvedPath(src, src.substring(dotIndex), false);
+			return new SolvedPath(src, src.substring(dotIndex));
 		}
 	};
 }

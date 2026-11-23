@@ -66,15 +66,14 @@ public final class NonStackingStatBuffs {
 
 	private void remove(final NonStackingStatBuffType type, final NonStackingStatBuff buff, final Object owner) {
 		final Map<String, List<NonStackingStatBuff>> buffKeyMap = this.nonStackingBuffs.get(type);
-		try {
-			buffKeyMap.get(buff.getStackingKey()).remove(buff);
-			if (buffKeyMap.get(buff.getStackingKey()).isEmpty()) {
-				buffKeyMap.remove(buff.getStackingKey());
-			}
-		} catch (final Exception e) {
+		final List<NonStackingStatBuff> buffs = (buffKeyMap == null) ? null : buffKeyMap.get(buff.getStackingKey());
+		if ((buffs == null) || !buffs.remove(buff)) {
 			Log.error("Removing a " + type + " buff with key " + buff.getStackingKey() + " that " + owner
 					+ " did not have");
-			Log.error(e);
+			return;
+		}
+		if (buffs.isEmpty()) {
+			buffKeyMap.remove(buff.getStackingKey());
 		}
 	}
 

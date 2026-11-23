@@ -141,6 +141,12 @@ public final class RenderCallCodes {
 	/** f0 = height. */
 	public static final int COMPONENT_SET_HEIGHT = 162;
 
+	/** a = unit, b = team color. */
+	public static final int UNIT_TEAM_COLOR = 163;
+
+	/** a = item. */
+	public static final int ITEM_REMOVE = 164;
+
 	private RenderCallCodes() {
 	}
 }

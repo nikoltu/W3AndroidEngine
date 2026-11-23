@@ -38,7 +38,8 @@ public class CAbilityBlink extends CAbilityPointTargetSpellBase {
 	@Override
 	protected void innerCheckCanTarget(final CSimulation game, final CUnit unit, final int orderId,
 			final AbilityPointTarget target, final AbilityTargetCheckReceiver<AbilityPointTarget> receiver) {
-		if (unit.distance(target) < minimumRange) {
+		// Measured (1.29): the minimum range counts from the caster's center to the point, not from its edge.
+		if (StrictMath.hypot(target.getX() - unit.getX(), target.getY() - unit.getY()) < minimumRange) {
 			receiver.targetCheckFailed(CommandStringErrorKeys.TARGET_IS_INSIDE_MINIMUM_RANGE);
 		}
 		else {

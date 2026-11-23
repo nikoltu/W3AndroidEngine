@@ -68,7 +68,7 @@ public class CAbilityUnstableConcoction extends CAbilityTargetSpellBase {
 				final float step = diveSpeed * WarsmashConstants.SIMULATION_STEP_TIME;
 				final float contact = caster.getUnitType().getCollisionSize()
 						+ targetUnit.getUnitType().getCollisionSize();
-				if (targetUnit.isDead() || (distance <= (contact + step))) {
+				if (targetUnit.isDead() || targetUnit.isRemovedFromGame() || (distance <= (contact + step))) {
 					pause(game);
 					explode(game, caster, targetUnit, targetUnit.getX(), targetUnit.getY());
 					return;

@@ -32,6 +32,8 @@ public final class ReplayPlayback implements GameTurnManager, ReplaySession {
 	 * @param startTick the step the playback plays on to without drawing before it shows the game, or 0 to start at the
 	 *                  beginning (a seek back restarts the replay this way)
 	 */
+	private Runnable skipListener;
+
 	public ReplayPlayback(final CReplay replay, final FileHandle file, final War3MapViewer viewer,
 			final int startTick) throws IOException {
 		this.viewer = viewer;
@@ -48,8 +50,17 @@ public final class ReplayPlayback implements GameTurnManager, ReplaySession {
 				+ ", " + replay.getCommands().size() + " commands");
 		final int skipTo = startTick > 0 ? startTick : Integer.getInteger(GameReplays.SKIP_TO_PROPERTY, -1);
 		if (skipTo > 0) {
-			skipTo(skipTo);
+			skipTo(skipTo, () -> {
+				if (this.skipListener != null) {
+					this.skipListener.run();
+				}
+			});
 		}
+	}
+
+	/** Runs when the playback reached the step it was asked to start at, once the interface is there to show it. */
+	public void setSkipListener(final Runnable listener) {
+		this.skipListener = listener;
 	}
 
 	/** Plays on to the step without drawing the game (see {@link War3MapViewer#fastForwardTo}). */

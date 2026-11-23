@@ -34,6 +34,14 @@ public abstract class CAbilityOverlayedMine extends AbstractGenericNoIconAbility
 		}
 	}
 
+	/** Measured: a gold mine under a removed Haunted Gold Mine or Entangled Gold Mine is back, whole, as it was. */
+	public void revealParentMine() {
+		if (this.parentGoldMineUnit != null) {
+			this.parentGoldMineUnit.setHidden(false);
+			this.parentGoldMineUnit.setPaused(false);
+		}
+	}
+
 	public void setGold(final int gold) {
 		if (this.parentGoldMineAbility != null) {
 			this.parentGoldMineAbility.setGold(gold);

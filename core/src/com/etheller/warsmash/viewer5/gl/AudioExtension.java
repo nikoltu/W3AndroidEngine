@@ -52,6 +52,16 @@ public interface AudioExtension {
 	}
 
 	/**
+	 * Waits, at most this long, for the sounds made so far to be decoded, and leaves what was started for the
+	 * game's use as it is.
+	 *
+	 * @return whether every sound made so far can play
+	 */
+	default boolean awaitLoading(final long maxMillis) {
+		return true;
+	}
+
+	/**
 	 * Starts decoding a sound on another thread when a backend decodes in newSound, so that the newSound which
 	 * follows only has to hand the result over. Nothing to do for a backend that decodes in the background anyway.
 	 */

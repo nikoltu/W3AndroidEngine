@@ -44,6 +44,9 @@ public final class UnitSound {
 	// The file names as the label has them: a duration is read from the data without graphics packages, so scripts
 	// wait the same time with every graphics set.
 	private final List<String> labelPaths = new ArrayList<>();
+	// Finding the files of every sound of a unit type took most of the frame its first unit appeared in (dozens of
+	// lookups in every data source per type), so the files are found when the sound is first asked for.
+	private String[] unresolvedFiles;
 	private final float volume;
 	private final float pitch;
 	private final float pitchVariance;
@@ -95,20 +98,39 @@ public final class UnitSound {
 				distanceCutoff, looping);
 		sound.channel = row.getFieldValue("Channel");
 		sound.wants3D = wants3D;
-		for (final String fileName : fileNames.split(",")) {
-			final String resolvedPath = resolveSoundPath(dataSource, directoryBase + fileName);
-			if (dataSource.has(resolvedPath)) {
-				sound.soundPaths.add(resolvedPath);
-				sound.sounds.add(null);
-				sound.handles.add(null);
-				sound.durations.add(null);
-				sound.labelPaths.add(directoryBase + fileName);
+		final String[] files = fileNames.split(",");
+		for (int i = 0; i < files.length; i++) {
+			files[i] = directoryBase + files[i];
+		}
+		sound.unresolvedFiles = files;
+		return sound;
+	}
+
+	private void resolveFiles() {
+		final String[] files = this.unresolvedFiles;
+		if (files == null) {
+			return;
+		}
+		this.unresolvedFiles = null;
+		for (final String labelPath : files) {
+			final String resolvedPath = resolveSoundPath(this.dataSource, labelPath);
+			if (this.dataSource.has(resolvedPath)) {
+				this.soundPaths.add(resolvedPath);
+				this.sounds.add(null);
+				this.handles.add(null);
+				this.durations.add(null);
+				this.labelPaths.add(labelPath);
 			}
-			else if (!fileName.isEmpty()) {
+			else if (!labelPath.endsWith("\\") && !labelPath.isEmpty()) {
 				Log.warn("Sound file not found: " + resolvedPath);
 			}
 		}
-		return sound;
+	}
+
+	/** The number of files the sound plays one of. */
+	private int fileCount() {
+		resolveFiles();
+		return this.sounds.size();
 	}
 
 	private static String resolveSoundPath(final DataSource dataSource, String filePath) {
@@ -149,6 +171,7 @@ public final class UnitSound {
 
 	/** Whether the sound of the file at the index is made, so that a play of it needs no waiting. */
 	public boolean isMade(final int index) {
+		resolveFiles();
 		return this.sounds.get(index) != null;
 	}
 
@@ -158,6 +181,7 @@ public final class UnitSound {
 	 * @return false when that cannot be done, so that the play makes the sound itself
 	 */
 	public boolean makeLater(final int index, final Runnable made) {
+		resolveFiles();
 		return decodeLater(index, made);
 	}
 
@@ -167,7 +191,7 @@ public final class UnitSound {
 	 * sound first played.
 	 */
 	public void preload() {
-		for (int i = 0; i < this.sounds.size(); i++) {
+		for (int i = 0; i < fileCount(); i++) {
 			if ((this.sounds.get(i) != null) || this.waitingPlays.containsKey(i)) {
 				continue;
 			}
@@ -182,13 +206,14 @@ public final class UnitSound {
 	 * finds it decoded.
 	 */
 	public void prefetch() {
-		for (int i = 0; i < this.sounds.size(); i++) {
+		for (int i = 0; i < fileCount(); i++) {
 			prefetch(i);
 		}
 	}
 
 	/** Starts decoding one file of this sound, as {@link #prefetch()} does for all of them. */
 	public void prefetch(final int index) {
+		resolveFiles();
 		if ((this.sounds.get(index) == null) && (this.handles.get(index) == null)) {
 			Extensions.audio.prefetchSound(handle(index));
 		}
@@ -319,7 +344,7 @@ public final class UnitSound {
 	}
 
 	public boolean playUnitResponse(final AudioContext audioContext, final RenderUnit unit) {
-		return playUnitResponse(audioContext, unit, (int) (Math.random() * this.sounds.size()));
+		return playUnitResponse(audioContext, unit, (int) (Math.random() * fileCount()));
 	}
 
 	public boolean playUnitResponse(final AudioContext audioContext, final RenderUnit unit, final int index) {
@@ -337,11 +362,11 @@ public final class UnitSound {
 
 	public long play(final AudioContext audioContext, final float x, final float y, final float z,
 			final boolean loopOverride) {
-		return play(audioContext, x, y, z, (int) (Math.random() * this.sounds.size()), loopOverride);
+		return play(audioContext, x, y, z, (int) (Math.random() * fileCount()), loopOverride);
 	}
 
 	public long play(final AudioContext audioContext, final float x, final float y, final float z) {
-		return play(audioContext, x, y, z, (int) (Math.random() * this.sounds.size()));
+		return play(audioContext, x, y, z, (int) (Math.random() * fileCount()));
 	}
 
 	public long play(final AudioContext audioContext, final float x, final float y, final float z, final int index) {
@@ -358,7 +383,7 @@ public final class UnitSound {
 	 */
 	public long playFollowing(final AudioContext audioContext, final float x, final float y, final float z,
 			final Boolean loopOverride, final float[] follow) {
-		return play(audioContext, x, y, z, (int) (Math.random() * this.sounds.size()), loopOverride, follow);
+		return play(audioContext, x, y, z, (int) (Math.random() * fileCount()), loopOverride, follow);
 	}
 
 	/**
@@ -366,7 +391,7 @@ public final class UnitSound {
 	 */
 	public long play(final AudioContext audioContext, final float x, final float y, final float z, final int index,
 			final Boolean loopOverride, final float[] follow) {
-		if (this.sounds.isEmpty()) {
+		if (fileCount() == 0) {
 			return -1;
 		}
 
@@ -487,7 +512,7 @@ public final class UnitSound {
 	 * @return the length in seconds of the label's first file, which scripts wait by; 0 when it has none
 	 */
 	public float getDuration() {
-		return this.soundPaths.isEmpty() ? 0 : getDuration(0);
+		return fileCount() == 0 ? 0 : getDuration(0);
 	}
 
 	/**
@@ -499,6 +524,7 @@ public final class UnitSound {
 
 	/** @return the length in seconds of the label's file at this index */
 	public float getDuration(final int index) {
+		resolveFiles();
 		Float duration = this.durations.get(index);
 		if (duration == null) {
 			final DataSource data = this.dataSource.graphicsIndependent();
@@ -513,7 +539,7 @@ public final class UnitSound {
 	}
 
 	public int getSoundCount() {
-		return this.sounds.size();
+		return fileCount();
 	}
 
 	public Sound getLastPlayedSound() {

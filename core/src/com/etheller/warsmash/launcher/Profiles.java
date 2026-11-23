@@ -211,7 +211,15 @@ public class Profiles {
 
 	/** The version of the campaign maps the profile plays, as {@link LaunchContract#EXTRA_CAMPAIGN_MAPS} names it. */
 	public String campaignMaps(final String name) {
-		return this.launcher.getString(key(name, "campaignmaps"), LaunchRequest.CAMPAIGN_MAPS_REFORGED);
+		return this.launcher.getString(campaignMapsKey(name), DEFAULT_CAMPAIGN_MAPS);
+	}
+
+	/** What a profile plays the campaigns in until it chooses. */
+	public static final String DEFAULT_CAMPAIGN_MAPS = LaunchRequest.CAMPAIGN_MAPS_REFORGED;
+
+	/** The launcher preferences' key of a profile's campaign map version, which the engine's own menu reads too. */
+	public static String campaignMapsKey(final String name) {
+		return key(name, "campaignmaps");
 	}
 
 	public void setCampaignMaps(final String name, final String maps) {

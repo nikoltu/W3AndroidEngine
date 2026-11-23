@@ -34,6 +34,7 @@ import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowInsets;
+import android.view.WindowInsetsController;
 import android.view.WindowManager;
 
 import com.badlogic.gdx.Gdx;
@@ -50,6 +51,7 @@ import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.utils.BufferUtils;
 import com.badlogic.gdx.utils.GdxRuntimeException;
 import com.etheller.warsmash.viewer5.handlers.w3x.simthread.SimThreadMode;
+import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.RenderUnitTypeData;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.campaign.CCampaignProgress;
 import com.etheller.warsmash.WarsmashGdxMapScreen;
 import com.etheller.warsmash.WarsmashGdxMenuScreen;
@@ -124,6 +126,8 @@ public class AndroidLauncher extends AndroidApplication {
 	private boolean initialized;
 	/** The game started from the launcher that is running, for the crash handler. */
 	private static volatile AndroidLauncher launched;
+	/** The game activity that is running by any start path, for the crash log. */
+	private static volatile AndroidLauncher crashSource;
 	private static boolean crashHandlerSet;
 	private static final int REQUEST_MOVIES = 1;
 	/** The game saved when the GL context was lost, in the app's own files; not one of the player's saves. */
@@ -134,6 +138,8 @@ public class AndroidLauncher extends AndroidApplication {
 	private Movies.Player moviePlayer;
 	private WarsmashGdxMultiScreenGame game;
 	private final Handler loadWatch = new Handler(Looper.getMainLooper());
+	private final Handler barsWatch = new Handler(Looper.getMainLooper());
+	private final Runnable hideBars = this::hideSystemBars;
 	private final Runnable loadWatcher = this::keepScreenOnWhileLoading;
 	private boolean screenKeptOn;
 	private boolean replayScreenOn;
@@ -173,6 +179,9 @@ public class AndroidLauncher extends AndroidApplication {
 	@Override
 	protected void onCreate(final Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
+		if (GlesSupport.redirect(this)) {
+			return;
+		}
 		final String token = getIntent().getStringExtra(LaunchContract.EXTRA_TOKEN);
 		if (token != null) {
 			// Android restores a closed game activity with its old extras; that must not start the game again.
@@ -192,10 +201,13 @@ public class AndroidLauncher extends AndroidApplication {
 			}
 			this.fromLauncher = true;
 			launched = this;
-			leaveCrashResult();
 			CrashLogs.crashIfAsked(this);
 		}
-		final File iniFile = new File(getExternalFilesDir(null), INI_FILE_NAME);
+		// Every start path, also a map started from outside the launcher, leaves a crash log.
+		crashSource = this;
+		leaveCrashResult();
+		ExitLogs.recordPreviousExit(this);
+		final File iniFile = new File(EngineResources.appFolder(this), INI_FILE_NAME);
 		if (!iniFile.isFile()) {
 			final Intent intent = new Intent(this, DataFolderActivity.class);
 			if (getIntent().getExtras() != null) {
@@ -300,6 +312,13 @@ public class AndroidLauncher extends AndroidApplication {
 		// A map started from outside the launcher (automated runs) may name its own profile, as the desktop
 		// -Dwarsmash.profile does, so its saves and caches stay out of the player's. The process outlives the run, so
 		// a later game must not inherit it.
+		// Automated runs may keep the models of unit types that are no longer shown, to measure what letting them go saves.
+		if (getIntent().getBooleanExtra("keepmodels", false)) {
+			System.setProperty(RenderUnitTypeData.KEEP_MODELS_PROPERTY, "true");
+		}
+		else {
+			System.clearProperty(RenderUnitTypeData.KEEP_MODELS_PROPERTY);
+		}
 		final String testProfile = this.fromLauncher ? null : getIntent().getStringExtra(EXTRA_TEST_PROFILE);
 		if ((fileToLoad != null) && (testProfile != null) && !testProfile.isEmpty()) {
 			System.setProperty("warsmash.profile", testProfile);
@@ -309,6 +328,7 @@ public class AndroidLauncher extends AndroidApplication {
 		}
 		final WarsmashGdxMultiScreenGame game = new WarsmashGdxMultiScreenGame();
 		initialize(GlContextWatch.watch(game, () -> contextLost(game, warsmashIni, fileToLoad)), config);
+		keepSystemBarsHidden();
 		this.initialized = true;
 		if (getIntent().getStringExtra(LaunchContract.EXTRA_REPLAY_FILE) != null) {
 			// A replay is watched without touching the screen, which must not go dark under it.
@@ -360,7 +380,19 @@ public class AndroidLauncher extends AndroidApplication {
 			if (save != null) {
 				menuScreen.setStartupMap(continuedMap);
 			}
-			menuScreen.setGameEndListener(this::gameEnded);
+			menuScreen.setGameEndListener(new WarsmashGdxMenuScreen.GameEndListener() {
+				@Override
+				public void gameEnded(final GameResult result) {
+					AndroidLauncher.this.gameEnded(result);
+				}
+
+				@Override
+				public void startupFailed(final Throwable error, final GameResult result) {
+					final Thread thread = Thread.currentThread();
+					new Thread(() -> CrashLogs.write(AndroidLauncher.this, thread, error), "startup-failure-log").start();
+					AndroidLauncher.this.gameEnded(result);
+				}
+			});
 			menuScreen.whenLoaded(menu -> {
 				final boolean started;
 				if (save != null) {
@@ -519,13 +551,15 @@ public class AndroidLauncher extends AndroidApplication {
 		CrashLogs.prepare();
 		final Thread.UncaughtExceptionHandler system = Thread.getDefaultUncaughtExceptionHandler();
 		Thread.setDefaultUncaughtExceptionHandler((thread, error) -> {
-			final AndroidLauncher game = launched;
+			final AndroidLauncher game = crashSource;
 			if (game != null) {
-				try {
-					game.writeResult(withoutGame("crash"));
-				}
-				catch (final Throwable e) {
-					Log.e(TAG, "Unable to leave the crash result", e);
+				if (game.fromLauncher) {
+					try {
+						game.writeResult(withoutGame("crash"));
+					}
+					catch (final Throwable e) {
+						Log.e(TAG, "Unable to leave the crash result", e);
+					}
 				}
 				CrashLogs.write(game, thread, error);
 			}
@@ -636,6 +670,9 @@ public class AndroidLauncher extends AndroidApplication {
 		if (launched == this) {
 			launched = null;
 		}
+		if (crashSource == this) {
+			crashSource = null;
+		}
 		Movies.removePlayer(this.moviePlayer);
 		if (this.audioFocus != null) {
 			this.audioFocus.release();
@@ -650,8 +687,9 @@ public class AndroidLauncher extends AndroidApplication {
 			endLanSession();
 		}
 		if (!this.initialized) {
-			skipKeyboardHeightClose();
+			skipKeyboardHeightClose(this);
 		}
+		this.barsWatch.removeCallbacks(this.hideBars);
 		super.onDestroy();
 		// libGDX keeps the application object in Gdx.app until the next game starts; it must not keep the game.
 		this.game = null;
@@ -662,12 +700,12 @@ public class AndroidLauncher extends AndroidApplication {
 	 * The backend closes its keyboard height provider on destroy without checking that initialize made one, so an
 	 * activity that finished before starting the engine (no data folder, say) would fail there.
 	 */
-	private void skipKeyboardHeightClose() {
+	static void skipKeyboardHeightClose(final AndroidApplication application) {
 		try {
 			final Field field = AndroidApplication.class.getDeclaredField("keyboardHeightProvider");
 			field.setAccessible(true);
-			if (field.get(this) == null) {
-				field.set(this, new KeyboardHeightProvider() {
+			if (field.get(application) == null) {
+				field.set(application, new KeyboardHeightProvider() {
 					@Override
 					public void start() {
 					}
@@ -726,6 +764,43 @@ public class AndroidLauncher extends AndroidApplication {
 			covered = decor.getRootView().getHeight() - visible.bottom;
 		}
 		OnscreenKeyboard.setCoveredHeightPixels(covered);
+	}
+
+	@Override
+	public void onWindowFocusChanged(final boolean hasFocus) {
+		super.onWindowFocusChanged(hasFocus);
+		if (hasFocus) {
+			hideSystemBars();
+		}
+	}
+
+	/**
+	 * A mouse pushed against a screen edge asks the system for its bars like a swipe does, and some devices then keep
+	 * them out; they are hidden again shortly after they appear, which leaves the system's own handling alone.
+	 */
+	private void keepSystemBarsHidden() {
+		getWindow().getDecorView().setOnApplyWindowInsetsListener((view, insets) -> {
+			final WindowInsets applied = view.onApplyWindowInsets(insets);
+			this.barsWatch.removeCallbacks(this.hideBars);
+			this.barsWatch.postDelayed(this.hideBars, 1500);
+			return applied;
+		});
+	}
+
+	@SuppressWarnings("deprecation")
+	private void hideSystemBars() {
+		final View decor = getWindow().getDecorView();
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+			final WindowInsetsController controller = decor.getWindowInsetsController();
+			if (controller != null) {
+				controller.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+				controller.hide(WindowInsets.Type.systemBars());
+				return;
+			}
+		}
+		decor.setSystemUiVisibility(View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_FULLSCREEN
+				| View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+				| View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
 	}
 
 	@Override
@@ -912,6 +987,11 @@ public class AndroidLauncher extends AndroidApplication {
 				catch (final RuntimeException e) {
 					return null;
 				}
+			}
+
+			@Override
+			public boolean awaitLoading(final long maxMillis) {
+				return PooledSounds.get().awaitLoading(maxMillis);
 			}
 
 			@Override

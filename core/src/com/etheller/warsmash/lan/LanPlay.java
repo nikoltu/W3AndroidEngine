@@ -24,6 +24,8 @@ import net.warsmash.lan.protocol.LanTimings;
 public final class LanPlay {
 	/** Each player may pause this many times in a game. */
 	public static final int PAUSES_PER_PLAYER = 3;
+	/** A loading player repeats its percentage every 10 seconds; one silent for this long is taken as gone. */
+	static final long LOAD_REPORT_FRESH_MS = 30000;
 
 	/** Sends the player's votes to the host. */
 	public interface Actions {
@@ -38,13 +40,21 @@ public final class LanPlay {
 		/** A {@code LanProtocol.LAG_*} reason. */
 		public final int reason;
 		public final long waitedMs;
+		/** How far a player that is still loading the game has got, 0 to 99; -1 for a player that is waited for. */
+		public final int loadPercent;
 
 		Row(final int participant, final String name, final int color, final int reason, final long waitedMs) {
+			this(participant, name, color, reason, waitedMs, -1);
+		}
+
+		Row(final int participant, final String name, final int color, final int reason, final long waitedMs,
+				final int loadPercent) {
 			this.participant = participant;
 			this.name = name;
 			this.color = color;
 			this.reason = reason;
 			this.waitedMs = waitedMs;
+			this.loadPercent = loadPercent;
 		}
 	}
 
@@ -54,6 +64,8 @@ public final class LanPlay {
 		public final boolean hostLost;
 		/** Opponents are all gone but nobody is waited for: only the claim is offered. */
 		public final boolean absentOnly;
+		/** The rows are players that are still loading the game: the game goes on without them, nothing is voted. */
+		public boolean loading;
 		/** Seconds until "Continue without them" opens, 0 when it is open; -1 when it is not offered. */
 		public final int continueInSeconds;
 		/** Seconds until "Claim victory" opens, 0 when it is open; -1 when it is not offered. */
@@ -137,6 +149,8 @@ public final class LanPlay {
 	private boolean catchingUp;
 	private int catchTick;
 	private long catchSteps;
+	private final Map<Integer, Integer> loadPercents = new HashMap<Integer, Integer>();
+	private final Map<Integer, Long> loadReportedAt = new HashMap<Integer, Long>();
 
 	/**
 	 * @param me this machine's participant id
@@ -155,6 +169,26 @@ public final class LanPlay {
 			this.presence.put(p.id, LanProtocol.PRESENCE_PLAYING);
 			this.controlSchemes.put(p.id, p.controlScheme);
 		}
+	}
+
+	/**
+	 * A player said how far it has loaded the game. The host marks a player that did not load in time absent and goes
+	 * on without it; such a player keeps reporting while it loads, which tells it from one that is gone.
+	 */
+	public synchronized void onLoadProgress(final int participant, final int percent) {
+		if (participant == this.me) {
+			return;
+		}
+		this.loadPercents.put(participant, percent);
+		this.loadReportedAt.put(participant, this.clock.getAsLong());
+	}
+
+	/** Whether the player is absent because it is still loading the game: it reported a load below 100 lately. */
+	private boolean isLoading(final int participant) {
+		final Integer percent = this.loadPercents.get(participant);
+		final Long at = this.loadReportedAt.get(participant);
+		return presenceOf(participant) == LanProtocol.PRESENCE_ABSENT && percent != null && percent < 100 && at != null
+				&& this.clock.getAsLong() - at <= LOAD_REPORT_FRESH_MS;
 	}
 
 	/** A participant changed how it plays (touch, or keyboard and mouse); only the score screen shows it. */
@@ -318,7 +352,7 @@ public final class LanPlay {
 			this.messages.add(name + " has left the game.");
 			break;
 		case LanProtocol.PRESENCE_ABSENT:
-			this.messages.add(name + " is absent.");
+			this.messages.add(name + (isLoading(participant) ? " is still loading the game." : " is absent."));
 			break;
 		case LanProtocol.PRESENCE_PLAYING:
 			if (before != null && before != LanProtocol.PRESENCE_PLAYING) {
@@ -462,6 +496,12 @@ public final class LanPlay {
 			}
 		}
 		if (rows.isEmpty()) {
+			final List<Row> loadingRows = loadingRows();
+			if (!loadingRows.isEmpty()) {
+				final Window w = new Window(loadingRows, false, false, -1, -1);
+				w.loading = true;
+				return w;
+			}
 			return claimableAbsent() ? new Window(rows, false, true, -1, 0) : null;
 		}
 		long longest = 0;
@@ -484,6 +524,16 @@ public final class LanPlay {
 			claimIn = any ? seconds(this.timings.claimAfterMs - shortest) : 0;
 		}
 		return new Window(rows, false, false, continueIn, claimIn);
+	}
+
+	private List<Row> loadingRows() {
+		final List<Row> rows = new ArrayList<Row>();
+		for (final ParticipantInfo p : this.setup.participants) {
+			if (p.id != this.me && isLoading(p.id)) {
+				rows.add(new Row(p.id, p.name, colorOf(p), LanProtocol.LAG_LAGGING, 0, this.loadPercents.get(p.id)));
+			}
+		}
+		return rows;
 	}
 
 	public void continueWithout() {

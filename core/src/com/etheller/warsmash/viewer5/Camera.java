@@ -144,6 +144,23 @@ public class Camera {
 		this.dirty = true;
 	}
 
+	/** Takes over another camera's viewport and projection. */
+	public void copyProjection(final Camera other) {
+		this.rect.set(other.rect);
+		this.aspect = other.aspect;
+		this.fov = other.fov;
+		this.isPerspective = other.isPerspective;
+		this.isOrtho = other.isOrtho;
+		this.leftClipPlane = other.leftClipPlane;
+		this.rightClipPlane = other.rightClipPlane;
+		this.bottomClipPlane = other.bottomClipPlane;
+		this.topClipPlane = other.topClipPlane;
+		this.nearClipPlane = other.nearClipPlane;
+		this.farClipPlane = other.farClipPlane;
+
+		this.dirty = true;
+	}
+
 	public void viewport(final Rectangle viewport) {
 		this.rect.set(viewport);
 

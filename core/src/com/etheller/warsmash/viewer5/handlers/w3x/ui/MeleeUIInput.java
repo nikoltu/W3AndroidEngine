@@ -39,6 +39,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnitStateListener;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnitType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CWidget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CWidgetFilterFunction;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.inventory.CAbilityInventory;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbility;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbilityAttack;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbilityView;
@@ -49,7 +50,6 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.harvest.C
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.queue.CAbilityRally;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityPointTarget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.CGroupMove;
-import com.etheller.warsmash.viewer5.handlers.w3x.simulation.data.CUnitRace;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.orders.OrderIds;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CAllianceType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.JassGameEventsWar3;
@@ -784,7 +784,7 @@ final class MeleeUIInput {
 											this.ui.activeCommand.getHandleId(), this.ui.activeCommandOrderId,
 											clickLocationTemp2.x, clickLocationTemp2.y, shiftDown);
 								}
-								if (this.ui.selectedUnits.size() > 1) {
+								if ((this.ui.selectedUnits.size() > 1) && !this.ui.activeCommand.isUniqueCast()) {
 									for (final RenderUnit otherSelectedUnit : this.ui.selectedUnits) {
 										if (otherSelectedUnit != this.ui.activeCommandUnit) {
 											CAbility abilityToUse = null;
@@ -887,6 +887,8 @@ final class MeleeUIInput {
 							boolean ordered = false;
 							boolean rallied = false;
 							boolean attacked = false;
+							final CUnit itemPicker = chooseItemPicker(rayPickUnit.getSimulationWidget());
+							final List<RenderUnit> itemWalkers = new ArrayList<>();
 							for (final RenderUnit unit : this.ui.selectedUnits) {
 								CAbility abilityToUse = null;
 								CWidget targetToUse = null;
@@ -901,7 +903,12 @@ final class MeleeUIInput {
 										targetToUse = targetWidget;
 									}
 								}
-								if (abilityToUse != null) {
+								if ((abilityToUse instanceof CAbilityInventory) && (itemPicker != null)
+										&& (unit.getSimulationUnit() != itemPicker)) {
+									itemWalkers.add(unit);
+									ordered = true;
+								}
+								else if (abilityToUse != null) {
 									this.ui.unitOrderListener.issueTargetOrder(unit.getSimulationUnit().getHandleId(),
 											abilityToUse.getHandleId(), OrderIds.smart, targetToUse.getHandleId(),
 											isShiftDown());
@@ -909,6 +916,10 @@ final class MeleeUIInput {
 									attacked |= abilityToUse instanceof CAbilityAttack;
 									ordered = true;
 								}
+							}
+							if (!itemWalkers.isEmpty()) {
+								rightClickMoveTo(rayPickUnit.getSimulationWidget().getX(),
+										rayPickUnit.getSimulationWidget().getY(), itemWalkers, false);
 							}
 							if (ordered) {
 								final UnitSound yesSound = attacked ? this.ui.getSelectedUnit().soundset.yesAttack
@@ -1026,14 +1037,55 @@ final class MeleeUIInput {
 		rightClickMoveTo(MeleeUI.clickLocationTemp.x, MeleeUI.clickLocationTemp.y);
 	}
 
+	/**
+	 * For a smart order on a ground item given to several units: the one that goes for it (see ItemPickupChooser), or
+	 * null when the target is no item, only one unit is selected or none of them has an inventory. When
+	 * none has room the nearest goes anyway, so the group shows one error and not one each.
+	 */
+	private CUnit chooseItemPicker(final CWidget target) {
+		if (!(target instanceof CItem) || (this.ui.selectedUnits.size() < 2)) {
+			return null;
+		}
+		final CItem item = (CItem) target;
+		final List<CUnit> units = new ArrayList<>();
+		final List<ItemPickupChooser.Candidate> candidates = new ArrayList<>();
+		for (final RenderUnit unit : this.ui.selectedUnits) {
+			final CUnit simUnit = unit.getSimulationUnit();
+			for (final CAbility ability : simUnit.getAbilities()) {
+				if (!(ability instanceof CAbilityInventory)) {
+					continue;
+				}
+				ability.checkCanTarget(this.ui.war3MapViewer.simulation, simUnit, this.ui.localPlayer.getId(),
+						OrderIds.smart, false, item, CWidgetAbilityTargetCheckReceiver.INSTANCE);
+				if (CWidgetAbilityTargetCheckReceiver.INSTANCE.getTarget() != null) {
+					final double dx = simUnit.getX() - item.getX();
+					final double dy = simUnit.getY() - item.getY();
+					units.add(simUnit);
+					candidates.add(new ItemPickupChooser.Candidate(simUnit.isHero(),
+							simUnit.isHero() ? simUnit.getUnitType().getPrimaryAttribute() : null,
+							((CAbilityInventory) ability).hasRoomFor(item), (dx * dx) + (dy * dy)));
+					break;
+				}
+			}
+		}
+		final int chosen = ItemPickupChooser.choose(
+				ItemPickupChooser.itemStats(this.ui.war3MapViewer.simulation, item), candidates);
+		return chosen == -1 ? null : units.get(chosen);
+	}
+
 	private void rightClickMoveTo(final float worldX, final float worldY) {
+		rightClickMoveTo(worldX, worldY, this.ui.selectedUnits, true);
+	}
+
+	private void rightClickMoveTo(final float worldX, final float worldY, final List<RenderUnit> units,
+			final boolean playSound) {
 		clickLocationTemp2.set(worldX, worldY);
 
 		boolean ordered = false;
 		boolean rallied = false;
 		final List<CUnit> walkers = new ArrayList<>();
 		final List<CAbilityView> walkerAbilities = new ArrayList<>();
-		for (final RenderUnit unit : this.ui.selectedUnits) {
+		for (final RenderUnit unit : units) {
 			if (isControlledByLocalPlayer(unit)) {
 				for (final CAbility ability : unit.getSimulationUnit().getAbilities()) {
 					ability.checkCanUse(this.ui.war3MapViewer.simulation, unit.getSimulationUnit(),
@@ -1066,7 +1118,7 @@ final class MeleeUIInput {
 		issueGroupPointOrder(walkers, walkerAbilities, OrderIds.smart, clickLocationTemp2.x, clickLocationTemp2.y,
 				isShiftDown());
 
-		if (ordered) {
+		if (ordered && playSound) {
 			if (this.ui.getSelectedUnit().soundset.yes.playUnitResponse(this.ui.war3MapViewer.worldScene.audioContext,
 					this.ui.getSelectedUnit())) {
 				this.ui.infoPanel.portraitTalk(this.ui.getSelectedUnit().soundset.yes);
@@ -1194,6 +1246,23 @@ final class MeleeUIInput {
 		return selectedUnits;
 	}
 
+	/**
+	 * A unit answers its selection for the player owning it and for everyone when Neutral Passive owns it, whatever
+	 * its race: map-made shops and taverns are often of another race than the stock neutral buildings.
+	 */
+	static boolean isSelectionVoiced(final int ownerIndex, final int localPlayerIndex, final int maxPlayers) {
+		return (ownerIndex == localPlayerIndex) || (ownerIndex == (maxPlayers - 1));
+	}
+
+	/**
+	 * Also a unit whose owner hands its control to the local player answers: maps that keep their shops with a slot
+	 * of their own (a Player(15) shared with everyone) rely on that.
+	 */
+	static boolean isSelectionVoiced(final int ownerIndex, final int localPlayerIndex, final int maxPlayers,
+			final boolean ownerSharesControl) {
+		return ownerSharesControl || isSelectionVoiced(ownerIndex, localPlayerIndex, maxPlayers);
+	}
+
 	private void presentSelection(final List<RenderUnit> prevSelectedUnits, final List<RenderUnit> selectedUnits) {
 		if (!selectedUnits.isEmpty()) {
 			final RenderUnit unit = selectedUnits.get(0);
@@ -1213,10 +1282,12 @@ final class MeleeUIInput {
 			final boolean selectedInFrame = selectedView.unit(unit);
 			final int selectedOwner = selectedInFrame ? selectedView.ownerIndex()
 					: readSimulation(() -> unit.getSimulationUnit().getPlayerIndex());
-			final CUnitRace selectedRace = unitTypeOf(unit).getRace();
-			if ((selectedOwner == this.ui.war3MapViewer.getLocalPlayerIndex())
-					|| (((selectedRace == CUnitRace.CRITTERS) || (selectedRace == CUnitRace.OTHER))
-							&& (selectedOwner == (this.ui.war3MapViewer.getGameData().getMaxPlayers() - 1)))) {
+			final int localPlayerIndex = this.ui.war3MapViewer.getLocalPlayerIndex();
+			final boolean ownerSharesControl = (selectedOwner != localPlayerIndex) && readSimulation(
+					() -> this.ui.war3MapViewer.simulation.getPlayer(selectedOwner).hasAlliance(localPlayerIndex,
+							CAllianceType.SHARED_CONTROL));
+			if (isSelectionVoiced(selectedOwner, localPlayerIndex, this.ui.war3MapViewer.getGameData().getMaxPlayers(),
+					ownerSharesControl)) {
 				if (unit.soundset != null) {
 					UnitSound ackSoundToPlay = unit.soundset.what;
 					int soundIndex;

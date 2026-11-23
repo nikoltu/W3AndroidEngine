@@ -1,5 +1,6 @@
 package com.etheller.warsmash.android;
 
+import java.util.ArrayDeque;
 import java.util.function.IntConsumer;
 
 import android.animation.ValueAnimator;
@@ -39,6 +40,7 @@ final class LauncherDialogs extends LauncherViews {
 	View[] dialogButtons;
 	/** A dialog that only its own buttons close (the first profile). */
 	boolean dialogLocked;
+	private final ArrayDeque<Runnable> queuedQuestions = new ArrayDeque<>();
 
 	LauncherDialogs(final LauncherActivity activity) {
 		super(activity);
@@ -76,7 +78,7 @@ final class LauncherDialogs extends LauncherViews {
 		final LinearLayout list = new LinearLayout(this.activity);
 		list.setOrientation(LinearLayout.VERTICAL);
 		list.setBackground(new LauncherKit.FrameDrawable(this.activity.art.bitmap(SkinArt.EDIT_BORDER), px(edge))
-				.filled(Color.argb(0xF2, 0, 0, 0)).fillInset(px(edge * 0.4f)).fallback(Color.argb(0xF2, 0x03, 0x04, 0x0A))
+				.filled(Color.BLACK).fillInset(px(edge * 0.4f)).fallback(Color.rgb(0x03, 0x04, 0x0A))
 				.line(this.activity.art.line()));
 		list.setPadding(px(edge), px(edge), px(edge), px(edge));
 		list.setClickable(true);
@@ -178,6 +180,11 @@ final class LauncherDialogs extends LauncherViews {
 	/** A question with a long explanation: the box is taller and the lines of the explanation are not cut at three. */
 	void showQuestion(final String title, final String line, final CharSequence[] labels,
 			final Runnable[] actions, final Bitmap icon, final int detailLines, final boolean tall) {
+		if (this.dialog != null) {
+			// Dropped silently, its buttons would never run; it opens when the open dialog closes.
+			this.queuedQuestions.add(() -> showQuestion(title, line, labels, actions, icon, detailLines, tall));
+			return;
+		}
 		final LauncherBoard b = this.activity.board;
 		final float w = b.tablet ? 1200 : 900;
 		final float h = tall ? (b.tablet ? 860 : 640) : (b.tablet ? 620 : 440);
@@ -248,6 +255,14 @@ final class LauncherDialogs extends LauncherViews {
 		this.dialogFold = null;
 		this.dialogButtons = null;
 		this.dialogLocked = false;
+		final Runnable next = this.queuedQuestions.poll();
+		if (next != null) {
+			this.activity.root.post(() -> {
+				if (!this.activity.isDestroyed()) {
+					next.run();
+				}
+			});
+		}
 	}
 
 	/**

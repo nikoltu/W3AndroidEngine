@@ -31,6 +31,7 @@ import com.etheller.warsmash.BuildInfo;
 import com.etheller.warsmash.datasources.GraphicsSettings;
 import com.etheller.warsmash.launcher.CrashReport;
 import com.etheller.warsmash.launcher.LauncherOptions;
+import com.etheller.warsmash.launcher.ProblemReport;
 
 /**
  * The opt-in crash log: written when the program crashes and the player turned "Save crash logs" on. The copy the
@@ -130,34 +131,37 @@ final class CrashLogs {
 			details.renderer = CrashReport.rendererFrom(details.log);
 			details.graphics = graphics(game);
 			details.map = map(game);
-			final long time = details.time;
-			final String name = CrashReport.fileName(time, ZoneId.systemDefault());
-			final byte[] text = CrashReport.text(details, ZoneId.systemDefault()).getBytes(StandardCharsets.UTF_8);
-			final File own = new File(privateFolder(game), name);
-			own.getParentFile().mkdirs();
-			try (OutputStream out = new java.io.FileOutputStream(own)) {
-				out.write(text);
-			}
-			try {
-				saveForPlayer(game, name, text);
-			}
-			catch (final IOException | RuntimeException e) {
-				Log.e(TAG, "Unable to save the crash log where the player finds it", e);
-			}
-			final String[] kept = privateFolder(game).list();
-			if (kept != null) {
-				for (final String old : CrashReport.expired(Arrays.asList(kept), CrashReport.KEEP)) {
-					new File(privateFolder(game), old).delete();
-				}
-			}
+			final String name = CrashReport.fileName(details.time, ZoneId.systemDefault());
+			store(game, name, CrashReport.text(details, ZoneId.systemDefault()).getBytes(StandardCharsets.UTF_8));
 		}
 		catch (final Throwable e) {
 			Log.e(TAG, "Unable to write the crash log", e);
 		}
 	}
 
+	/** Keeps a log in the private folder and where the player finds it, and drops the oldest ones. */
+	static void store(final Context context, final String name, final byte[] text) throws IOException {
+		final File own = new File(privateFolder(context), name);
+		own.getParentFile().mkdirs();
+		try (OutputStream out = new java.io.FileOutputStream(own)) {
+			out.write(text);
+		}
+		try {
+			saveForPlayer(context, name, text);
+		}
+		catch (final IOException | RuntimeException e) {
+			Log.e(TAG, "Unable to save the crash log where the player finds it", e);
+		}
+		final String[] kept = privateFolder(context).list();
+		if (kept != null) {
+			for (final String old : CrashReport.expired(Arrays.asList(kept), CrashReport.KEEP)) {
+				new File(privateFolder(context), old).delete();
+			}
+		}
+	}
+
 	/** The app's own log: an app may read it without a permission, and only its own process's lines. */
-	private static List<String> ownLog() {
+	static List<String> ownLog() {
 		final List<String> lines = new ArrayList<>();
 		final Thread reader = new Thread(() -> {
 			Process process = null;
@@ -198,7 +202,7 @@ final class CrashLogs {
 		}
 	}
 
-	private static String graphics(final Context context) {
+	static String graphics(final Context context) {
 		try {
 			final EngineSettings engine = new EngineSettings(context);
 			return "set=" + engine.graphics(GraphicsSettings.KEY_SET, "")
@@ -326,6 +330,34 @@ final class CrashLogs {
 		return file;
 	}
 
+	/**
+	 * The part of a problem report the phone knows: the build, the device, the graphics, this run's app log and the
+	 * newest crash log. Blocks while the log is read, so not for the main thread.
+	 */
+	static ProblemReport.Request reportRequest(final Context context) {
+		final ProblemReport.Request request = new ProblemReport.Request();
+		request.time = System.currentTimeMillis();
+		final BuildInfo build = BuildInfo.current();
+		request.facts.put("App version", build.getVersionName());
+		request.facts.put("Commit", build.getBuildId());
+		request.facts.put("Device", Build.MANUFACTURER + " " + Build.MODEL);
+		request.facts.put("Android", Build.VERSION.RELEASE + " (API " + Build.VERSION.SDK_INT + ")");
+		request.appLog = ownLog();
+		final String renderer = CrashReport.rendererFrom(request.appLog);
+		request.facts.put("GPU", renderer != null ? renderer : "not in this run's log (it is logged once a game runs)");
+		request.facts.put("Graphics", graphics(context));
+		final String simulationThread = System.getProperty("warsmash.simthread");
+		if (simulationThread != null) {
+			request.facts.put("Simulation thread", simulationThread);
+		}
+		request.crashLog = latest(context);
+		final String exit = ExitLogs.lastSummary(context);
+		if (exit != null) {
+			request.facts.put("Last abnormal process exit", exit);
+		}
+		return request;
+	}
+
 	/** The share sheet for the newest crash log; false when there is none. */
 	static boolean share(final Context context) {
 		final File log = latest(context);
@@ -336,7 +368,7 @@ final class CrashLogs {
 	static boolean share(final Context context, final File log, final String subject) {
 		final Uri uri = CrashLogProvider.uri(context, log.getName());
 		final Intent send = new Intent(Intent.ACTION_SEND);
-		send.setType("text/plain");
+		send.setType(CrashLogProvider.type(log.getName()));
 		send.putExtra(Intent.EXTRA_STREAM, uri);
 		send.putExtra(Intent.EXTRA_SUBJECT, subject);
 		send.setClipData(ClipData.newRawUri(log.getName(), uri));

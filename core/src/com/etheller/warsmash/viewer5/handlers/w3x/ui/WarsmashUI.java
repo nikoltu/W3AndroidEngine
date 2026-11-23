@@ -51,6 +51,9 @@ public interface WarsmashUI extends CommandErrorListener, WarsmashBaseUI {
 	/** DialogDisplay: shows or hides the dialog; one shown now is the dialog shown last. */
 	void displayScriptDialog(CScriptDialog dialog, boolean flag);
 
+	/** DialogSetMessage. */
+	void setScriptDialogTitle(CScriptDialog dialog, String text);
+
 	CScriptDialogButton createScriptDialogButton(CScriptDialog dialog, String buttonText, char hotkeyInt);
 
 	void quitMission();

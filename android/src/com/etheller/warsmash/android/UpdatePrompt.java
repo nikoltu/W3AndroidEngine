@@ -45,6 +45,7 @@ import android.widget.TextView;
 
 import com.etheller.warsmash.BuildInfo;
 import com.etheller.warsmash.launcher.LauncherKeys;
+import com.etheller.warsmash.launcher.LauncherText;
 import com.etheller.warsmash.launcher.ProjectInfo;
 import com.etheller.warsmash.launcher.SkinArt;
 import com.etheller.warsmash.launcher.UpdateCheck;
@@ -67,7 +68,7 @@ final class UpdatePrompt {
 	private static final int RED = Color.rgb(0xE2, 0x9A, 0x9A);
 
 	private enum State {
-		CHECKING, OFFER, DOWNLOADING, PERMISSION, MANUAL, FAILED, INSTALLING, DONE
+		CHECKING, OFFER, DOWNLOADING, PERMISSION, MANUAL, FAILED, REJECTED, INSTALLING, DONE
 	}
 
 	private static final Object LOCK = new Object();
@@ -93,6 +94,7 @@ final class UpdatePrompt {
 		}
 	};
 	private boolean receiving;
+	private boolean leftInstalling;
 	private float scale;
 	private boolean tablet;
 	private FrameLayout root;
@@ -123,6 +125,11 @@ final class UpdatePrompt {
 				Context.MODE_PRIVATE);
 		synchronized (LOCK) {
 			if (state == State.DONE) {
+				return false;
+			}
+			if (state == State.INSTALLING) {
+				// The window is made again after the install screen was left; the offer comes back at the next start.
+				state = State.DONE;
 				return false;
 			}
 			if (!started) {
@@ -244,6 +251,26 @@ final class UpdatePrompt {
 		this.root.setSystemUiVisibility(View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_FULLSCREEN
 				| View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
 				| View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
+	}
+
+	/** The window is left; if the install screen is what it is left for, {@link #closeInstalling} knows it. */
+	void leaving() {
+		this.leftInstalling = state == State.INSTALLING;
+	}
+
+	/**
+	 * Back in the window after the install screen was left without the app being replaced: the window is closed and
+	 * the launcher goes on.
+	 *
+	 * @return whether it was closed
+	 */
+	boolean closeInstalling() {
+		final boolean close = this.leftInstalling && (state == State.INSTALLING);
+		this.leftInstalling = false;
+		if (close) {
+			finish();
+		}
+		return close;
 	}
 
 	void detach() {
@@ -508,6 +535,15 @@ final class UpdatePrompt {
 			setButton(this.second, R.string.update_continue, false, this::finish);
 			setButton(this.third, 0, false, null);
 			break;
+		case REJECTED:
+			this.title.setText(R.string.update_rejected_title);
+			this.title.setTextColor(RED);
+			this.detail.setText(rejectedDetail());
+			this.detail.setTextColor(this.textDim);
+			setButton(this.first, R.string.update_open_apk, true, this::openApk);
+			setButton(this.second, R.string.update_open_page, false, this::openPage);
+			setButton(this.third, R.string.update_continue, false, this::finish);
+			break;
 		case INSTALLING:
 			this.title.setText(R.string.update_installing);
 			this.detail.setText(R.string.update_installing_detail);
@@ -533,6 +569,45 @@ final class UpdatePrompt {
 
 	private void openPage() {
 		open(release.pageUrl);
+	}
+
+	private String rejectedDetail() {
+		final StringBuilder text = new StringBuilder(this.activity.getString(R.string.update_rejected_detail));
+		text.append("\n\n").append(this.activity.getString(
+				isXiaomi() ? R.string.update_rejected_miui : R.string.update_rejected_other));
+		if ((problem != null) && !problem.isEmpty() && !"null".equals(problem)) {
+			text.append("\n\n").append(problem);
+		}
+		return text.toString();
+	}
+
+	/** MIUI and HyperOS turn away installs from apps unless the player allows them in the phone's own settings. */
+	private static boolean isXiaomi() {
+		for (final String name : new String[] { Build.MANUFACTURER, Build.BRAND }) {
+			if ("Xiaomi".equalsIgnoreCase(name) || "Redmi".equalsIgnoreCase(name) || "POCO".equalsIgnoreCase(name)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** Hands the downloaded APK to the phone's own installer, which has the permissions an app-made session lacks. */
+	private void openApk() {
+		final File file = apk;
+		if ((file == null) || !file.isFile()) {
+			openPage();
+			return;
+		}
+		try {
+			final Intent view = new Intent(Intent.ACTION_VIEW)
+					.setDataAndType(UpdateApkProvider.uri(this.activity, file.getName()), UpdateApkProvider.TYPE)
+					.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+			this.activity.startActivity(Intent.createChooser(view, null));
+		}
+		catch (final RuntimeException e) {
+			Log.w(TAG, "Unable to open the downloaded update", e);
+			openPage();
+		}
 	}
 
 	private void open(final String url) {
@@ -594,7 +669,7 @@ final class UpdatePrompt {
 		}
 		catch (final RuntimeException | PackageManager.NameNotFoundException e) {
 			Log.w(TAG, "Unable to read the signatures of the update", e);
-			problem = "The downloaded file is not a usable APK.";
+			problem = LauncherText.get("update_error_not_apk");
 			file.delete();
 			return State.FAILED;
 		}
@@ -682,7 +757,7 @@ final class UpdatePrompt {
 			catch (final IOException | RuntimeException e) {
 				Log.w(TAG, "Unable to install the update", e);
 				problem = String.valueOf(e.getMessage());
-				state = State.FAILED;
+				state = State.REJECTED;
 			}
 		}, "UpdateInstall");
 		thread.setDaemon(true);
@@ -701,12 +776,13 @@ final class UpdatePrompt {
 		else if (status == PackageInstaller.STATUS_SUCCESS) {
 			state = State.INSTALLING;
 		}
-		else if (status == PackageInstaller.STATUS_FAILURE_ABORTED) {
+		else if ((status == PackageInstaller.STATUS_FAILURE_ABORTED) && !isXiaomi()) {
 			state = State.OFFER;
 		}
 		else {
+			// MIUI reports its own refusal as an abort, which cannot be told from the player declining the dialog.
 			problem = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE);
-			state = State.FAILED;
+			state = State.REJECTED;
 		}
 	}
 }

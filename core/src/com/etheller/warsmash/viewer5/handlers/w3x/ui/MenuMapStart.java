@@ -7,16 +7,19 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
 import java.util.function.Predicate;
 
 import com.badlogic.gdx.Application.ApplicationType;
+import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.files.FileHandle;
 import com.etheller.warsmash.WarsmashGdxMapScreen;
 import com.etheller.warsmash.WarsmashGdxMenuScreen;
 import com.etheller.warsmash.datasources.DataSource;
+import com.etheller.warsmash.datasources.GameLanguage;
 import com.etheller.warsmash.datasources.GraphicsSet;
 import com.etheller.warsmash.datasources.GpuMemory;
 import com.etheller.warsmash.datasources.GraphicsSettings;
@@ -37,6 +40,7 @@ import com.etheller.warsmash.parsers.w3x.w3i.War3MapW3iFlags;
 import com.etheller.warsmash.units.DataTable;
 import com.etheller.warsmash.units.custom.WTS;
 import com.etheller.warsmash.util.Log;
+import com.etheller.warsmash.util.PerfStats;
 import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.viewer5.handlers.w3x.CampaignMaps;
 import com.etheller.warsmash.viewer5.handlers.w3x.War3MapViewer;
@@ -86,6 +90,9 @@ final class MenuMapStart {
 	private CReplayHeader loadingReplayHeader;
 	private Predicate<String> mapLoadFailureListener;
 	private LoadingMap loadingMap;
+	/** The game loaded, setting up its screen a step a frame under the loading screen before it is shown. */
+	private WarsmashGdxMapScreen startingScreen;
+	private WarsmashClient startingClient;
 	private FileHandle pendingSavedGame;
 	private boolean loadedFixedPlayerSettings;
 	private boolean pendingSavedGameByScript;
@@ -162,7 +169,9 @@ final class MenuMapStart {
 	}
 
 	void showMapLoadError() {
+		this.menu.loadDeferredMenuModels();
 		this.mapLoadErrorCount++;
+		this.menu.finishReturnFromGame();
 		// A start refused before any loading began leaves the startup preview of the map's loading screen up.
 		this.menu.loadingScreen.abandon();
 		this.menu.restoreMainMenuBackground();
@@ -172,7 +181,12 @@ final class MenuMapStart {
 		this.menu.setGlueLayersSequence("Death");
 		this.menu.menuState = MenuState.GOING_TO_MAIN_MENU;
 		this.menu.dialog.showError(
-				this.mapLoadFailureIssue != MapIssue.NONE ? this.mapLoadFailureIssue.english : MAP_LOAD_ERROR, null);
+				this.mapLoadFailureIssue != MapIssue.NONE ? issueText(this.mapLoadFailureIssue) : MAP_LOAD_ERROR, null);
+	}
+
+	/** What a map's issue says on the menu's error dialog: the engine's text for the game language, else the English one. */
+	private String issueText(final MapIssue issue) {
+		return this.menu.rootFrame.smashString("SMASH_" + issue.message.toUpperCase(Locale.ROOT), issue.english);
 	}
 
 	/**
@@ -254,6 +268,23 @@ final class MenuMapStart {
 				mapFilename.equals(this.reforgedGraphicsMap));
 	}
 
+	/** One line per game start that says what the device and the settings made of the run, for a report of a problem. */
+	private void logStartFacts(final GraphicsSettings.MemoryTier memoryTier, final War3MapViewer viewer,
+			final GraphicsSet graphics) {
+		final java.nio.IntBuffer maxTexture = com.badlogic.gdx.utils.BufferUtils.newIntBuffer(16);
+		Gdx.gl.glGetIntegerv(GL20.GL_MAX_TEXTURE_SIZE, maxTexture);
+		final String simulationThread = System.getProperty("warsmash.simthread");
+		Gdx.app.log("Warsmash",
+				"Game start: memory tier " + memoryTier + ", device RAM " + GraphicsSettings.deviceMemoryMb()
+						+ " MB, texture size limit " + viewer.getTextureSizeLimit() + " (GL max " + maxTexture.get(0)
+						+ "), levels skipped " + memoryTier.skippedLevels() + ", texture budget "
+						+ (memoryTier.textureBudget() >> 20) + " MB, GL renderer " + Gdx.gl.glGetString(GL20.GL_RENDERER)
+						+ ", GL version " + Gdx.gl.glGetString(GL20.GL_VERSION) + ", simulation thread "
+						+ (simulationThread == null ? "off" : simulationThread) + ", data " + graphics.getIniName()
+						+ ", language " + GameLanguage.effective(this.menu.warsmashIni) + ", perf log "
+						+ (PerfStats.ENABLED ? "on" : "off"));
+	}
+
 	private void internalStartMap(final String mapFilename, final int localPlayerIndex) {
 		if (this.pendingSavedGame != null) {
 			continueSavedCampaign(this.pendingSavedGame, this.pendingSavedGameByScript);
@@ -272,10 +303,7 @@ final class MenuMapStart {
 		final GraphicsSettings.MemoryTier memoryTier = GraphicsSettings.memoryTier();
 		viewer.setTextureSkippedLevels(memoryTier.skippedLevels());
 		viewer.setTextureBudget(memoryTier.textureBudget());
-		if (memoryTier != GraphicsSettings.MemoryTier.UNLIMITED) {
-			Log.info("Memory tier " + memoryTier + ": texture size " + viewer.getTextureSizeLimit() + ", levels skipped "
-					+ memoryTier.skippedLevels() + ", texture budget " + (memoryTier.textureBudget() >> 20) + " MB");
-		}
+		logStartFacts(memoryTier, viewer, gameGraphics(mapFilename));
 		viewer.setRenderScale(GraphicsSettings.renderScale(this.menu.warsmashIni));
 		final int shadowMode = GameOptions.get().getUnitShadowMode();
 		viewer.getDynamicShadowManager().setModelShadows(shadowMode >= 0
@@ -347,6 +375,7 @@ final class MenuMapStart {
 			return false;
 		}
 		this.menu.campaigns.getFade().setVisible(false);
+		PerfStats.loadingFrame();
 		if (!beginGameInformation.loadingStarted) {
 			final String mapFilename;
 			if (beginGameInformation.gameMapLookup instanceof CurrentNetGameMapLookupFile) {
@@ -372,6 +401,10 @@ final class MenuMapStart {
 		}
 		if (this.loadingMap == null) {
 			return false;
+		}
+		if (this.startingScreen != null) {
+			showStartingScreen();
+			return true;
 		}
 		final MenuLoadingScreen loadingScreen = this.menu.loadingScreen;
 		final int localPlayerIndex = beginGameInformation.localPlayerIndex;
@@ -466,15 +499,12 @@ final class MenuMapStart {
 					}
 
 					// TODO not cast menu screen
-					this.menu.screenManager.setScreen(new WarsmashGdxMapScreen(this.loadingMap.viewer,
-							this.menu.screenManager, (WarsmashGdxMenuScreen) this.menu.menuScreen, uiOrderListener));
-					this.loadingMap = null;
-					this.menu.beginGameInformation = null;
-					// The loading screen stays drawn until the game has drawn its first frame; hiding it now
-					// would end this frame black while the game's first frames are still being prepared.
-					if (warsmashClient != null) {
-						warsmashClient.startThread();
-					}
+					this.startingScreen = new WarsmashGdxMapScreen(this.loadingMap.viewer, this.menu.screenManager,
+							(WarsmashGdxMenuScreen) this.menu.menuScreen, uiOrderListener);
+					this.startingClient = warsmashClient;
+					// The menu's music would otherwise go on under the game's own, which its script may start
+					// before the game is shown.
+					this.menu.hide();
 				}
 				else {
 					loadingScreen.setLoadingProgress(this.loadingMap.activeMapLoader.getCompletionRatio());
@@ -495,6 +525,29 @@ final class MenuMapStart {
 			mapLoadFailed(this.loadingMapFilename, e);
 		}
 		return true;
+	}
+
+	/**
+	 * Runs the next setup step of the game loaded, or shows it once they have all run. A step that fails is not
+	 * caught here, as the setup was not when it ran in one frame.
+	 */
+	private void showStartingScreen() {
+		final WarsmashGdxMapScreen starting = this.startingScreen;
+		if (!starting.isSetUp()) {
+			starting.setUpNext();
+			return;
+		}
+		final WarsmashClient warsmashClient = this.startingClient;
+		this.startingScreen = null;
+		this.startingClient = null;
+		this.menu.screenManager.setScreen(starting);
+		this.loadingMap = null;
+		this.menu.beginGameInformation = null;
+		// The loading screen stays drawn until the game has drawn its first frame; hiding it now would end this
+		// frame black while the game's first frames are still being prepared.
+		if (warsmashClient != null) {
+			warsmashClient.startThread();
+		}
 	}
 
 	/**

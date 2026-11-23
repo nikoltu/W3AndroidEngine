@@ -52,6 +52,31 @@ public final class ProfileStorage {
 		}
 	}
 
+	/** Whether any profile folder under the root holds a file, that is, whether a copy has anything to move. */
+	public static boolean hasFiles(final File root) {
+		for (final String name : FOLDERS) {
+			if (anyFile(new File(root, name))) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private static boolean anyFile(final File file) {
+		if (file.isFile()) {
+			return true;
+		}
+		final File[] children = file.listFiles();
+		if (children != null) {
+			for (final File child : children) {
+				if (anyFile(child)) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
 	/** What a copy did. */
 	public static final class Result {
 		public int copied;

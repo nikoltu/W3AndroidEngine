@@ -118,9 +118,12 @@ public class CAbilityHero extends AbstractCAbility {
 	private void learnSkill(final CSimulation game, final CUnit caster, final War3ID skillId) {
 		final CAbilityType<?> abilityType = game.getAbilityData().getAbilityType(skillId);
 		if (abilityType != null) {
-			this.skillPoints--;
 			final CLevelingAbility existingAbility = caster
 					.getAbility(GetAbilityByRawcodeVisitor.getInstance().reset(skillId));
+			if ((existingAbility != null) && (existingAbility.getLevel() >= abilityType.getLevelCount())) {
+				return;
+			}
+			this.skillPoints--;
 			if (existingAbility == null) {
 				final CAbility newAbility = abilityType.createAbility(game.getHandleIdAllocator().createId());
 				newAbility.setHero(true);
@@ -661,17 +664,16 @@ public class CAbilityHero extends AbstractCAbility {
 		final float hitPointIncrease = gameplayConstants.getStrHitPointBonus() * deltaStrength;
 		final int oldMaximumLife = unit.getMaximumLife();
 		final float oldLife = unit.getLife();
-		final int newMaximumLife = Math.round(oldMaximumLife + hitPointIncrease);
-		final float newLife = (oldLife * (newMaximumLife)) / oldMaximumLife;
-		unit.setMaximumLife(newMaximumLife);
+		// The attribute bonus goes into the base maximum: the buffs on top (Metamorphosis) are not counted twice.
+		unit.setMaximumLife(Math.round(unit.getBaseMaximumLife() + hitPointIncrease));
+		final float newLife = (oldLife * unit.getMaximumLife()) / oldMaximumLife;
 		unit.setLife(game, newLife);
 
 		final float manaPointIncrease = gameplayConstants.getIntManaBonus() * deltaIntelligence;
 		final int oldMaximumMana = unit.getMaximumMana();
 		final float oldMana = unit.getMana();
-		final int newMaximumMana = Math.round(oldMaximumMana + manaPointIncrease);
-		final float newMana = (oldMana * (newMaximumMana)) / oldMaximumMana;
-		unit.setMaximumMana(newMaximumMana);
+		unit.setMaximumMana(Math.round(unit.getBaseMaximumMana() + manaPointIncrease));
+		final float newMana = (oldMana * unit.getMaximumMana()) / oldMaximumMana;
 		unit.setMana(newMana);
 
 		final float agilityDefenseBonus = gameplayConstants.getAgiDefenseBase()
@@ -709,17 +711,16 @@ public class CAbilityHero extends AbstractCAbility {
 		final float hitPointIncrease = gameplayConstants.getStrHitPointBonus() * currentStrength;
 		final int oldMaximumLife = unit.getMaximumLife();
 		final float oldLife = unit.getLife();
-		final int newMaximumLife = Math.round(oldMaximumLife + hitPointIncrease);
-		final float newLife = (oldLife * (newMaximumLife)) / oldMaximumLife;
-		unit.setMaximumLife(newMaximumLife);
+		// The attribute bonus goes into the base maximum: the buffs on top (Metamorphosis) are not counted twice.
+		unit.setMaximumLife(Math.round(unit.getBaseMaximumLife() + hitPointIncrease));
+		final float newLife = (oldLife * unit.getMaximumLife()) / oldMaximumLife;
 		unit.setLife(game, newLife);
 
 		final float manaPointIncrease = gameplayConstants.getIntManaBonus() * currentIntelligence;
 		final int oldMaximumMana = unit.getMaximumMana();
 		final float oldMana = unit.getMana();
-		final int newMaximumMana = Math.round(oldMaximumMana + manaPointIncrease);
-		final float newMana = (oldMana * (newMaximumMana)) / oldMaximumMana;
-		unit.setMaximumMana(newMaximumMana);
+		unit.setMaximumMana(Math.round(unit.getBaseMaximumMana() + manaPointIncrease));
+		final float newMana = (oldMana * unit.getMaximumMana()) / oldMaximumMana;
 		unit.setMana(newMana);
 
 		final float agilityDefenseBonus = gameplayConstants.getAgiDefenseBase()

@@ -11,6 +11,10 @@ sourceSets.main.java.srcDirs = [ "src/" ]
 sourceSets.test.java.srcDirs = [ "test/" ]
 // The launcher shares its texts with the Android launcher.
 sourceSets.main.resources.srcDirs = [ "../android/res/values" ]
+// Its translations are read over them, under the folder of their language.
+processResources {
+    from("../android/res/values-es") { into "values-es" }
+}
 
 project.ext.mainClassName = "com.etheller.warsmash.desktop.DesktopLauncher"
 project.ext.assetsDir = new File("../core/assets");

@@ -16,7 +16,6 @@ public class CBehaviorAttackMove implements CRangedBehavior {
 	private AbilityPointTarget target;
 	private boolean justAutoAttacked = false;
 	private int nextScanTick = Integer.MIN_VALUE;
-	private boolean endedMove = false;
 	private boolean continueMove = false;
 	private CGroupMove group;
 	private float laneX;
@@ -44,7 +43,6 @@ public class CBehaviorAttackMove implements CRangedBehavior {
 		this.continueMove = (this.unit.getCurrentBehavior() == moveBehavior)
 				&& moveBehavior.continuesAttackMove(this, target);
 		this.target = target;
-		this.endedMove = false;
 		return this;
 	}
 

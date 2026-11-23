@@ -49,8 +49,22 @@ public final class GameLanguage {
 
 	/** Notes the language a game data configuration is read in: the chosen one, else the one its data is made for. */
 	public static void useInGame(final DataTable ini) {
+		gameLanguage = effective(ini);
+	}
+
+	/** The language a configuration is read in: the chosen one, else the one its data is made for; empty for none. */
+	public static String effective(final DataTable ini) {
 		final String chosen = configured(ini);
-		gameLanguage = chosen.isEmpty() ? canonical(GraphicsSettings.locale(ini)) : chosen;
+		return chosen.isEmpty() ? canonical(GraphicsSettings.locale(ini)) : chosen;
+	}
+
+	/**
+	 * The folder of a map archive that holds the map's own files in a language (the war3map.wts of the strings the
+	 * map shows), or null for English, in which the map's own files are already the ones to read.
+	 */
+	public static String mapFolder(final String locale) {
+		final String code = canonical(locale);
+		return code.isEmpty() || code.equals("enUS") ? null : "_Locales/" + code + ".w3mod/";
 	}
 
 	/** The language the game reads its text and speech in; "enUS" until a configuration says otherwise. */

@@ -40,8 +40,11 @@ public class CWorldCollision {
 	/** Counts the units put in, taken out and moved, so that what was gathered from the trees can tell it is stale. */
 	@SavedTransient
 	private int unitChanges;
-	private final List<Set<CUnit>> enumSets = new ArrayList<>();
-	private int enumSetDepth;
+	private final List<List<CUnit>> foundLists = new ArrayList<>();
+	private int foundListDepth;
+	private final EnumCollector enumCollector = new EnumCollector();
+	private final RangeMatcher rangeMatcher = new RangeMatcher();
+	private long enumStampCounter;
 	private final List<Set<Object>> otherEnumSets = new ArrayList<>();
 	private int otherEnumSetDepth;
 	private final AnyUnitExceptTwoIntersector anyUnitExceptTwoIntersector;
@@ -208,56 +211,58 @@ public class CWorldCollision {
 	/**
 	 * Found first, called after: a callback that removes a unit (RemoveUnit in a filter) would otherwise shift the
 	 * leaf under the walk and skip the next one. As in 1.29 a unit removed meanwhile is still visited; one that is
-	 * hidden meanwhile is not. A callback can start another enumeration, so each nesting depth gets its own set and
-	 * list.
+	 * hidden meanwhile is not. A callback can start another enumeration, so each nesting depth gets its own list.
+	 * The walk itself calls no script or callback, so one collector with a fresh stamp serves every enumeration: a
+	 * unit carries the stamp of the last walk that met it, which replaces a set that had to be emptied each time.
 	 */
 	private void enumSnapshot(final Rectangle rect, final CUnitEnumFunction callback, final boolean units,
 			final boolean corpses) {
-		final Set<CUnit> intersectedUnits = acquireEnumSet();
-		final List<CUnit> found = new ArrayList<>();
+		if (this.foundListDepth == this.foundLists.size()) {
+			this.foundLists.add(new ArrayList<>());
+		}
+		final List<CUnit> found = this.foundLists.get(this.foundListDepth++);
 		try {
-			final QuadtreeIntersector<CUnit> collector = (unit) -> {
-				if (unit.isHidden() || unit.isUnenumerable() || !intersectedUnits.add(unit)) {
-					return false;
-				}
-				found.add(unit);
-				return false;
-			};
+			found.clear();
+			final EnumCollector collector = this.enumCollector;
+			collector.stamp = ++this.enumStampCounter;
+			collector.found = found;
 			if (units) {
 				this.anyUnitEnumerableCollision.intersect(rect, collector);
 			}
 			if (corpses) {
 				this.deadUnitCollision.intersect(rect, collector);
 			}
+			collector.found = null;
+			for (int i = 0, size = found.size(); i < size; i++) {
+				final CUnit unit = found.get(i);
+				// RemoveUnit hides the unit and takes it out of the collision at once.
+				if ((unit.getCollisionRectangle() != null) && (unit.isHidden() || unit.isUnenumerable())) {
+					continue;
+				}
+				if (callback.call(unit)) {
+					return;
+				}
+			}
 		}
 		finally {
-			releaseEnumSet();
-		}
-		for (final CUnit unit : found) {
-			// RemoveUnit hides the unit and takes it out of the collision at once.
-			if ((unit.getCollisionRectangle() != null) && (unit.isHidden() || unit.isUnenumerable())) {
-				continue;
-			}
-			if (callback.call(unit)) {
-				return;
-			}
+			found.clear();
+			this.foundListDepth--;
 		}
 	}
 
-	// A callback can start another enumeration (killing units in an area gives experience to units around them),
-	// so each nesting depth gets its own set. Identity sets keep their entries in one array, so adding a unit
-	// allocates nothing; a new set for every enumeration was a large share of the garbage made during fights.
-	private Set<CUnit> acquireEnumSet() {
-		if (this.enumSetDepth == this.enumSets.size()) {
-			this.enumSets.add(Collections.newSetFromMap(new IdentityHashMap<>()));
-		}
-		final Set<CUnit> set = this.enumSets.get(this.enumSetDepth++);
-		set.clear();
-		return set;
-	}
+	private static final class EnumCollector implements QuadtreeIntersector<CUnit> {
+		private long stamp;
+		private List<CUnit> found;
 
-	private void releaseEnumSet() {
-		this.enumSetDepth--;
+		@Override
+		public boolean onIntersect(final CUnit unit) {
+			if (unit.isHidden() || unit.isUnenumerable() || (unit.enumStamp == this.stamp)) {
+				return false;
+			}
+			unit.enumStamp = this.stamp;
+			this.found.add(unit);
+			return false;
+		}
 	}
 
 	public void enumCorpsesInRange(final float x, final float y, final float radius, final CUnitEnumFunction callback) {
@@ -276,6 +281,48 @@ public class CWorldCollision {
 			}
 			return false;
 		});
+	}
+
+	/** A test for {@link CWorldCollision#anyUnitInRange}: cheap and exact parts, both without side effects. */
+	public interface UnitMatcher {
+		/** May reject a unit before its position is looked at; never rejects one that {@link #exact} would accept. */
+		boolean quick(CUnit unit);
+
+		boolean exact(CUnit unit);
+	}
+
+	/**
+	 * Whether {@code enumUnitsInRange} would meet a unit the matcher accepts, without building the list of units. The
+	 * matcher must change nothing, as then the order of the walk does not matter either.
+	 */
+	public boolean anyUnitInRange(final float x, final float y, final float radius, final UnitMatcher matcher) {
+		final RangeMatcher range = this.rangeMatcher;
+		range.rect.set(x - radius, y - radius, radius * 2, radius * 2);
+		range.x = x;
+		range.y = y;
+		range.radius = radius;
+		range.matcher = matcher;
+		try {
+			return this.anyUnitEnumerableCollision.intersectNodes(range.rect, range);
+		}
+		finally {
+			range.matcher = null;
+		}
+	}
+
+	private static final class RangeMatcher implements Quadtree.NodeTester<CUnit> {
+		private final Rectangle rect = new Rectangle();
+		private float x;
+		private float y;
+		private float radius;
+		private UnitMatcher matcher;
+
+		@Override
+		public boolean test(final CUnit unit, final Rectangle bounds) {
+			return this.matcher.quick(unit) && bounds.overlaps(this.rect) && !unit.isHidden()
+					&& !unit.isUnenumerable() && unit.canReach(this.x, this.y, this.radius)
+					&& this.matcher.exact(unit);
+		}
 	}
 
 	public void enumUnitsOrCorpsesInRange(final float x, final float y, final float radius, final CUnitEnumFunction callback) {

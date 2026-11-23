@@ -247,7 +247,7 @@ public class WarsmashGdxFDFTestRenderScreen implements InputProcessor, Screen, S
 		final MdxModel model2 = War3MapViewer.loadModelMdx(this.viewer.dataSource, this.viewer, path, new PathSolver() {
 			@Override
 			public SolvedPath solve(final String src, final Object solverParams) {
-				return new SolvedPath(src, src.substring(src.lastIndexOf('.')), true);
+				return new SolvedPath(src, src.substring(src.lastIndexOf('.')));
 			}
 		}, null);
 

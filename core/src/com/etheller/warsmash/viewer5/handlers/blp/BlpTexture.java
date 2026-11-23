@@ -13,7 +13,6 @@ import com.etheller.warsmash.util.OffHeapBlock;
 import com.etheller.warsmash.util.StreamBytes;
 
 import com.etheller.warsmash.util.ImageUtils;
-import com.etheller.warsmash.util.Log;
 import com.etheller.warsmash.viewer5.ModelViewer;
 import com.etheller.warsmash.viewer5.PathSolver;
 import com.etheller.warsmash.viewer5.RawOpenGLTextureResource;
@@ -264,10 +263,13 @@ public class BlpTexture extends RawOpenGLTextureResource {
 			return;
 		}
 		if (!ImageUtils.IMAGE_IO_AVAILABLE) {
-			Log.warn("No decoder for this BLP on this platform, texture left empty");
+			reportUnreadable("no decoder for this BLP on this platform");
 			return;
 		}
 		img = ImageIO.read(new ByteArrayInputStream(data.array()));
+		if (img == null) {
+			throw new IOException("Not a readable image: " + this.fetchUrl);
+		}
 		update(img, true);
 	}
 

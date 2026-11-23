@@ -41,6 +41,13 @@ public final class GameCameraManager extends CameraManager {
 	private Rectangle cameraBounds;
 	private int currentPreset = 0;
 	private float fov;
+	/**
+	 * The far clipping distance the view has now. Measured on 1.29: a setup or field applied over a time brings it to
+	 * the new value over that time, like the other fields; at once, the far edge cut the ground the camera still
+	 * looked at from afar. Negative before the first step.
+	 */
+	private float farZ = -1;
+	private float farZRate = Float.POSITIVE_INFINITY;
 	private float projectionHeightScale = 1;
 	private boolean started;
 	private float targetZOffset = 0.0f;
@@ -301,6 +308,9 @@ public final class GameCameraManager extends CameraManager {
 				cameraRate.distance, deltaTime);
 		this.verticalAngle = applyAtRateAngle(this.verticalAngle, (float) Math.toRadians(cameraPreset.getAoa() - 270),
 				(float) Math.toRadians(cameraRate.aoa), deltaTime);
+		final float farZTarget = Math.max(MIN_FAR_Z, cameraPreset.getFarZ());
+		this.farZ = (this.farZ < 0) || (cameraRate == CameraRates.INFINITY) ? farZTarget
+				: applyAtRate(this.farZ, farZTarget, this.farZRate, deltaTime);
 		final float fovDegrees = Math.min(MAX_FOV, Math.max(MIN_FOV, cameraPreset.getFov()));
 		this.fov = applyAtRate(this.fov, (float) Math.toRadians(fovDegrees / 2),
 				(float) Math.toRadians(cameraRate.fov / 2), deltaTime);
@@ -492,7 +502,7 @@ public final class GameCameraManager extends CameraManager {
 		final CameraSetup setup = getCurrentSetup();
 		this.camera.perspective(this.projectionHeightScale == 1 ? this.fov
 				: 2 * (float) StrictMath.atan(StrictMath.tan(this.fov / 2) * this.projectionHeightScale), this.camera.getAspect(), Math.max(MIN_NEAR_Z, setup.getNearZ()),
-				Math.max(MIN_FAR_Z, setup.getFarZ()));
+				this.farZ < 0 ? Math.max(MIN_FAR_Z, setup.getFarZ()) : this.farZ);
 		if ((this.roll == 0) && (this.localPitch == 0) && (this.localYaw == 0) && (this.localRoll == 0)) {
 			this.camera.moveToAndFace(eye, lookAt, this.worldUp);
 			return;
@@ -707,6 +717,7 @@ public final class GameCameraManager extends CameraManager {
 		private float verticalAngle;
 		private float distance;
 		private float fov;
+		private float farZ;
 		private float roll;
 		private float localPitch;
 		private float localYaw;
@@ -732,6 +743,7 @@ public final class GameCameraManager extends CameraManager {
 			this.verticalAngle = camera.verticalAngle;
 			this.distance = camera.distance;
 			this.fov = camera.fov;
+			this.farZ = camera.farZ;
 			this.roll = camera.roll;
 			this.localPitch = camera.localPitch;
 			this.localYaw = camera.localYaw;
@@ -757,6 +769,7 @@ public final class GameCameraManager extends CameraManager {
 			camera.verticalAngle = this.verticalAngle;
 			camera.distance = this.distance;
 			camera.fov = this.fov;
+			camera.farZ = this.farZ;
 			camera.roll = this.roll;
 			camera.localPitch = this.localPitch;
 			camera.localYaw = this.localYaw;
@@ -988,6 +1001,7 @@ public final class GameCameraManager extends CameraManager {
 	private void clearCustomSetup() {
 		this.customSetup = null;
 		this.customCameraRates = null;
+		this.farZRate = Float.POSITIVE_INFINITY;
 		clearPan();
 	}
 
@@ -1176,6 +1190,9 @@ public final class GameCameraManager extends CameraManager {
 		case LOCAL_ROLL:
 			localRollRate = instant ? Float.POSITIVE_INFINITY : localDegreesTo(value, this.localRoll) / duration;
 			break;
+		case FARZ:
+			this.farZRate = farZRateTowards(value, duration);
+			break;
 		default:
 			break;
 		}
@@ -1225,6 +1242,7 @@ public final class GameCameraManager extends CameraManager {
 		this.customSetup = cameraSetup;
 		this.cameraType = cameraSetup.getCameraType();
 		setTargetZOffset(cameraSetup.getHeight(), forceDuration);
+		this.farZRate = farZRateTowards(cameraSetup.getFarZ(), forceDuration);
 		if (forceDuration > 0) {
 			this.customCameraRates = ratesTowards(cameraSetup, forceDuration);
 			if (doPan) {
@@ -1258,6 +1276,13 @@ public final class GameCameraManager extends CameraManager {
 				localDegreesTo(setup.getLocalRoll(), this.localRoll) / duration);
 	}
 
+	private float farZRateTowards(final float farZ, final float duration) {
+		if ((duration <= 0) || (this.farZ < 0)) {
+			return Float.POSITIVE_INFINITY;
+		}
+		return Math.abs(Math.max(MIN_FAR_Z, farZ) - this.farZ) / duration;
+	}
+
 	private static float localDegreesTo(final float degrees, final float currentRadians) {
 		return angleBetween(degrees, (float) Math.toDegrees(currentRadians));
 	}
@@ -1271,6 +1296,7 @@ public final class GameCameraManager extends CameraManager {
 		syncToGameStep();
 		this.rotateModeActive = false;
 		this.customSetup = cameraSetup;
+		this.farZRate = Float.POSITIVE_INFINITY;
 		this.cameraType = cameraSetup.getCameraType();
 		if (doPan) {
 			if (panTimed) {
@@ -1302,6 +1328,7 @@ public final class GameCameraManager extends CameraManager {
 		}
 		else {
 			this.customCameraRates = ratesTowards(getCurrentSetup(), duration);
+			this.farZRate = farZRateTowards(getCurrentSetup().getFarZ(), duration);
 		}
 	}
 

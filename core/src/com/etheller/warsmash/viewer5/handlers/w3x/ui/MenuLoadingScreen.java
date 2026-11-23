@@ -288,10 +288,11 @@ final class MenuLoadingScreen {
 	/** With a keyboard and mouse the game's own line, Press any key to continue, instead of the touch one. */
 	private String continueText() {
 		if (Gdx.app.getType() != Application.ApplicationType.Desktop) {
-			return TAP_TO_CONTINUE;
+			return this.menu.rootFrame.smashString("SMASH_TAP_TO_CONTINUE", TAP_TO_CONTINUE);
 		}
 		final String glue = this.menu.rootFrame.getTemplates().getDecoratedString("LOADING_PRESS_A_KEY");
-		return (glue == null) || glue.isEmpty() || "LOADING_PRESS_A_KEY".equals(glue) ? PRESS_TO_CONTINUE
+		return (glue == null) || glue.isEmpty() || "LOADING_PRESS_A_KEY".equals(glue)
+				? this.menu.rootFrame.smashString("SMASH_PRESS_TO_CONTINUE", PRESS_TO_CONTINUE)
 				: glue.toUpperCase(Locale.ROOT);
 	}
 
@@ -564,7 +565,9 @@ final class MenuLoadingScreen {
 
 	/** The text of the Reforged bar while loading: the game's own string when the data has one. */
 	private String reforgedLoadingString() {
-		return decoratedString("LOADING_STRING_0", "Loading...");
+		// A language pack made for older data has the English words under this key; the engine's own translation wins.
+		final String own = this.menu.rootFrame.smashLanguageString("SMASH_LOADING");
+		return own != null ? own : decoratedString("LOADING_STRING_0", "Loading...");
 	}
 
 	/** A string of the game's string tables, or the given text when the data does not have it. */
@@ -662,6 +665,9 @@ final class MenuLoadingScreen {
 				&& !mapInfo.hasFlag(War3MapW3iFlags.FIXED_PLAYER_SETTINGS_FOR_CUSTOM_FORCES);
 		final Map<Integer, List<ReforgedLoadingScreen.Player>> players = new TreeMap<>();
 		boolean localListed = false;
+		boolean firstUser = false;
+		final boolean fixedSettings = mapInfo.hasFlag(War3MapW3iFlags.FIXED_PLAYER_SETTINGS_FOR_CUSTOM_FORCES)
+				&& mapInfo.hasFlag(War3MapW3iFlags.USE_CUSTOM_FORCES);
 		final List<LauncherSlot> launcherSlots = LauncherSlot.parse(startupSlots);
 		final int count = Math.min(WarsmashConstants.MAX_PLAYERS, mapPlayers.size());
 		for (int i = 0; i < count; i++) {
@@ -673,10 +679,19 @@ final class MenuLoadingScreen {
 			int color = mapPlayer.getId();
 			if (startupSlots != null) {
 				type = null;
-				final LauncherSlot slot = LauncherSlot.of(launcherSlots, i);
+				// Slots are listed by player number, which a map need not number from its first slot on.
+				final LauncherSlot slot = LauncherSlot.of(launcherSlots, mapPlayer.getId());
+				if ((slot == null) && fixedSettings) {
+					// A fixed lobby sends only what the host changed: the first user slot is the local player, the
+					// computers are the map's own, the other user slots stay open.
+					type = mapPlayer.getType() == 1 ? (firstUser ? null : LobbyPlayerType.USER)
+							: mapPlayer.getType() == 2 ? LobbyPlayerType.COMPUTER_NORMAL : null;
+					firstUser |= mapPlayer.getType() == 1;
+				}
 				if (slot != null) {
 					try {
 						type = LobbyPlayerType.valueOf(slot.type);
+						firstUser |= type == LobbyPlayerType.USER;
 						race = LauncherSlot.orMap(slot.race, race);
 						team = LauncherSlot.orMap(slot.team, team);
 						color = LauncherSlot.orMap(slot.color, color);

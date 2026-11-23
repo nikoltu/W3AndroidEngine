@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
+
+import com.badlogic.gdx.math.Rectangle;
 import com.etheller.warsmash.util.ArgbImage;
 import com.etheller.warsmash.viewer5.handlers.w3x.environment.PathingGrid.MovementType;
 import com.etheller.warsmash.viewer5.handlers.w3x.environment.PathingGrid;
@@ -388,9 +390,25 @@ final class CUnitPlacement {
 				rangeInCells * rangeInCells);
 	}
 
+	/**
+	 * Measured: a worker raising a structure over a mine (an Acolyte over a Gold Mine) starts once its footprint
+	 * touches the mine's blocked cells, from any side. canReachToPathing keeps a cell more off the footprint than that.
+	 */
+	static boolean canReachToPathingTouching(final CUnit self, final float rotationForPathing,
+			final ArgbImage buildingPathingPixelMap, final float targetX, final float targetY) {
+		return canReachToPathing(self, 0, rotationForPathing, buildingPathingPixelMap, targetX, targetY, 1, true);
+	}
+
 	static boolean canReachToPathing(final CUnit self, final float range, final float rotationForPathing,
 			final ArgbImage buildingPathingPixelMap, final float targetX, final float targetY,
 			final float rangeInCellsSquare) {
+		return canReachToPathing(self, range, rotationForPathing, buildingPathingPixelMap, targetX, targetY,
+				rangeInCellsSquare, false);
+	}
+
+	private static boolean canReachToPathing(final CUnit self, final float range, final float rotationForPathing,
+			final ArgbImage buildingPathingPixelMap, final float targetX, final float targetY,
+			final float rangeInCellsSquare, final boolean touching) {
 		if (buildingPathingPixelMap == null) {
 			return canReach(self, targetX, targetY, range);
 		}
@@ -439,7 +457,7 @@ final class CUnitPlacement {
 						// a point of the footprint within the reach (a footprint cell diagonal to the building's
 						// corner cell counts as one cell off both ways)
 						final boolean near = (((dx * dx) + (dy * dy)) <= rangeInCellsSquare)
-								|| (((fx * fx) + (fy * fy)) <= (rangeInCellsSquare - 1));
+								|| (((fx * fx) + (fy * fy)) <= (touching ? rangeInCellsSquare : (rangeInCellsSquare - 1)));
 						if (near) {
 							if (((getRGBFromPixelData(self, buildingPathingPixelMap, checkX, checkY, rotation)
 									& 0xFF0000) >>> 16) > 127) {
@@ -508,8 +526,38 @@ final class CUnitPlacement {
 		setPointAndCheckUnstuck(self, structure.getX(), structure.getY(), simulation);
 	}
 
-	static boolean isInRegion(final CUnit self, final CRegion region) {
-		return self.containingRegions.contains(region);
+	/**
+	 * The unit's footprint touches the region right now. A region made after the unit last moved (a trigger action
+	 * making one for the unit that just entered a rect) is not in the unit's cached region set yet, so the cache alone
+	 * would answer false for it.
+	 */
+	static boolean isInRegion(final CUnit self, final CRegion region, final CRegionManager regionManager) {
+		if (self.containingRegions.contains(region)) {
+			return true;
+		}
+		final RegionMatchImpl match = new RegionMatchImpl(region);
+		regionManager.checkRegions(
+				self.placement.collisionRectangle == null ? new Rectangle(self.getX(), self.getY(), 0, 0)
+						: self.placement.collisionRectangle,
+				match);
+		return match.found;
+	}
+
+	private static final class RegionMatchImpl implements CRegionEnumFunction {
+		private final CRegion target;
+		private boolean found;
+
+		private RegionMatchImpl(final CRegion target) {
+			this.target = target;
+		}
+
+		@Override
+		public boolean call(final CRegion region) {
+			if (region == this.target) {
+				this.found = true;
+			}
+			return this.found;
+		}
 	}
 
 	static final class RegionCheckerImpl implements CRegionEnumFunction {

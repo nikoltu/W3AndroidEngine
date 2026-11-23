@@ -13,7 +13,12 @@ import com.etheller.warsmash.parsers.fdf.GameUI;
 import com.etheller.warsmash.viewer5.handlers.w3x.simthread.SimFrame;
 import com.etheller.warsmash.viewer5.handlers.w3x.simthread.ui.PlayerPanelState;
 import com.etheller.warsmash.parsers.fdf.datamodel.AnchorDefinition;
+import com.etheller.warsmash.parsers.fdf.datamodel.FrameClass;
+import com.etheller.warsmash.parsers.fdf.datamodel.FrameDefinition;
 import com.etheller.warsmash.parsers.fdf.datamodel.FramePoint;
+import com.etheller.warsmash.parsers.fdf.datamodel.SetPointDefinition;
+import com.etheller.warsmash.parsers.fdf.datamodel.fields.StringFrameDefinitionField;
+import com.etheller.warsmash.parsers.fdf.frames.AbstractUIFrame;
 import com.etheller.warsmash.parsers.fdf.frames.EditBoxFrame;
 import com.etheller.warsmash.parsers.fdf.frames.GlueTextButtonFrame;
 import com.etheller.warsmash.parsers.fdf.frames.SetPoint;
@@ -213,6 +218,8 @@ final class MeleeUIMenus {
 		final GlueTextButtonFrame returnButton = (GlueTextButtonFrame) this.ui.rootFrame.getFrameByName("ReturnButton",
 				0);
 
+		final GlueTextButtonFrame markButton = addMarkButton(escMenuInnerMainPanel, endGameButton);
+
 		final UIFrame escMenuInnerEndGamePanel = this.ui.rootFrame.getFrameByName("EndGamePanel", 0);
 		final GlueTextButtonFrame endGamePreviousButton = (GlueTextButtonFrame) this.ui.rootFrame
 				.getFrameByName("PreviousButton", 0);
@@ -255,6 +262,7 @@ final class MeleeUIMenus {
 		});
 		GameOptions.get().apply();
 		this.ui.war3MapViewer.setInterfaceStateKeeper(this.ui);
+		this.ui.war3MapViewer.setScriptDialogPause(this.ui::isScriptDialogPause);
 		this.ui.war3MapViewer.setLoadGameListener(this::loadSavedGame);
 		this.ui.war3MapViewer.setSaveGameListener(this::onGameSaved);
 		this.ui.gameMenu = new MeleeGameMenu(this.ui.rootFrame, this.ui.uiViewport, this.ui.smashEscMenu,
@@ -296,7 +304,7 @@ final class MeleeUIMenus {
 		this.escMenuButtons = new GlueTextButtonFrame[] { pauseButton, saveGameButton, loadGameButton,
 				(GlueTextButtonFrame) this.ui.rootFrame.getFrameByName("OptionsButton", 0), helpButton, tipsButton,
 				endGameButton, returnButton, endGameRestartButton, endGameQuitButton, endGameExitButton,
-				endGamePreviousButton, confirmQuitQuitButton, confirmQuitCancelButton };
+				endGamePreviousButton, confirmQuitQuitButton, confirmQuitCancelButton, markButton };
 		this.escMenuBackAction = () -> {
 			if (escMenuInnerConfirmQuitPanel.isVisible()) {
 				confirmQuitCancelButton.onClick(Input.Buttons.LEFT);
@@ -331,6 +339,9 @@ final class MeleeUIMenus {
 						.setSaveAndLoadEnabled(!MeleeUIMenus.this.ui.war3MapViewer.isNetworkGame() && !replay);
 				endGameRestartButton.setEnabled(!MeleeUIMenus.this.ui.war3MapViewer.isNetworkGame()
 						&& !MeleeUIMenus.this.ui.war3MapViewer.isRestartMissionDisabled() && !replay);
+				if (markButton != null) {
+					markButton.setEnabled(!replay);
+				}
 				escMenuBackdrop.setVisible(true);
 				escMenuMainPanel.setVisible(true);
 				MeleeUIMenus.this.ui.smashEscMenu.setVisible(true);
@@ -349,6 +360,12 @@ final class MeleeUIMenus {
 				escMenuInnerMainPanel.setVisible(false);
 			}
 		});
+		if (markButton != null) {
+			markButton.setOnClick(() -> {
+				returnButton.onClick(Input.Buttons.LEFT);
+				this.ui.markThisMoment();
+			});
+		}
 		endGameButton.setOnClick(new Runnable() {
 			@Override
 			public void run() {
@@ -411,6 +428,37 @@ final class MeleeUIMenus {
 		});
 	}
 
+	/**
+	 * Capture a Bug, under End Game, for a problem report: the main panel grows by the button, so Return to Game keeps
+	 * its gap at the bottom. Null when the menu's data lacks what the button is made from.
+	 */
+	private GlueTextButtonFrame addMarkButton(final UIFrame mainPanel, final GlueTextButtonFrame endGameButton) {
+		final FrameDefinition buttonTemplate = this.ui.rootFrame.getTemplates().getFrame("EscMenuButtonTemplate");
+		final FrameDefinition textTemplate = this.ui.rootFrame.getTemplates().getFrame("EscMenuButtonTextTemplate");
+		if ((endGameButton == null) || !(endGameButton.getParent() instanceof AbstractUIFrame) || (mainPanel == null)
+				|| (buttonTemplate == null) || (textTemplate == null)) {
+			return null;
+		}
+		final FrameDefinition text = new FrameDefinition(FrameClass.Frame, "TEXT", "MarkMomentButtonText");
+		text.inheritFrom(textTemplate, false);
+		text.set("Text", new StringFrameDefinitionField(
+				this.ui.rootFrame.smashString("SMASH_CAPTURE_A_BUG", "Capture a Bug")));
+		final FrameDefinition button = new FrameDefinition(FrameClass.Frame, "GLUETEXTBUTTON", "MarkMomentButton");
+		button.inheritFrom(buttonTemplate, true);
+		button.set("ButtonText", new StringFrameDefinitionField("MarkMomentButtonText"));
+		button.add(text);
+		button.add(new SetPointDefinition(FramePoint.TOP, endGameButton.getName(), FramePoint.BOTTOM, 0, -0.002f));
+		final AbstractUIFrame parent = (AbstractUIFrame) endGameButton.getParent();
+		final UIFrame made = this.ui.rootFrame.inflate(button, parent, null, true);
+		if (!(made instanceof GlueTextButtonFrame)) {
+			return null;
+		}
+		parent.add(made);
+		mainPanel.setHeight(mainPanel.getAssignedHeight() + endGameButton.getAssignedHeight()
+				+ GameUI.convertY(this.ui.uiViewport, 0.004f));
+		return (GlueTextButtonFrame) made;
+	}
+
 	void createTimeIndicator() {
 		// Create the Time Indicator (clock)
 		this.ui.timeIndicator = (SpriteFrame) this.ui.rootFrame.createFrame("TimeOfDayIndicator", this.ui.rootFrame, 0,
@@ -438,9 +486,9 @@ final class MeleeUIMenus {
 		}
 	}
 
-	/** With the user interface disabled the upper bar is greyed out and does not answer, like under the game menu. */
+	/** With a dialog on the screen the upper bar is greyed out and does not answer, like under the game menu. */
 	boolean isUpperBarLocked() {
-		return this.ui.cinematics.isUserUIDisabledDim();
+		return this.ui.cinematics.isScriptDialogDim();
 	}
 
 	void updateAlliesButton() {
@@ -638,14 +686,15 @@ final class MeleeUIMenus {
 	private void onGameSaved(final FileHandle file, final boolean saved) {
 		if (this.savingFromMenu) {
 			this.savingFromMenu = false;
-			this.ui.messages.displayTimedText(0, 0, 10, saved ? savedMessage() : "Could not save the game.");
+			this.ui.messages.displayTimedText(0, 0, 10, saved ? savedMessage()
+					: this.ui.rootFrame.smashString("SMASH_SAVE_FAILED", "Could not save the game."));
 		}
 	}
 
 	private String savedMessage() {
 		final String text = this.ui.rootFrame.getTemplates().getDecoratedString("GAME_SAVED");
 		// 1.29 GlobalStrings has no GAME_SAVED; the lookup then returns the key itself.
-		return "GAME_SAVED".equals(text) ? "Game saved." : text;
+		return "GAME_SAVED".equals(text) ? this.ui.rootFrame.smashString("SMASH_GAME_SAVED", "Game saved.") : text;
 	}
 
 	private void restartMission() {

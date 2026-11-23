@@ -160,8 +160,9 @@ final class MapViewerSimWorld implements BufferingRenderController.WorldFactory 
 
 	@Override
 	public WorldPeerData.TypeChange typeChangeData(final CUnit unit) {
-		return new WorldPeerData.TypeChange(this.viewer.simulation.getPlayer(unit.getPlayerIndex()).getColor(),
-				unit.getX(), unit.getY(), unit.getFlyHeight());
+		return new WorldPeerData.TypeChange(unit.getTeamColorOverride() != -1 ? unit.getTeamColorOverride()
+				: this.viewer.simulation.getPlayer(unit.getPlayerIndex()).getColor(), unit.getX(), unit.getY(),
+				unit.getFlyHeight());
 	}
 
 	/** The tags the render side puts on the listener of every unit of the type; the simulation's mirror starts from them. */

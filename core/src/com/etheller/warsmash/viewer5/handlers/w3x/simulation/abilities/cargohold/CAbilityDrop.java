@@ -118,6 +118,11 @@ public class CAbilityDrop extends AbstractGenericSingleIconNoSmartActiveAbility 
 	}
 
 	@Override
+	public boolean needsTargetFromCommandCard(final int orderId) {
+		return orderId == OrderIds.unloadall;
+	}
+
+	@Override
 	protected void innerCheckCanTargetNoTarget(final CSimulation game, final CUnit unit, final int orderId,
 			final AbilityTargetCheckReceiver<Void> receiver) {
 		// Measured on 1.29: unload-all without a target is taken and does nothing.

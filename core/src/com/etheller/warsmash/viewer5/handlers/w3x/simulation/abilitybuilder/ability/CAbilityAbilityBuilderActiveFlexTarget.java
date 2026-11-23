@@ -83,6 +83,11 @@ public class CAbilityAbilityBuilderActiveFlexTarget extends CAbilityAbilityBuild
 	}
 
 	@Override
+	public boolean isTargetOrder(final int orderId) {
+		return this.targetedSpell && (orderId != 0) && (orderId == getBaseOrderId());
+	}
+
+	@Override
 	public void setLevel(CSimulation game, CUnit unit, int level) {
 		super.setLevel(game, unit, level);
 		this.setTargeted(game, unit);

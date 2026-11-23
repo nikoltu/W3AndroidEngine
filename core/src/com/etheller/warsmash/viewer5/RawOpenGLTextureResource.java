@@ -8,6 +8,7 @@ import java.util.Locale;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.GL30;
 import com.etheller.warsmash.util.ArgbImage;
+import com.etheller.warsmash.util.DataErrors;
 import com.etheller.warsmash.util.Log;
 import com.etheller.warsmash.util.UploadStaging;
 import com.etheller.warsmash.viewer5.handlers.ResourceHandler;
@@ -78,7 +79,43 @@ public abstract class RawOpenGLTextureResource extends Texture {
 
 	@Override
 	protected void error(final Exception e) {
-		Log.error(e);
+		recordDecodeFailure(this.fetchUrl, e);
+		Log.error("Texture could not be decoded: " + this.fetchUrl, e);
+		showFallback();
+	}
+
+	/** The other format of the same texture, else the neutral value of its kind, in place of the empty texture a failed decode leaves. */
+	private void showFallback() {
+		if (this.disposed || isShadowTexture()) {
+			return;
+		}
+		try {
+			final MipLevels other = TextureFallback.alternate(this.viewer.dataSource, this.fetchUrl,
+					this.viewer.getTextureSizeRule());
+			if (other != null) {
+				update(other, false);
+			}
+			else {
+				update(1, 1, TextureFallback.neutral(TextureFallback.kindOf(this.fetchUrl)), false);
+				setFallback(true);
+			}
+			this.ok = true;
+		}
+		catch (final RuntimeException e) {
+			Log.error("Texture fallback failed: " + this.fetchUrl, e);
+		}
+	}
+
+	/** The file is there but could not be read as an image, which the missing file report does not cover. */
+	static void recordDecodeFailure(final String fetchUrl, final Exception e) {
+		DataErrors.record(DataErrors.BAD_TEXTURE, fetchUrl + " (" + e + ")");
+	}
+
+	/** Records that a texture was left empty without an exception to show for it. */
+	protected final void reportUnreadable(final String reason) {
+		DataErrors.report(DataErrors.BAD_TEXTURE, this.fetchUrl + " (" + reason + ")",
+				"Texture left empty: " + this.fetchUrl + " (" + reason + ")");
+		showFallback();
 	}
 
 	protected final boolean isDisposed() {
@@ -146,6 +183,23 @@ public abstract class RawOpenGLTextureResource extends Texture {
 		this.evicted = true;
 	}
 
+	final boolean isEvicted() {
+		return this.evicted;
+	}
+
+	/** Reads a texture that was let go again now, in place of when it is drawn next. */
+	final void restore() {
+		this.evicted = false;
+		this.reloading = true;
+		this.lastUsedFrame = this.viewer.frame;
+		this.viewer.reloadTexture(this, false);
+		// Letting go without a kept stub marked the texture pending, which only a queued load clears; this one was read
+		// at once, so it is ready now and is not left drawn as nothing.
+		if (!this.reloading) {
+			setPending(false);
+		}
+	}
+
 	/** Keeps the largest level of at most {@link #STUB_SIZE} pixels to draw while the texture is let go. */
 	private void keepStub(final int format, final int levelWidth, final int levelHeight,
 			final ByteBuffer pixels, final boolean sRGBFix) {
@@ -164,6 +218,7 @@ public abstract class RawOpenGLTextureResource extends Texture {
 
 	/** The file of a texture that was let go could not be read again: it stays empty, as a missing file does. */
 	final void reloadFailed() {
+		DataErrors.record(DataErrors.BAD_TEXTURE, this.fetchUrl + " (could not be read again)");
 		this.reloading = false;
 		setPending(false);
 	}

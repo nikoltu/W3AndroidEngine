@@ -173,6 +173,21 @@ class GameResultTest {
 	}
 
 	@Test
+	void aLongMissionNameGoesOnInASecondLine() {
+		// One unit of width a letter, the banner ten letters wide: a line may fill nine and a half of them.
+		assertEquals(java.util.List.of("Chasing Visions"), CampaignResult.nameLines("Chasing Visions", String::length, 20));
+		assertEquals(java.util.List.of("Trudging through", "the Ashes"),
+				CampaignResult.nameLines("Trudging through the Ashes", String::length, 20));
+		assertEquals(java.util.List.of("Unbreakable", "Word"), CampaignResult.nameLines("Unbreakable Word", String::length, 8));
+		final CampaignResult.Layout one = new CampaignResult.Layout(1100, 1600, 720, 1);
+		final CampaignResult.Layout two = new CampaignResult.Layout(1100, 1600, 720, 2);
+		assertEquals(one.nameStep, two.dividerY[1] - one.dividerY[1], 0.01f);
+		assertEquals(one.nameStep, two.difficultyIconY - one.difficultyIconY, 0.01f);
+		assertTrue(one.bannerY < 0);
+		assertTrue(one.titleY > one.bannerY);
+	}
+
+	@Test
 	void theClassicResultFitsItsPanel() {
 		// The mission list's place on the tablet and on the phone, with the frame and buttons of each.
 		assertClassicFits(new CampaignResult.ClassicLayout(1956, 208, 924, 1432, 40, 112));
@@ -205,9 +220,9 @@ class GameResultTest {
 	@Test
 	void theTitleSaysVictoryOrDefeat() {
 		final GameResult result = won();
-		assertEquals("VICTORY", CampaignResult.title(result)[0]);
+		assertEquals("VICTORY", CampaignResult.title(result));
 		result.result = "defeat";
-		assertEquals("DEFEAT", CampaignResult.title(result)[0]);
+		assertEquals("DEFEAT", CampaignResult.title(result));
 	}
 
 	@Test
@@ -256,8 +271,8 @@ class GameResultTest {
 	@Test
 	void resultButtonIsContinueAfterVictoryAndRestartAfterLoss() {
 		final GameResult result = won();
-		assertArrayEquals(new String[] { "CONTINUE", "Continue" }, CampaignResult.buttonLabel(result));
+		assertEquals("CONTINUE", CampaignResult.buttonLabel(result));
 		result.result = "defeat";
-		assertArrayEquals(new String[] { "RESTART", "Restart" }, CampaignResult.buttonLabel(result));
+		assertEquals("RESTART", CampaignResult.buttonLabel(result));
 	}
 }

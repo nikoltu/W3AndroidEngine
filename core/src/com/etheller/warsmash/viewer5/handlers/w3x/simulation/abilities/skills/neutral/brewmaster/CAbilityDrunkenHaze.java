@@ -69,6 +69,11 @@ public class CAbilityDrunkenHaze extends CAbilityTargetSpellBase {
 					}
 
 					@Override
+					public boolean hitsGoneTarget() {
+						return true;
+					}
+
+					@Override
 					public void onHit(final CSimulation game, final CProjectile projectile,
 							final AbilityTarget target) {
 						final CUnit hitUnit = target.visit(AbilityTargetUnitVisitor.INSTANCE);

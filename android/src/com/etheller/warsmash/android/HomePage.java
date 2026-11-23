@@ -148,12 +148,12 @@ final class HomePage extends LauncherViews {
 		for (int i = 0; i < LauncherActivity.RAIL.length; i++) {
 			final int entry = i;
 			final boolean open = true;
-			addHolder(view, glue(LauncherActivity.RAIL[i][0], LauncherActivity.RAIL[i][1]),
+			addHolder(view, glue(LauncherActivity.RAIL[i]),
 					b.holderY + (i * b.holderPitch), i == selected,
 					open ? v -> this.activity.openEntry(entry) : null, entry == LauncherActivity.RAIL_LAN);
 		}
 		if (b.quitY >= 0) {
-			addHolder(view, glue("KEY_QUIT", "Quit"), b.quitY, false, v -> this.activity.dialogs.showExit());
+			addHolder(view, glue("KEY_QUIT"), b.quitY, false, v -> this.activity.dialogs.showExit());
 			addFooter(view);
 		}
 		addProfile(view, home);
@@ -342,10 +342,12 @@ final class HomePage extends LauncherViews {
 		final CampaignCatalog catalog = this.activity.campaigns.catalog;
 		final CCampaignProgress.Snapshot progress = this.activity.campaigns.progress;
 		final CampaignCatalog.Entry entry = CampaignChoice.playedCampaign(catalog, progress);
-		if ((entry == null) || entry.getData().getMissions().isEmpty()) {
+		final List<CampaignMission> missions = entry == null ? null
+				: entry.getMissions(this.activity.campaigns
+						.reforgedMaps(this.activity.profiles.campaignMaps(this.activity.profiles.current())));
+		if ((missions == null) || missions.isEmpty()) {
 			return null;
 		}
-		final List<CampaignMission> missions = entry.getData().getMissions();
 		int mission = 0;
 		for (int i = 0; i < missions.size(); i++) {
 			if (CampaignCatalog.isMissionOpen(entry, i, progress)) {
@@ -446,7 +448,7 @@ final class HomePage extends LauncherViews {
 		}
 		if (live) {
 			this.bannerScene = this.activity.sceneBackdrop(still, shown.scene, focus, LauncherActivity.LAYER_BANNER,
-					shown.background, null,
+					this.activity.backdropField(shown.background), shown.background,
 					shown.fog, 0, x + (b.frame / 2), b.frame / 2, innerW, innerH, CampaignChoice.modelX(shown.scene));
 		}
 		else {
@@ -480,7 +482,7 @@ final class HomePage extends LauncherViews {
 		onTap(hit, true, v -> continueCampaign());
 		hit.setContentDescription(getString(R.string.launcher_continue_campaign));
 		box.addView(hit, frameParams(0, 0, b.bannerW, b.height));
-		place(box, button(LauncherKit.glueText(glue("CONTINUE", "Continue")), bh, b.tablet ? 44 : 30,
+		place(box, button(LauncherKit.glueText(glue("CONTINUE")), bh, b.tablet ? 44 : 30,
 				v -> continueCampaign()), ix, by, iw, bh);
 	}
 
@@ -512,7 +514,7 @@ final class HomePage extends LauncherViews {
 		final String profile = this.activity.profiles.current();
 		portrait.setImageBitmap(this.activity.profilePage.portraitBitmap(this.activity.profiles.portrait(profile)));
 		chip.addView(portrait, new LinearLayout.LayoutParams(px(b.chipH), px(b.chipH)));
-		final TextView name = text(this.activity.profiles.any() ? profile : glue("PLAYER", "Player"), b.name,
+		final TextView name = text(this.activity.profiles.any() ? profile : glue("PLAYER"), b.name,
 				this.activity.art.text());
 		final LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(
 				ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -560,7 +562,7 @@ final class HomePage extends LauncherViews {
 		final TextView version = text(buildLine() + dataVersion(), 24, LauncherKit.CAPTION);
 		version.setPadding(px(20), 0, 0, 0);
 		version.setShadowLayer(0, 0, 0, 0);
-		place(parent, version, 24, WarsmashApplication.originLabel(this.activity).isEmpty() ? 1730 : 1766, 592, 48);
+		place(parent, version, 24, showsBuildBadge() ? 1766 : 1730, 592, 48);
 	}
 
 	private View indicator(final String label, final boolean present) {
@@ -585,20 +587,28 @@ final class HomePage extends LauncherViews {
 	String buildLine() {
 		final String origin = WarsmashApplication.originLabel(this.activity);
 		if (!origin.isEmpty()) {
-			return BuildInfo.current().displayVersion() + " - " + origin;
+			return BuildInfo.current().displayVersion() + " - " + BuildOrigin.text(origin);
 		}
 		return BuildInfo.current().displayVersion()
 				+ (BuildInfo.current().isOfficial() ? "" : " - " + getString(R.string.build_unofficial));
 	}
 
-	/** A small label on Home for a build that is not signed with the project's key; the About page says it too. */
-	private void addBuildBadge(final FrameLayout parent) {
+	private boolean showsBuildBadge() {
 		final String origin = WarsmashApplication.originLabel(this.activity);
-		if (origin.isEmpty()) {
+		return !origin.isEmpty() && !BuildOrigin.DEBUG.equals(origin);
+	}
+
+	/**
+	 * A small label on Home for a build that is not signed with the project's key; the About page says it too. A debug
+	 * build is named in the version line already, so the label would only say it twice.
+	 */
+	private void addBuildBadge(final FrameLayout parent) {
+		if (!showsBuildBadge()) {
 			return;
 		}
+		final String origin = WarsmashApplication.originLabel(this.activity);
 		final LauncherBoard b = this.activity.board;
-		final String notice = BuildOrigin.UNOFFICIAL.equals(origin) ? BuildOrigin.UNOFFICIAL_NOTICE : origin;
+		final String notice = BuildOrigin.notice(origin);
 		final TextView badge = text(notice, b.tablet ? 24 : 18, LauncherKit.GOLD);
 		badge.setSingleLine(false);
 		badge.setMaxLines(2);

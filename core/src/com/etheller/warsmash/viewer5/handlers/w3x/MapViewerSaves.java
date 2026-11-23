@@ -88,6 +88,9 @@ final class MapViewerSaves {
 		state.fogDrawOverSky = fog.drawOverSky;
 		state.waterColor = viewer.waterColor;
 		state.allyColorFilterState = viewer.getAllyColorFilter().getState();
+		state.occlusion = viewer.viewSettings.occlusion;
+		state.worldFogBoundary = viewer.viewSettings.worldFogBoundary;
+		state.waterDeforms = viewer.viewSettings.waterDeforms;
 		state.restartMissionDisabled = viewer.restartMissionDisabled;
 		state.altMinimapIcon = viewer.altMinimapIcon;
 		state.volumeGroupScales = new float[CSoundVolumeGroup.VALUES.length];
@@ -124,6 +127,10 @@ final class MapViewerSaves {
 			viewer.setWaterBaseColor(state.waterColor);
 		}
 		viewer.getAllyColorFilter().setState(state.allyColorFilterState);
+		viewer.viewSettings.occlusion = state.occlusion;
+		viewer.viewSettings.waterDeforms = state.waterDeforms;
+		viewer.viewSettings.worldFogBoundary = state.worldFogBoundary;
+		viewer.terrain.setWorldFogBoundary(state.worldFogBoundary);
 		viewer.restartMissionDisabled = state.restartMissionDisabled;
 		viewer.altMinimapIcon = state.altMinimapIcon;
 		final float[] scales = state.volumeGroupScales;

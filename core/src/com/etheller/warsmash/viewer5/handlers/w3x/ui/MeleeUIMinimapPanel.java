@@ -18,6 +18,8 @@ import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.utils.TimeUtils;
+import com.badlogic.gdx.utils.viewport.ExtendViewport;
+import com.etheller.warsmash.parsers.fdf.GameUI;
 import com.etheller.warsmash.parsers.fdf.datamodel.FramePoint;
 import com.etheller.warsmash.parsers.fdf.frames.SimpleButtonFrame;
 import com.etheller.warsmash.parsers.fdf.frames.SpriteFrame;
@@ -27,6 +29,7 @@ import com.etheller.warsmash.units.Element;
 import com.etheller.warsmash.util.ImageUtils;
 import com.etheller.warsmash.util.Log;
 import com.etheller.warsmash.util.WarsmashConstants;
+import com.etheller.warsmash.viewer5.Scene;
 import com.etheller.warsmash.viewer5.handlers.mdx.ReplaceableIds;
 import com.etheller.warsmash.viewer5.handlers.tga.TgaFile;
 import com.etheller.warsmash.viewer5.handlers.w3x.UnitSound;
@@ -53,6 +56,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.C
  */
 final class MeleeUIMinimapPanel {
 	private final List<MinimapPing> minimapPings = new ArrayList<>();
+	private Scene pingScene;
 	private final ArrayDeque<SpriteFrame> freeMinimapPings = new ArrayDeque<>();
 	private Runnable minimapTerrainRedraw = () -> {
 	};
@@ -787,6 +791,7 @@ final class MeleeUIMinimapPanel {
 		if (frame == null) {
 			frame = (SpriteFrame) this.ui.rootFrame.createFrameByType("SPRITE", "SmashMinimapPing", this.ui.rootFrame,
 					"", 0);
+			frame.setScene(pingScene());
 			this.ui.rootFrame.setSpriteFrameModel(frame, this.ui.rootFrame.getSkinField("MinimapIndicator"));
 			frame.setZDepth(0.5f);
 			frame.setModelScale(MINIMAP_PING_SCALE);
@@ -804,7 +809,49 @@ final class MeleeUIMinimapPanel {
 		this.minimapPings.add(ping);
 	}
 
+	/**
+	 * The scene the pings are drawn in: the interface's own, cut to the minimap, as a ping's glow and arrows reach past
+	 * the ring and a ping at the edge of the map must not be drawn over the world.
+	 */
+	private Scene pingScene() {
+		if (this.pingScene == null) {
+			this.pingScene = this.ui.war3MapViewer.addSimpleScene();
+			this.pingScene.alpha = true;
+			this.pingScene.clip = new Rectangle();
+		}
+		return this.pingScene;
+	}
+
+	/** Puts the ping scene over the interface's and cuts it to the minimap's pixels. */
+	private void placePingScene() {
+		final Scene interfaceScene = this.ui.uiScene;
+		this.pingScene.show = interfaceScene.show;
+		this.pingScene.camera.copyProjection(interfaceScene.camera);
+		final MeleeUIMinimap minimap = this.ui.meleeUIMinimap;
+		if (minimap == null) {
+			return;
+		}
+		final Rectangle area = minimap.getDisplayArea();
+		final ExtendViewport viewport = this.ui.uiViewport;
+		final Rectangle screen = interfaceScene.camera.rect;
+		// The interface scene shows 0.8 x 0.6 interface model units, more when the screen is wider or taller.
+		final float width = 0.8f * (viewport.getWorldWidth() / viewport.getMinWorldWidth());
+		final float height = 0.6f * (viewport.getWorldHeight() / viewport.getMinWorldHeight());
+		final float left = (0.8f - width) / 2;
+		final float bottom = (0.6f - height) / 2;
+		final float x0 = screen.x + (((GameUI.unconvertX(viewport, area.x) - left) / width) * screen.width);
+		final float y0 = screen.y + (((GameUI.unconvertY(viewport, area.y) - bottom) / height) * screen.height);
+		final float x1 = screen.x
+				+ (((GameUI.unconvertX(viewport, area.x + area.width) - left) / width) * screen.width);
+		final float y1 = screen.y
+				+ (((GameUI.unconvertY(viewport, area.y + area.height) - bottom) / height) * screen.height);
+		this.pingScene.clip.set(x0, y0, x1 - x0, y1 - y0);
+	}
+
 	void updateMinimapPings(final long currentMillis) {
+		if (this.pingScene != null) {
+			placePingScene();
+		}
 		for (final Iterator<MinimapPing> iterator = this.minimapPings.iterator(); iterator.hasNext();) {
 			final MinimapPing ping = iterator.next();
 			if (ping.dying) {

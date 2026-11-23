@@ -3,6 +3,7 @@ package com.etheller.warsmash.launcher;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.ToIntFunction;
 
 import com.etheller.warsmash.datasources.GraphicsSet;
 import com.etheller.warsmash.datasources.GraphicsSettings;
@@ -27,6 +28,8 @@ public final class LauncherOptions {
 		public final List<String> choices;
 		/** An older on/off setting of the same choice, off meaning the first choice while the row was never set. */
 		private final String legacyFlag;
+		/** The default the game applies while the row was never set, when it depends on other settings. */
+		private ToIntFunction<EngineSettings> fallbackOf;
 
 		Row(final String label, final Kind kind, final String key, final int fallback, final String... choices) {
 			this(label, kind, key, null, fallback, choices);
@@ -42,6 +45,11 @@ public final class LauncherOptions {
 			this.choices = Collections.unmodifiableList(Arrays.asList(choices));
 		}
 
+		Row defaultedBy(final ToIntFunction<EngineSettings> defaultOf) {
+			this.fallbackOf = defaultOf;
+			return this;
+		}
+
 		/** The row's value in the engine's settings; a check is 1 or 0. */
 		public int value(final EngineSettings engine) {
 			if (this.kind == Kind.CHECK) {
@@ -50,7 +58,8 @@ public final class LauncherOptions {
 			if ((this.legacyFlag != null) && (engine.number(this.key, -1) < 0) && !engine.flag(this.legacyFlag, true)) {
 				return 0;
 			}
-			final int value = engine.number(this.key, this.fallback);
+			final int value = engine.number(this.key,
+					this.fallbackOf != null ? this.fallbackOf.applyAsInt(engine) : this.fallback);
 			return this.kind == Kind.RADIO ? Math.max(0, Math.min(this.choices.size() - 1, value)) : value;
 		}
 
@@ -80,8 +89,23 @@ public final class LauncherOptions {
 	public static final List<Row> GRAPHICS = Collections.unmodifiableList(Arrays.asList(
 			new Row("options_particles", Kind.RADIO, "particles", 2, "options_low", "options_medium", "options_high"),
 			new Row("options_unit_shadows", Kind.RADIO, "unitShadowMode", "unitShadows", 2, "options_shadows_off",
-					"options_shadows_blob", "options_shadows_full"),
+					"options_shadows_blob", "options_shadows_full").defaultedBy(LauncherOptions::unitShadowsDefault),
 			slider("options_gamma", "gamma", 50, "options_low", "options_high")));
+
+	/**
+	 * The unit shadows a game casts while the player never chose a mode: what the configuration names, else a round
+	 * blob under Classic graphics and the models' own shadows under HD and DE. The row shows the same.
+	 */
+	static int unitShadowsDefault(final EngineSettings engine) {
+		final String named = engine.graphics(GraphicsSettings.KEY_UNIT_SHADOWS, "").trim();
+		if (named.equalsIgnoreCase("Full")) {
+			return 2;
+		}
+		if (named.equalsIgnoreCase("Blob")) {
+			return 1;
+		}
+		return GraphicsSet.fromIniName(engine.graphics(GraphicsSettings.KEY_SET, "")) == GraphicsSet.CLASSIC ? 1 : 2;
+	}
 
 	/**
 	 * The in-game graphics choices, in the order of {@link GraphicsSet}: the label, and the label when the game data

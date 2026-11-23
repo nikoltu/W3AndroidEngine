@@ -418,8 +418,15 @@ final class Gui {
 		return (clip == null) || inside(this.mouseX, this.mouseY, clip[0], clip[1], clip[2], clip[3]);
 	}
 
+	/**
+	 * The tooltip of the place the mouse is over. A place without a control has no hover of its own, so the tip names
+	 * it, which is also what restarts the wait when the mouse moves to another such place.
+	 */
 	void tip(final String text) {
 		this.tooltip = text;
+		if ((text != null) && (this.hoverId == null)) {
+			this.hoverId = text;
+		}
 	}
 
 	// ---------------------------------------------------------------- clipping
@@ -654,13 +661,7 @@ final class Gui {
 		final List<SmallCaps.Run> runs = SmallCaps.runs(GlueText.plain(value));
 		final float smaller = size * SmallCaps.SCALE;
 		final float[] widths = new float[runs.size()];
-		float total = 0;
-		for (int i = 0; i < widths.length; i++) {
-			// A bar on both sides keeps the spaces at the ends of a run, which a laid out line drops.
-			final float at = runs.get(i).small ? smaller : size;
-			widths[i] = width('|' + runs.get(i).text + '|', at) - (2 * width("|", at));
-			total += widths[i];
-		}
+		final float total = smallCapsWidths(runs, size, widths);
 		final float lift = (sized(size).getCapHeight() - sized(smaller).getCapHeight()) / 2;
 		float left = align == Align.center ? x + ((w - total) / 2) : align == Align.right ? (x + w) - total : x;
 		for (int i = 0; i < widths.length; i++) {
@@ -668,6 +669,42 @@ final class Gui {
 			text(run.text, left, run.small ? y + lift : y, widths[i] + 1, h, run.small ? smaller : size, argb, Align.left);
 			left += widths[i];
 		}
+	}
+
+	/** The width of a text in small capitals in design pixels; each run's own width goes in the array. */
+	private float smallCapsWidths(final List<SmallCaps.Run> runs, final float size, final float[] widths) {
+		final float smaller = size * SmallCaps.SCALE;
+		float total = 0;
+		for (int i = 0; i < widths.length; i++) {
+			final float at = runs.get(i).small ? smaller : size;
+			widths[i] = runWidth(runs.get(i).text, at);
+			total += widths[i];
+		}
+		return total;
+	}
+
+	/**
+	 * The width of a run with the spaces at its ends, which a laid out line drops. The letters are measured as they
+	 * stand, not between signs, which the font kerns against them.
+	 */
+	private float runWidth(final String run, final float size) {
+		int start = 0;
+		int end = run.length();
+		while ((start < end) && (run.charAt(start) == ' ')) {
+			start++;
+		}
+		while ((end > start) && (run.charAt(end - 1) == ' ')) {
+			end--;
+		}
+		final int spaces = run.length() - (end - start);
+		final float space = spaces == 0 ? 0 : width("I I", size) - (2 * width("I", size));
+		return (end > start ? width(run.substring(start, end), size) : 0) + (spaces * space);
+	}
+
+	/** The width of a text set in small capitals. */
+	float smallCapsWidth(final String value, final float size) {
+		final List<SmallCaps.Run> runs = SmallCaps.runs(GlueText.plain(value));
+		return smallCapsWidths(runs, size, new float[runs.size()]);
 	}
 
 	/** The width of a text in design pixels. */
@@ -1320,7 +1357,7 @@ final class Gui {
 	private void drawTooltip(final String text) {
 		final float size = this.b.tablet ? 30 : 22;
 		final float pad = size * 0.5f;
-		final float w = Math.min(this.b.width * 0.5f, width(text, size) + (2 * pad));
+		final float w = Math.min(this.b.width * 0.75f, width(text, size) + (2 * pad));
 		final float h = size * 1.8f;
 		float x = this.mouseX + (size * 0.8f);
 		float y = this.mouseY + (size * 1.2f);

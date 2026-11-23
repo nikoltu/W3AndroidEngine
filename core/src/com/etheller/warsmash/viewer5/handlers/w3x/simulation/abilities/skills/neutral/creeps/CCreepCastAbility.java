@@ -10,6 +10,8 @@ import com.etheller.warsmash.viewer5.handlers.w3x.environment.PathingGrid.Moveme
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CDestructable;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CWorldCollision;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityTarget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CWidget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbility;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.autocast.CAutocastAbility;
@@ -538,6 +540,10 @@ public interface CCreepCastAbility {
 			if (!isHitCastOrder(orderId)) {
 				continue;
 			}
+			// Measured on 1.29: Shadow Strike answers a hit only on a hero; a Warden struck by plain units never casts.
+			if ((orderId == OrderIds.shadowstrike) && (source.getHeroData() == null)) {
+				continue;
+			}
 			final BooleanAbilityActivationReceiver activation = BooleanAbilityActivationReceiver.INSTANCE.reset();
 			ability.checkCanUse(game, hero, hero.getPlayerIndex(), orderId, true, activation);
 			if (activation.isOk() && hero.canReach(source, getCastRange(ability))
@@ -647,22 +653,26 @@ public interface CCreepCastAbility {
 	 * Whether an enemy of the player is on its way to attack the unit or attacking it.
 	 */
 	static boolean isAttacked(final CSimulation game, final CUnit unit, final CPlayer player) {
-		final boolean[] attacked = { false };
-		game.getWorldCollision().enumUnitsInRange(unit.getX(), unit.getY(), ATTACKER_SEARCH_RANGE, (enumUnit) -> {
-			if (!enumUnit.isDead() && !enumUnit.isUnitAlly(player)) {
-				CBehavior behavior = enumUnit.getCurrentBehavior();
-				if (behavior instanceof CBehaviorMove) {
-					behavior = ((CBehaviorMove) behavior).getRangedBehavior();
-				}
-				if ((behavior instanceof CBehaviorAttack)
-						&& (((CBehaviorAttack) behavior).getTarget().visit(AbilityTargetVisitor.UNIT) == unit)) {
-					attacked[0] = true;
-					return true;
-				}
-			}
-			return false;
-		});
-		return attacked[0];
+		return game.getWorldCollision().anyUnitInRange(unit.getX(), unit.getY(), ATTACKER_SEARCH_RANGE,
+				new CWorldCollision.UnitMatcher() {
+					@Override
+					public boolean quick(final CUnit enumUnit) {
+						CBehavior behavior = enumUnit.getCurrentBehavior();
+						if (behavior instanceof CBehaviorMove) {
+							behavior = ((CBehaviorMove) behavior).getRangedBehavior();
+						}
+						if (!(behavior instanceof CBehaviorAttack)) {
+							return false;
+						}
+						final AbilityTarget attackTarget = ((CBehaviorAttack) behavior).getTarget();
+						return (attackTarget != null) && (attackTarget.visit(AbilityTargetVisitor.UNIT) == unit);
+					}
+
+					@Override
+					public boolean exact(final CUnit enumUnit) {
+						return !enumUnit.isDead() && !enumUnit.isUnitAlly(player);
+					}
+				});
 	}
 
 	static boolean isReadyToCast(final CSimulation game, final CUnit unit, final int orderId) {

@@ -14,6 +14,7 @@ import com.etheller.interpreter.ast.value.visitor.ObjectJassValueVisitor;
 import com.etheller.interpreter.ast.value.visitor.RealJassValueVisitor;
 import com.etheller.warsmash.parsers.jass.Jass2.CommonEnvironment;
 import com.etheller.warsmash.util.War3ID;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.queue.CAbilityRally;
 import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbility;
@@ -41,6 +42,7 @@ final class AbilityNatives extends CommonNatives {
 	/** The attack and move the engine gives units itself; the original does not add them by script. */
 	private static final War3ID ATTACK_CODE = War3ID.fromString("Aatk");
 	private static final War3ID MOVE_CODE = War3ID.fromString("Amov");
+	private static final War3ID REVIVE_CODE = War3ID.fromString("Arev");
 
 	AbilityNatives(final CommonEnvironment environment) {
 		super(environment);
@@ -230,6 +232,11 @@ final class AbilityNatives extends CommonNatives {
 						}
 					}
 					whichUnit.add(this.simulation, ability);
+					if (rawcode.equals(REVIVE_CODE) && (whichUnit.getFirstAbilityOfType(CAbilityRally.class) == null)) {
+						// Measured (1.29): a unit given the revive ability takes a rally point like an altar.
+						whichUnit.add(this.simulation,
+								new CAbilityRally(this.simulation.getHandleIdAllocator().createId()));
+					}
 					return BooleanJassValue.TRUE;
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("UnitRemoveAbility",

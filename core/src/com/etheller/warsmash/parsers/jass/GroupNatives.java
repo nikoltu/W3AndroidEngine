@@ -51,8 +51,8 @@ final class GroupNatives extends CommonNatives {
 						new UnitGroup(this.simulation.getHandleIdAllocator().createHandleId())));
 		jassProgramVisitor.getJassNativeManager().createNative("DestroyGroup",
 				(arguments, globalScope, triggerScope) -> {
-					final List<CUnit> group = arguments.get(0)
-							.visit(ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					final List<CUnit> group = nullable(arguments, 0,
+							ObjectJassValueVisitor.<List<CUnit>>getInstance());
 					release(group);
 					return null;
 				});
@@ -70,15 +70,20 @@ final class GroupNatives extends CommonNatives {
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("GroupRemoveUnit",
 				(arguments, globalScope, triggerScope) -> {
-					final List<CUnit> group = arguments.get(0)
-							.visit(ObjectJassValueVisitor.<List<CUnit>>getInstance());
-					final CUnit whichUnit = arguments.get(1).visit(ObjectJassValueVisitor.<CUnit>getInstance());
-					group.remove(whichUnit);
+					final List<CUnit> group = nullable(arguments, 0,
+							ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					final CUnit whichUnit = nullable(arguments, 1, ObjectJassValueVisitor.<CUnit>getInstance());
+					if (group != null) {
+						group.remove(whichUnit);
+					}
 					return null;
 				});
 		final JassFunction groupAddGroupFast = (arguments, globalScope, triggerScope) -> {
-			final List<CUnit> group = arguments.get(0).visit(ObjectJassValueVisitor.<List<CUnit>>getInstance());
-			final List<CUnit> addGroup = arguments.get(1).visit(ObjectJassValueVisitor.<List<CUnit>>getInstance());
+			final List<CUnit> group = nullable(arguments, 0, ObjectJassValueVisitor.<List<CUnit>>getInstance());
+			final List<CUnit> addGroup = nullable(arguments, 1, ObjectJassValueVisitor.<List<CUnit>>getInstance());
+			if ((group == null) || (addGroup == null)) {
+				return null;
+			}
 			// TODO: this is not fast. This is slow. use HashSet<Unit> to be fast.
 			for (final CUnit unit : addGroup) {
 				if (!group.contains(unit)) {
@@ -90,9 +95,12 @@ final class GroupNatives extends CommonNatives {
 		jassProgramVisitor.getJassNativeManager().createNative("BlzGroupAddGroupFast", groupAddGroupFast);
 		jassProgramVisitor.getJassNativeManager().createNative("GroupAddGroupFast", groupAddGroupFast);
 		final JassFunction groupRemoveGroupFast = (arguments, globalScope, triggerScope) -> {
-			final List<CUnit> group = arguments.get(0).visit(ObjectJassValueVisitor.<List<CUnit>>getInstance());
-			final List<CUnit> removeGroup = arguments.get(1)
-					.visit(ObjectJassValueVisitor.<List<CUnit>>getInstance());
+			final List<CUnit> group = nullable(arguments, 0, ObjectJassValueVisitor.<List<CUnit>>getInstance());
+			final List<CUnit> removeGroup = nullable(arguments, 1,
+					ObjectJassValueVisitor.<List<CUnit>>getInstance());
+			if ((group == null) || (removeGroup == null)) {
+				return null;
+			}
 			group.removeAll(removeGroup);
 			return null;
 		};
@@ -100,19 +108,22 @@ final class GroupNatives extends CommonNatives {
 		jassProgramVisitor.getJassNativeManager().createNative("GroupRemoveGroupFast", groupRemoveGroupFast);
 		jassProgramVisitor.getJassNativeManager().createNative("GroupClear",
 				(arguments, globalScope, triggerScope) -> {
-					final List<CUnit> group = arguments.get(0)
-							.visit(ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					final List<CUnit> group = nullable(arguments, 0,
+							ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					if (group == null) {
+						return null;
+					}
 					group.clear();
 					return null;
 				});
 		final JassFunction groupGetSize = (arguments, globalScope, triggerScope) -> {
-			final List<CUnit> group = arguments.get(0).visit(ObjectJassValueVisitor.<List<CUnit>>getInstance());
-			return IntegerJassValue.of(group.size());
+			final List<CUnit> group = nullable(arguments, 0, ObjectJassValueVisitor.<List<CUnit>>getInstance());
+			return IntegerJassValue.of((group == null) ? 0 : group.size());
 		};
 		jassProgramVisitor.getJassNativeManager().createNative("BlzGroupGetSize", groupGetSize);
 		jassProgramVisitor.getJassNativeManager().createNative("GroupGetSize", groupGetSize);
 		final JassFunction groupGetUnitAt = (arguments, globalScope, triggerScope) -> {
-			final List<CUnit> group = arguments.get(0).visit(ObjectJassValueVisitor.<List<CUnit>>getInstance());
+			final List<CUnit> group = nullable(arguments, 0, ObjectJassValueVisitor.<List<CUnit>>getInstance());
 			final int index = arguments.get(1).visit(IntegerJassValueVisitor.getInstance());
 			if ((group == null) || (index < 0) || (index >= group.size())) {
 				return unitType.getNullValue();
@@ -162,8 +173,11 @@ final class GroupNatives extends CommonNatives {
 
 		jassProgramVisitor.getJassNativeManager().createNative("GroupEnumUnitsOfType",
 				(arguments, globalScope, triggerScope) -> {
-					final List<CUnit> group = arguments.get(0)
-							.visit(ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					final List<CUnit> group = nullable(arguments, 0,
+							ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					if (group == null) {
+						return null;
+					}
 					// As in the original, every enumeration replaces the contents of the group.
 					group.clear();
 					final String unitname = arguments.get(1).visit(StringJassValueVisitor.getInstance());
@@ -181,8 +195,11 @@ final class GroupNatives extends CommonNatives {
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("GroupEnumUnitsOfPlayer",
 				(arguments, globalScope, triggerScope) -> {
-					final List<CUnit> group = arguments.get(0)
-							.visit(ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					final List<CUnit> group = nullable(arguments, 0,
+							ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					if (group == null) {
+						return null;
+					}
 					group.clear();
 					final CPlayerJass player = arguments.get(1)
 							.visit(ObjectJassValueVisitor.<CPlayerJass>getInstance());
@@ -203,8 +220,11 @@ final class GroupNatives extends CommonNatives {
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("GroupEnumUnitsSelected",
 				(arguments, globalScope, triggerScope) -> {
-					final List<CUnit> group = arguments.get(0)
-							.visit(ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					final List<CUnit> group = nullable(arguments, 0,
+							ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					if (group == null) {
+						return null;
+					}
 					group.clear();
 					final CPlayerJass player = arguments.get(1)
 							.visit(ObjectJassValueVisitor.<CPlayerJass>getInstance());
@@ -222,8 +242,11 @@ final class GroupNatives extends CommonNatives {
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("GroupEnumUnitsOfTypeCounted",
 				(arguments, globalScope, triggerScope) -> {
-					final List<CUnit> group = arguments.get(0)
-							.visit(ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					final List<CUnit> group = nullable(arguments, 0,
+							ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					if (group == null) {
+						return null;
+					}
 					group.clear();
 					final String unitname = arguments.get(1).visit(StringJassValueVisitor.getInstance());
 					final TriggerBooleanExpression filter = nullable(arguments, 2,
@@ -246,8 +269,11 @@ final class GroupNatives extends CommonNatives {
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("GroupEnumUnitsInRect",
 				(arguments, globalScope, triggerScope) -> {
-					final List<CUnit> group = arguments.get(0)
-							.visit(ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					final List<CUnit> group = nullable(arguments, 0,
+							ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					if (group == null) {
+						return null;
+					}
 					group.clear();
 					final Rectangle rect = nullable(arguments, 1, ObjectJassValueVisitor.<Rectangle>getInstance());
 					if (rect != null) {
@@ -267,8 +293,11 @@ final class GroupNatives extends CommonNatives {
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("GroupEnumUnitsInRectCounted",
 				(arguments, globalScope, triggerScope) -> {
-					final List<CUnit> group = arguments.get(0)
-							.visit(ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					final List<CUnit> group = nullable(arguments, 0,
+							ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					if (group == null) {
+						return null;
+					}
 					group.clear();
 					final Rectangle rect = arguments.get(1).visit(ObjectJassValueVisitor.<Rectangle>getInstance());
 					final TriggerBooleanExpression filter = nullable(arguments, 2,
@@ -296,8 +325,11 @@ final class GroupNatives extends CommonNatives {
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("GroupEnumUnitsInRange",
 				(arguments, globalScope, triggerScope) -> {
-					final List<CUnit> group = arguments.get(0)
-							.visit(ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					final List<CUnit> group = nullable(arguments, 0,
+							ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					if (group == null) {
+						return null;
+					}
 					group.clear();
 					final float x = arguments.get(1).visit(RealJassValueVisitor.getInstance()).floatValue();
 					final float y = arguments.get(2).visit(RealJassValueVisitor.getInstance()).floatValue();
@@ -319,8 +351,11 @@ final class GroupNatives extends CommonNatives {
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("GroupEnumUnitsInRangeOfLoc",
 				(arguments, globalScope, triggerScope) -> {
-					final List<CUnit> group = arguments.get(0)
-							.visit(ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					final List<CUnit> group = nullable(arguments, 0,
+							ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					if (group == null) {
+						return null;
+					}
 					group.clear();
 					final AbilityPointTarget whichLocation = arguments.get(1)
 							.visit(ObjectJassValueVisitor.<AbilityPointTarget>getInstance());
@@ -344,8 +379,11 @@ final class GroupNatives extends CommonNatives {
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("GroupEnumUnitsInRangeCounted",
 				(arguments, globalScope, triggerScope) -> {
-					final List<CUnit> group = arguments.get(0)
-							.visit(ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					final List<CUnit> group = nullable(arguments, 0,
+							ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					if (group == null) {
+						return null;
+					}
 					group.clear();
 					final float x = arguments.get(1).visit(RealJassValueVisitor.getInstance()).floatValue();
 					final float y = arguments.get(2).visit(RealJassValueVisitor.getInstance()).floatValue();
@@ -376,8 +414,11 @@ final class GroupNatives extends CommonNatives {
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("GroupEnumUnitsInRangeOfLocCounted",
 				(arguments, globalScope, triggerScope) -> {
-					final List<CUnit> group = arguments.get(0)
-							.visit(ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					final List<CUnit> group = nullable(arguments, 0,
+							ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					if (group == null) {
+						return null;
+					}
 					group.clear();
 					final AbilityPointTarget whichLocation = arguments.get(1)
 							.visit(ObjectJassValueVisitor.<AbilityPointTarget>getInstance());
@@ -429,9 +470,9 @@ final class GroupNatives extends CommonNatives {
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("FirstOfGroup",
 				(arguments, globalScope, triggerScope) -> {
-					final List<CUnit> group = arguments.get(0)
-							.visit(ObjectJassValueVisitor.<List<CUnit>>getInstance());
-					if (group.isEmpty()) {
+					final List<CUnit> group = nullable(arguments, 0,
+							ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					if ((group == null) || group.isEmpty()) {
 						return unitType.getNullValue();
 					}
 					return new HandleJassValue(unitType, group.get(0));

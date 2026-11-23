@@ -97,7 +97,7 @@ final class ProfilePage extends LauncherViews {
 		final float fieldW = listW - (2 * fieldInset) - addW - gap;
 		final EditText field = nameField(t ? 34 : 24);
 		place(listPanel, field, fieldInset, fieldY, fieldW, fieldH);
-		final LauncherKit.GlueButton add = button(glueLabel("KEY_ADD", "Add"), fieldH, t ? 34 : 26, v -> {
+		final LauncherKit.GlueButton add = button(glueLabel("KEY_ADD"), fieldH, t ? 34 : 26, v -> {
 			final String typed = field.getText().toString();
 			if (this.activity.profiles.check(typed, null) == Profiles.NameProblem.NONE) {
 				this.activity.profiles.create(typed, firstPortrait(), false);
@@ -121,11 +121,11 @@ final class ProfilePage extends LauncherViews {
 		fillProfileDetails(details, selected, rightW - (2 * frame));
 
 		action(view, 0, glueLabel("BACK", getString(R.string.launcher_back)), v -> this.activity.homePage.showHome());
-		final LauncherKit.GlueButton delete = action(view, 1, glueLabel("KEY_DELETE", "Delete"),
+		final LauncherKit.GlueButton delete = action(view, 1, glueLabel("KEY_DELETE"),
 				v -> askDeleteProfile(selected));
 		delete.setTone(LauncherKit.GlueButton.TONE_DANGER);
 		delete.setEnabled(names.size() > 1);
-		final LauncherKit.GlueButton select = action(view, 2, glueLabel("KEY_SELECT", "Select"), v -> {
+		final LauncherKit.GlueButton select = action(view, 2, glueLabel("KEY_SELECT"), v -> {
 			this.activity.profiles.select(selected);
 			profileChanged();
 			this.activity.homePage.showHome();
@@ -177,14 +177,15 @@ final class ProfilePage extends LauncherViews {
 		if (entry == null) {
 			return "";
 		}
-		final String chapter = chapterOf(entry, progress);
+		final String chapter = chapterOf(entry, progress, name);
 		return glueLabel(entry.getData().getHeader(), entry.getData().getHeader())
 				+ (chapter.isEmpty() ? "" : " · " + chapter);
 	}
 
-	/** The header of the furthest open mission of a campaign. */
-	private String chapterOf(final CampaignCatalog.Entry entry, final CCampaignProgress.Snapshot progress) {
-		final List<CampaignMission> missions = entry.getData().getMissions();
+	/** The header of the furthest open mission of a campaign, in the profile's version of the campaign maps. */
+	private String chapterOf(final CampaignCatalog.Entry entry, final CCampaignProgress.Snapshot progress,
+			final String name) {
+		final List<CampaignMission> missions = entry.getMissions(reforgedMaps(name));
 		int furthest = -1;
 		for (int i = 0; i < missions.size(); i++) {
 			if (CampaignCatalog.isMissionOpen(entry, i, progress)) {
@@ -193,6 +194,10 @@ final class ProfilePage extends LauncherViews {
 		}
 		return furthest < 0 ? ""
 				: glueLabel(missions.get(furthest).getHeader(), missions.get(furthest).getHeader()).toString();
+	}
+
+	private boolean reforgedMaps(final String name) {
+		return this.activity.campaigns.reforgedMaps(this.activity.profiles.campaignMaps(name));
 	}
 
 	private void readProfileProgress(final List<String> names) {
@@ -255,7 +260,7 @@ final class ProfilePage extends LauncherViews {
 		final float buttonsY = t ? top0 + 128 : picture + 12;
 		final float changeW = t ? 340 : ((w - buttonsX) - 12) / 2;
 		final float renameW = t ? 260 : changeW;
-		place(details, button(LauncherKit.glueText(glue("CHANGE_PORTRAIT", "Change Portrait") + "…"), buttonH,
+		place(details, button(LauncherKit.glueText(glue("CHANGE_PORTRAIT") + "…"), buttonH,
 				t ? 32 : 24, v -> showChoosePortrait(name)), buttonsX, buttonsY, changeW, buttonH);
 		place(details, button(getString(R.string.profile_rename), buttonH, t ? 32 : 24, v -> showRename(name)),
 				buttonsX + changeW + (t ? 20 : 12), buttonsY, renameW, buttonH);
@@ -301,13 +306,13 @@ final class ProfilePage extends LauncherViews {
 				status = getString(R.string.profile_not_started);
 				color = this.activity.art.text2();
 			}
-			else if (CampaignCatalog.isCompleted(entry, progress)) {
+			else if (CampaignCatalog.isCompleted(entry, progress, reforgedMaps(name))) {
 				status = getString(R.string.profile_completed);
 				color = LauncherKit.OK;
 			}
 			else if (CampaignChoice.started(entry, progress)
 					|| (CampaignChoice.playedCampaign(catalog, progress) == entry)) {
-				status = chapterOf(entry, progress);
+				status = chapterOf(entry, progress, name);
 				color = this.activity.art.text();
 			}
 			else {
@@ -470,7 +475,7 @@ final class ProfilePage extends LauncherViews {
 				lines.addView(new View(this.activity), new LinearLayout.LayoutParams(px(gap * 2), 1));
 			}
 			if (!oneRow && (group.key != null)) {
-				final TextView header = text(glue(group.key, group.fallback), Math.max(24, cell * 0.16f),
+				final TextView header = text(glue(group.key), Math.max(24, cell * 0.16f),
 						this.activity.art.gold());
 				final LinearLayout.LayoutParams headerParams = new LinearLayout.LayoutParams(MATCH,
 						ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -560,7 +565,7 @@ final class ProfilePage extends LauncherViews {
 		final View grid;
 		final float buttonY = h - (t ? 72 : 32) - b.buttonH;
 		if (t) {
-			place(box, text(glue("NEW_PROFILE", "New Profile"), b.title, this.activity.art.gold()), inset, 64, inner,
+			place(box, text(glue("NEW_PROFILE"), b.title, this.activity.art.gold()), inset, 64, inner,
 					-1);
 			place(box, lines(getString(R.string.profile_message), b.body, this.activity.art.text(), 2), inset, 140,
 					inner, -1);
@@ -588,7 +593,7 @@ final class ProfilePage extends LauncherViews {
 		final float buttonGap = t ? 32 : 24;
 		final float rowX = (w - ((2 * buttonW) + buttonGap)) / 2;
 		final LauncherKit.GlueButton skip = button(getString(R.string.profile_skip), b.buttonH, b.buttonText, v -> {
-			final String fallback = glue("PLAYER", "Player");
+			final String fallback = glue("PLAYER");
 			if (this.activity.profiles.check(fallback, null) == Profiles.NameProblem.NONE) {
 				this.activity.profiles.create(fallback, firstPortrait(), true);
 			}
@@ -641,7 +646,7 @@ final class ProfilePage extends LauncherViews {
 		place(box, portraitGrid(portrait, columns, cell, gap, false), (w - gridW) / 2, gridY, gridW,
 				buttonY - gridY - (t ? 24 : 12));
 		final float buttonW = t ? 400 : 320;
-		place(box, button(glueLabel("CANCEL", "Cancel"), b.buttonH, b.buttonText,
+		place(box, button(glueLabel("CANCEL"), b.buttonH, b.buttonText,
 				v -> this.activity.dialogs.closeDialog()),
 				w - inset - (2 * buttonW) - 24, buttonY, buttonW, b.buttonH);
 		place(box, button(glueLabel("OK", getString(R.string.game_ok)), b.buttonH, b.buttonText, v -> {
@@ -674,7 +679,7 @@ final class ProfilePage extends LauncherViews {
 		place(box, problem, inset, t ? 316 : 194, inner, -1);
 		final float buttonY = h - (t ? 72 : 28) - b.buttonH;
 		final float buttonW = t ? 400 : 320;
-		place(box, button(glueLabel("CANCEL", "Cancel"), b.buttonH, b.buttonText,
+		place(box, button(glueLabel("CANCEL"), b.buttonH, b.buttonText,
 				v -> this.activity.dialogs.closeDialog()),
 				w - inset - (2 * buttonW) - 24, buttonY, buttonW, b.buttonH);
 		final LauncherKit.GlueButton ok = button(glueLabel("OK", getString(R.string.game_ok)), b.buttonH,
@@ -708,7 +713,7 @@ final class ProfilePage extends LauncherViews {
 		}
 		this.activity.dialogs.showQuestion(question, getString(R.string.profile_delete_line),
 				new CharSequence[] { glueLabel("NO", getString(R.string.game_no)),
-					glueLabel("KEY_DELETE", "Delete") },
+					glueLabel("KEY_DELETE") },
 				new Runnable[] { null, () -> {
 					final boolean current = name.equals(this.activity.profiles.current());
 					this.activity.profiles.delete(name);

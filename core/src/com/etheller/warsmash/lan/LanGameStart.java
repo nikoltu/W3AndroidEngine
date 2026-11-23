@@ -136,6 +136,13 @@ public final class LanGameStart {
 	/** A player reported how far it has loaded; for the loading screen's list. */
 	public void onLoadProgress(final int participant, final int percent) {
 		this.loadPercents.put(participant, percent);
+		final LanPlay current;
+		synchronized (this) {
+			current = this.play;
+		}
+		if (current != null) {
+			current.onLoadProgress(participant, percent);
+		}
 	}
 
 	/**
@@ -232,6 +239,10 @@ public final class LanGameStart {
 			this.play = new LanPlay(this.setup, this.client.participantId(),
 					session == null ? new net.warsmash.lan.protocol.LanTimings() : session.timings(), this.client::vote,
 					System::currentTimeMillis);
+			// What the others reported while the game loaded, so that a player still loading is known from the start.
+			for (final java.util.Map.Entry<Integer, Integer> e : this.loadPercents.entrySet()) {
+				this.play.onLoadProgress(e.getKey(), e.getValue());
+			}
 			if (this.resyncKind == LanProtocol.RESYNC_DESYNC) {
 				this.play.notice(com.etheller.warsmash.launcher.lan.LanText.outOfSync(this.resyncTick));
 			}

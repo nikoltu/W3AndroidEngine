@@ -1,9 +1,12 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation;
 
+import com.etheller.warsmash.units.GameObject;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbility;
 import java.util.ArrayList;
 import java.util.List;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit.CreepCamp;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.neutral.creeps.CCreepCastAbility;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.undead.units.CAbilityPossession;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbilityAttack;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityPointTarget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.CBehavior;
@@ -266,6 +269,11 @@ final class CUnitAggro {
 				&& !holdsBackOnlyForPassive(self, simulation, source)
 				// Measured on 1.29: a unit holding position stays when it cannot hit back.
 				&& (self.orders.defaultBehavior != self.holdPositionBehavior)) {
+			if ((distance == FLEE_DISTANCE) && simulation.castsSpellsByItself(self.playerIndex)
+					&& !simulation.isNeutralAggressive(self.playerIndex)) {
+				simulation.getHarmfulAreas().runFrom(simulation, self, source);
+				return;
+			}
 			// Measured on 1.29: the run is a real move order (order events fire, the current order is move) to a
 			// point 300 (a critter's 500) straight away from the source whatever the unit's speed; like any move it
 			// ends a little short of the point.
@@ -333,11 +341,30 @@ final class CUnitAggro {
 		self.aggro.spellMissileSource = caster;
 	}
 
-	static void onSpellEffect(final CUnit self, final CSimulation simulation, final CUnit caster) {
+	static void onSpellEffect(final CUnit self, final CSimulation simulation, final CUnit caster,
+			final CAbility ability) {
 		if (self.aggro.spellMissileSource == caster) {
 			return;
 		}
+		if ((caster != null) && !self.isDead() && (caster.getPlayerIndex() != self.playerIndex)
+				&& raisesHitEventAtEffect(simulation, ability)) {
+			CUnitDamage.fireSpellHitEvent(self, simulation, caster);
+		}
 		onTargetedBySpell(self, simulation, caster);
+	}
+
+	/**
+	 * Measured on 1.29: a spell without a missile raises the damaged event on the unit it takes effect on, one with a
+	 * missile when that lands (Possession, whose spirit flies only when the channel ends, raises it at the effect);
+	 * Chain Lightning raises none.
+	 */
+	private static boolean raisesHitEventAtEffect(final CSimulation simulation, final CAbility ability) {
+		if (ability == null) {
+			return false;
+		}
+		final GameObject data = simulation.getAbilityData().getEditorData(ability.getAlias().asStringValue());
+		return (data != null) && (data.getField("Missileart").isEmpty() || (ability instanceof CAbilityPossession))
+				&& !"chainlightning".equalsIgnoreCase(data.getField("Order"));
 	}
 
 	static void resolveSpellAnswer(final CUnit self, final CSimulation simulation) {

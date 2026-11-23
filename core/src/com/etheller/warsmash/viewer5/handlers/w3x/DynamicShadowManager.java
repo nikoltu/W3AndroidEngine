@@ -47,7 +47,9 @@ public class DynamicShadowManager {
 	/** A shadow is never longer than this many times the height of what casts it, however low the light is. */
 	private static final float MAX_SHADOW_LENGTH = 3.5f;
 	/** Reforged keeps the same shadow length at every hour of the day; above 1 lengthens the moonlight shadows. */
-	private static final float NIGHT_LENGTH = Float.parseFloat(System.getProperty("warsmash.shadowNightLength", "1.0"));
+	private static final float NIGHT_LENGTH = Float.parseFloat(System.getProperty("warsmash.shadowNightLength", "2.5"));
+	/** Without a light of their own, trees and other scenery throw shadows this part as long as units do. */
+	private static final float SCENERY_LENGTH = 0.6f;
 	private static final float DAY_STRENGTH = 0.6f;
 	private static final float NIGHT_STRENGTH = 0.5f;
 	/** The most units and buildings that are drawn in a frame, the first in the scene order; each costs a draw. */
@@ -91,7 +93,10 @@ public class DynamicShadowManager {
 			"    }";
 
 	private final Vector3 sunDirection = new Vector3(DEFAULT_LIGHT_X, DEFAULT_LIGHT_Y, 1f).nor();
+	private final Vector3 sceneryDirection = new Vector3();
+	private boolean ownSceneryDirection;
 	private final Vector3 shadowLight = new Vector3();
+	private final Vector3 sceneryLight = new Vector3();
 	private final Vector3 straightDown = new Vector3(0f, 0f, 1f);
 	private final Vector3 viewHeap = new Vector3();
 	private final Vector3 viewHeap2 = new Vector3();
@@ -129,16 +134,28 @@ public class DynamicShadowManager {
 	 * Takes the direction of the shadows from the main light of the day and night cycle and their length and strength
 	 * from the time of day.
 	 *
-	 * @param towardLight the unit vector from the ground towards the cycle's main light, or null for the default
-	 * @param dayRatio    how far the day is, 0 to 1, with the middle at noon
+	 * @param towardLight   the unit vector from the ground towards the cycle's main light for units and buildings, or
+	 *                      null for the default
+	 * @param towardScenery the same for trees and other scenery when the cycle lights them from a light of their own,
+	 *                      or null to throw their shadows along the unit light, shortened
+	 * @param dayRatio      how far the day is, 0 to 1, with the middle at noon
 	 */
-	public void setSunLight(final Vector3 towardLight, final float dayRatio) {
+	public void setSunLight(final Vector3 towardLight, final Vector3 towardScenery, final float dayRatio) {
 		if (towardLight != null) {
 			this.sunDirection.set(towardLight);
+		}
+		this.ownSceneryDirection = towardScenery != null;
+		if (this.ownSceneryDirection) {
+			this.sceneryDirection.set(towardScenery);
 		}
 		final float hour = (dayRatio - (float) Math.floor(dayRatio)) * 24f;
 		this.night = hour < 12f ? 1f - smoothStep(5f, 7f, hour) : smoothStep(17f, 19f, hour);
 		this.strength = DAY_STRENGTH + ((NIGHT_STRENGTH - DAY_STRENGTH) * this.night);
+	}
+
+	/** 1 at night, 0 by day, following the time of day last passed to setSunLight. */
+	float getNight() {
+		return this.night;
 	}
 
 	private static float smoothStep(final float from, final float to, final float value) {
@@ -154,6 +171,16 @@ public class DynamicShadowManager {
 		final float horizontal = (float) Math.sqrt((x * x) + (y * y));
 		final float z = Math.max(Math.max(this.sunDirection.z, 0.01f) / length, horizontal / MAX_SHADOW_LENGTH);
 		this.shadowLight.set(x, y, z);
+		if (this.ownSceneryDirection) {
+			final float sx = this.sceneryDirection.x;
+			final float sy = this.sceneryDirection.y;
+			final float sHorizontal = (float) Math.sqrt((sx * sx) + (sy * sy));
+			this.sceneryLight.set(sx, sy, Math.max(Math.max(this.sceneryDirection.z, 0.01f) / length,
+					sHorizontal / MAX_SHADOW_LENGTH));
+		}
+		else {
+			this.sceneryLight.set(x, y, Math.max(z / SCENERY_LENGTH, horizontal / MAX_SHADOW_LENGTH));
+		}
 	}
 
 	/** Whether the shadow of something at this place, from its foot to the end of its length, could reach the view. */
@@ -278,7 +305,7 @@ public class DynamicShadowManager {
 			final float groundZ = terrain.getGroundHeight(instance.worldLocation.x, instance.worldLocation.y);
 			// What is in the air has its shadow straight below it, wherever the light is.
 			final Vector3 light = (instance.worldLocation.z - groundZ) > AIRBORNE_HEIGHT ? this.straightDown
-					: this.shadowLight;
+					: (scenery ? this.sceneryLight : this.shadowLight);
 			this.caster.draw(webGL, instance, viewProjection, light, groundZ,
 					levelUnder(terrain, instance.worldLocation.x, instance.worldLocation.y, groundZ, light), scenery);
 		}

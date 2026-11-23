@@ -4,18 +4,21 @@ import static com.etheller.warsmash.launcher.LauncherKeys.KEY_ANIMATED;
 import static com.etheller.warsmash.launcher.LauncherKeys.KEY_CRASH_LOGS;
 import static com.etheller.warsmash.launcher.LauncherKeys.KEY_MUSIC;
 import static com.etheller.warsmash.launcher.LauncherKeys.KEY_SKIN;
+import static com.etheller.warsmash.launcher.LauncherKeys.KEY_UNLOCK_ASKED;
 import static com.etheller.warsmash.launcher.LauncherKeys.KEY_UPDATE_CHECK;
 import static com.etheller.warsmash.launcher.LauncherKeys.KEY_UPDATE_SKIPPED;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 import java.util.function.Predicate;
 
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.provider.Settings;
@@ -36,9 +39,12 @@ import com.etheller.warsmash.input.touch.PenButton;
 import com.etheller.warsmash.input.touch.TouchInputRouter;
 import com.etheller.warsmash.input.touch.TouchStyle;
 import com.etheller.warsmash.launcher.DataFolderCheck;
+import com.etheller.warsmash.launcher.GameCatalog;
 import com.etheller.warsmash.launcher.LauncherBoard;
 import com.etheller.warsmash.launcher.LauncherOptions;
+import com.etheller.warsmash.launcher.ProblemReport;
 import com.etheller.warsmash.launcher.SkinArt;
+import com.etheller.warsmash.util.PerfStats;
 
 /** The launcher's own Options: its tabs of settings, most of them the engine's. */
 final class OptionsPage extends LauncherViews {
@@ -49,12 +55,19 @@ final class OptionsPage extends LauncherViews {
 	private static final int TAB_TOUCH = 3;
 	static final int TAB_GAME_DATA = 4;
 	private static final int TAB_ABOUT = 5;
+	private static final int TAB_DEBUGGING = 6;
 
-	private static final long HINT_MILLIS = 3000;
 
 	int optionsTab = TAB_GRAPHICS;
-	private TextView hint;
+	/** The campaigns the Debugging tab lists, handed over by the read that asked for the page to be shown again. */
+	private List<GameCatalog.UnlockEntry> unlockEntries;
+	private boolean makingReport;
 	final HotkeyEditorPage hotkeys;
+
+	private final AtomicBoolean readabilityWalking = new AtomicBoolean();
+	private volatile TextView readabilityRow;
+	private volatile File readabilityFolder;
+	private volatile String readabilityFiles;
 
 	OptionsPage(final LauncherActivity activity) {
 		super(activity);
@@ -67,7 +80,8 @@ final class OptionsPage extends LauncherViews {
 		final FrameLayout view = this.activity.homePage.shell(LauncherActivity.RAIL_OPTIONS);
 		final FrameLayout content = content(view, 0);
 		final float top = addTabs(content, new int[] { R.string.options_graphics, R.string.options_sound,
-			R.string.options_gameplay, R.string.options_controls, R.string.options_game_data, R.string.options_about },
+			R.string.options_gameplay, R.string.options_controls, R.string.options_game_data, R.string.options_about,
+			R.string.options_debugging },
 				tab, this::showOptions);
 		final FrameLayout panel = framed(content, 0, top, b.contentW, b.contentH - top);
 		final ScrollView scroll = new ScrollView(this.activity);
@@ -95,6 +109,9 @@ final class OptionsPage extends LauncherViews {
 			break;
 		case TAB_ABOUT:
 			aboutRows(rows);
+			break;
+		case TAB_DEBUGGING:
+			debuggingRows(rows);
 			break;
 		default:
 			graphicsRows(rows, engine);
@@ -136,8 +153,13 @@ final class OptionsPage extends LauncherViews {
 		// The game falls back to Classic when the data lacks the chosen package, and so does the row.
 		final int setChoice = GraphicsSet.fromIniName(engine.graphics(GraphicsSettings.KEY_SET, "")).ordinal();
 		radioRow(rows, R.string.options_ingame_graphics, setNames, setsHere, setsHere[setChoice] ? setChoice : 0,
-				choice -> engine.setGraphics(GraphicsSettings.KEY_SET, sets[choice].getIniName()),
-				getString(R.string.options_graphics_locked_note));
+				choice -> {
+					engine.setGraphics(GraphicsSettings.KEY_SET, sets[choice].getIniName());
+					if (engine.number("unitShadowMode", -1) < 0) {
+						// The shadows row shows what the graphics set decides until the player chooses a mode.
+						showOptions(TAB_GRAPHICS);
+					}
+				}, getString(R.string.options_graphics_locked_note));
 		final String[] sizeNames = new String[LauncherOptions.TEXTURE_SIZES.length];
 		for (int i = 0; i < sizeNames.length; i++) {
 			sizeNames[i] = getString(stringId(LauncherOptions.TEXTURE_SIZES[i]));
@@ -161,11 +183,13 @@ final class OptionsPage extends LauncherViews {
 				LauncherOptions.textureSizeChoice(GraphicsSettings.limitToCap(textureSize, cap)),
 				choice -> engine.setGraphics(GraphicsSettings.KEY_TEXTURE_SIZE,
 						Integer.toString(GraphicsSettings.TEXTURE_SIZES[choice])),
-				getString(R.string.options_texture_capped, cap));
-		if ((cap > 0) && (GraphicsSettings.limitToCap(textureSize, cap) != textureSize)) {
-			noteRow(rows, getString(R.string.options_texture_limited,
-					textureSize == 0 ? getString(R.string.options_texture_full) : Integer.toString(textureSize), cap));
-		}
+				getString(R.string.options_texture_capped, cap),
+				(cap > 0) && (GraphicsSettings.limitToCap(textureSize, cap) != textureSize)
+						? getString(R.string.options_texture_limited,
+								textureSize == 0 ? getString(R.string.options_texture_full)
+										: Integer.toString(textureSize),
+								cap)
+						: null);
 		final String[] scaleNames = new String[LauncherOptions.RENDER_SCALES.length];
 		for (int i = 0; i < scaleNames.length; i++) {
 			scaleNames[i] = getString(stringId(LauncherOptions.RENDER_SCALES[i]));
@@ -260,10 +284,7 @@ final class OptionsPage extends LauncherViews {
 					com.etheller.warsmash.lan.LanSessions.onControlSchemeChanged(ControlScheme.values()[choice]);
 					// The hotkey editor below the rows belongs to the keyboard and mouse scheme only.
 					showOptions(TAB_TOUCH);
-				});
-		if (mouseScheme) {
-			noteRow(rows, R.string.options_mouse_note);
-		}
+				}, null, getString(mouseScheme ? R.string.options_mouse_note : R.string.options_touch_note));
 		radioRow(rows, mouseScheme ? R.string.options_touch_style_pen : R.string.options_touch_style,
 				new String[] { getString(R.string.options_style_hold), getString(R.string.options_style_double) },
 				null, engine.touchStyle().ordinal(), choice -> {
@@ -284,7 +305,7 @@ final class OptionsPage extends LauncherViews {
 					if (router != null) {
 						router.setPenButton(button);
 					}
-				});
+				}, null, getString(R.string.options_pen_note));
 		touchRow(rows, R.string.options_tap_slop, engine, "TapSlopDp", 10, 4, 24, R.string.options_dp);
 		touchRow(rows, R.string.options_long_press, engine, "LongPressMs", 300, 200, 800, R.string.options_ms);
 		checkRow(rows, R.string.options_palm_on, !"Off".equalsIgnoreCase(engine.touch("PalmRejection", "")),
@@ -296,23 +317,6 @@ final class OptionsPage extends LauncherViews {
 		if (mouseScheme) {
 			this.hotkeys.addTo(rows);
 		}
-	}
-
-	/** A line of explanation across the whole row, for settings that mean something else under the other scheme. */
-	private void noteRow(final LinearLayout rows, final int note) {
-		noteRow(rows, getString(note));
-	}
-
-	private void noteRow(final LinearLayout rows, final String note) {
-		final LauncherBoard b = this.activity.board;
-		final FrameLayout row = row(rows);
-		row.getLayoutParams().height = px(b.rowH * 1.6f);
-		final TextView shown = text(note, b.small, this.activity.art.text());
-		shown.setGravity(Gravity.CENTER_VERTICAL);
-		shown.setSingleLine(false);
-		shown.setMaxLines(3);
-		shown.setEllipsize(null);
-		place(row, shown, b.labelX, 0, b.contentW - (2 * b.pageFrame) - (2 * b.labelX), b.rowH * 1.6f);
 	}
 
 	private void touchRow(final LinearLayout rows, final int label, final EngineSettings engine, final String key,
@@ -357,12 +361,12 @@ final class OptionsPage extends LauncherViews {
 			final EngineSettings engine = new EngineSettings(this.activity);
 			final String chosen = engine.language().isEmpty() ? locale : engine.language();
 			radioRow(rows, R.string.options_language, names, null, Math.max(0, languages.indexOf(chosen)),
-					choice -> engine.setLanguage(languages.get(choice)));
-			noteRow(rows, getString(R.string.options_language_note));
+					choice -> chooseLanguage(engine, languages.get(choice)), null,
+					getString(R.string.options_language_note));
 		}
 		else {
 			infoRow(rows, R.string.options_locale, locale.isEmpty() ? getString(R.string.options_not_stated) : locale,
-					false);
+					false, getString(R.string.options_locale_note));
 		}
 		if (!this.activity.homePage.installedGame()) {
 			final String files = DataFolderCheck.describe(kind, folder);
@@ -372,11 +376,7 @@ final class OptionsPage extends LauncherViews {
 				shown.setText(filesText(files, known));
 			}
 			else {
-				new Thread(() -> {
-					final DataFolderCheck.Readability found = DataFolderCheck.readability(folder, Integer.MAX_VALUE,
-							0);
-					this.activity.runOnUiThread(() -> shown.setText(filesText(files, found)));
-				}, "DataFolderReadability").start();
+				walkReadability(shown, folder, files);
 			}
 			final String packer = DataFolderCheck.packerTool(folder);
 			infoRow(rows, R.string.options_packer, packer.isEmpty() ? getString(R.string.options_not_stated) : packer,
@@ -497,16 +497,11 @@ final class OptionsPage extends LauncherViews {
 			});
 			skippedRow.setContentDescription(getString(R.string.options_skipped_update));
 		}
-		debuggingRows(rows);
 	}
 
 	/** Crash logs stay on the phone unless the player attaches one to a bug report; the first turn-on asks. */
 	private void debuggingRows(final LinearLayout rows) {
 		final LauncherBoard b = this.activity.board;
-		final FrameLayout heading = row(rows);
-		final TextView title = text(getString(R.string.options_debugging), b.body, this.activity.art.text2());
-		title.setGravity(Gravity.CENTER_VERTICAL);
-		place(heading, title, b.labelX, 0, b.contentW - (2 * b.pageFrame) - (2 * b.labelX), b.rowH);
 		askedCheckRow(rows, R.string.options_crash_logs, CrashLogs.enabled(this.activity), on -> {
 			if (!on) {
 				this.activity.preferences.edit().putBoolean(KEY_CRASH_LOGS, false).apply();
@@ -516,18 +511,154 @@ final class OptionsPage extends LauncherViews {
 					getString(R.string.crash_logs_line, CrashLogs.location(this.activity)),
 					new CharSequence[] { glueLabel("CANCEL", getString(R.string.crash_logs_cancel)),
 						getString(R.string.crash_logs_turn_on) },
-					new Runnable[] { () -> showOptions(TAB_ABOUT), () -> {
+					new Runnable[] { () -> showOptions(TAB_DEBUGGING), () -> {
 						this.activity.preferences.edit().putBoolean(KEY_CRASH_LOGS, true).apply();
-						showOptions(TAB_ABOUT);
+						showOptions(TAB_DEBUGGING);
 					} }, null, 12, true);
 			return false;
 		});
-		infoRow(rows, R.string.options_logs_share, getString(R.string.options_logs_share_value), false);
-		final View shareRow = rows.getChildAt(rows.getChildCount() - 1);
-		shareRow.setContentDescription(getString(R.string.options_logs_share));
-		onTap(shareRow, false, v -> shareLogs());
-		infoRow(rows, R.string.options_logs_where, getString(R.string.options_logs_where_value,
-				CrashLogs.location(this.activity)), true);
+		final FrameLayout shareRow = labelledRow(rows, R.string.options_logs_share);
+		final float shareH = b.tablet ? 80 : 64;
+		final float shareW = b.tablet ? 300 : 200;
+		place(shareRow, button(getString(R.string.options_logs_send), shareH, b.tablet ? 32 : 24, v -> shareLogs()),
+				controlX(0), (b.rowH - shareH) / 2, shareW, shareH);
+		tipMark(shareRow, getString(R.string.options_logs_share), b.rowH, getString(R.string.options_logs_share_value));
+		infoRow(rows, R.string.options_logs_where, CrashLogs.enabled(this.activity)
+				? getString(R.string.options_logs_where_value, CrashLogs.location(this.activity))
+				: getString(R.string.options_logs_where_off), true);
+		askedCheckRow(rows, getString(R.string.options_perf_log), PerfStats.isSwitchedOn(this.activity.getFilesDir()),
+				on -> {
+					PerfStats.setSwitch(this.activity.getFilesDir(), on);
+					return true;
+				}, getString(R.string.options_perf_note));
+		reportRows(rows);
+		unlockRows(rows);
+	}
+
+	/**
+	 * Report a Bug: one zip with everything the bug needs goes to the share sheet; the player chooses nothing
+	 * but whether to make it.
+	 */
+	private void reportRows(final LinearLayout rows) {
+		final LauncherBoard b = this.activity.board;
+		final FrameLayout consentRow = row(rows);
+		final TextView consent = text(LauncherKit.glueText(getString(R.string.options_report_consent)), b.small,
+				this.activity.art.text2());
+		consent.setGravity(Gravity.CENTER);
+		place(consentRow, consent, b.labelX, 0, b.contentW - (2 * b.pageFrame) - (2 * b.labelX), b.rowH);
+		final FrameLayout makeRow = labelledRow(rows, R.string.options_report);
+		tipMark(makeRow, getString(R.string.options_report), b.rowH, getString(R.string.options_report_note));
+		final float makeH = b.tablet ? 80 : 64;
+		place(makeRow, button(getString(this.makingReport ? R.string.options_report_making : R.string.options_report_make),
+				makeH, b.tablet ? 32 : 24, v -> makeReport()), controlX(0), (b.rowH - makeH) / 2, b.tablet ? 300 : 200,
+				makeH);
+	}
+
+	/** The phone's part is read off the main thread, the catalog adds the game's part, then the share sheet opens. */
+	private void makeReport() {
+		if (this.makingReport) {
+			return;
+		}
+		this.makingReport = true;
+		showOptions(TAB_DEBUGGING);
+		new Thread(() -> {
+			final ProblemReport.Request request = CrashLogs.reportRequest(this.activity);
+			this.activity.runOnUiThread(() -> this.activity.catalog.problemReport(request,
+					CrashLogs.privateFolder(this.activity), java.time.ZoneId.systemDefault(), this::reportMade));
+		}, "problem-report").start();
+	}
+
+	private void reportMade(final ProblemReport.Result result) {
+		this.makingReport = false;
+		if (this.activity.shown == LauncherActivity.PAGE_OPTIONS && (this.optionsTab == TAB_DEBUGGING)) {
+			showOptions(TAB_DEBUGGING);
+		}
+		if (result == null) {
+			this.activity.dialogs.showMessage(getString(R.string.options_report),
+					getString(R.string.options_report_failed));
+			return;
+		}
+		final Runnable share = () -> {
+			try {
+				CrashLogs.share(this.activity, result.file, "Warsmash bug report");
+			}
+			catch (final RuntimeException e) {
+				this.activity.dialogs.showMessage(getString(R.string.options_report),
+						getString(R.string.options_report_failed));
+			}
+		};
+		if (result.leftOut.isEmpty()) {
+			share.run();
+			return;
+		}
+		this.activity.dialogs.showQuestion(getString(R.string.options_report),
+				getString(R.string.options_report_left_out, String.join("; ", result.leftOut)),
+				new CharSequence[] { glueLabel("CANCEL", getString(R.string.crash_logs_cancel)),
+					getString(R.string.options_report_share) },
+				new Runnable[] { () -> {
+				}, share }, null, 12, true);
+	}
+
+	/**
+	 * Campaigns the player opens by hand when the progress got stuck: one switch per campaign of the game data. Only a
+	 * separate flag is kept, so the progress and the saves are the player's own whether the switch is on or off.
+	 */
+	private void unlockRows(final LinearLayout rows) {
+		final LauncherBoard b = this.activity.board;
+		final FrameLayout heading = row(rows);
+		final TextView title = text(getString(R.string.options_unlock_campaigns), b.body, this.activity.art.text2());
+		title.setGravity(Gravity.CENTER_VERTICAL);
+		place(heading, title, b.labelX, 0, b.contentW - (2 * b.pageFrame) - (2 * b.labelX), b.rowH);
+		tipMark(heading, getString(R.string.options_unlock_campaigns), b.rowH,
+				getString(R.string.options_unlock_note));
+		// Showing the page makes it a new one, so the answer is for the generation that follows this build.
+		final int generation = this.activity.generation + 1;
+		final List<GameCatalog.UnlockEntry> listed = this.unlockEntries;
+		this.unlockEntries = null;
+		if ((listed == null) || listed.isEmpty()) {
+			final TextView none = text(getString(R.string.options_unlock_none), b.body, LauncherKit.DISABLED);
+			none.setGravity(Gravity.CENTER_VERTICAL);
+			place(heading, none, controlX(0), 0, b.contentW - b.controlX - b.pageFrame - 24, b.rowH);
+		}
+		if (listed == null) {
+			this.activity.catalog.unlockEntries(found -> {
+				if ((found == null) || (generation != this.activity.generation)
+						|| (this.activity.shown != LauncherActivity.PAGE_OPTIONS)
+						|| (this.optionsTab != TAB_DEBUGGING)) {
+					return;
+				}
+				this.unlockEntries = found;
+				showOptions(TAB_DEBUGGING);
+			});
+			return;
+		}
+		for (final GameCatalog.UnlockEntry entry : listed) {
+			askedCheckRow(rows, glueLabel(entry.name, entry.name).toString(), entry.unlocked, on -> {
+				if (!on || this.activity.preferences.getBoolean(KEY_UNLOCK_ASKED, false)) {
+					setUnlocked(entry, on);
+					return false;
+				}
+				this.activity.dialogs.showQuestion(getString(R.string.unlock_title), getString(R.string.unlock_line),
+						new CharSequence[] { glueLabel("CANCEL", getString(R.string.unlock_cancel)),
+							getString(R.string.unlock_turn_on) },
+						new Runnable[] { () -> showOptions(TAB_DEBUGGING), () -> {
+							this.activity.preferences.edit().putBoolean(KEY_UNLOCK_ASKED, true).apply();
+							setUnlocked(entry, true);
+						} }, null, 12, true);
+				return false;
+			});
+		}
+	}
+
+	/** Keeps the choice beside the profile, then lists again; the campaign pages read the progress anew. */
+	private void setUnlocked(final GameCatalog.UnlockEntry entry, final boolean on) {
+		final int generation = this.activity.generation;
+		this.activity.catalog.setCampaignUnlocked(entry.section, on, kept -> {
+			this.activity.campaigns = null;
+			if ((generation == this.activity.generation) && (this.activity.shown == LauncherActivity.PAGE_OPTIONS)) {
+				showOptions(TAB_DEBUGGING);
+			}
+		});
 	}
 
 	/** The log is read off the main thread; the share sheet opens when the snapshot is written. */
@@ -577,9 +708,13 @@ final class OptionsPage extends LauncherViews {
 	}
 
 	private FrameLayout labelledRow(final LinearLayout rows, final int label) {
+		return labelledRow(rows, getString(label));
+	}
+
+	private FrameLayout labelledRow(final LinearLayout rows, final String label) {
 		final LauncherBoard b = this.activity.board;
 		final FrameLayout row = row(rows);
-		final TextView name = text(getString(label), b.body, this.activity.art.gold());
+		final TextView name = text(label, b.body, this.activity.art.gold());
 		name.setGravity(Gravity.CENTER_VERTICAL);
 		place(row, name, b.labelX, 0, b.controlX - b.pageFrame - b.labelX - 16, b.rowH);
 		return row;
@@ -601,6 +736,16 @@ final class OptionsPage extends LauncherViews {
 	/** @param changed gets the new value; false leaves the box as it was, for a change that waits for an answer */
 	private void askedCheckRow(final LinearLayout rows, final int label, final boolean value,
 			final Predicate<Boolean> changed) {
+		askedCheckRow(rows, getString(label), value, changed);
+	}
+
+	private void askedCheckRow(final LinearLayout rows, final String label, final boolean value,
+			final Predicate<Boolean> changed) {
+		askedCheckRow(rows, label, value, changed, null);
+	}
+
+	private void askedCheckRow(final LinearLayout rows, final String label, final boolean value,
+			final Predicate<Boolean> changed, final String tip) {
 		final LauncherBoard b = this.activity.board;
 		final FrameLayout row = labelledRow(rows, label);
 		final LauncherKit.CheckDrawable check = new LauncherKit.CheckDrawable(this.activity.art);
@@ -616,7 +761,8 @@ final class OptionsPage extends LauncherViews {
 				check.setChecked(on[0]);
 			}
 		});
-		row.setContentDescription(getString(label));
+		row.setContentDescription(label);
+		tipMark(row, label, b.rowH, tip);
 	}
 
 	void radioRow(final LinearLayout rows, final int label, final String[] choices, final boolean[] enabled,
@@ -627,6 +773,12 @@ final class OptionsPage extends LauncherViews {
 	/** @param lockedNote shown beside a greyed-out choice when it is tapped or held, to say why it cannot be chosen */
 	private void radioRow(final LinearLayout rows, final int label, final String[] choices, final boolean[] enabled,
 			final int selected, final IntConsumer changed, final String lockedNote) {
+		radioRow(rows, label, choices, enabled, selected, changed, lockedNote, null);
+	}
+
+	/** @param tip what the row's mark shows, or null for a row that has nothing to explain */
+	void radioRow(final LinearLayout rows, final int label, final String[] choices, final boolean[] enabled,
+			final int selected, final IntConsumer changed, final String lockedNote, final String tip) {
 		final LauncherBoard b = this.activity.board;
 		final TextView[] names = new TextView[choices.length];
 		final float[] nameWidths = new float[choices.length];
@@ -643,6 +795,7 @@ final class OptionsPage extends LauncherViews {
 		place(row, rowName, b.labelX, 0,
 				(places.ownLine ? b.contentW - (2 * b.pageFrame) : b.controlX - b.pageFrame) - b.labelX - 16,
 				places.labelH);
+		tipMark(row, getString(label), places.labelH, tip);
 		final LauncherKit.RadioDrawable[] marks = new LauncherKit.RadioDrawable[choices.length];
 		final int[] current = { selected };
 		for (int i = 0; i < choices.length; i++) {
@@ -686,51 +839,31 @@ final class OptionsPage extends LauncherViews {
 		}
 	}
 
-	private void showHint(final View anchor, final String note) {
-		hideHint();
+	/**
+	 * A small mark after the row's label that shows the tip when tapped; holding the row shows it too, for a row the
+	 * mark is hidden behind a long label.
+	 */
+	private void tipMark(final FrameLayout row, final String label, final float cellH, final String tip) {
+		if (tip == null) {
+			return;
+		}
 		final LauncherBoard b = this.activity.board;
-		final int[] at = new int[2];
-		anchor.getLocationInWindow(at);
-		final int[] origin = new int[2];
-		this.activity.root.getLocationInWindow(origin);
-		// The tip stays inside the panel the choice is in.
-		View panel = anchor;
-		while ((panel.getParent() instanceof View) && !(panel instanceof ScrollView)) {
-			panel = (View) panel.getParent();
-		}
-		final int[] area = new int[2];
-		panel.getLocationInWindow(area);
-		final int left = area[0] - origin[0];
-		final int top = area[1] - origin[1];
-		final int width = panel instanceof ScrollView ? panel.getWidth() : px(b.width);
-		final int height = panel instanceof ScrollView ? panel.getHeight() : px(b.height);
-		final int border = px(b.tablet ? 8 : 6);
-		final TextView tip = text(note, b.small, Color.WHITE);
-		tip.setSingleLine(false);
-		tip.setEllipsize(null);
-		tip.setBackground(panelFrame(b.tablet ? 8 : 6, Color.rgb(0x08, 0x08, 0x10)));
-		tip.setPadding(border + px(12), border + px(8), border + px(12), border + px(8));
-		final int maxWidth = Math.min(px(b.tablet ? 900 : 700), width);
-		tip.setMaxWidth(maxWidth);
-		tip.measure(View.MeasureSpec.makeMeasureSpec(maxWidth, View.MeasureSpec.AT_MOST),
-				View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-		final FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
-				ViewGroup.LayoutParams.WRAP_CONTENT);
-		params.leftMargin = Math.max(left, Math.min(at[0] - origin[0] - px(8), left + width - tip.getMeasuredWidth()));
-		final int below = at[1] - origin[1] + anchor.getHeight() + px(6);
-		// Above the choice when there is no room below it, so the tip never covers the choice.
-		params.topMargin = below + tip.getMeasuredHeight() <= top + height ? below
-				: Math.max(top, at[1] - origin[1] - px(6) - tip.getMeasuredHeight());
-		this.activity.root.addView(tip, params);
-		this.hint = tip;
-		tip.postDelayed(this::hideHint, HINT_MILLIS);
-	}
-
-	private void hideHint() {
-		if (this.hint != null) {
-			this.activity.root.removeView(this.hint);
-			this.hint = null;
-		}
+		final float size = Math.min(cellH, b.rowH) * 0.36f;
+		final float labelW = text(label, b.body, 0).getPaint().measureText(label) / this.activity.scale;
+		final float limit = Math.max(b.labelX, b.controlX - b.pageFrame - 16) - size - 8;
+		final TextView mark = text("i", b.small, this.activity.art.text2());
+		mark.setGravity(Gravity.CENTER);
+		final GradientDrawable ring = new GradientDrawable();
+		ring.setShape(GradientDrawable.OVAL);
+		ring.setStroke(Math.max(1, px(2)), this.activity.art.text2());
+		mark.setBackground(ring);
+		mark.setContentDescription(tip);
+		onTap(mark, false, v -> showHint(mark, tip));
+		place(row, mark, Math.min(b.labelX + labelW + 14, limit), (cellH - size) / 2, size, size);
+		row.setOnLongClickListener(v -> {
+			showHint(mark, tip);
+			return true;
+		});
 	}
 
 	private void sliderRow(final LinearLayout rows, final int label, final int value, final String low,
@@ -761,20 +894,80 @@ final class OptionsPage extends LauncherViews {
 		place(row, after, controlX(lowW + sliderW + (b.tablet ? 20 : 12)), 0, b.tablet ? 240 : 140, b.rowH);
 	}
 
+	/**
+	 * Opening the page again while a walk runs must not start another; the row shown last gets the answer. When the
+	 * folder changed meanwhile, the running walk ends and one for the new folder follows.
+	 */
+	private void walkReadability(final TextView row, final File folder, final String files) {
+		this.readabilityRow = row;
+		this.readabilityFolder = folder;
+		this.readabilityFiles = files;
+		if (!this.readabilityWalking.compareAndSet(false, true)) {
+			return;
+		}
+		new Thread(() -> {
+			try {
+				File walked;
+				do {
+					walked = this.readabilityFolder;
+					final DataFolderCheck.Readability found = DataFolderCheck.readability(walked, Integer.MAX_VALUE, 0);
+					final File done = walked;
+					this.activity.runOnUiThread(() -> {
+						if (done.equals(this.readabilityFolder)) {
+							this.readabilityRow.setText(filesText(this.readabilityFiles, found));
+						}
+					});
+				}
+				while (!walked.equals(this.readabilityFolder));
+			}
+			finally {
+				this.readabilityWalking.set(false);
+			}
+		}, "DataFolderReadability").start();
+	}
+
 	private String filesText(final String files, final DataFolderCheck.Readability readability) {
 		return readability.unreadable == 0 ? files
 				: getString(R.string.options_files_unreadable, files, readability.unreadable);
 	}
 
 	private TextView infoRow(final LinearLayout rows, final int label, final String value, final boolean path) {
+		return infoRow(rows, label, value, path, null);
+	}
+
+	private TextView infoRow(final LinearLayout rows, final int label, final String value, final boolean path,
+			final String tip) {
 		final LauncherBoard b = this.activity.board;
 		final FrameLayout row = labelledRow(rows, label);
+		tipMark(row, getString(label), b.rowH, tip);
 		final TextView shown = text(value, b.body, this.activity.art.text());
 		shown.setGravity(Gravity.CENTER_VERTICAL);
 		// A long folder keeps its last parts visible.
 		shown.setEllipsize(path ? TextUtils.TruncateAt.START : TextUtils.TruncateAt.END);
 		place(row, shown, controlX(0), 0, b.contentW - b.controlX - b.pageFrame - 24, b.rowH);
 		return shown;
+	}
+
+	/**
+	 * The launcher reads its texts and the campaign lists in the game language, so the choice is read again from the
+	 * configuration, with the glue strings made again when the language changed.
+	 */
+	private void chooseLanguage(final EngineSettings engine, final String language) {
+		if (language.equals(engine.language())) {
+			return;
+		}
+		engine.setLanguage(language);
+		this.activity.reloadContent();
+		this.activity.cache = SkinCache.forConfiguration(this.activity, this.activity.ini,
+				this.activity.cache.reforged() ? SkinArt.REFORGED_SKIN : SkinArt.CLASSIC_SKIN);
+		this.optionsTab = TAB_GAME_DATA;
+		if (this.activity.cache.isCurrent()) {
+			showOptions(TAB_GAME_DATA);
+		}
+		else {
+			this.activity.afterPrep = LauncherActivity.PAGE_OPTIONS;
+			this.activity.prepPage.showPrep();
+		}
 	}
 
 	private void chooseSkin(final boolean reforged) {
@@ -792,6 +985,7 @@ final class OptionsPage extends LauncherViews {
 
 	/** Re-check: the art is prepared again from the game data, as after a change of data. */
 	private void recheck() {
+		DataFolderCheck.forget(new File(this.activity.homePage.dataFolder()));
 		this.activity.cache.invalidate();
 		this.activity.afterPrep = LauncherActivity.PAGE_OPTIONS;
 		this.optionsTab = TAB_GAME_DATA;

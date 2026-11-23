@@ -94,6 +94,8 @@ public class MdxComplexInstance extends ModelInstance implements SceneUpdateWork
 	public Texture[] replaceableTextures = NO_REPLACEABLE_TEXTURES;
 	/** Layers of the team glow (replaceable texture 2) are left out of the drawing. */
 	public boolean teamGlowHidden;
+	/** The ground this instance is drawn as part of, or null for one drawn on its own. */
+	public GroundShading groundShading;
 	// Only instances of a team colored or skinned HD model have these.
 	public Texture[] replaceableTextures_diffuse;
 	public Texture[] replaceableTextures_normal;
@@ -106,6 +108,8 @@ public class MdxComplexInstance extends ModelInstance implements SceneUpdateWork
 	/** A still copy of a model (a fog ghost) shows no particles, ribbons or event effects of its own. */
 	public boolean emittersSuppressed = false;
 	private boolean hasAnyUnselectableMesh = false;
+	/** Only the particles and ribbons made before it was taken out of the world are drawn, until they are gone. */
+	private boolean afterlife;
 
 	/** Per node: 0 nothing to update, 1 the node's object is updated hidden, 2 visible (see updateShared). */
 	private byte[] heldObjects;
@@ -509,7 +513,8 @@ public class MdxComplexInstance extends ModelInstance implements SceneUpdateWork
 				// This includes attachments and emitters.
 				final UpdatableObject object = node.object;
 
-				if ((object != null) && !(this.emittersSuppressed && (object instanceof MdxEmitter))) {
+				if ((object != null) && !(this.emittersSuppressed && (object instanceof MdxEmitter))
+						&& !(this.afterlife && (object instanceof AttachmentInstance))) {
 					if (holdObjects) {
 						if (this.heldObjects == null) {
 							this.heldObjects = new byte[sortedNodes.length];
@@ -774,6 +779,9 @@ public class MdxComplexInstance extends ModelInstance implements SceneUpdateWork
 		if (!this.additiveOverrideMeshMode) {
 			for (int i = 0, n = model.opaqueGroups.size(); i < n; i++) {
 				final GenericGroup group = model.opaqueGroups.get(i);
+				if (this.afterlife && !(group instanceof EmitterGroup)) {
+					continue;
+				}
 				group.render(this, mvp);
 			}
 		}
@@ -797,11 +805,17 @@ public class MdxComplexInstance extends ModelInstance implements SceneUpdateWork
 		if (this.additiveOverrideMeshMode) {
 			for (int i = 0, n = model.opaqueGroups.size(); i < n; i++) {
 				final GenericGroup group = model.opaqueGroups.get(i);
+				if (this.afterlife && !(group instanceof EmitterGroup)) {
+					continue;
+				}
 				group.render(this, this.scene.camera.viewProjectionMatrix);
 			}
 		}
 		for (int i = 0, n = model.translucentGroups.size(); i < n; i++) {
 			final GenericGroup group = model.translucentGroups.get(i);
+			if (this.afterlife && !(group instanceof EmitterGroup)) {
+				continue;
+			}
 			group.render(this, this.scene.camera.viewProjectionMatrix);
 
 			if (WarsmashConstants.ENABLE_DEBUG) {
@@ -1030,9 +1044,42 @@ public class MdxComplexInstance extends ModelInstance implements SceneUpdateWork
 
 	@Override
 	protected void updateLights(final Scene scene) {
+		if (this.afterlife) {
+			return;
+		}
 		for (int i = 0, n = this.lights.size(); i < n; i++) {
 			final LightInstance light = this.lights.get(i);
 			light.update(scene);
+		}
+	}
+
+	@Override
+	public boolean hasParticlesAlive() {
+		for (int i = 0, n = this.particleEmitters2.size(); i < n; i++) {
+			if (this.particleEmitters2.get(i).alive > 0) {
+				return true;
+			}
+		}
+		for (int i = 0, n = this.ribbonEmitters.size(); i < n; i++) {
+			if (this.ribbonEmitters.get(i).alive > 0) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	@Override
+	public void beginAfterlife() {
+		this.afterlife = true;
+		this.emittersSuppressed = true;
+		this.groundShadow = false;
+		this.sceneryShadow = false;
+		if (this.parent != null) {
+			// What it hung on may be gone before its particles are; it stays where it was last drawn.
+			this.localLocation.set(this.worldLocation);
+			this.localRotation.set(this.worldRotation);
+			this.localScale.set(this.worldScale);
+			setParent(null);
 		}
 	}
 

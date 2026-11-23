@@ -129,7 +129,9 @@ public abstract class ModelInstance extends Node {
 	@Override
 	protected final void updateObject(final float dt, final Scene scene) {
 		if (this.updateFrame < this.model.viewer.frame) {
-			if (this.rendered && !this.paused) {
+			// An instance parented to a node of another instance is updated with that node's children, whether
+			// or not its own model has been built and the instance loaded; scenes only hold loaded ones.
+			if (this.rendered && !this.paused && this.model.ok && !this.waiting) {
 				this.updateAnimations(dt);
 			}
 		}
@@ -292,6 +294,15 @@ public abstract class ModelInstance extends Node {
 		}
 
 		return false;
+	}
+
+	/** Whether particles this instance made are still alive. */
+	public boolean hasParticlesAlive() {
+		return false;
+	}
+
+	/** Stops this instance emitting and drawing anything but the particles it already made. */
+	public void beginAfterlife() {
 	}
 
 	public boolean isBatched() {

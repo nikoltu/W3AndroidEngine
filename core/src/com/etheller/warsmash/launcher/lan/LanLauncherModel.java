@@ -445,7 +445,7 @@ public final class LanLauncherModel {
 		}
 		catch (final IOException | RuntimeException e) {
 			LauncherLog.w("The search for LAN games cannot run", e);
-			this.browseError = "The search for games cannot run";
+			this.browseError = LanText.searchFailed();
 		}
 	}
 
@@ -738,7 +738,7 @@ public final class LanLauncherModel {
 	 */
 	public String create(final CreateSettings settings) {
 		if (inSession()) {
-			return "Leave the lobby first.";
+			return LanText.leaveFirst();
 		}
 		if (settings.issue != MapIssue.NONE) {
 			return LanText.mapIssue(settings.issue);
@@ -795,7 +795,7 @@ public final class LanLauncherModel {
 		catch (final IOException | RuntimeException e) {
 			LauncherLog.w("Unable to host", e);
 			endSession();
-			return "The game cannot be created: " + e.getMessage();
+			return LanText.createFailed(e.getMessage());
 		}
 	}
 
@@ -972,7 +972,7 @@ public final class LanLauncherModel {
 
 	/** The game started from the lobby could not be started by the engine. */
 	public void launchFailed() {
-		this.error = "The game could not be started.";
+		this.error = LanText.launchFailed();
 		this.launched = false;
 		leave();
 	}

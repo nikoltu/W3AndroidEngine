@@ -87,6 +87,13 @@ public abstract class AbstractCSound extends AllocatedHandle implements CSound {
 				&& (isLooping() || (getElapsed(gameTurnTick) < getDuration()));
 	}
 
+	@Override
+	public final void resumeAfterLoad(final int gameTurnTick) {
+		if (isLooping() && isPlaying(gameTurnTick)) {
+			play();
+		}
+	}
+
 	/**
 	 * 1.29: counted from the last start whether or not the sound was stopped since, and 0 for one never started.
 	 */

@@ -28,12 +28,28 @@ final class MapViewerFog {
 	private CPlayerFogOfWar lastFogOfWar;
 	private int version;
 	private int doodadFrames;
+	private boolean doodadsFading;
 
 	MapViewerFog(final War3MapViewer viewer) {
 		this.viewer = viewer;
 	}
 
 	void update() {
+		refresh(false);
+	}
+
+	/**
+	 * A loaded game has no fade to continue: the ground and the doodads take the shade of the fog state they have
+	 * now, so they match while the game is still paused.
+	 */
+	void settle() {
+		while (refresh(true)) {
+			// each pass moves the drawn fog one fade step
+		}
+	}
+
+	/** @return whether the ground fog is still fading */
+	private boolean refresh(final boolean snap) {
 		final CPlayerFogOfWar fogOfWar = this.viewer.getFogOfWar();
 		final ByteBuffer source = fogOfWar.getFogOfWarBuffer().duplicate();
 		source.clear();
@@ -58,24 +74,31 @@ final class MapViewerFog {
 		this.viewer.terrain.updateShownBlight();
 		// Doodads fade with the ground fog, so they only need the step while it changes; every so often they are
 		// checked anyway.
-		if (fogChanged || moved || ((++this.doodadFrames % DOODAD_CHECK_FRAMES) == 0)) {
-			updateDoodads(fogOfWar);
+		// They start black (masked) and are still fading when the ground has settled, so they keep stepping until
+		// they have reached their shade.
+		if (fogChanged || moved || this.doodadsFading || snap || ((++this.doodadFrames % DOODAD_CHECK_FRAMES) == 0)) {
+			this.doodadsFading = updateDoodads(fogOfWar, snap);
 		}
+		return fogChanged;
 	}
 
-	private void updateDoodads(final CPlayerFogOfWar fogOfWar) {
+	/** @return whether a doodad is still fading toward its fog state */
+	private boolean updateDoodads(final CPlayerFogOfWar fogOfWar, final boolean snap) {
 		final List<RenderDoodad> doodads = this.viewer.decals;
 		final int doodadCount = doodads.size();
 		if (doodadCount == 0) {
-			return;
+			return false;
 		}
 		final PathingGrid pathingGrid = this.viewer.simulation.getPathingGrid();
 		for (final CFogState state : CFogState.VALUES) {
 			this.shadeByState[state.ordinal()] = this.viewer.getFogShade(state.getMask());
 		}
 		final int fogWidth = fogOfWar.getWidth();
+		boolean fading = false;
 		for (int i = 0; i < doodadCount; i++) {
-			doodads.get(i).updateFog(this.states, fogWidth, pathingGrid, this.stateByCell, this.shadeByState);
+			fading |= doodads.get(i).updateFog(this.states, fogWidth, pathingGrid, this.stateByCell, this.shadeByState,
+					snap);
 		}
+		return fading;
 	}
 }

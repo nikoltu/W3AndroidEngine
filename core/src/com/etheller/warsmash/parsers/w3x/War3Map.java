@@ -7,6 +7,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.SeekableByteChannel;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Locale;
 import java.util.zip.Checksum;
 
 import com.etheller.warsmash.util.FileReadChannel;
@@ -15,10 +16,12 @@ import org.apache.commons.compress.utils.SeekableInMemoryByteChannel;
 import com.etheller.warsmash.datasources.CompoundDataSource;
 import com.etheller.warsmash.datasources.DataSource;
 import com.etheller.warsmash.datasources.FolderDataSource;
+import com.etheller.warsmash.datasources.GameLanguage;
 import com.etheller.warsmash.datasources.GraphicsSet;
 import com.etheller.warsmash.datasources.IndependentStream;
 import com.etheller.warsmash.datasources.LayeredDataSource;
 import com.etheller.warsmash.datasources.MpqDataSource;
+import com.etheller.warsmash.datasources.SubdirDataSource;
 import com.etheller.warsmash.parsers.w3x.doo.War3MapDoo;
 import com.etheller.warsmash.parsers.w3x.objectdata.Warcraft3MapRuntimeObjectData;
 import com.etheller.warsmash.parsers.w3x.unitsdoo.War3MapUnitsDoo;
@@ -40,6 +43,7 @@ public class War3Map implements DataSource {
 	private CompoundDataSource baseDataSource;
 	private DataSource dataSource;
 	private DataSource internalMpqContentsDataSource;
+	private DataSource mapContentsDataSource;
 	private GraphicsSet graphics = GraphicsSet.CLASSIC;
 
 	public War3Map(final DataSource dataSource, final String mapFileName) {
@@ -52,7 +56,8 @@ public class War3Map implements DataSource {
 			SeekableByteChannel sbc;
 			sbc = new SeekableInMemoryByteChannel(dataSource.read(mapFileName).array());
 			this.internalMpqContentsDataSource = new MpqDataSource(new MPQArchive(sbc), sbc);
-			this.baseDataSource = new CompoundDataSource(Arrays.asList(dataSource, this.internalMpqContentsDataSource));
+			this.mapContentsDataSource = localized(this.internalMpqContentsDataSource, GameLanguage.inGame());
+			this.baseDataSource = new CompoundDataSource(Arrays.asList(dataSource, this.mapContentsDataSource));
 			this.dataSource = this.baseDataSource;
 			this.graphics = LayeredDataSource.graphicsOf(dataSource);
 		}
@@ -80,7 +85,8 @@ public class War3Map implements DataSource {
 					throw e;
 				}
 			}
-			this.baseDataSource = new CompoundDataSource(Arrays.asList(dataSource, this.internalMpqContentsDataSource));
+			this.mapContentsDataSource = localized(this.internalMpqContentsDataSource, GameLanguage.inGame());
+			this.baseDataSource = new CompoundDataSource(Arrays.asList(dataSource, this.mapContentsDataSource));
 			this.dataSource = this.baseDataSource;
 			this.graphics = LayeredDataSource.graphicsOf(dataSource);
 		}
@@ -90,6 +96,32 @@ public class War3Map implements DataSource {
 		catch (final MPQException e) {
 			throw new RuntimeException(e);
 		}
+	}
+
+	/**
+	 * The files of a map archive with the ones of its language folder over them: a map of the Reforged campaigns keeps
+	 * its text in each language of the game in a "_Locales/xxXX.w3mod" folder. The files themselves when the language
+	 * is English or the map has no folder of it.
+	 */
+	public static DataSource localized(final DataSource contents, final String locale) {
+		final String folder = GameLanguage.mapFolder(locale);
+		if ((folder == null) || !hasFolder(contents, folder)) {
+			return contents;
+		}
+		return new CompoundDataSource(Arrays.asList(contents, new SubdirDataSource(contents, folder)));
+	}
+
+	private static boolean hasFolder(final DataSource contents, final String folder) {
+		if (contents.has(folder + "war3map.wts")) {
+			return true;
+		}
+		final String prefix = folder.replace('/', '\\').toLowerCase(Locale.ROOT);
+		for (final String path : contents.getListfile()) {
+			if (path.replace('/', '\\').toLowerCase(Locale.ROOT).startsWith(prefix)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	public MpqDataSource getInternalMpqContentsDataSource() {
@@ -237,7 +269,7 @@ public class War3Map implements DataSource {
 
 	/** Only the files of the map itself, which hold more than the game's of the same name. */
 	public DataSource getMapContentsDataSource() {
-		return this.internalMpqContentsDataSource;
+		return this.mapContentsDataSource;
 	}
 
 	public DataSource getCompoundDataSource() {

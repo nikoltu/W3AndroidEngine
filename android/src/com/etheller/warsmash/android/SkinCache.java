@@ -42,6 +42,7 @@ import android.util.Log;
 
 import com.etheller.warsmash.WarsmashGdxMapScreen;
 import com.etheller.warsmash.datasources.DataSource;
+import com.etheller.warsmash.datasources.GameLanguage;
 import com.etheller.warsmash.datasources.GraphicsSet;
 import com.etheller.warsmash.launcher.CampaignChoice;
 import com.etheller.warsmash.launcher.CustomContent;
@@ -62,6 +63,10 @@ final class SkinCache {
 	/** Raised whenever the list of cached files or the way they are made changes. */
 	private static final int FORMAT = 14;
 	private static final String STAMP = "stamp";
+	/** The game language the glue strings were read in; they alone are made again when it changes. */
+	private static final String STRINGS_LANGUAGE = "strings.lang";
+	/** Changes when the way the glue strings are made does, so that the ones kept are made again. */
+	private static final String STRINGS_RULES = "|own1";
 	private static final String PENDING = "pending";
 
 	interface Progress {
@@ -87,16 +92,20 @@ final class SkinCache {
 
 	private final File folder;
 	private final String key;
+	private final DataTable ini;
+	private final String language;
 	private final boolean reforged;
 
-	private SkinCache(final File folder, final String key, final boolean reforged) {
+	private SkinCache(final File folder, final String key, final boolean reforged, final DataTable ini) {
 		this.folder = folder;
 		this.key = key;
 		this.reforged = reforged;
+		this.ini = ini;
+		this.language = GameLanguage.configured(ini);
 	}
 
 	static File iniFile(final Context context) {
-		return new File(context.getExternalFilesDir(null), AndroidLauncher.INI_FILE_NAME);
+		return new File(EngineResources.appFolder(context), AndroidLauncher.INI_FILE_NAME);
 	}
 
 	/** The cache of a skin for the data sources the engine configuration names, or null without a configuration. */
@@ -117,7 +126,8 @@ final class SkinCache {
 			}
 			key.append('|').append(sources.getField("Type" + id)).append(':').append(sources.getField("Path" + id));
 		}
-		return new SkinCache(new File(new File(context.getCacheDir(), "skin"), name), key.toString(), reforged);
+		return new SkinCache(new File(new File(context.getCacheDir(), "skin"), name), key.toString(), reforged,
+				ini);
 	}
 
 	/** Whether the game data has the Reforged interface, as the last preparation of either skin found it. */
@@ -172,7 +182,7 @@ final class SkinCache {
 
 	/** Whether every file of the last finished preparation is still there for the same game data. */
 	boolean isCurrent() {
-		if (!this.key.equals(read(file(STAMP)))) {
+		if (!this.key.equals(read(file(STAMP))) || !stringsInLanguage()) {
 			return false;
 		}
 		final String list = read(file(STAMP + ".files"));
@@ -185,6 +195,11 @@ final class SkinCache {
 			}
 		}
 		return true;
+	}
+
+	private boolean stringsInLanguage() {
+		final String made = read(file(STRINGS_LANGUAGE));
+		return (this.language + STRINGS_RULES).equals(made == null ? "" : made);
 	}
 
 	int total() {
@@ -203,6 +218,9 @@ final class SkinCache {
 		this.folder.mkdirs();
 		new File(this.folder, "webms").mkdirs();
 		file(STAMP).delete();
+		if (!stringsInLanguage()) {
+			file(STRINGS).delete();
+		}
 		write(file(PENDING), this.key);
 		final List<Item> items = items();
 		progress.step(0, items.size(), null);
@@ -239,6 +257,7 @@ final class SkinCache {
 		finally {
 			data.close();
 		}
+		write(file(STRINGS_LANGUAGE), this.language + STRINGS_RULES);
 		write(file(STAMP + ".files"), made.toString());
 		write(file(STAMP), this.key);
 		file(PENDING).delete();
@@ -252,7 +271,7 @@ final class SkinCache {
 		return items;
 	}
 
-	private static Item item(final SkinArt.Item art) {
+	private Item item(final SkinArt.Item art) {
 		switch (art.kind) {
 		case PLAIN:
 			return image(art, Shape.PLAIN);
@@ -265,7 +284,7 @@ final class SkinCache {
 		case WEB:
 			return web(art);
 		case STRINGS:
-			return new Item(art.name, art.shown, SkinCache::strings);
+			return new Item(art.name, art.shown, (data, target) -> strings(this.ini, data, target));
 		case MARK:
 			return new Item(art.name, art.shown, (data, target) -> {
 				if (!data.has(art.path)) {
@@ -473,8 +492,9 @@ final class SkinCache {
 	}
 
 	/** The glue strings the launcher shows, so that it speaks as the installed game does. */
-	private static boolean strings(final DataSource data, final File target) throws IOException {
-		final Map<String, String> found = GlueText.read(data);
+	private static boolean strings(final DataTable ini, final DataSource data, final File target)
+			throws IOException {
+		final Map<String, String> found = GlueText.read(ini, data);
 		if (found == null) {
 			return false;
 		}

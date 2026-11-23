@@ -505,7 +505,9 @@ final class AIAttack {
 		if (attack.hasGoal()) {
 			driveAttackCaptain(ai);
 		}
-		else if (!attack.isRetreating()) {
+		// Measured: a group whose target has just died and that is still fighting stays and finishes the camp; it
+		// gathers only once the fight is over.
+		else if (!attack.isRetreating() && !isCaptainInCombat(ai, true)) {
 			ai.gatherOrdered.removeIf((unit) -> !attack.isMember(unit));
 			final List<CUnit> gathering = new ArrayList<>();
 			for (final CUnit unit : attack.getMembers()) {

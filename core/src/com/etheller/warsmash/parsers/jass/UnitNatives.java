@@ -49,6 +49,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.harvest.C
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.nightelf.units.CAbilityShadowmeld;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.CAttackType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.CGenericDamageFlags;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.orders.COrder;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.orders.OrderIds;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayer;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayerColor;
@@ -1471,8 +1472,10 @@ final class UnitNatives extends CommonNatives {
 				(arguments, globalScope, triggerScope) -> {
 					final CUnit whichUnit = inGame(nullable(arguments, 0, ObjectJassValueVisitor.<CUnit>getInstance()));
 					int orderId;
-					if ((whichUnit != null) && whichUnit.isBuilding()) {
-						// 1.29: a structure always reads 0, whatever it trains, builds or attacks.
+					if ((whichUnit != null) && whichUnit.isBuilding()
+							&& !isRootingOrder(whichUnit.getCurrentOrder())) {
+						// 1.29: a structure always reads 0, whatever it trains, builds or attacks; an ancient
+						// that is uprooting or rooting still reads that order.
 						orderId = 0;
 					}
 					else if ((whichUnit != null) && whichUnit.isPaused() && whichUnit.isHidden() && isLoaded(whichUnit)) {
@@ -1548,17 +1551,18 @@ final class UnitNatives extends CommonNatives {
 				});
 	}
 
+	private static boolean isRootingOrder(final COrder order) {
+		return (order != null) && ((order.getOrderId() == OrderIds.root) || (order.getOrderId() == OrderIds.unroot));
+	}
+
 	private void registerAppearance() {
 		jassProgramVisitor.getJassNativeManager().createNative("SetUnitColor",
 				(arguments, globalScope, triggerScope) -> {
 					final CUnit whichUnit = arguments.get(0).visit(ObjectJassValueVisitor.getInstance());
 					final Object whichPlayerColor = arguments.get(1).visit(ObjectJassValueVisitor.getInstance());
-					render.post(RenderSide.WORLD, () -> {
-						final RenderUnit renderPeer = war3MapViewer.getRenderPeer(whichUnit);
-						if ((renderPeer != null) && (whichPlayerColor instanceof CPlayerColor)) {
-							renderPeer.setPlayerColor(((CPlayerColor) whichPlayerColor).ordinal());
-						}
-					});
+					if ((whichUnit != null) && (whichPlayerColor instanceof CPlayerColor)) {
+						war3MapViewer.simulation.setUnitTeamColor(whichUnit, ((CPlayerColor) whichPlayerColor).ordinal());
+					}
 					return null;
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("SetUnitScale",

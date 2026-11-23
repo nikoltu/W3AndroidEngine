@@ -51,6 +51,7 @@ public abstract class Scene {
 	private BoneAtlas boneAtlas;
 	public int currentBatchedInstance;
 	public final EmittedObjectUpdater emitterObjectUpdater;
+	private final List<ModelInstance> afterlifeInstances = new ArrayList<>();
 	public final Map<TextureMapper, RenderBatch> batches;
 	public final Comparator<ModelInstance> instanceDepthComparator;
 	/**
@@ -62,6 +63,8 @@ public abstract class Scene {
 	 * If true, alpha works as usual.
 	 */
 	public boolean alpha = false;
+	/** Draws HD models with their texture colour alone, as for a sky that no light of the world reaches. */
+	public boolean unlit = false;
 	public Color backgroundColor = Color.BLACK;
 	private final SceneLightManager lightManager;
 	public FogSettings fogSettings = new FogSettings();
@@ -199,6 +202,38 @@ public abstract class Scene {
 		return false;
 	}
 
+	/**
+	 * Takes an instance out of the world as {@link #removeInstance} does, but lets the particles it already made live
+	 * out their lifetime; it leaves the scene when the last of them is gone.
+	 * 
+	 * @return false when there are no such particles and nothing was done, so the caller removes it as usual
+	 */
+	public boolean leaveParticles(final ModelInstance instance) {
+		if ((instance.scene != this) || !instance.hasParticlesAlive()) {
+			return false;
+		}
+		instance.removeLights(this);
+		for (int i = 0, l = instance.childrenInstances.size(); i < l; i++) {
+			instance.childrenInstances.get(i).detach();
+		}
+		instance.beginAfterlife();
+		this.afterlifeInstances.add(instance);
+		return true;
+	}
+
+	private void removeFinishedAfterlives() {
+		for (int i = this.afterlifeInstances.size() - 1; i >= 0; i--) {
+			final ModelInstance instance = this.afterlifeInstances.get(i);
+			if (instance.scene != this) {
+				this.afterlifeInstances.remove(i);
+			}
+			else if (!instance.hasParticlesAlive()) {
+				this.afterlifeInstances.remove(i);
+				removeInstance(instance);
+			}
+		}
+	}
+
 	protected abstract void innerRemove(ModelInstance instance);
 
 	public abstract void clear();
@@ -287,6 +322,7 @@ public abstract class Scene {
 
 		this.emitterObjectUpdater.update(dt);
 		this.updatedParticles = this.emitterObjectUpdater.objects.size();
+		removeFinishedAfterlives();
 
 	}
 

@@ -66,6 +66,13 @@ public interface CSound {
 
 	boolean isPlaying(int gameTurnTick);
 
+	/**
+	 * A load starts what was heard when the game was saved. The platform cannot start a sound part way in, so only a
+	 * loop is taken up again; a sound that plays once keeps its script timing and is silent for the rest of its length.
+	 */
+	default void resumeAfterLoad(final int gameTurnTick) {
+	}
+
 	/** KillSoundWhenDone: once the sound is not playing any more, it is released and cannot be started again. */
 	void killWhenDone();
 

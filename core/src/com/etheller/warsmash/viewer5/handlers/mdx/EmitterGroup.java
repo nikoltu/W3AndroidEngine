@@ -38,34 +38,35 @@ public class EmitterGroup extends GenericGroup {
 
 		viewer.webGL.useShaderProgram(shader);
 
-		shader.setUniformMatrix("u_mvp", mvp);
-		shader.setUniformi("u_texture", 0);
+		final EmitterLocations loc = EmitterLocations.of(shader);
+		shader.setUniformMatrix(loc.mvp, mvp);
+		shader.setUniformi(loc.texture, 0);
 
-		final int a_position = shader.getAttributeLocation("a_position");
+		final int a_position = loc.position;
 		instancedArrays.glVertexAttribDivisorANGLE(a_position, 0);
 
 		gl.glBindBuffer(GL20.GL_ARRAY_BUFFER, viewer.rectBuffer);
 		gl.glVertexAttribPointer(a_position, 1, GL20.GL_UNSIGNED_BYTE, false, 0, 0);
 
-		instancedArrays.glVertexAttribDivisorANGLE(shader.getAttributeLocation("a_p0"), 1);
-		instancedArrays.glVertexAttribDivisorANGLE(shader.getAttributeLocation("a_p1"), 1);
-		instancedArrays.glVertexAttribDivisorANGLE(shader.getAttributeLocation("a_p2"), 1);
-		instancedArrays.glVertexAttribDivisorANGLE(shader.getAttributeLocation("a_p3"), 1);
-		instancedArrays.glVertexAttribDivisorANGLE(shader.getAttributeLocation("a_health"), 1);
-		instancedArrays.glVertexAttribDivisorANGLE(shader.getAttributeLocation("a_color"), 1);
-		instancedArrays.glVertexAttribDivisorANGLE(shader.getAttributeLocation("a_tail"), 1);
-		instancedArrays.glVertexAttribDivisorANGLE(shader.getAttributeLocation("a_leftRightTop"), 1);
+		instancedArrays.glVertexAttribDivisorANGLE(loc.p0, 1);
+		instancedArrays.glVertexAttribDivisorANGLE(loc.p1, 1);
+		instancedArrays.glVertexAttribDivisorANGLE(loc.p2, 1);
+		instancedArrays.glVertexAttribDivisorANGLE(loc.p3, 1);
+		instancedArrays.glVertexAttribDivisorANGLE(loc.health, 1);
+		instancedArrays.glVertexAttribDivisorANGLE(loc.color, 1);
+		instancedArrays.glVertexAttribDivisorANGLE(loc.tail, 1);
+		instancedArrays.glVertexAttribDivisorANGLE(loc.leftRightTop, 1);
 
-		GeometryEmitterFuncs.renderEmitters(nodes, getObjectArray(), shader);
+		GeometryEmitterFuncs.renderEmitters(nodes, getObjectArray(), shader, loc);
 
-		instancedArrays.glVertexAttribDivisorANGLE(shader.getAttributeLocation("a_leftRightTop"), 0);
-		instancedArrays.glVertexAttribDivisorANGLE(shader.getAttributeLocation("a_tail"), 0);
-		instancedArrays.glVertexAttribDivisorANGLE(shader.getAttributeLocation("a_color"), 0);
-		instancedArrays.glVertexAttribDivisorANGLE(shader.getAttributeLocation("a_health"), 0);
-		instancedArrays.glVertexAttribDivisorANGLE(shader.getAttributeLocation("a_p3"), 0);
-		instancedArrays.glVertexAttribDivisorANGLE(shader.getAttributeLocation("a_p2"), 0);
-		instancedArrays.glVertexAttribDivisorANGLE(shader.getAttributeLocation("a_p1"), 0);
-		instancedArrays.glVertexAttribDivisorANGLE(shader.getAttributeLocation("a_p0"), 0);
+		instancedArrays.glVertexAttribDivisorANGLE(loc.leftRightTop, 0);
+		instancedArrays.glVertexAttribDivisorANGLE(loc.tail, 0);
+		instancedArrays.glVertexAttribDivisorANGLE(loc.color, 0);
+		instancedArrays.glVertexAttribDivisorANGLE(loc.health, 0);
+		instancedArrays.glVertexAttribDivisorANGLE(loc.p3, 0);
+		instancedArrays.glVertexAttribDivisorANGLE(loc.p2, 0);
+		instancedArrays.glVertexAttribDivisorANGLE(loc.p1, 0);
+		instancedArrays.glVertexAttribDivisorANGLE(loc.p0, 0);
 
 	}
 }

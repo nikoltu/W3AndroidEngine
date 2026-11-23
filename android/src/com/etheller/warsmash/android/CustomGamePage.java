@@ -121,13 +121,13 @@ final class CustomGamePage extends LauncherViews {
 		final float rightX = t ? 656 : 430;
 		this.customRight = new FrameLayout(this.activity);
 		place(content, this.customRight, rightX, 0, b.contentW - rightX, b.contentH);
-		action(view, 0, glueLabel("CANCEL", "Cancel"), v -> this.activity.homePage.showHome());
+		action(view, 0, glueLabel("CANCEL"), v -> this.activity.homePage.showHome());
 		this.customAdvanced = t ? null
 				: action(view, 1, getString(R.string.game_advanced), v -> showAdvancedSheet());
 		if (this.customAdvanced != null) {
 			this.customAdvanced.setEnabled(false);
 		}
-		this.customStart = action(view, 2, glueLabel("KEY_START_GAME", "Start Game"), v -> startCustom());
+		this.customStart = action(view, 2, glueLabel("KEY_START_GAME"), v -> startCustom());
 		this.customStart.setEnabled(false);
 		this.activity.setPage(view, LauncherActivity.PAGE_CUSTOM);
 		if (chosen != null) {
@@ -172,7 +172,7 @@ final class CustomGamePage extends LauncherViews {
 		final TextView mark = text("!", icon * 0.5f, this.activity.art.gold());
 		mark.setGravity(Gravity.CENTER);
 		row.addView(mark, new LinearLayout.LayoutParams(px(icon), px(icon)));
-		final TextView title = text(file + " · " + reason, line * 0.46f, this.activity.art.text2());
+		final TextView title = fitWidth(text(file + " · " + reason, line * 0.46f, this.activity.art.text2()), 0.7f);
 		title.setSingleLine(true);
 		title.setEllipsize(android.text.TextUtils.TruncateAt.END);
 		final LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(0,
@@ -203,7 +203,8 @@ final class CustomGamePage extends LauncherViews {
 		final boolean playable = entry.issue == MapIssue.NONE;
 		// A map the engine cannot play stays in the list, greyed, with the reason beside its name; a long name is cut
 		// before the reason is.
-		final TextView title = text(name, line * 0.56f, playable ? this.activity.art.text() : this.activity.art.text2());
+		final TextView title = fitWidth(
+				text(name, line * 0.56f, playable ? this.activity.art.text() : this.activity.art.text2()), 0.7f);
 		final LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(0,
 				ViewGroup.LayoutParams.WRAP_CONTENT, 1);
 		titleParams.leftMargin = px(18);
@@ -271,9 +272,9 @@ final class CustomGamePage extends LauncherViews {
 		place(map, minimap, frame, frame, picture, picture);
 		final float factsX = frame + picture + (t ? 36 : 14);
 		final float factsW = mapW - factsX - frame;
-		final CharSequence suggested = glueLabel("COLON_SUGGESTED_PLAYERS", "Suggested Players:");
-		final CharSequence size = glueLabel("COLON_MAP_SIZE", "Map Size:");
-		final CharSequence tileset = glueLabel("COLON_TILESET", "Tileset:");
+		final CharSequence suggested = glueLabel("COLON_SUGGESTED_PLAYERS");
+		final CharSequence size = glueLabel("COLON_MAP_SIZE");
+		final CharSequence tileset = glueLabel("COLON_TILESET");
 		if (t) {
 			place(map, text(mapTitle(details), 42, this.activity.art.text()), factsX, frame, factsW, -1);
 			final CharSequence[][] facts = { { suggested, LauncherKit.glueText(details.suggested) },
@@ -282,7 +283,7 @@ final class CustomGamePage extends LauncherViews {
 			for (int i = 0; i < facts.length; i++) {
 				final float y = frame + 76 + (i * 46);
 				place(map, text(facts[i][0], 30, this.activity.art.gold()), factsX, y, labelW, -1);
-				place(map, text(facts[i][1], 30, this.activity.art.text()), factsX + labelW + 10, y,
+				place(map, fitWidth(text(facts[i][1], 30, this.activity.art.text()), 0.7f), factsX + labelW + 10, y,
 						factsW - labelW - 10, -1);
 			}
 			final float descriptionY = frame + 76 + (3 * 46) + 20;
@@ -304,8 +305,8 @@ final class CustomGamePage extends LauncherViews {
 		final float headerH = t ? 56 : 0;
 		if (t) {
 			final float[] columns = slotColumns(rowW);
-			final String[] headers = { glue("PLAYER", "Player"), glue("COLON_RACE", "Race"), glue("TEAM", "Team"),
-				glue("COLOR", "Color") };
+			final String[] headers = { glue("PLAYER"), glue("COLON_RACE"), glue("TEAM"),
+				glue("COLOR") };
 			for (int i = 0; i < headers.length; i++) {
 				place(slots, text(LauncherKit.glueText(headers[i]).toString().replace(":", ""), 28,
 						this.activity.art.gold()),
@@ -336,13 +337,13 @@ final class CustomGamePage extends LauncherViews {
 		return this.activity.board.tablet ? 154 : 96;
 	}
 
-	/** Where the slot columns start and how wide they are: player, race, team and colour, as 40 : 24 : 15 : 18. */
+	/** Where the slot columns start and how wide they are: player, race, team and colour; a force name needs the room. */
 	private float[] slotColumns(final float w) {
 		final boolean t = this.activity.board.tablet;
 		final float gap = t ? 16 : 6;
-		final float player = w * (t ? 0.40f : 0.38f);
-		final float race = w * (t ? 0.24f : 0.28f);
-		final float team = w * 0.15f;
+		final float player = w * (t ? 0.34f : 0.34f);
+		final float race = w * (t ? 0.22f : 0.26f);
+		final float team = w * (t ? 0.24f : 0.21f);
 		final float color = w - player - race - team - (3 * gap);
 		return new float[] { 0, player, player + gap, race, player + race + (2 * gap), team,
 			player + race + team + (3 * gap), color };
@@ -370,7 +371,8 @@ final class CustomGamePage extends LauncherViews {
 					CustomGame.typeEditable(details, index), menuH, textSize,
 					choice -> this.lobby.slotTypes[index] = choice), columns[0], menuY, columns[1], menuH);
 		}
-		place(row, dropdown(glueList(RACES, 0), this.lobby.slotRaces[index], editable, menuH, textSize,
+		place(row, dropdown(glueList(RACES, 0), this.lobby.slotRaces[index],
+				CustomGame.raceEditable(details, index), menuH, textSize,
 				choice -> this.lobby.slotRaces[index] = choice), columns[2], menuY, columns[3], menuH);
 		final String[] teams = teamNames(details);
 		final int team = this.lobby.slotTeams[index] >= 0 ? this.lobby.slotTeams[index]
@@ -401,9 +403,9 @@ final class CustomGamePage extends LauncherViews {
 	}
 
 	private CharSequence[] optionLabels() {
-		return new CharSequence[] { glueLabel("LOCK_TEAMS", "Lock Teams"),
+		return new CharSequence[] { glueLabel("LOCK_TEAMS"),
 			glueLabel("FULL_SHARED_UNIT_CONTROL", getString(R.string.game_shared_control)),
-			glueLabel("RANDOM_RACES", "Random Races"), glueLabel("RANDOM_HERO", "Random Hero") };
+			glueLabel("RANDOM_RACES"), glueLabel("RANDOM_HERO") };
 	}
 
 	/**
@@ -413,7 +415,7 @@ final class CustomGamePage extends LauncherViews {
 	private void addAdvanced(final FrameLayout parent, final float x, final float y, final float w, final float h) {
 		final float frame = this.activity.board.pageInset;
 		final FrameLayout panel = framed(parent, x, y, w, h);
-		place(panel, text(glueLabel("ADVANCED_OPTIONS", "Advanced Options"), 34, this.activity.art.gold()), frame,
+		place(panel, text(glueLabel("ADVANCED_OPTIONS"), 34, this.activity.art.gold()), frame,
 				frame - 4,
 				w - (2 * frame), -1);
 		final CharSequence[] labels = optionLabels();
@@ -426,9 +428,9 @@ final class CustomGamePage extends LauncherViews {
 					top + (i * step), w - (2 * frame), 94);
 		}
 		final float observersY = top + 19 + (labels.length * step) + 6;
-		place(panel, text(glueLabel("COLON_OBSERVERS", "Observers:"), 27, this.activity.art.gold()), frame, observersY,
+		place(panel, text(glueLabel("COLON_OBSERVERS"), 27, this.activity.art.gold()), frame, observersY,
 				w - (2 * frame), -1);
-		place(panel, dropdown(new String[] { glue("NONE", "None") }, 0, true, 80, 33, null), frame,
+		place(panel, dropdown(new String[] { glue("NONE") }, 0, true, 80, 33, null), frame,
 				observersY + 40, w - (2 * frame), 80);
 	}
 
@@ -443,7 +445,7 @@ final class CustomGamePage extends LauncherViews {
 			return;
 		}
 		final float edge = 32;
-		place(box, text(glueLabel("ADVANCED_OPTIONS", "Advanced Options"), 30, this.activity.art.gold()), edge + 16,
+		place(box, text(glueLabel("ADVANCED_OPTIONS"), 30, this.activity.art.gold()), edge + 16,
 				edge + 8,
 				1120 - (2 * edge) - 32, -1);
 		final CharSequence[] labels = optionLabels();

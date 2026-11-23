@@ -28,7 +28,6 @@ public class CBehaviorAbilityBuilderBase extends CAbstractRangedBehavior impleme
 	private AbilityBuilderActiveAbility ability;
 	private ABAbilityTargetStillTargetableVisitor preCastTargetableVisitor;
 
-	private int castBehaviorNotifyTick = 0;
 
 	private int castStartTick = 0;
 	private int castTimeEndTick = 0;
@@ -207,7 +206,6 @@ public class CBehaviorAbilityBuilderBase extends CAbstractRangedBehavior impleme
 			CBehavior prevBeh = this.unit.getCurrentBehavior();
 
 			this.castStartTick = game.getGameTurnTick();
-			this.castBehaviorNotifyTick = this.castStartTick + CTimer.wholeSteps(0.5f);
 
 			if (!this.target.visit(
 					this.preCastTargetableVisitor.reset(game, this.unit, ability, this.autoOrder, false, issuingPlayerIndex, orderId))) {

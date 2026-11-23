@@ -129,9 +129,10 @@ public final class CampaignChoice {
 				&& (!entry.getData().isDefaultOpen() || CampaignCatalog.isMissionOpen(entry, 1, progress));
 	}
 
-	/** The furthest open mission of a campaign, -1 for none. */
-	public static int furthestMission(final CampaignCatalog.Entry entry, final CCampaignProgress.Snapshot progress) {
-		final List<CampaignMission> missions = entry.getData().getMissions();
+	/** The furthest open mission of a campaign in a version of the campaign maps, -1 for none. */
+	public static int furthestMission(final CampaignCatalog.Entry entry, final CCampaignProgress.Snapshot progress,
+			final boolean reforged) {
+		final List<CampaignMission> missions = entry.getMissions(reforged);
 		int furthest = -1;
 		for (int i = 0; i < missions.size(); i++) {
 			if (CampaignCatalog.isMissionOpen(entry, i, progress)) {
@@ -157,6 +158,17 @@ public final class CampaignChoice {
 			}
 		}
 		return null;
+	}
+
+	/**
+	 * The skin field of a campaign's background model for an edition: game data with a campaign list per edition keep a
+	 * model per edition under the same Background name (HumanBackdrop_V0 is the Reign of Chaos one, _V1 the Frozen Throne
+	 * one), and the engine's own game version would pick the wrong one for the other edition's list. The plain name is
+	 * to be given as the fallback, for data that name it without a version.
+	 */
+	public static String backdropField(final String background, final String edition) {
+		final int version = LauncherKeys.editionGameVersion(edition, -1);
+		return version < 0 ? background : background + "_V" + version;
 	}
 
 	/** The scene behind a campaign's pages: the recorded model its Background names. */

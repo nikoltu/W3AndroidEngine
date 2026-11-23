@@ -53,6 +53,7 @@ import com.etheller.warsmash.viewer5.Texture;
 import com.etheller.warsmash.viewer5.gl.DataTexture;
 import com.etheller.warsmash.viewer5.gl.Extensions;
 import com.etheller.warsmash.viewer5.gl.WebGL;
+import com.etheller.warsmash.viewer5.handlers.mdx.GroundShading;
 import com.etheller.warsmash.viewer5.handlers.mdx.MdxShadowCaster;
 import com.etheller.warsmash.viewer5.handlers.w3x.DynamicShadowManager;
 import com.etheller.warsmash.viewer5.handlers.w3x.ui.GameOptions;
@@ -66,7 +67,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CCliffLayout;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CFogMaskSettings;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.vision.CPlayerFogOfWar;
 
-public class Terrain {
+public class Terrain implements GroundShading {
 	public static final float CELL_SIZE = 128f;
 	private static final String[] colorTags = { "R", "G", "B", "A" };
 	private static final float[] sizeHeap = new float[2];
@@ -82,7 +83,11 @@ public class Terrain {
 
 	//
 	public List<GroundTexture> groundTextures = new ArrayList<>();
+	private final GroundBanks groundBanks = new GroundBanks();
+	private final int[] groundSlots = new int[18];
 	public List<UnloadedTexture> cliffTextures = new ArrayList<>();
+	/** The texture file of each of the map's cliff types, without its extension, by cliff type index. */
+	private final List<String> cliffTextureFiles = new ArrayList<>();
 	public RenderCorner[][] corners;
 	public int columns;
 	public int rows;
@@ -279,7 +284,7 @@ public class Terrain {
 			final String file = terrainTileInfo.getField("file");
 			this.groundTextures
 					.add(new GroundTexture(dir + "\\" + file + texturesExt, terrainTileInfo, dataSource, Gdx.gl30,
-							textureSizeLimit));
+							textureSizeLimit, this.groundBanks));
 			this.groundTextureToId.put(groundTile.asStringValue(), this.groundTextures.size() - 1);
 			this.groundTileIds.add(groundTile.getValue());
 		}
@@ -289,7 +294,7 @@ public class Terrain {
 		this.blightTextureIndex = this.groundTextures.size();
 		this.groundTextures
 				.add(new GroundTexture(tilesets.getField(Character.toString(tileset)).split(",")[1] + texturesExt, null,
-						dataSource, Gdx.gl30, textureSizeLimit));
+						dataSource, Gdx.gl30, textureSizeLimit, this.groundBanks));
 
 		// Cliff Textures
 		Element fallbackCliffInfo = null;
@@ -314,6 +319,7 @@ public class Terrain {
 			final String texFile = cliffInfo.getField("texFile");
 			final RgbaImage image = ImageUtils.getAnyExtensionRgbaImage(dataSource,
 					texDir + "\\" + texFile + texturesExt, "cliff texture", true, textureSizeLimit);
+			this.cliffTextureFiles.add(texDir + "\\" + texFile);
 			this.cliffTextures.add(new UnloadedTexture(image.getWidth(), image.getHeight(), image.getPixels(),
 					cliffInfo.getField("cliffModelDir"), cliffInfo.getField("rampModelDir")));
 			this.cliffTexturesSize = Math.max(this.cliffTexturesSize,
@@ -717,7 +723,8 @@ public class Terrain {
 		}
 		try {
 			final GroundTexture texture = new GroundTexture(tileInfo.getField("dir") + "\\" + tileInfo.getField("file")
-					+ ".blp", tileInfo, this.dataSource, Gdx.gl30, this.viewer.getTextureSizeLimit());
+					+ ".blp", tileInfo, this.dataSource, Gdx.gl30, this.viewer.getTextureSizeLimit(),
+					this.groundBanks);
 			this.groundTextures.add(this.blightTextureIndex, texture);
 		}
 		catch (final IOException e) {
@@ -1048,28 +1055,22 @@ public class Terrain {
 		gl.glActiveTexture(GL30.GL_TEXTURE2);
 		gl.glBindTexture(GL30.GL_TEXTURE_2D, this.groundTextureData);
 
-		this.groundShader.setUniformi("sample0", 3);
-		this.groundShader.setUniformi("sample1", 4);
-		this.groundShader.setUniformi("sample2", 5);
-		this.groundShader.setUniformi("sample3", 6);
-		this.groundShader.setUniformi("sample4", 7);
-		this.groundShader.setUniformi("sample5", 8);
-		this.groundShader.setUniformi("sample6", 9);
-		this.groundShader.setUniformi("sample7", 10);
-		this.groundShader.setUniformi("sample8", 11);
-		this.groundShader.setUniformi("sample9", 12);
-		this.groundShader.setUniformi("sample10", 13);
-		this.groundShader.setUniformi("sample11", 14);
-		this.groundShader.setUniformi("sample12", 15);
-		this.groundShader.setUniformi("sample13", 16);
-		this.groundShader.setUniformi("sample14", 17);
-		this.groundShader.setUniformi("sample15", 18);
-		this.groundShader.setUniformi("sample16", 19);
+		this.groundShader.setUniformi("groundBank0", 3);
+		this.groundShader.setUniformi("groundBank1", 4);
+		this.groundShader.setUniformi("groundBank2", 5);
 		this.groundShader.setUniformi("shadowMap", 20);
 		this.groundShader.setUniformi("fogOfWarMap", 22);
-		for (int i = 0; i < this.groundTextures.size(); i++) {
-			gl.glActiveTexture(GL30.GL_TEXTURE3 + i);
-			gl.glBindTexture(GL30.GL_TEXTURE_2D_ARRAY, this.groundTextures.get(i).id);
+		uploadFogTexel(this.groundShader);
+		// An image id may be any of 0..16 (17 is "no image"); the shader finds its bank and layers from its slot.
+		for (int i = 0; i < this.groundSlots.length; i++) {
+			this.groundSlots[i] = i < this.groundTextures.size() ? Math.max(0, this.groundTextures.get(i).slot) : 0;
+		}
+		gl.glUniform1iv(this.groundShader.fetchUniformLocation("groundSlot", false), this.groundSlots.length,
+				this.groundSlots, 0);
+		for (int bank = 0; bank < GroundBanks.MAX_BANKS; bank++) {
+			gl.glActiveTexture(GL30.GL_TEXTURE3 + bank);
+			final int built = Math.min(bank, Math.max(0, this.groundBanks.bankCount() - 1));
+			gl.glBindTexture(GL30.GL_TEXTURE_2D_ARRAY, this.groundBanks.bankTexture(gl, built));
 		}
 
 //		gl.glActiveTexture(GL30.GL_TEXTURE20, /*pathingMap.getTextureStatic()*/);
@@ -1127,6 +1128,7 @@ public class Terrain {
 		shader.setUniformi("u_shadowMap", 2);
 		shader.setUniformi("u_waterHeightsMap", 3);
 		shader.setUniformi("u_fogOfWarMap", 4);
+		uploadFogTexel(shader);
 		shader.setUniformf("u_waterHeightOffset", this.waterHeightOffset);
 
 		gl.glActiveTexture(GL30.GL_TEXTURE0);
@@ -1194,6 +1196,7 @@ public class Terrain {
 		this.waterShader.setUniformi("water_exists_texture", 2);
 		this.waterShader.setUniformi("water_textures", 4);
 		this.waterShader.setUniformi("fogOfWarMap", 5);
+		uploadFogTexel(this.waterShader);
 		gl.glActiveTexture(GL30.GL_TEXTURE0);
 		gl.glBindTexture(GL30.GL_TEXTURE_2D, this.waterHeight);
 		gl.glActiveTexture(GL30.GL_TEXTURE1);
@@ -1259,6 +1262,7 @@ public class Terrain {
 		gl.glBindTexture(GL30.GL_TEXTURE_2D, this.shadowMap);
 
 		this.cliffShader.setUniformi("fogOfWarMap", 3);
+		uploadFogTexel(this.cliffShader);
 		gl.glActiveTexture(GL30.GL_TEXTURE3);
 		gl.glBindTexture(GL30.GL_TEXTURE_2D, this.fogOfWarMap);
 
@@ -1374,6 +1378,7 @@ public class Terrain {
 			for (int i = 0; i < shadowSize; i++) {
 				this.staticShadowData[i] = (byte) ((buffer[i] & 0xFF) / 2f);
 			}
+			softenShadowEdges(this.staticShadowData, columns, rows);
 		}
 
 		this.mapShadowData = this.staticShadowData.clone();
@@ -1395,6 +1400,35 @@ public class Terrain {
 
 		this.fogOfWarMap = gl.glGenTexture();
 		gl.glBindTexture(GL30.GL_TEXTURE_2D, this.fogOfWarMap);
+	}
+
+	/**
+	 * The baked shadows are hard 0/255 texels, but the game shows them with edges blurred over about two texels; drawn
+	 * as stored, a cliff doodad's footprint shadow reads as a sharp grey square.
+	 */
+	private static void softenShadowEdges(final byte[] data, final int columns, final int rows) {
+		final int[] line = new int[Math.max(columns, rows)];
+		for (int y = 0; y < rows; y++) {
+			final int row = y * columns;
+			for (int x = 0; x < columns; x++) {
+				line[x] = data[row + x] & 0xFF;
+			}
+			for (int x = 0; x < columns; x++) {
+				final int left = line[Math.max(x - 1, 0)];
+				final int right = line[Math.min(x + 1, columns - 1)];
+				data[row + x] = (byte) ((left + (2 * line[x]) + right + 2) / 4);
+			}
+		}
+		for (int x = 0; x < columns; x++) {
+			for (int y = 0; y < rows; y++) {
+				line[y] = data[(y * columns) + x] & 0xFF;
+			}
+			for (int y = 0; y < rows; y++) {
+				final int down = line[Math.max(y - 1, 0)];
+				final int up = line[Math.min(y + 1, rows - 1)];
+				data[(y * columns) + x] = (byte) ((down + (2 * line[y]) + up + 2) / 4);
+			}
+		}
 	}
 
 	/** The dark band past the playable area; EnableWorldFogBoundary(false) leaves it out. */
@@ -1526,6 +1560,32 @@ public class Terrain {
 			this.rampModelDir = rampModelDir;
 		}
 
+	}
+
+	/** The texture file of a cliff type of the map, without its extension, or null for no such type. */
+	public String getCliffTextureFile(final int cliffType) {
+		return (cliffType >= 0) && (cliffType < this.cliffTextureFiles.size()) ? this.cliffTextureFiles.get(cliffType)
+				: null;
+	}
+
+	/**
+	 * The ground height the cliff meshes follow: the corner heights without the cliff levels, interpolated across the
+	 * cell, in world units.
+	 */
+	public float getCliffGroundHeight(final float x, final float y) {
+		final float cellSpaceX = (x - this.centerOffset[0]) / 128.0f;
+		final float cellSpaceY = (y - this.centerOffset[1]) / 128.0f;
+		final int cellX = Math.max(0, Math.min((int) Math.floor(cellSpaceX), this.columns - 2));
+		final int cellY = Math.max(0, Math.min((int) Math.floor(cellSpaceY), this.rows - 2));
+		final float sqX = Math.max(0, Math.min(cellSpaceX - cellX, 1));
+		final float sqY = Math.max(0, Math.min(cellSpaceY - cellY, 1));
+		final float bottomLeft = this.groundHeights[(cellY * this.columns) + cellX];
+		final float bottomRight = this.groundHeights[(cellY * this.columns) + cellX + 1];
+		final float topLeft = this.groundHeights[((cellY + 1) * this.columns) + cellX];
+		final float topRight = this.groundHeights[((cellY + 1) * this.columns) + cellX + 1];
+		final float bottom = bottomLeft + ((bottomRight - bottomLeft) * sqX);
+		final float top = topLeft + ((topRight - topLeft) * sqX);
+		return (bottom + ((top - bottom) * sqY)) * 128.0f;
 	}
 
 	public float getGroundHeight(final float x, final float y) {
@@ -1932,12 +1992,18 @@ public class Terrain {
 		}
 		final byte[] visual = this.visualFogArray;
 		boolean faded = false;
+		int firstChanged = Integer.MAX_VALUE;
+		int lastChanged = -1;
 		for (int i = 0, n = Math.min(visual.length, states.length); i < n; i++) {
 			final byte previous = visual[i];
 			final byte next = War3MapViewer.fadeLineOfSightColor(previous, shadeByState[states[i] & 0xFF]);
 			if (next != previous) {
 				visual[i] = next;
 				faded = true;
+				if (firstChanged == Integer.MAX_VALUE) {
+					firstChanged = i;
+				}
+				lastChanged = i;
 			}
 		}
 		changed |= faded;
@@ -1948,10 +2014,24 @@ public class Terrain {
 		if (!changed) {
 			return false;
 		}
-		this.visualFogData.clear();
-		this.visualFogData.put(visual);
+		final int fogWidth = this.fogOfWarData.getWidth();
 		this.visualFogData.clear();
 		gl.glBindTexture(GL30.GL_TEXTURE_2D, Terrain.this.fogOfWarMap);
+		if (this.fogOfWarMapAllocated && faded) {
+			// Only the rows the fade touched go to the GPU; a fog update moves the vision of a few units.
+			final int firstRow = firstChanged / fogWidth;
+			final int rowCount = (lastChanged / fogWidth) - firstRow + 1;
+			this.visualFogData.position(firstRow * fogWidth);
+			this.visualFogData.put(visual, firstRow * fogWidth, rowCount * fogWidth);
+			this.visualFogData.position(firstRow * fogWidth);
+			this.visualFogData.limit((firstRow + rowCount) * fogWidth);
+			gl.glTexSubImage2D(GL30.GL_TEXTURE_2D, 0, 0, firstRow, fogWidth, rowCount, GL30.GL_RED,
+					GL30.GL_UNSIGNED_BYTE, this.visualFogData.slice());
+			this.visualFogData.clear();
+			return true;
+		}
+		this.visualFogData.put(visual);
+		this.visualFogData.clear();
 		if (!this.fogOfWarMapAllocated) {
 			gl.glTexParameteri(GL30.GL_TEXTURE_2D, GL30.GL_TEXTURE_MAG_FILTER, GL30.GL_LINEAR);
 			gl.glTexParameteri(GL30.GL_TEXTURE_2D, GL30.GL_TEXTURE_MIN_FILTER, GL30.GL_LINEAR);
@@ -1968,8 +2048,36 @@ public class Terrain {
 		return true;
 	}
 
+	/** The fog is drawn with a soft edge: the distance, in cells of the fog texture, its blur reaches. */
+	private static final float FOG_EDGE_SOFTNESS = 1.5f;
+
+	private void uploadFogTexel(final com.badlogic.gdx.graphics.glutils.ShaderProgram shader) {
+		final CPlayerFogOfWar data = this.fogOfWarData;
+		final float soft = FOG_EDGE_SOFTNESS;
+		if (data != null) {
+			shader.setUniformf("u_fogTexel", soft / data.getWidth(), soft / data.getHeight());
+		}
+		else {
+			shader.setUniformf("u_fogTexel", 0f, 0f);
+		}
+	}
+
 	public int getFogOfWarMap() {
 		return this.fogOfWarMap;
+	}
+
+	@Override
+	public void bindGroundShading(final ShaderProgram shader, final int shadowMapUnit, final int fogOfWarMapUnit) {
+		final GL30 gl = this.gl;
+		shader.setUniformi("u_groundShadowMap", shadowMapUnit);
+		gl.glActiveTexture(GL30.GL_TEXTURE0 + shadowMapUnit);
+		gl.glBindTexture(GL30.GL_TEXTURE_2D, this.shadowMap);
+		shader.setUniformi("u_groundFogOfWarMap", fogOfWarMapUnit);
+		gl.glActiveTexture(GL30.GL_TEXTURE0 + fogOfWarMapUnit);
+		gl.glBindTexture(GL30.GL_TEXTURE_2D, this.fogOfWarMap);
+		uploadFogTexel(shader);
+		shader.setUniformf("u_groundMapping", this.centerOffset[0], this.centerOffset[1],
+				1f / ((this.columns - 1) * 128f), 1f / ((this.rows - 1) * 128f));
 	}
 
 	public void setWaterBaseColor(float red, float green, float blue, float alpha) {
@@ -2007,9 +2115,7 @@ public class Terrain {
 
 	public void dispose() {
 		final GL30 gl = this.gl;
-		for (final GroundTexture texture : this.groundTextures) {
-			texture.dispose(gl);
-		}
+		this.groundBanks.dispose(gl);
 		for (final CliffMesh mesh : this.cliffMeshes) {
 			mesh.dispose();
 		}

@@ -186,7 +186,15 @@ public class GeometryEmitterFuncs {
 	}
 
 
-	public static void bindParticleEmitter2Shader(final ParticleEmitter2 emitter, final ShaderProgram shader) {
+	private static void setAttribute(final ShaderProgram shader, final int location, final int size, final int type,
+			final boolean normalize, final int stride, final int offset) {
+		if (location >= 0) {
+			shader.setVertexAttribute(location, size, type, normalize, stride, offset);
+		}
+	}
+
+	public static void bindParticleEmitter2Shader(final ParticleEmitter2 emitter, final ShaderProgram shader,
+			final EmitterLocations loc) {
 		final MdxComplexInstance instance = emitter.instance;
 		final Scene scene = instance.scene;
 		final Camera camera = scene.camera;
@@ -220,45 +228,45 @@ public class GeometryEmitterFuncs {
 			vectors = camera.billboardedVectors;
 		}
 
-		shader.setUniformf("u_emitter", EMITTER_PARTICLE2);
+		shader.setUniformf(loc.emitter, EMITTER_PARTICLE2);
 
-		shader.setUniformf("u_filterMode", emitterObject.filterModeForShader);
-		shader.setUniformf("u_lifeSpan", emitterObject.lifeSpan);
-		shader.setUniformf("u_timeMiddle", emitterObject.timeMiddle);
-		shader.setUniformf("u_columns", emitterObject.columns);
-		shader.setUniformf("u_rows", emitterObject.rows);
-		shader.setUniformf("u_teamColored", emitterObject.teamColored);
-		shader.setUniformi("u_unshaded", emitterObject.emitterUsesMdlOrUnshaded != 0 ? 1 : 0);
-		shader.setUniformi("u_unfogged", emitterObject.unfogged != 0 ? 1 : 0);
-		scene.fogSettings.uploadUniforms(shader);
+		shader.setUniformf(loc.filterMode, emitterObject.filterModeForShader);
+		shader.setUniformf(loc.lifeSpan, emitterObject.lifeSpan);
+		shader.setUniformf(loc.timeMiddle, emitterObject.timeMiddle);
+		shader.setUniformf(loc.columns, emitterObject.columns);
+		shader.setUniformf(loc.rows, emitterObject.rows);
+		shader.setUniformf(loc.teamColored, emitterObject.teamColored);
+		shader.setUniformi(loc.unshaded, emitterObject.emitterUsesMdlOrUnshaded != 0 ? 1 : 0);
+		shader.setUniformi(loc.unfogged, emitterObject.unfogged != 0 ? 1 : 0);
+		scene.fogSettings.uploadUniforms(shader, loc.fogColor, loc.fogParams, loc.fogHeight);
 
 		final W3xSceneLightManager lightManager = (W3xSceneLightManager) scene.getLightManager();
 		final DataTexture unitLightsTexture = lightManager.getUnitLightsTexture();
 
 		unitLightsTexture.bind(14);
-		shader.setUniformi("u_lightTexture", 14);
-		shader.setUniformf("u_lightCount", lightManager.getUnitLightCount());
-		shader.setUniformf("u_lightTextureHeight", unitLightsTexture.getHeight());
+		shader.setUniformi(loc.lightTexture, 14);
+		shader.setUniformf(loc.lightCount, lightManager.getUnitLightCount());
+		shader.setUniformf(loc.lightTextureHeight, unitLightsTexture.getHeight());
 
-		shader.setUniform3fv("u_intervals[0]", intervals[0], 0, 3);
-		shader.setUniform3fv("u_intervals[1]", intervals[1], 0, 3);
-		shader.setUniform3fv("u_intervals[2]", intervals[2], 0, 3);
-		shader.setUniform3fv("u_intervals[3]", intervals[3], 0, 3);
+		shader.setUniform3fv(loc.intervals[0], intervals[0], 0, 3);
+		shader.setUniform3fv(loc.intervals[1], intervals[1], 0, 3);
+		shader.setUniform3fv(loc.intervals[2], intervals[2], 0, 3);
+		shader.setUniform3fv(loc.intervals[3], intervals[3], 0, 3);
 
-		shader.setUniform4fv("u_colors[0]", colors[0], 0, 4);
-		shader.setUniform4fv("u_colors[1]", colors[1], 0, 4);
-		shader.setUniform4fv("u_colors[2]", colors[2], 0, 4);
+		shader.setUniform4fv(loc.colors[0], colors[0], 0, 4);
+		shader.setUniform4fv(loc.colors[1], colors[1], 0, 4);
+		shader.setUniform4fv(loc.colors[2], colors[2], 0, 4);
 
-		shader.setUniform3fv("u_scaling", emitterObject.scaling, 0, 3);
+		shader.setUniform3fv(loc.scaling, emitterObject.scaling, 0, 3);
 
 		if (emitterObject.headOrTail.isIncludesHead()) {
-			shader.setUniform3fv("u_vertices[0]", asFloatArray(vectors[0]), 0, 3);
-			shader.setUniform3fv("u_vertices[1]", asFloatArray(vectors[1]), 0, 3);
-			shader.setUniform3fv("u_vertices[2]", asFloatArray(vectors[2]), 0, 3);
-			shader.setUniform3fv("u_vertices[3]", asFloatArray(vectors[3]), 0, 3);
+			shader.setUniform3fv(loc.vertices[0], asFloatArray(vectors[0]), 0, 3);
+			shader.setUniform3fv(loc.vertices[1], asFloatArray(vectors[1]), 0, 3);
+			shader.setUniform3fv(loc.vertices[2], asFloatArray(vectors[2]), 0, 3);
+			shader.setUniform3fv(loc.vertices[3], asFloatArray(vectors[3]), 0, 3);
 		}
 
-		shader.setUniform3fv("u_cameraZ", asFloatArray(camera.billboardedVectors[6]), 0, 3);
+		shader.setUniform3fv(loc.cameraZ, asFloatArray(camera.billboardedVectors[6]), 0, 3);
 	}
 
 	public static void bindRibbonEmitterBuffer(final RibbonEmitter emitter, final ClientBuffer buffer, final int base) {
@@ -324,7 +332,8 @@ public class GeometryEmitterFuncs {
 		}
 	}
 
-	public static void bindRibbonEmitterShader(final RibbonEmitter emitter, final ShaderProgram shader) {
+	public static void bindRibbonEmitterShader(final RibbonEmitter emitter, final ShaderProgram shader,
+			final EmitterLocations loc) {
 		final TextureMapper textureMapper = emitter.instance.textureMapper;
 		final RibbonEmitterObject emitterObject = emitter.emitterObject;
 		final Layer layer = emitterObject.layer;
@@ -332,7 +341,7 @@ public class GeometryEmitterFuncs {
 		final GL20 gl = model.viewer.gl;
 		final Texture texture = model.getTextures().get(layer.textureId);
 
-		layer.bind(shader);
+		layer.bind(shader, loc.filterMode);
 
 		Texture mappedTexture = textureMapper.get(texture);
 		if (mappedTexture == null) {
@@ -340,10 +349,10 @@ public class GeometryEmitterFuncs {
 		}
 		model.viewer.webGL.bindTexture(mappedTexture, 0);
 
-		shader.setUniformf("u_emitter", EMITTER_RIBBON);
+		shader.setUniformf(loc.emitter, EMITTER_RIBBON);
 
-		shader.setUniformf("u_columns", emitterObject.columns);
-		shader.setUniformf("u_rows", emitterObject.rows);
+		shader.setUniformf(loc.columns, emitterObject.columns);
+		shader.setUniformf(loc.rows, emitterObject.rows);
 	}
 
 	public static void bindEventObjectSplEmitterBuffer(
@@ -384,7 +393,7 @@ public class GeometryEmitterFuncs {
 	}
 
 	public static void bindEventObjectSplEmitterShader(final EventObjectSplEmitter emitter,
-			final ShaderProgram shader) {
+			final ShaderProgram shader, final EmitterLocations loc) {
 		final MdxComplexInstance instance = emitter.instance;
 		final Scene scene = instance.scene;
 		final TextureMapper textureMapper = instance.textureMapper;
@@ -404,31 +413,31 @@ public class GeometryEmitterFuncs {
 		}
 		model.viewer.webGL.bindTexture(finalTexture, 0);
 
-		shader.setUniformf("u_lifeSpan", emitterObject.lifeSpan);
-		shader.setUniformf("u_columns", emitterObject.columns);
-		shader.setUniformf("u_rows", emitterObject.rows);
-		shader.setUniformi("u_unshaded", emitterObject.emitterUsesMdlOrUnshaded != 0 ? 1 : 0);
+		shader.setUniformf(loc.lifeSpan, emitterObject.lifeSpan);
+		shader.setUniformf(loc.columns, emitterObject.columns);
+		shader.setUniformf(loc.rows, emitterObject.rows);
+		shader.setUniformi(loc.unshaded, emitterObject.emitterUsesMdlOrUnshaded != 0 ? 1 : 0);
 
 		final W3xSceneLightManager lightManager = (W3xSceneLightManager) scene.getLightManager();
 		final DataTexture unitLightsTexture = lightManager.getUnitLightsTexture();
 
 		unitLightsTexture.bind(14);
-		shader.setUniformi("u_lightTexture", 14);
-		shader.setUniformf("u_lightCount", lightManager.getUnitLightCount());
-		shader.setUniformf("u_lightTextureHeight", unitLightsTexture.getHeight());
+		shader.setUniformi(loc.lightTexture, 14);
+		shader.setUniformf(loc.lightCount, lightManager.getUnitLightCount());
+		shader.setUniformf(loc.lightTextureHeight, unitLightsTexture.getHeight());
 
 		// 3 because the uniform is shared with UBR, which has 3 values.
 		vectorTemp[0] = intervalTimes[0];
 		vectorTemp[1] = intervalTimes[1];
 		vectorTemp[2] = 0;
-		shader.setUniform3fv("u_intervalTimes", vectorTemp, 0, 3);
+		shader.setUniform3fv(loc.intervalTimes, vectorTemp, 0, 3);
 
-		shader.setUniform3fv("u_intervals[0]", intervals[0], 0, 3);
-		shader.setUniform3fv("u_intervals[1]", intervals[1], 0, 3);
+		shader.setUniform3fv(loc.intervals[0], intervals[0], 0, 3);
+		shader.setUniform3fv(loc.intervals[1], intervals[1], 0, 3);
 
-		shader.setUniform4fv("u_colors[0]", colors[0], 0, 4);
-		shader.setUniform4fv("u_colors[1]", colors[1], 0, 4);
-		shader.setUniform4fv("u_colors[2]", colors[2], 0, 4);
+		shader.setUniform4fv(loc.colors[0], colors[0], 0, 4);
+		shader.setUniform4fv(loc.colors[1], colors[1], 0, 4);
+		shader.setUniform4fv(loc.colors[2], colors[2], 0, 4);
 	}
 
 	public static void bindEventObjectUbrEmitterBuffer(
@@ -454,7 +463,7 @@ public class GeometryEmitterFuncs {
 	}
 
 	public static void bindEventObjectUbrEmitterShader(final EventObjectUbrEmitter emitter,
-			final ShaderProgram shader) {
+			final ShaderProgram shader, final EmitterLocations loc) {
 		final TextureMapper textureMapper = emitter.instance.textureMapper;
 		final EventObjectEmitterObject emitterObject = emitter.emitterObject;
 		final float[] intervalTimes = emitterObject.intervalTimes;
@@ -471,15 +480,15 @@ public class GeometryEmitterFuncs {
 		}
 		model.viewer.webGL.bindTexture(finalTexture, 0);
 
-		shader.setUniformf("u_lifeSpan", emitterObject.lifeSpan);
-		shader.setUniformf("u_columns", emitterObject.columns);
-		shader.setUniformf("u_rows", emitterObject.rows);
+		shader.setUniformf(loc.lifeSpan, emitterObject.lifeSpan);
+		shader.setUniformf(loc.columns, emitterObject.columns);
+		shader.setUniformf(loc.rows, emitterObject.rows);
 
-		shader.setUniform3fv("u_intervalTimes", intervalTimes, 0, 3);
+		shader.setUniform3fv(loc.intervalTimes, intervalTimes, 0, 3);
 
-		shader.setUniform4fv("u_colors[0]", colors[0], 0, 4);
-		shader.setUniform4fv("u_colors[1]", colors[1], 0, 4);
-		shader.setUniform4fv("u_colors[2]", colors[2], 0, 4);
+		shader.setUniform4fv(loc.colors[0], colors[0], 0, 4);
+		shader.setUniform4fv(loc.colors[1], colors[1], 0, 4);
+		shader.setUniform4fv(loc.colors[2], colors[2], 0, 4);
 	}
 
 	/** How many instances the emitter draws this frame; 0 when it draws nothing. */
@@ -511,7 +520,8 @@ public class GeometryEmitterFuncs {
 	 * Draws the emitters of one model instance. Their instance data goes into the shared buffer one emitter after the
 	 * other and is uploaded once, instead of giving the buffer fresh storage for every emitter.
 	 */
-	public static void renderEmitters(final SkeletalNode[] nodes, final int[] emitterNodes, final ShaderProgram shader) {
+	public static void renderEmitters(final SkeletalNode[] nodes, final int[] emitterNodes, final ShaderProgram shader,
+			final EmitterLocations loc) {
 		final int count = emitterNodes.length;
 		if (drawCounts.length < count) {
 			drawCounts = new int[count];
@@ -572,35 +582,35 @@ public class GeometryEmitterFuncs {
 
 				switch (emitterType) {
 				case EMITTER_PARTICLE2:
-					bindParticleEmitter2Shader((ParticleEmitter2) emitter, shader);
+					bindParticleEmitter2Shader((ParticleEmitter2) emitter, shader, loc);
 					break;
 				case EMITTER_RIBBON:
-					bindRibbonEmitterShader((RibbonEmitter) emitter, shader);
+					bindRibbonEmitterShader((RibbonEmitter) emitter, shader, loc);
 					break;
 				case EMITTER_SPLAT:
-					bindEventObjectSplEmitterShader((EventObjectSplEmitter) emitter, shader);
+					bindEventObjectSplEmitterShader((EventObjectSplEmitter) emitter, shader, loc);
 					break;
 				default:
-					bindEventObjectUbrEmitterShader((EventObjectUbrEmitter) emitter, shader);
+					bindEventObjectUbrEmitterShader((EventObjectUbrEmitter) emitter, shader, loc);
 					break;
 				}
 
 				// Binding the textures and layers above may have changed the bound array buffer.
 				buffer.bind();
 
-				shader.setUniformf("u_emitter", emitterType);
+				shader.setUniformf(loc.emitter, emitterType);
 
-				shader.setVertexAttribute("a_p0", 3, GL20.GL_FLOAT, false, BYTES_PER_OBJECT, byteBase + BYTE_OFFSET_P0);
-				shader.setVertexAttribute("a_p1", 3, GL20.GL_FLOAT, false, BYTES_PER_OBJECT, byteBase + BYTE_OFFSET_P1);
-				shader.setVertexAttribute("a_p2", 3, GL20.GL_FLOAT, false, BYTES_PER_OBJECT, byteBase + BYTE_OFFSET_P2);
-				shader.setVertexAttribute("a_p3", 3, GL20.GL_FLOAT, false, BYTES_PER_OBJECT, byteBase + BYTE_OFFSET_P3);
-				shader.setVertexAttribute("a_health", 1, GL20.GL_FLOAT, false, BYTES_PER_OBJECT,
+				setAttribute(shader, loc.p0, 3, GL20.GL_FLOAT, false, BYTES_PER_OBJECT, byteBase + BYTE_OFFSET_P0);
+				setAttribute(shader, loc.p1, 3, GL20.GL_FLOAT, false, BYTES_PER_OBJECT, byteBase + BYTE_OFFSET_P1);
+				setAttribute(shader, loc.p2, 3, GL20.GL_FLOAT, false, BYTES_PER_OBJECT, byteBase + BYTE_OFFSET_P2);
+				setAttribute(shader, loc.p3, 3, GL20.GL_FLOAT, false, BYTES_PER_OBJECT, byteBase + BYTE_OFFSET_P3);
+				setAttribute(shader, loc.health, 1, GL20.GL_FLOAT, false, BYTES_PER_OBJECT,
 						byteBase + BYTE_OFFSET_HEALTH);
-				shader.setVertexAttribute("a_color", 4, GL20.GL_UNSIGNED_BYTE, true, BYTES_PER_OBJECT,
+				setAttribute(shader, loc.color, 4, GL20.GL_UNSIGNED_BYTE, true, BYTES_PER_OBJECT,
 						byteBase + BYTE_OFFSET_COLOR);
-				shader.setVertexAttribute("a_tail", 1, GL20.GL_UNSIGNED_BYTE, false, BYTES_PER_OBJECT,
+				setAttribute(shader, loc.tail, 1, GL20.GL_UNSIGNED_BYTE, false, BYTES_PER_OBJECT,
 						byteBase + BYTE_OFFSET_TAIL);
-				shader.setVertexAttribute("a_leftRightTop", 3, GL20.GL_UNSIGNED_BYTE, false, BYTES_PER_OBJECT,
+				setAttribute(shader, loc.leftRightTop, 3, GL20.GL_UNSIGNED_BYTE, false, BYTES_PER_OBJECT,
 						byteBase + BYTE_OFFSET_LEFT_RIGHT_TOP);
 
 				PerfStats.draw();

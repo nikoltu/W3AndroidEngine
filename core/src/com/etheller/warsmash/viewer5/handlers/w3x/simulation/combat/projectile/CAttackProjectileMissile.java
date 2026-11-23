@@ -25,6 +25,9 @@ public class CAttackProjectileMissile extends CAttackProjectile {
 
 	@Override
 	protected void onHitTarget(CSimulation game) {
+		if (isTargetGone(game)) {
+			return;
+		}
 		CUnit tarU = getTarget().visit(AbilityTargetVisitor.UNIT);
 		if (tarU == null || tarU.checkForAttackProjReaction(game, getSource(), this)) {
 			this.unitAttack.doDamage(game, getSource(), getTarget(), this.damage, getX(), getY(), this.bounceIndex,

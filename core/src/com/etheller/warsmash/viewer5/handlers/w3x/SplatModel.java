@@ -37,6 +37,8 @@ public class SplatModel implements Comparable<SplatModel> {
 	private final boolean highPriority;
 	private final boolean aboveWater;
 	private boolean released;
+	/** The centre offset of splats added since the batches were last built; null when they are up to date. */
+	private float[] pendingCenterOffset;
 
 	public SplatModel(final GL30 gl, final ViewerTextureRenderable texture, final List<float[]> locations,
 			final float[] centerOffset, final List<Consumer<SplatMover>> unitMapping, final boolean unshaded,
@@ -253,7 +255,22 @@ public class SplatModel implements Comparable<SplatModel> {
 		}
 	}
 
+	/**
+	 * Builds the batches for the splats added since. A hundred splats added in one frame (a script making that many
+	 * units) built them a hundred times over, every one a rebuild of all of the splats there are.
+	 */
+	private void flushAdded() {
+		final float[] centerOffset = this.pendingCenterOffset;
+		if (centerOffset != null) {
+			this.pendingCenterOffset = null;
+			if (!this.released) {
+				compact(Gdx.gl30, centerOffset);
+			}
+		}
+	}
+
 	public void render(final GL30 gl, final ShaderProgram shader) {
+		flushAdded();
 		if (this.color[3] <= 0) {
 			return;
 		}
@@ -297,16 +314,19 @@ public class SplatModel implements Comparable<SplatModel> {
 
 	public SplatMover add(final float x, final float y, final float x2, final float y2, final float zDepthUpward,
 			final float[] centerOffset) {
-		this.locations.add(new float[] { x, y, x2, y2, zDepthUpward });
+		final float[] location = new float[] { x, y, x2, y2, zDepthUpward };
+		this.locations.add(location);
 		final SplatMover splatMover;
 		if (this.splatInstances != null) {
 			splatMover = new SplatMover(this);
+			splatMover.locs = location;
+			splatMover.index = this.locations.size() - 1;
 			this.splatInstances.add(splatMover);
 		}
 		else {
 			splatMover = null;
 		}
-		compact(Gdx.gl30, centerOffset);
+		this.pendingCenterOffset = centerOffset;
 		return splatMover;
 	}
 
@@ -415,6 +435,7 @@ public class SplatModel implements Comparable<SplatModel> {
 				// Units and items move their splats every frame; one standing still would upload the same data again.
 				return;
 			}
+			this.splatModel.flushAdded();
 			this.locs[0] += deltaX;
 			this.locs[2] += deltaX;
 			this.locs[1] += deltaY;
@@ -428,6 +449,7 @@ public class SplatModel implements Comparable<SplatModel> {
 			if (this.splatModel.released) {
 				return;
 			}
+			this.splatModel.flushAdded();
 			final float width = this.locs[2] - this.locs[0];
 			final float height = this.locs[3] - this.locs[1];
 			this.locs[0] = x - (width / 2);
@@ -438,6 +460,7 @@ public class SplatModel implements Comparable<SplatModel> {
 		}
 
 		private void updateAfterMove(final float[] centerOffset) {
+			this.splatModel.flushAdded();
 			final float x0 = this.locs[0];
 			final float y0 = this.locs[1];
 			final float x1 = this.locs[2];
@@ -537,6 +560,7 @@ public class SplatModel implements Comparable<SplatModel> {
 			if (this.splatModel.released) {
 				return;
 			}
+			this.splatModel.flushAdded();
 			this.splatModel.locations.remove(this.index);
 			this.splatModel.splatInstances.remove(this.index);
 			this.splatModel.compact(gl, centerOffset);
@@ -549,6 +573,7 @@ public class SplatModel implements Comparable<SplatModel> {
 				this.hidden = true;
 				return;
 			}
+			this.splatModel.flushAdded();
 			final GL30 gl = Gdx.gl30;
 			for (final float[] vertex : this.vertices) {
 				for (int i = 0; i < vertex.length; i++) {
@@ -599,6 +624,7 @@ public class SplatModel implements Comparable<SplatModel> {
 		}
 
 		private void updateAbsoluteHeightParams() {
+			this.splatModel.flushAdded();
 			final GL30 gl = Gdx.gl30;
 			final float height = this.heightIsAbsolute ? this.absoluteHeightValue : NO_ABS_HEIGHT;
 			for (final float[] absHeight : this.absoluteHeights) {

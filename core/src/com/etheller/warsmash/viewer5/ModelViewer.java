@@ -1,5 +1,6 @@
 package com.etheller.warsmash.viewer5;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -16,6 +17,7 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.LongSupplier;
+import java.util.function.UnaryOperator;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.GL20;
@@ -33,6 +35,7 @@ import com.etheller.warsmash.viewer5.gl.WebGL;
 import com.etheller.warsmash.viewer5.handlers.ResourceHandler;
 import com.etheller.warsmash.viewer5.handlers.ResourceHandlerConstructionParams;
 import com.etheller.warsmash.viewer5.handlers.blp.MipLevels;
+import com.google.common.io.ByteStreams;
 
 public abstract class ModelViewer {
 	public DataSource dataSource;
@@ -41,6 +44,7 @@ public abstract class ModelViewer {
 	public Map<String, Resource> fetchCache;
 	private final Map<String, String> foundSources = new HashMap<>();
 	private DataSource foundSourcesData;
+	private final MissingSources missingSources = new MissingSources();
 	public int frameTime;
 	public GL20 gl;
 	public WebGL webGL;
@@ -67,6 +71,7 @@ public abstract class ModelViewer {
 	/** Frame numbers at the budget checks with their times, the oldest first, to tell how long ago a frame was. */
 	private final ArrayDeque<long[]> budgetCheckFrames = new ArrayDeque<>();
 	private int evictedTextures;
+	private int evictedModels;
 	private boolean deferTextureLoads;
 	private boolean deferModelTextures;
 	private boolean deferModelLoads;
@@ -76,6 +81,7 @@ public abstract class ModelViewer {
 	/** How many pending models have not had their file opened yet. */
 	private int lazyModels;
 	private final ArrayDeque<Model<?>> pendingModels = new ArrayDeque<>();
+	private final ModelPrepareBudget prepareBudget = new ModelPrepareBudget();
 	private final TextureLoadQueue deferredTextureLoads = new TextureLoadQueue(TextureWorkers.EXECUTOR,
 			TextureWorkers.THREADS, TextureWorkers.READY_BYTES);
 
@@ -223,23 +229,7 @@ public abstract class ModelViewer {
 	 */
 	public void finishReadyModels(final long nanos) {
 		final long end = System.nanoTime() + nanos;
-		if (this.prepareModelsAhead && (this.lazyModels > 0)) {
-			// the files of models loaded while the game was not drawn are opened now, as time allows
-			final List<Model<?>> loadedNow = new ArrayList<>();
-			for (final Model<?> model : this.pendingModels) {
-				if (model.lazySource != null) {
-					if (!startPreparation(model)) {
-						loadedNow.add(model);
-					}
-					if (System.nanoTime() >= end) {
-						break;
-					}
-				}
-			}
-			for (final Model<?> model : loadedNow) {
-				completeModel(model);
-			}
-		}
+		startWaitingPreparations(end);
 		while (true) {
 			Model<?> next = this.building;
 			if (next == null) {
@@ -257,7 +247,53 @@ public abstract class ModelViewer {
 			if (System.nanoTime() >= end) {
 				return;
 			}
+			startWaitingPreparations(end);
 		}
+	}
+
+	/**
+	 * Opens the files of waiting models, the oldest first, as the budget of {@link ModelPrepareBudget} and the time
+	 * allow: those loaded while the game was not drawn, and those past the budget when they were asked for.
+	 */
+	private void startWaitingPreparations(final long end) {
+		if (!this.prepareModelsAhead || (this.lazyModels <= 0)) {
+			return;
+		}
+		final List<Model<?>> loadedNow = new ArrayList<>();
+		for (final Model<?> model : this.pendingModels) {
+			if (model.lazySource != null) {
+				if (!mayStartPreparation()) {
+					break;
+				}
+				if (!startPreparation(model)) {
+					loadedNow.add(model);
+				}
+				if (System.nanoTime() >= end) {
+					break;
+				}
+			}
+		}
+		for (final Model<?> model : loadedNow) {
+			completeModel(model);
+		}
+	}
+
+	/** Whether the helper may be given another model file now, see {@link ModelPrepareBudget}. */
+	private boolean mayStartPreparation() {
+		int unread = 0;
+		long readBytes = 0;
+		for (final Model<?> model : this.pendingModels) {
+			if ((model.lazySource == null) && !model.built) {
+				final long bytes = model.getPreparedFileBytes();
+				if (bytes == 0) {
+					unread++;
+				}
+				else {
+					readBytes += bytes;
+				}
+			}
+		}
+		return this.prepareBudget.admits(unread, readBytes);
 	}
 
 	void finishPendingModel(final Model<?> model) {
@@ -387,6 +423,10 @@ public abstract class ModelViewer {
 
 	private void completeModel(final Model<?> model) {
 		this.pendingModels.remove(model);
+		final long fileBytes = model.getPreparedFileBytes();
+		if (fileBytes > 0) {
+			this.prepareBudget.read(fileBytes);
+		}
 		if (this.building == model) {
 			this.building = null;
 		}
@@ -471,6 +511,30 @@ public abstract class ModelViewer {
 	/** The size limit of model textures with the levels they skip, as the decoders take it. */
 	public int getTextureSizeRule() {
 		return MipLevels.sizeRule(this.textureSizeLimit, this.textureSkippedLevels);
+	}
+
+	/** Gives the GPU memory of every texture that can be read again back, and returns the bytes freed. */
+	public long evictAllTextures() {
+		final long before = this.textureBytes;
+		for (final Resource resource : new ArrayList<>(this.resources)) {
+			if (resource instanceof RawOpenGLTextureResource) {
+				final RawOpenGLTextureResource texture = (RawOpenGLTextureResource) resource;
+				if (texture.isEvictable()) {
+					texture.evict();
+					this.evictedTextures++;
+				}
+			}
+		}
+		return before - this.textureBytes;
+	}
+
+	/** Reads again, now, every texture that was let go, so that they are back before they are drawn. */
+	public void restoreTextures() {
+		for (final Resource resource : new ArrayList<>(this.resources)) {
+			if ((resource instanceof RawOpenGLTextureResource) && ((RawOpenGLTextureResource) resource).isEvicted()) {
+				((RawOpenGLTextureResource) resource).restore();
+			}
+		}
 	}
 
 	public boolean hasTextureBudget() {
@@ -559,6 +623,7 @@ public abstract class ModelViewer {
 		}
 		this.resources.clear();
 		this.fetchCache.clear();
+		this.missingSources.clear();
 		for (final Scene scene : this.scenes) {
 			scene.dispose();
 		}
@@ -606,8 +671,14 @@ public abstract class ModelViewer {
 			this.foundSources.put(src, found);
 			return found;
 		}
+		final String missing = this.missingSources.get(this.dataSource, src);
+		if (missing != null) {
+			return missing;
+		}
 		DataErrors.report(DataErrors.MISSING_ASSET, src, "Attempting to load non-existant file: " + src);
-		return withDdsBeside(this.dataSource, src);
+		final String answer = withDdsBeside(this.dataSource, src);
+		this.missingSources.put(this.dataSource, src, answer);
+		return answer;
 	}
 
 	/**
@@ -663,7 +734,6 @@ public abstract class ModelViewer {
 	public Resource load(final String src, final PathSolver pathSolver, final Object solverParams) {
 		String finalSrc = src;
 		String extension = "";
-		boolean isFetch = false;
 
 		// If a given path solver, resolve.
 		if (pathSolver != null) {
@@ -675,7 +745,6 @@ public abstract class ModelViewer {
 				// Found under another name (a .dds beside it or in a graphics package), so it is read as that file's type.
 				extension = finalSrc.substring(finalSrc.lastIndexOf('.'));
 			}
-			isFetch = solved.isFetch();
 
 			if (!(extension instanceof String)) {
 				throw new IllegalStateException("The path solver did not return an extension!");
@@ -691,26 +760,28 @@ public abstract class ModelViewer {
 
 			// Is there a handler for this file type?
 			if (handlerAndDataType != null) {
-				if (isFetch) {
-					final Resource resource = this.fetchCache.get(finalSrc);
+				final Resource cached = this.fetchCache.get(cacheKey(finalSrc));
 
-					if (resource != null) {
-						if (!this.deferModelLoads && (resource instanceof Model)) {
-							((Model<?>) resource).finishPending();
+				if (cached != null) {
+					if (cached instanceof Model) {
+						((Model<?>) cached).requested();
+						if (!this.deferModelLoads) {
+							((Model<?>) cached).finishPending();
 						}
-						return resource;
 					}
+					return cached;
 				}
 
 				final ResourceHandler handler = (ResourceHandler) handlerAndDataType[0];
 				final Resource resource = handler.construct(new ResourceHandlerConstructionParams(this, handler,
-						extension, pathSolver, isFetch ? finalSrc : ""));
+						extension, pathSolver, finalSrc));
 
 				this.resources.add(resource);
 
-//				if (isFetch) {
-				this.fetchCache.put(finalSrc, resource);
-//				}
+				this.fetchCache.put(cacheKey(finalSrc), resource);
+				if (resource instanceof Model) {
+					((Model<?>) resource).requested();
+				}
 
 				// TODO this is a synchronous hack, skipped some Ghostwolf code
 				final long loadStart = PerfStats.ENABLED ? System.nanoTime() : 0;
@@ -720,7 +791,8 @@ public abstract class ModelViewer {
 					this.deferTextureLoads = true;
 				}
 				try {
-					if (this.deferModelLoads && (resource instanceof Model) && !this.prepareModelsAhead) {
+					if (this.deferModelLoads && (resource instanceof Model)
+							&& (!this.prepareModelsAhead || !mayStartPreparation())) {
 						final Model<?> model = (Model<?>) resource;
 						model.lazySource = finalSrc;
 						this.lazyModels++;
@@ -765,6 +837,38 @@ public abstract class ModelViewer {
 	}
 
 	/**
+	 * Builds a model from a file whose bytes {@code edit} changes first. The model is kept under no name, so every call
+	 * makes a model of its own; it is built at once and its textures come from the same cache as any other model's.
+	 */
+	public Resource loadEdited(final String src, final PathSolver pathSolver, final Object solverParams,
+			final UnaryOperator<byte[]> edit) {
+		final SolvedPath solved = pathSolver.solve(src, solverParams);
+		final String finalSrc = findSource(solved.getFinalSrc());
+		final String extension = finalSrc.substring(finalSrc.lastIndexOf('.'));
+		final Object[] handlerAndDataType = findHandler(extension.toLowerCase(Locale.ROOT));
+		if (handlerAndDataType == null) {
+			throw new IllegalStateException("Missing handler for: " + finalSrc);
+		}
+		final boolean deferBefore = this.deferTextureLoads;
+		try (InputStream stream = this.dataSource.getResourceAsStream(finalSrc)) {
+			final byte[] data = edit.apply(ByteStreams.toByteArray(stream));
+			final ResourceHandler handler = (ResourceHandler) handlerAndDataType[0];
+			final Resource resource = handler.construct(
+					new ResourceHandlerConstructionParams(this, handler, extension, pathSolver, ""));
+			this.resources.add(resource);
+			this.deferTextureLoads = false;
+			resource.loadData(new ByteArrayInputStream(data), null);
+			return resource;
+		}
+		catch (final IOException e) {
+			throw new IllegalStateException("Unable to load data: " + finalSrc, e);
+		}
+		finally {
+			this.deferTextureLoads = deferBefore;
+		}
+	}
+
+	/**
 	 * The file of a resource whose loading goes on on a helper thread: when the data source allows, the helper opens
 	 * it too, which for a file of the game's storage that is not streamed means reading and decoding all of it.
 	 */
@@ -773,12 +877,40 @@ public abstract class ModelViewer {
 		return opener != null ? new IndependentStream.Opening(opener) : this.dataSource.getResourceAsStream(path);
 	}
 
+	/**
+	 * The key a file is kept under: the data sources find a file whatever the case or the slashes of its name, and the
+	 * same file is asked for under different spellings (a model's own path and the one a unit's data gives), which
+	 * would otherwise be read and built twice.
+	 */
+	private static String cacheKey(final String path) {
+		return path.replace('/', '\\').toLowerCase(Locale.ROOT);
+	}
+
 	public boolean has(final String key) {
-		return this.fetchCache.containsKey(key);
+		return this.fetchCache.containsKey(cacheKey(key));
 	}
 
 	public Resource get(final String key) {
-		return this.fetchCache.get(key);
+		final Resource resource = this.fetchCache.get(cacheKey(key));
+		if (resource instanceof Model) {
+			((Model<?>) resource).requested();
+		}
+		return resource;
+	}
+
+	/**
+	 * Lets go of a model that nothing holds any more (see {@link Model#isReleasable}): its file is read and built again
+	 * when it is asked for next.
+	 */
+	public void evictModel(final Model<?> model) {
+		unload(model);
+		this.textureMappers.remove(model);
+		model.dispose();
+		this.evictedModels++;
+	}
+
+	public int getEvictedModels() {
+		return this.evictedModels;
 	}
 
 	public GenericResource loadGeneric(final String path, final FetchDataTypeName dataType,
@@ -804,7 +936,7 @@ public abstract class ModelViewer {
 	 */
 	public GenericResource loadGeneric(final String path, final FetchDataTypeName dataType,
 			final LoadGenericCallback callback, final DataSource dataSource) {
-		final Resource cachedResource = this.fetchCache.get(path);
+		final Resource cachedResource = this.fetchCache.get(cacheKey(path));
 
 		if (cachedResource != null) {
 			// Technically also non-generic resources can be returned here, since the fetch
@@ -817,7 +949,7 @@ public abstract class ModelViewer {
 		final GenericResource resource = new GenericResource(this, null, null, path, callback);
 
 		this.resources.add(resource);
-		this.fetchCache.put(path, resource);
+		this.fetchCache.put(cacheKey(path), resource);
 
 		// TODO this is a synchronous hack, skipped some Ghostwolf code
 		try {
@@ -883,8 +1015,12 @@ public abstract class ModelViewer {
 
 	/** Reads and decodes again a texture that was let go, on helper threads where the data allows. */
 	void reloadTexture(final RawOpenGLTextureResource texture) {
+		reloadTexture(texture, true);
+	}
+
+	void reloadTexture(final RawOpenGLTextureResource texture, final boolean defer) {
 		final boolean before = this.deferTextureLoads;
-		this.deferTextureLoads = true;
+		this.deferTextureLoads = defer;
 		try {
 			final InputStream stream = openForHelper(texture.fetchUrl);
 			if (stream == null) {
@@ -906,7 +1042,7 @@ public abstract class ModelViewer {
 		// TODO Auto-generated method stub
 		final String fetchUrl = resource.fetchUrl;
 		if (!"".equals(fetchUrl)) {
-			this.fetchCache.remove(fetchUrl);
+			this.fetchCache.remove(cacheKey(fetchUrl));
 		}
 		return this.resources.remove(resource);
 	}
@@ -996,4 +1132,9 @@ public abstract class ModelViewer {
 	}
 
 	public abstract SceneLightManager createLightManager(boolean simple);
+
+	/** The light of a scene that shows a talking portrait. */
+	public SceneLightManager createPortraitLightManager() {
+		return createLightManager(true);
+	}
 }

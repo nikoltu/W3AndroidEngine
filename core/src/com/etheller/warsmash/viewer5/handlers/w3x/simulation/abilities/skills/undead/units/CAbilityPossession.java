@@ -63,6 +63,11 @@ public class CAbilityPossession extends CAbilityTargetSpellBase {
 	}
 
 	@Override
+	public boolean isCastingTimeBeforeCast() {
+		return true;
+	}
+
+	@Override
 	protected void innerCheckCanTargetSpell(final CSimulation game, final CUnit unit, final int orderId,
 			final CWidget target, final AbilityTargetCheckReceiver<CWidget> receiver) {
 		final CUnit targetUnit = target.visit(AbilityTargetVisitor.UNIT);

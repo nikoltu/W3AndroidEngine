@@ -120,8 +120,12 @@ final class CUnitTypes {
 		final List<CAbility> persistedAbilities = new ArrayList<>();
 		final List<CAbility> removedAbilities = new ArrayList<>();
 		final List<CAbility> startingAbilities = new ArrayList<>(self.abilities);
+		final CAbilityInventory inventory = self.getInventoryData();
 		for (final CAbility ability : startingAbilities) {
-			if (!ability.isPermanent() && !sharedAbilities.contains(ability.getAlias())
+			// An item's abilities stay through a change of form: the inventory still holds them, and the bonuses of the
+			// carried items go on counting.
+			if (!ability.isPermanent() && ((inventory == null) || !inventory.isHeldItemAbility(ability))
+					&& !sharedAbilities.contains(ability.getAlias())
 					&& (!ability.isHero() || !self.unitType.isHero())
 					&& !(ability.getAbilityCategory() == CAbilityCategory.BUFF)) {
 				ability.onRemove(game, self);

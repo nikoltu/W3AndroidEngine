@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.sound.SimSound;
@@ -35,6 +36,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.RenderEffect;
 import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.RenderLightningEffect;
 import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.RenderSpellEffect;
 import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.RenderUbersplat;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.sound.CSound;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CDestructable;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.HandleIdAllocator;
@@ -643,142 +645,265 @@ public final class SavedGame {
 	 */
 	public static void load(final War3MapViewer viewer, final FileHandle file, final AiScriptStarter aiStarter)
 			throws IOException {
-		final CSimulation simulation = viewer.simulation;
-		final Header header;
-		final byte[] tableBytes;
-		final byte[] bodyBytes;
-		final byte[] table;
-		try (DataInputStream in = new DataInputStream(new BufferedInputStream(file.read(), 1 << 16))) {
-			header = Header.read(in);
-			final long fileLength = file.length();
-			tableBytes = readBlock(in, fileLength);
-			bodyBytes = readBlock(in, fileLength);
-			checkIntact(tableBytes);
-			checkIntact(bodyBytes);
-			table = gunzipFully(tableBytes);
-			// A save from another engine build must be refused here, while the map can still start normally.
-			try {
-				SavedObjectGraph.checkClassesMatch(table, header.formatVersion);
+		final Loading loading = new Loading(viewer, file, aiStarter);
+		while (!loading.next()) {
+		}
+	}
+
+	/**
+	 * {@link #load} in slices, so that a loading screen can draw between them: reading and checking the file, the
+	 * AI scripts and the checks that can still refuse the save, the objects' read, the scripts' and game's
+	 * restore, and what is shown again. Every slice does what the one call did at that point, in the same order.
+	 */
+	public static final class Loading {
+		private static final int SLICE_READ_FILE = 0;
+		private static final int SLICE_START_SCRIPTS = 1;
+		private static final int SLICE_CHECK_SCRIPTS = 2;
+		private static final int SLICE_BEGIN_OBJECTS = 3;
+		private static final int SLICE_READ_OBJECTS = 4;
+		private static final int SLICE_FINISH_OBJECTS = 5;
+		private static final int SLICE_RESTORE = 6;
+		private static final int SLICE_SHOW = 7;
+		/** What the read of the objects takes of a frame, before the next one is let in. */
+		private static final long READ_SLICE_NANOS = 8_000_000L;
+		private final War3MapViewer viewer;
+		private final FileHandle file;
+		private final AiScriptStarter aiStarter;
+		private int slice;
+		private Header header;
+		private byte[] bodyBytes;
+		private byte[] table;
+		private List<JassAIEnvironment> aiEnvironments;
+		private Map<Integer, CDestructable> placedDestructables;
+		private List<GlobalScope> loadedScopes;
+		private List<SavedScriptPositions.Program> programs;
+		private SavedScriptPositions.Mapping mapping;
+		private Root root;
+		private DataInputStream bodies;
+		private SavedObjectGraph.Reader reader;
+		private List<CSound> sounds = Collections.emptyList();
+		private List<SimSound> restoredSounds = Collections.emptyList();
+
+		public Loading(final War3MapViewer viewer, final FileHandle file, final AiScriptStarter aiStarter) {
+			this.viewer = viewer;
+			this.file = file;
+			this.aiStarter = aiStarter;
+		}
+
+		/** @return whether the save is loaded */
+		public boolean next() throws IOException {
+			switch (this.slice) {
+			case SLICE_READ_FILE:
+				readFile();
+				break;
+			case SLICE_START_SCRIPTS:
+				startScripts();
+				break;
+			case SLICE_CHECK_SCRIPTS:
+				checkScripts();
+				break;
+			case SLICE_BEGIN_OBJECTS:
+				beginObjects();
+				break;
+			case SLICE_READ_OBJECTS:
+				if (!readObjects()) {
+					return false;
+				}
+				break;
+			case SLICE_FINISH_OBJECTS:
+				finishObjects();
+				break;
+			case SLICE_RESTORE:
+				restoreScriptsAndGame();
+				break;
+			default:
+				showAgain();
+				break;
 			}
-			catch (final IOException e) {
-				throw new LoadRefused(Loadability.OTHER_VERSION, e.getMessage());
+			return ++this.slice > SLICE_SHOW;
+		}
+
+		private void readFile() throws IOException {
+			try (DataInputStream in = new DataInputStream(new BufferedInputStream(this.file.read(), 1 << 16))) {
+				this.header = Header.read(in);
+				final long fileLength = this.file.length();
+				final byte[] tableBytes = readBlock(in, fileLength);
+				this.bodyBytes = readBlock(in, fileLength);
+				checkIntact(tableBytes);
+				checkIntact(this.bodyBytes);
+				this.table = gunzipFully(tableBytes);
+				// A save from another engine build must be refused here, while the map can still start normally.
+				try {
+					SavedObjectGraph.checkClassesMatch(this.table, this.header.formatVersion);
+				}
+				catch (final IOException e) {
+					throw new LoadRefused(Loadability.OTHER_VERSION, e.getMessage());
+				}
+			}
+			catch (final RuntimeException e) {
+				throw new IOException("Damaged save", e);
 			}
 		}
-		catch (final RuntimeException e) {
-			throw new IOException("Damaged save", e);
-		}
-		for (final AiEntry entry : header.loadedScripts) {
-			aiStarter.start(entry);
-		}
-		final List<JassAIEnvironment> aiEnvironments = new ArrayList<>();
-		for (final AiEntry entry : header.aiScripts) {
-			final JassAIEnvironment ai = (entry.playerIndex >= 0)
-					&& (entry.playerIndex < simulation.getGameData().getMaxPlayers())
-							? simulation.getPlayer(entry.playerIndex).getAiScript()
-							: null;
-			if (ai == null) {
-				throw new LoadRefused(Loadability.OTHER_SCRIPTS,
-						"The AI script " + entry.scriptFile + " of player " + entry.playerIndex + " did not start");
+
+		private void startScripts() throws IOException {
+			for (final AiEntry entry : this.header.loadedScripts) {
+				this.aiStarter.start(entry);
 			}
-			aiEnvironments.add(ai);
-		}
-		final Map<Integer, CDestructable> placedDestructables = new HashMap<>();
-		int legacyHandleId = HandleIdAllocator.LEGACY_FIRST_ID;
-		for (final CDestructable destructable : simulation.getDestructables()) {
-			// Before format 6 one counter numbered everything, and the map's destructables came first.
-			placedDestructables.put(header.formatVersion < 6 ? legacyHandleId++ : destructable.getHandleId(),
-					destructable);
-		}
-		for (final War3MapViewer.CreatedDestructable created : header.createdDestructables) {
-			placedDestructables.put(created.savedHandleId, viewer.createDestructableForSavedGame(created));
-		}
-		final List<GlobalScope> loadedScopes = scopesOf(simulation, aiEnvironments);
-		final List<SavedScriptPositions.Program> programs = new ArrayList<>();
-		for (final GlobalScope scope : loadedScopes) {
-			programs.add(new SavedScriptPositions.Program(scope));
-		}
-		final SavedScriptPositions.Mapping mapping;
-		if (header.positions != null) {
-			final String mismatch = SavedScriptPositions.mismatch(header.positions, programs, false);
-			if (mismatch != null) {
-				throw new LoadRefused(Loadability.OTHER_SCRIPTS, mismatch);
+			final CSimulation simulation = this.viewer.simulation;
+			this.aiEnvironments = new ArrayList<>();
+			for (final AiEntry entry : this.header.aiScripts) {
+				final JassAIEnvironment ai = (entry.playerIndex >= 0)
+						&& (entry.playerIndex < simulation.getGameData().getMaxPlayers())
+								? simulation.getPlayer(entry.playerIndex).getAiScript()
+								: null;
+				if (ai == null) {
+					throw new LoadRefused(Loadability.OTHER_SCRIPTS,
+							"The AI script " + entry.scriptFile + " of player " + entry.playerIndex + " did not start");
+				}
+				this.aiEnvironments.add(ai);
 			}
-			mapping = new SavedScriptPositions.Mapping(header.positions, programs);
 		}
-		else {
-			mapping = null;
-			for (int i = 0; i < loadedScopes.size(); i++) {
-				if ((i >= header.scopeSizes.size())
-						|| (loadedScopes.get(i).getInstructions().size() != header.scopeSizes.get(i))) {
-					throw new LoadRefused(Loadability.OTHER_SCRIPTS, "Saved with other scripts or game data");
+
+		private void checkScripts() throws IOException {
+			final CSimulation simulation = this.viewer.simulation;
+			this.placedDestructables = new HashMap<>();
+			int legacyHandleId = HandleIdAllocator.LEGACY_FIRST_ID;
+			for (final CDestructable destructable : simulation.getDestructables()) {
+				// Before format 6 one counter numbered everything, and the map's destructables came first.
+				this.placedDestructables.put(
+						this.header.formatVersion < 6 ? legacyHandleId++ : destructable.getHandleId(), destructable);
+			}
+			for (final War3MapViewer.CreatedDestructable created : this.header.createdDestructables) {
+				this.placedDestructables.put(created.savedHandleId,
+						this.viewer.createDestructableForSavedGame(created));
+			}
+			this.loadedScopes = scopesOf(simulation, this.aiEnvironments);
+			this.programs = new ArrayList<>();
+			for (final GlobalScope scope : this.loadedScopes) {
+				this.programs.add(new SavedScriptPositions.Program(scope));
+			}
+			if (this.header.positions != null) {
+				final String mismatch = SavedScriptPositions.mismatch(this.header.positions, this.programs, false);
+				if (mismatch != null) {
+					throw new LoadRefused(Loadability.OTHER_SCRIPTS, mismatch);
+				}
+				this.mapping = new SavedScriptPositions.Mapping(this.header.positions, this.programs);
+			}
+			else {
+				this.mapping = null;
+				for (int i = 0; i < this.loadedScopes.size(); i++) {
+					if ((i >= this.header.scopeSizes.size())
+							|| (this.loadedScopes.get(i).getInstructions().size() != this.header.scopeSizes.get(i))) {
+						throw new LoadRefused(Loadability.OTHER_SCRIPTS, "Saved with other scripts or game data");
+					}
 				}
 			}
 		}
-		// From here on the map's own state is gone, so everything that can refuse the save comes before this.
-		viewer.clearRenderPeersForSavedGame();
-		viewer.setGameSeedForSavedGame(header.gameSeed);
-		final SavedGameRules rules = new SavedGameRules(viewer, loadedScopes, aiEnvironments);
-		for (final Map.Entry<Integer, CDestructable> destructable : placedDestructables.entrySet()) {
-			rules.nameDestructable(destructable.getValue(), destructable.getKey());
-		}
-		final Root root;
-		final List<SimSound> restoredSounds;
-		try (DataInputStream bodies = gunzip(bodyBytes)) {
-			final SavedObjectGraph.Reader reader = new SavedObjectGraph.Reader(rules, table, bodies,
-					header.formatVersion);
-			root = (Root) reader.readRoot();
-			restoreHandleIds(reader, simulation, header.formatVersion);
-			restoredSounds = reader.objectsOf(SimSound.class);
-			if (mapping != null) {
-				mapping.apply(reader.objectsOf(JassThread.class), reader.objectsOf(CodeJassValue.class), programs,
-						header.scopeSizes);
+
+		private void beginObjects() {
+			// From here on the map's own state is gone, so everything that can refuse the save comes before this.
+			this.viewer.clearRenderPeersForSavedGame();
+			this.viewer.setGameSeedForSavedGame(this.header.gameSeed);
+			final SavedGameRules rules = new SavedGameRules(this.viewer, this.loadedScopes, this.aiEnvironments);
+			for (final Map.Entry<Integer, CDestructable> destructable : this.placedDestructables.entrySet()) {
+				rules.nameDestructable(destructable.getValue(), destructable.getKey());
+			}
+			try {
+				this.bodies = gunzip(this.bodyBytes);
+				this.reader = SavedObjectGraph.Reader.incremental(rules, this.table, this.bodies,
+						this.header.formatVersion);
+			}
+			catch (final IOException e) {
+				throw new IllegalStateException("Could not read the saved game " + this.file.name(), e);
 			}
 		}
-		catch (final IOException e) {
-			// The simulation is read in place, so past this point starting the map normally is no longer possible.
-			throw new IllegalStateException("Could not read the saved game " + file.name(), e);
+
+		/** @return whether every object is read */
+		private boolean readObjects() {
+			try {
+				return this.reader.advance(READ_SLICE_NANOS);
+			}
+			catch (final IOException e) {
+				// The simulation is read in place, so past this point starting the map normally is no longer
+				// possible.
+				throw new IllegalStateException("Could not read the saved game " + this.file.name(), e);
+			}
 		}
-		final List<GlobalScope> scopes = scopesOf(simulation, aiEnvironments);
-		for (int i = 0; i < scopes.size(); i++) {
-			scopes.get(i).restoreThreads(root.scopes.get(i).threads, root.scopes.get(i).newThreads,
-					root.scopes.get(i).triggerQueue, root.scopes.get(i).runningTriggerQueue);
+
+		private void finishObjects() {
+			try (DataInputStream bodies = this.bodies) {
+				this.root = (Root) this.reader.root();
+				restoreHandleIds(this.reader, this.viewer.simulation, this.header.formatVersion);
+				this.sounds = this.reader.objectsOf(CSound.class);
+				this.restoredSounds = this.reader.objectsOf(SimSound.class);
+				if (this.mapping != null) {
+					this.mapping.apply(this.reader.objectsOf(JassThread.class),
+							this.reader.objectsOf(CodeJassValue.class), this.programs, this.header.scopeSizes);
+				}
+			}
+			catch (final IOException e) {
+				throw new IllegalStateException("Could not read the saved game " + this.file.name(), e);
+			}
+			this.reader = null;
+			this.bodies = null;
+			this.bodyBytes = null;
+			this.table = null;
 		}
-		for (int i = 0; i < aiEnvironments.size(); i++) {
-			simulation.getPlayer(header.aiScripts.get(i).playerIndex).setAiScript(aiEnvironments.get(i));
+
+		private void restoreScriptsAndGame() throws IOException {
+			final CSimulation simulation = this.viewer.simulation;
+			final List<GlobalScope> scopes = scopesOf(simulation, this.aiEnvironments);
+			for (int i = 0; i < scopes.size(); i++) {
+				scopes.get(i).restoreThreads(this.root.scopes.get(i).threads, this.root.scopes.get(i).newThreads,
+						this.root.scopes.get(i).triggerQueue, this.root.scopes.get(i).runningTriggerQueue);
+			}
+			for (int i = 0; i < this.aiEnvironments.size(); i++) {
+				simulation.getPlayer(this.header.aiScripts.get(i).playerIndex)
+						.setAiScript(this.aiEnvironments.get(i));
+			}
+			try (DataInputStream caches = new DataInputStream(new ByteArrayInputStream(this.root.gameCaches))) {
+				CGameCache.restoreAll(caches);
+			}
+			this.viewer.finishLoadingSavedGame(this.placedDestructables.values());
+			this.viewer.restoreSoundVoices(this.restoredSounds);
+			this.restoredSounds = Collections.emptyList();
 		}
-		try (DataInputStream caches = new DataInputStream(new ByteArrayInputStream(root.gameCaches))) {
-			CGameCache.restoreAll(caches);
+
+		private void showAgain() {
+			final CSimulation simulation = this.viewer.simulation;
+			for (final SavedEffect effect : this.root.effects) {
+				effect.show(this.viewer);
+			}
+			for (final SavedLightning lightning : this.root.lightnings) {
+				lightning.show(this.viewer);
+			}
+			for (final SavedWeather weather : this.root.weathers) {
+				weather.show(this.viewer);
+			}
+			for (final SavedUbersplat splat : this.root.ubersplats) {
+				splat.show(this.viewer);
+			}
+			for (final CImage image : simulation.getScriptImages()) {
+				this.viewer.updateImage(image);
+			}
+			for (final CTrackable trackable : simulation.getTrackables()) {
+				this.viewer.showTrackable(trackable);
+			}
+			simulation.getTerrainDeformations().restore(simulation);
+			simulation.getTerrainTypeChanges().restore(simulation);
+			this.viewer.setGamePaused(War3MapViewer.PauseSource.SCRIPT, this.root.scriptPaused);
+			this.viewer.setGamePaused(War3MapViewer.PauseSource.PLAYER, this.root.playerPaused);
+			this.viewer.restoreInterfaceState(this.root.interfaceState);
+			for (final CSound sound : this.sounds) {
+				sound.resumeAfterLoad(simulation.getGameTurnTick());
+			}
+			this.sounds = Collections.emptyList();
+			simulation.setSaveBasicFilename(this.file.nameWithoutExtension());
+			// Zone maps restore their saves from the player's own save folder only on a player's load; a load by the
+			// map's LoadGame (zone travel) is told apart by this flag.
+			this.viewer.getMapConfig().setMapFlag(CMapFlag.MAP_RELOADED, this.viewer.isSavedGameLoadedByScript());
+			simulation.fireGameEvent(JassGameEventsWar3.EVENT_GAME_LOADED);
 		}
-		viewer.finishLoadingSavedGame(placedDestructables.values());
-		viewer.restoreSoundVoices(restoredSounds);
-		for (final SavedEffect effect : root.effects) {
-			effect.show(viewer);
-		}
-		for (final SavedLightning lightning : root.lightnings) {
-			lightning.show(viewer);
-		}
-		for (final SavedWeather weather : root.weathers) {
-			weather.show(viewer);
-		}
-		for (final SavedUbersplat splat : root.ubersplats) {
-			splat.show(viewer);
-		}
-		for (final CImage image : simulation.getScriptImages()) {
-			viewer.updateImage(image);
-		}
-		for (final CTrackable trackable : simulation.getTrackables()) {
-			viewer.showTrackable(trackable);
-		}
-		simulation.getTerrainDeformations().restore(simulation);
-		simulation.getTerrainTypeChanges().restore(simulation);
-		viewer.setGamePaused(War3MapViewer.PauseSource.SCRIPT, root.scriptPaused);
-		viewer.setGamePaused(War3MapViewer.PauseSource.PLAYER, root.playerPaused);
-		viewer.restoreInterfaceState(root.interfaceState);
-		simulation.setSaveBasicFilename(file.nameWithoutExtension());
-		// Zone maps restore their saves from the player's own save folder only on a player's load; a load by the
-		// map's LoadGame (zone travel) is told apart by this flag.
-		viewer.getMapConfig().setMapFlag(CMapFlag.MAP_RELOADED, viewer.isSavedGameLoadedByScript());
-		simulation.fireGameEvent(JassGameEventsWar3.EVENT_GAME_LOADED);
 	}
 
 	/**

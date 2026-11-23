@@ -20,6 +20,7 @@ import com.etheller.warsmash.util.StreamBytes;
  * @author Riven, modified by Oger-Lord
  */
 public class TgaFile {
+	private static final int MAX_PIXELS = 1 << 26;
 
 	/**
 	 * Read a TGA image from a file
@@ -158,6 +159,10 @@ public class TgaFile {
 			alpha = ((sampleBits == 32) || (sampleBits == 16)) && (attributeBits != 0);
 		}
 
+		// a damaged header must not size the arrays below: 65535 x 65535 overflows an int
+		if ((w == 0) || (h == 0) || (((long) w * h) > MAX_PIXELS)) {
+			throw new IllegalStateException("Error " + name + " invalid size: " + w + "x" + h);
+		}
 		final int sampleBytes = (sampleBits + 7) / 8;
 		final int pixelCount = w * h;
 		final byte[] raw;
@@ -249,6 +254,11 @@ public class TgaFile {
 	 */
 	private static byte[] decodeRunLength(final String name, final byte[] packed, final int start,
 			final int pixelCount, final int bytesPerPixel) {
+		// a packet of at most 128 pixels takes at least bytesPerPixel + 1 bytes, so a short file cannot fill a big image
+		if (((long) pixelCount * bytesPerPixel) > ((long) Math.max(0, packed.length - start) * 128 * bytesPerPixel
+				/ (bytesPerPixel + 1))) {
+			throw new IllegalStateException("Error " + name + " not enaugh pixel data");
+		}
 		final byte[] raw = new byte[pixelCount * bytesPerPixel];
 		int in = start;
 		int out = 0;

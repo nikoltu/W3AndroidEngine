@@ -149,8 +149,12 @@ public final class BlpDecoder {
 		case BLP2_PALETTE:
 			return decodePaletted(data, headerSize, width, height, mipOffset, alphaDepth);
 		case BLP2_DXT: {
-			final byte[] pixels = DdsDecoder.decodeBlocks(bytes(data, mipOffset, mipSize), width, height,
-					dxtFormat(data.get(10)));
+			final int dxt = dxtFormat(data.get(10));
+			// a size field that claims more than the level can hold must not size the copy
+			final int blockBytes = dxt == DdsDecoder.FOURCC_DXT1 ? 8 : 16;
+			final long levelBytes = (long) ((width + 3) / 4) * ((height + 3) / 4) * blockBytes;
+			final byte[] pixels = DdsDecoder.decodeBlocks(bytes(data, mipOffset, (int) Math.min(mipSize, levelBytes)),
+					width, height, dxt);
 			if (alphaDepth == 0) {
 				// Without alpha bits the game uploads DXT1 as opaque RGB, where the
 				// transparent black of a three color block is plain black.
@@ -185,8 +189,9 @@ public final class BlpDecoder {
 	private static byte[] decodeJpeg(final ByteBuffer data, final int headerSize, final int width,
 			final int height, final int mipOffset, final int mipSize) throws IOException {
 		final int jpegHeaderSize = data.getInt(headerSize);
-		if ((jpegHeaderSize < 0) || (mipSize < 0) || ((headerSize + 4 + jpegHeaderSize) > data.limit())
-				|| ((mipOffset + mipSize) > data.limit())) {
+		if ((jpegHeaderSize < 0) || (mipSize < 0) || (mipOffset < 0)
+				|| (((long) headerSize + 4 + jpegHeaderSize) > data.limit())
+				|| (((long) mipOffset + mipSize) > data.limit())) {
 			throw new IOException("Truncated JPEG BLP file");
 		}
 		final byte[] jpeg = new byte[jpegHeaderSize + mipSize];
@@ -220,14 +225,16 @@ public final class BlpDecoder {
 			throw new IOException("Truncated BLP palette");
 		}
 		final int pixelCount = width * height;
-		final byte[] indices = bytes(data, mipOffset, pixelCount + (((pixelCount * alphaBits) + 7) / 8));
+		// only these alpha depths exist; anything else reads as opaque instead of sizing the copy by a bad field
+		final int alphaDepth = (alphaBits == 1) || (alphaBits == 4) || (alphaBits == 8) ? alphaBits : 0;
+		final byte[] indices = bytes(data, mipOffset, pixelCount + (((pixelCount * alphaDepth) + 7) / 8));
 		final byte[] pixels = new byte[pixelCount * 4];
 		for (int i = 0; i < pixelCount; i++) {
 			final int paletteEntry = paletteOffset + ((indices[i] & 0xFF) * 4);
 			pixels[i * 4] = data.get(paletteEntry + 2);
 			pixels[(i * 4) + 1] = data.get(paletteEntry + 1);
 			pixels[(i * 4) + 2] = data.get(paletteEntry);
-			pixels[(i * 4) + 3] = (byte) alpha(indices, pixelCount, alphaBits, i);
+			pixels[(i * 4) + 3] = (byte) alpha(indices, pixelCount, alphaDepth, i);
 		}
 		return pixels;
 	}

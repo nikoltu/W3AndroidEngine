@@ -31,7 +31,11 @@ final class ProfileStorageAndroid {
 	/** Set when the shared folder has been copied to the private files after the player turned the choice off. */
 	private static final String KEY_MOVED_OUT = "profilesMovedOut";
 
+	/** Set when the background copy is done; the next start copies once more what was saved since, then sets MOVED_IN. */
+	private static final String KEY_MOVE_PENDING = "profilesMovePending";
+
 	private static File active;
+	private static boolean moving;
 	private static String state = "";
 
 	private ProfileStorageAndroid() {
@@ -49,7 +53,7 @@ final class ProfileStorageAndroid {
 			if (!wanted) {
 				state = "private";
 				if (access && !preferences.getBoolean(KEY_MOVED_OUT, false)) {
-					moveOut(context, preferences, folder);
+					background(() -> moveOut(context, preferences, folder));
 				}
 				return;
 			}
@@ -57,10 +61,29 @@ final class ProfileStorageAndroid {
 				state = access ? "unwritable" : "noaccess";
 				return;
 			}
-			if (!preferences.getBoolean(KEY_MOVED_IN, false) && !moveIn(context, preferences, folder)) {
-				// The private copy stays the one in use until every file is in the shared folder.
-				state = "failed";
-				return;
+			if (!preferences.getBoolean(KEY_MOVED_IN, false)) {
+				final File privateRoot = context.getFilesDir();
+				if (!preferences.getBoolean(KEY_MOVE_PENDING, false) && !ProfileStorage.hasFiles(privateRoot)) {
+					// Nothing to copy, so the shared folder is used at once.
+					preferences.edit().putBoolean(KEY_MOVED_IN, true).commit();
+				}
+				else if (!preferences.getBoolean(KEY_MOVE_PENDING, false)) {
+					// The copy can take long, so it runs off the main thread while the private storage stays in use;
+					// what is saved meanwhile is copied by the incremental pass of the next start, before the switch.
+					state = "private";
+					if (!moving) {
+						moving = true;
+						background(() -> moveIn(context, preferences, folder));
+					}
+					return;
+				}
+				else if (copyFolders(privateRoot, folder)) {
+					preferences.edit().putBoolean(KEY_MOVED_IN, true).putBoolean(KEY_MOVE_PENDING, false).commit();
+				}
+				else {
+					state = "private";
+					return;
+				}
 			}
 			active = folder;
 			StorageRoot.set(folder);
@@ -77,13 +100,41 @@ final class ProfileStorageAndroid {
 		}
 	}
 
+	/**
+	 * Looks again for the shared folder when it was out of reach at the start (access was not allowed yet) and is
+	 * usable now. Called while the launcher is not open yet, so that no one holds the private folders.
+	 */
+	static synchronized void recheck(final Context context) {
+		if (("noaccess".equals(state) || "unwritable".equals(state)) && allFilesAccess(context)) {
+			init(context);
+		}
+	}
+
+	private static void background(final Runnable work) {
+		final Thread thread = new Thread(() -> {
+			try {
+				work.run();
+			}
+			catch (final RuntimeException e) {
+				Log.e(TAG, "Moving the profiles failed", e);
+			}
+		}, "ProfileMove");
+		thread.setDaemon(true);
+		thread.start();
+	}
+
 	/** Private Save and Replay into the shared folder; nothing is overwritten or deleted. */
 	private static boolean moveIn(final Context context, final SharedPreferences preferences, final File folder) {
-		if (!copyFolders(context.getFilesDir(), folder)) {
-			return false;
+		try {
+			if (!copyFolders(context.getFilesDir(), folder)) {
+				return false;
+			}
+			preferences.edit().putBoolean(KEY_MOVE_PENDING, true).commit();
+			return true;
 		}
-		preferences.edit().putBoolean(KEY_MOVED_IN, true).commit();
-		return true;
+		finally {
+			moving = false;
+		}
 	}
 
 	/** The shared folder into the private storage, for a player who turned the choice off; the shared copy stays. */
@@ -92,7 +143,6 @@ final class ProfileStorageAndroid {
 			preferences.edit().putBoolean(KEY_MOVED_OUT, true).commit();
 			return;
 		}
-		active = null;
 		if (copyFolders(folder, context.getFilesDir())) {
 			final Profiles profiles = new Profiles(context, preferences);
 			ProfileMirror.restore(profiles, folder);
@@ -144,7 +194,7 @@ final class ProfileStorageAndroid {
 
 	static void setWanted(final Context context, final boolean wanted) {
 		context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE).edit().putBoolean(KEY_PROFILES_SHARED, wanted)
-				.putBoolean(KEY_MOVED_IN, false).putBoolean(KEY_MOVED_OUT, false).commit();
+				.putBoolean(KEY_MOVED_IN, false).putBoolean(KEY_MOVE_PENDING, false).putBoolean(KEY_MOVED_OUT, false).commit();
 	}
 
 	/** Writes the copy of the profile list beside the profiles (after a change, and for what the engine's menu did). */

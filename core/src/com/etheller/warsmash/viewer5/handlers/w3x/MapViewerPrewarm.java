@@ -32,6 +32,7 @@ import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.viewer5.PathSolver;
 import com.etheller.warsmash.viewer5.handlers.blp.TextureTranscoder;
 import com.etheller.warsmash.viewer5.handlers.w3x.War3MapViewer.MapLoader;
+import com.etheller.warsmash.viewer5.handlers.w3x.environment.PathingGrid;
 import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.RenderItemTypeData;
 import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.RenderUnitType;
 import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.RenderUnitTypeData;
@@ -63,7 +64,7 @@ final class MapViewerPrewarm {
 	// The model is the last argument of the BJ forms, so any model path on the line is taken. The string patterns
 	// here are possessive: a repeated alternative is matched recursively, and a long string overflowed the stack.
 	static final Pattern SCRIPT_EFFECT_MODEL = Pattern.compile(
-			"\\bAddSpecialEffect\\w*\\s*\\([^\\n]*?\"((?:[^\"\\\\\\n]++|\\\\.)*+)(?<=\\.[mM][dD][lLxX])\"");
+			"\\bAddSpecialEffect\\w*\\s*\\([^\\r\\n]*?\"((?:[^\"\\\\\\r\\n]++|\\\\.)*+)(?<=\\.[mM][dD][lLxX])\"");
 	private static final Pattern SCRIPT_LABEL_PARAMETERS = Pattern
 			.compile("\\bSetSoundParamsFromLabel\\s*\\([^,()]+,\\s*\"((?:[^\"\\\\]++|\\\\.)++)\"");
 	private static final Pattern SCRIPT_LABEL_CREATE = Pattern
@@ -77,7 +78,6 @@ final class MapViewerPrewarm {
 			"\\b(?:CreateDestructable\\w*|CreateDeadDestructable\\w*|BlzCreateDestructable\\w*)\\s*\\(");
 	private static final Pattern SCRIPT_DESTRUCTABLE_CALL = Pattern
 			.compile("\\b((?:CreateDestructable|CreateDeadDestructable|BlzCreateDestructable)\\w*)\\s*\\(");
-	private static final Pattern RAW_CODE = Pattern.compile("'(\\w{4})'");
 	/** What a model's vertices, sequences and bookkeeping hold on the heap beside its textures, on average. */
 	private static final long MODEL_HEAP_BYTES = 1_500_000L;
 	/** Sizes within a megabyte of each other count as the same size. */
@@ -98,8 +98,10 @@ final class MapViewerPrewarm {
 				viewer.unitAckSoundsTable, viewer.terrain.uberSplatTable);
 		viewer.renderUnitTypeData = types;
 		viewer.renderUnitTypeDataObjects = viewer.allObjectData;
+		types.warmModelLookups();
 
 		final String script = readMapScript(viewer);
+		viewer.typeUsage = new MapTypeUsage(script);
 		viewer.scriptSpeaksLines = script.contains("Transmission") || script.contains("CinematicScene")
 				|| script.contains("Dialogue");
 		viewer.prefetchFrameTemplates();
@@ -164,11 +166,16 @@ final class MapViewerPrewarm {
 		typeIds.addAll(createdTypes(SCRIPT_UNIT_CREATION, script));
 		loader.addSlices(typeIds.iterator(), typeId -> loadSimulationType(viewer.simulation, typeId), () -> {
 		});
-		loader.addLoadTask(() -> queuePathingData(viewer, typeIds, loader));
+		loader.addLoadTask(() -> queuePathingData(viewer, typeIds, script, loader));
 	}
 
-	/** The path search data of the walking sizes among the types, one size at a time, as the first orders need it. */
-	private static void queuePathingData(final War3MapViewer viewer, final Set<War3ID> typeIds,
+	/**
+	 * The path search data of the walking sizes among the types, one size at a time, as the first orders need it. A
+	 * script that makes its units through variables (a map's own creep tables) names no type in a creation call, so the
+	 * types it has as raw codes anywhere follow the ones it makes plainly: otherwise the first search of each size
+	 * finds the parts of the whole map in the step that orders it.
+	 */
+	private static void queuePathingData(final War3MapViewer viewer, final Set<War3ID> typeIds, final String script,
 			final MapLoader loader) throws IOException {
 		final Set<String> sizes = new LinkedHashSet<>();
 		final List<CUnitType> walkers = new ArrayList<>();
@@ -179,8 +186,105 @@ final class MapViewerPrewarm {
 				walkers.add(type);
 			}
 		}
+		if (walkers.size() < 4) {
+			for (final War3ID typeId : rawCodes(script)) {
+				if (typeIds.contains(typeId)) {
+					continue;
+				}
+				final CUnitType type = viewer.simulation.getUnitData().getUnitTypeLightweight(typeId);
+				if ((type != null) && (type.getSpeed() > 0) && !type.isBuilding()
+						&& (type.getMovementType() != PathingGrid.MovementType.FLY)
+						&& sizes.add(type.getMovementType() + ":" + type.getCollisionSize())) {
+					walkers.add(type);
+					if (walkers.size() >= 4) {
+						break;
+					}
+				}
+			}
+		}
+		if (viewer.playsOpeningSteps()) {
+			viewer.deferPathingParts(walkers);
+		}
 		loader.addSlices(walkers.iterator(), viewer.simulation::prewarmPathing, () -> {
 		});
+	}
+
+	private static final char QUOTE = '\'';
+
+	/** Every four-character code in single quotes in the script, most often named first. */
+	static List<War3ID> rawCodes(final String script) {
+		final Map<War3ID, int[]> counts = new LinkedHashMap<>();
+		scanQuotedCodes(script, counts);
+		scanIntegerCodes(script, counts);
+		return mostOftenFirst(counts);
+	}
+
+	private static void scanQuotedCodes(final String script, final Map<War3ID, int[]> counts) {
+		final int length = script.length();
+		for (int i = 0; (i + 5) < length; i++) {
+			if ((script.charAt(i) == QUOTE) && (script.charAt(i + 5) == QUOTE)) {
+				boolean word = true;
+				for (int j = i + 1; j < (i + 5); j++) {
+					word &= isWordChar(script.charAt(j));
+				}
+				if (word) {
+					counts.computeIfAbsent(War3ID.fromString(script.substring(i + 1, i + 5)), id -> new int[1])[0]++;
+					i += 5;
+				}
+			}
+		}
+	}
+
+	/**
+	 * Raw codes written as decimal integers (map script optimizers replace 'h001' with its number): nine or ten digits
+	 * whose four bytes are all letters or digits, the first a letter.
+	 */
+	private static void scanIntegerCodes(final String script, final Map<War3ID, int[]> counts) {
+		final int length = script.length();
+		int i = 0;
+		while (i < length) {
+			if (!isDigit(script.charAt(i))) {
+				i++;
+				continue;
+			}
+			final int start = i;
+			long value = 0;
+			while ((i < length) && isDigit(script.charAt(i))) {
+				value = (value * 10) + (script.charAt(i) - '0');
+				i++;
+				if (value > 0xFFFFFFFFL) {
+					break;
+				}
+			}
+			final int digits = i - start;
+			final boolean standalone = (start == 0) || (!isWordChar(script.charAt(start - 1))
+					&& (script.charAt(start - 1) != '.'));
+			if ((digits < 9) || (digits > 10) || (value > 0x7A7A7A7AL) || !standalone
+					|| ((i < length) && (isWordChar(script.charAt(i)) || (script.charAt(i) == '.')))) {
+				while ((i < length) && isWordChar(script.charAt(i))) {
+					i++;
+				}
+				continue;
+			}
+			final char[] code = new char[4];
+			boolean valid = true;
+			for (int j = 0; j < 4; j++) {
+				final char c = (char) ((value >>> (24 - (8 * j))) & 0xFF);
+				code[j] = c;
+				valid &= isWordChar(c);
+			}
+			if (valid && Character.isLetter(code[0])) {
+				counts.computeIfAbsent(War3ID.fromString(new String(code)), id -> new int[1])[0]++;
+			}
+		}
+	}
+
+	private static boolean isDigit(final char c) {
+		return (c >= '0') && (c <= '9');
+	}
+
+	private static boolean isWordChar(final char c) {
+		return (c == '_') || isDigit(c) || ((c >= 'A') && (c <= 'Z')) || ((c >= 'a') && (c <= 'z'));
 	}
 
 	/** The effect a creep falls asleep under, which a creep made at night shows in the first step. */
@@ -249,18 +353,35 @@ final class MapViewerPrewarm {
 		final Map<War3ID, int[]> counts = new LinkedHashMap<>();
 		final Matcher matcher = call.matcher(script);
 		while (matcher.find()) {
-			int lineEnd = script.indexOf('\n', matcher.end());
-			if (lineEnd == -1) {
-				lineEnd = script.length();
-			}
 			// Not a region of the whole script: on Android each matcher keeps a native copy of its input until the
 			// collector frees it, and there is one for every call in the script.
-			final Matcher raw = RAW_CODE.matcher(script.substring(matcher.end(), lineEnd));
-			if (raw.find()) {
-				counts.computeIfAbsent(War3ID.fromString(raw.group(1)), id -> new int[1])[0]++;
+			final War3ID typeId = firstRawCode(script.substring(matcher.end(), lineEnd(script, matcher.end())));
+			if (typeId != null) {
+				counts.computeIfAbsent(typeId, id -> new int[1])[0]++;
 			}
 		}
 		return mostOftenFirst(counts);
+	}
+
+	/** The end of the line that holds the position: a line ends with a line feed or a carriage return. */
+	private static int lineEnd(final String script, final int from) {
+		for (int i = from, n = script.length(); i < n; i++) {
+			final char c = script.charAt(i);
+			if ((c == '\n') || (c == '\r')) {
+				return i;
+			}
+		}
+		return script.length();
+	}
+
+	/** The raw code a piece of script names first: in single quotes if it has one, else written as a number. */
+	private static War3ID firstRawCode(final String text) {
+		final Map<War3ID, int[]> counts = new LinkedHashMap<>();
+		scanQuotedCodes(text, counts);
+		if (counts.isEmpty()) {
+			scanIntegerCodes(text, counts);
+		}
+		return counts.isEmpty() ? null : counts.keySet().iterator().next();
 	}
 
 	/**
@@ -271,18 +392,18 @@ final class MapViewerPrewarm {
 		final Map<War3ID, Set<Integer>> variations = new LinkedHashMap<>();
 		final Matcher matcher = SCRIPT_DESTRUCTABLE_CALL.matcher(script);
 		while (matcher.find()) {
-			int lineEnd = script.indexOf('\n', matcher.end());
-			if (lineEnd == -1) {
-				lineEnd = script.length();
-			}
+			final int lineEnd = lineEnd(script, matcher.end());
 			final List<String> arguments = splitArguments(script.substring(matcher.end(), lineEnd));
 			// The argument order of the natives: type, x, y, [z], face, [pitch, roll], scale, variation.
 			final String name = matcher.group(1);
 			final int index = 5 + (name.contains("DestructableZ") ? 1 : 0) + (name.contains("PitchRoll") ? 2 : 0);
-			if ((arguments.size() <= index) || !RAW_CODE.matcher(arguments.get(0)).matches()) {
+			if (arguments.size() <= index) {
 				continue;
 			}
-			final War3ID typeId = War3ID.fromString(arguments.get(0).substring(1, 5));
+			final War3ID typeId = firstRawCode(arguments.get(0));
+			if (typeId == null) {
+				continue;
+			}
 			try {
 				final int variation = Integer.parseInt(arguments.get(index));
 				variations.computeIfAbsent(typeId, id -> new LinkedHashSet<>()).add(variation);
@@ -303,7 +424,7 @@ final class MapViewerPrewarm {
 		for (int i = 0; i < text.length(); i++) {
 			final char c = text.charAt(i);
 			if (quoted) {
-				quoted = c != '"' && c != '\n';
+				quoted = c != '"' && c != '\n' && c != '\r';
 			}
 			else if (c == '"') {
 				quoted = true;
@@ -325,12 +446,7 @@ final class MapViewerPrewarm {
 
 	/** Every raw code in a script, most often named first. */
 	static List<War3ID> namedTypes(final String script) {
-		final Map<War3ID, int[]> counts = new LinkedHashMap<>();
-		final Matcher matcher = RAW_CODE.matcher(script);
-		while (matcher.find()) {
-			counts.computeIfAbsent(War3ID.fromString(matcher.group(1)), id -> new int[1])[0]++;
-		}
-		return mostOftenFirst(counts);
+		return rawCodes(script);
 	}
 
 	private static List<War3ID> mostOftenFirst(final Map<War3ID, int[]> counts) {
@@ -371,7 +487,7 @@ final class MapViewerPrewarm {
 	 */
 	private static void queueScriptCreations(final War3MapViewer viewer, final String script,
 			final Set<War3ID> known, final RenderUnitTypeData types, final RenderItemTypeData items,
-			final MapLoader loader) {
+			final MapLoader loader) throws IOException {
 		final long budget = scriptCreationBudget(GraphicsSettings.deviceMemoryMb(), Runtime.getRuntime().maxMemory());
 		if (budget <= 0) {
 			return;
@@ -416,12 +532,47 @@ final class MapViewerPrewarm {
 		// The sort keeps the order of the script among types of about the same size.
 		created.sort(Comparator.comparingLong(Candidate::cost));
 		named.sort(Comparator.comparingLong(Candidate::cost));
-		final Deque<Candidate> pending = new ArrayDeque<>(created);
-		pending.addAll(named);
+		final List<Candidate> learned = new ArrayList<>();
+		final Set<String> learnedKeys = new LinkedHashSet<>();
+		if (viewer.typeUsage != null) {
+			for (final War3ID typeId : viewer.typeUsage.typesByTick()) {
+				if (!known.contains(typeId) && (viewer.allObjectData.getUnits().get(typeId) != null)) {
+					final Candidate candidate = new Candidate("u" + typeId, () -> load(viewer, types, null, typeId));
+					candidate.bytes = seen.getOrDefault(candidate.key, -1L);
+					learned.add(candidate);
+					learnedKeys.add(candidate.key);
+				}
+			}
+		}
+		// What earlier games made comes first, earliest made first. The wait for the textures after each type, which
+		// measures it, is not needed for these: they load side by side until together they take what the budget says.
+		final long learnedBudget = Math.max(budget, learnedBudget(budget, Runtime.getRuntime().maxMemory()));
+		final Deque<Candidate> pending = new ArrayDeque<>();
+		for (final Candidate candidate : created) {
+			if (!learnedKeys.contains(candidate.key)) {
+				pending.add(candidate);
+			}
+		}
+		for (final Candidate candidate : named) {
+			if (!learnedKeys.contains(candidate.key)) {
+				pending.add(candidate);
+			}
+		}
+		final long baseline = viewer.getTextureBytes();
 		final long started = System.nanoTime();
-		final int total = pending.size();
-		loader.addNextTask(loader.settled(loader.modelTask(() -> loadScriptCreations(viewer, pending, budget,
-				viewer.getTextureBytes(), started, 0, total, null, 0, seen, loader))));
+		final int total = pending.size() + learned.size();
+		final int[] loadedAhead = new int[1];
+		loader.addSlices(learned.iterator(), candidate -> {
+			candidate.load.run();
+			loadedAhead[0]++;
+		}, () -> ((viewer.getTextureBytes() - baseline) + (loadedAhead[0] * MODEL_HEAP_BYTES)) < learnedBudget,
+				() -> loader.addNextTask(loader.settled(loader.modelTask(() -> loadScriptCreations(viewer, pending,
+						budget, baseline, started, loadedAhead[0], total, null, 0, seen, loader)))));
+	}
+
+	/** What the types earlier games of the map made may take: they are made in the game anyway, a little later. */
+	static long learnedBudget(final long budget, final long maxHeapBytes) {
+		return Math.min(maxHeapBytes / 2, budget * 6);
 	}
 
 	private static void loadScriptCreations(final War3MapViewer viewer, final Deque<Candidate> pending,
@@ -844,6 +995,7 @@ final class MapViewerPrewarm {
 		try {
 			final RenderUnitType type = types.get(typeId);
 			if (type != null) {
+				type.getPortraitModel();
 				// The building's ground texture, which its unit's first frame loaded otherwise.
 				if (type.getUberSplat() != null) {
 					viewer.load(type.getUberSplat(), PathSolver.DEFAULT, null);

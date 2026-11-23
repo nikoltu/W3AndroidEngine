@@ -9,6 +9,7 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.Signature;
+import android.content.res.Resources;
 import android.os.Build;
 
 import com.etheller.warsmash.BuildInfo;
@@ -17,6 +18,8 @@ import com.etheller.warsmash.launcher.BuildOrigin;
 /** Tells the engine which certificate this APK is signed with, so that it knows whether it is an official build. */
 public class WarsmashApplication extends Application {
 	private static volatile String signer = "";
+	/** The resources in the game language, set by the launcher; null while the language of the system is used. */
+	private static volatile Resources languageResources;
 
 	@Override
 	public void onCreate() {
@@ -24,14 +27,21 @@ public class WarsmashApplication extends Application {
 		signer = signingCertificateSha256();
 		BuildInfo.setSigningCertificate(signer);
 		ProfileStorageAndroid.init(this);
+		DataFolderActivity.useFolderCache(this);
+		EngineResources.prepareInBackground(this);
 		com.etheller.warsmash.lan.LanSessions.setNetwork(new AndroidLanNetwork(this));
-		com.etheller.warsmash.launcher.lan.LanText.use((name, arguments) -> {
-			final int id = getResources().getIdentifier(name, "string", R.class.getPackage().getName());
+		com.etheller.warsmash.launcher.LauncherText.use((name, arguments) -> {
+			final Resources words = languageResources != null ? languageResources : getResources();
+			final int id = words.getIdentifier(name, "string", R.class.getPackage().getName());
 			if (id == 0) {
 				return name;
 			}
-			return arguments.length == 0 ? getString(id) : getString(id, arguments);
+			return arguments.length == 0 ? words.getString(id) : words.getString(id, arguments);
 		});
+	}
+
+	static void useLanguageResources(final Resources resources) {
+		languageResources = resources;
 	}
 
 	/** The not-official notice or "Debug build" when this APK is not signed with the project's key, else an empty text. */

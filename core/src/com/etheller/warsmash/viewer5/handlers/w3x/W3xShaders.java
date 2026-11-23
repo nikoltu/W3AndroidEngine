@@ -88,6 +88,16 @@ public class W3xShaders {
 				"    uniform sampler2D u_texture;\r\n" + //
 				"    uniform sampler2D u_shadowMap;\r\n" + //
 				"    uniform sampler2D u_fogOfWarMap;\r\n" + //
+				"    uniform vec2 u_fogTexel;\r\n" + //
+				"    float softFog(sampler2D map, vec2 uv) {\r\n" + //
+				"      vec2 t = u_fogTexel;\r\n" + //
+				"      float m = texture2D(map, uv).r * 0.25;\r\n" + //
+				"      m += (texture2D(map, uv + vec2(t.x, 0.0)).r + texture2D(map, uv - vec2(t.x, 0.0)).r\r\n" + //
+				"          + texture2D(map, uv + vec2(0.0, t.y)).r + texture2D(map, uv - vec2(0.0, t.y)).r) * 0.125;\r\n" + //
+				"      m += (texture2D(map, uv + t).r + texture2D(map, uv - t).r\r\n" + //
+				"          + texture2D(map, uv + vec2(t.x, -t.y)).r + texture2D(map, uv + vec2(-t.x, t.y)).r) * 0.0625;\r\n" + //
+				"      return m;\r\n" + //
+				"    }\r\n" + //
 				"    uniform vec4 u_color;\r\n" + //
 				"    uniform bool u_show_lighting;\r\n" + //
 				"    uniform bool u_unfogged;\r\n" + //
@@ -107,7 +117,7 @@ public class W3xShaders {
 				"      }\r\n" + //
 				"      vec4 color = texture2D(u_texture, clamp(v_uv, 0.0, 1.0)).rgba * u_color;\r\n" + //
 				"      float shadow = texture2D(u_shadowMap, v_suv).r;\r\n" + //
-				"      float fogOfWarData = texture2D(u_fogOfWarMap, v_suv).r;\r\n" + //
+				"      float fogOfWarData = softFog(u_fogOfWarMap, v_suv);\r\n" + //
 				"      shadow = clamp(shadow + fogOfWarData, 0.0, 1.0);\r\n" + //
 				// " color.xyz *= clamp(dot(v_normal, lightDirection) + 0.45, 0.0, 1.0);\r\n" +
 				// //

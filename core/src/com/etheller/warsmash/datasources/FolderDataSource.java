@@ -11,10 +11,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.nio.file.attribute.FileTime;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -56,33 +55,118 @@ public class FolderDataSource implements DataSource {
 
 	/**
 	 * The data sources are made again for every game, and listing a data folder of tens of thousands of files took
-	 * seconds on phones. An index is reused while no folder in it has changed (adding or removing a file changes its
-	 * folder's modification time). Folders that cannot be read are left out instead of failing the whole source.
+	 * seconds on phones (half a minute over the shared storage). An index is reused while no folder in it has changed
+	 * (adding or removing a file changes its folder's modification time), and a large one is kept in a file by
+	 * {@link FolderIndexStore} for the next start of the app. Folders that cannot be read are left out instead of
+	 * failing the whole source; an index made of such a folder is not kept.
 	 */
 	private static final Map<Path, FolderIndex> INDEXES = new HashMap<>();
 
-	private static final long SETTLE_MILLIS = 2500;
+	/** Walks made, for the tests. */
+	static final java.util.concurrent.atomic.AtomicInteger WALKS = new java.util.concurrent.atomic.AtomicInteger();
+
+	/** Forgets the index of a folder, in memory and in its file: the folder was changed by something that knows not what. */
+	public static void dropIndex(final File folder) {
+		synchronized (INDEXES) {
+			INDEXES.remove(folder.toPath());
+		}
+		FolderIndexStore.remove(folder);
+	}
+
+	/**
+	 * Makes the index of a folder anew after an import changed it, so that the first game after the import does not
+	 * walk it. Only where indexes are kept in files; elsewhere the index is made when a game asks for it. A folder
+	 * that changed a moment ago is waited for until it can be kept, as the file system's times need.
+	 */
+	public static void reindex(final File folder) {
+		dropIndex(folder);
+		if (!FolderIndexStore.isUsed()) {
+			return;
+		}
+		final Path path = folder.toPath();
+		try {
+			FolderIndex index = new FolderIndex(path);
+			if (!index.settled) {
+				final long wait = Math.min(FolderSignature.settleMillis, index.millisToSettle(System.currentTimeMillis()));
+				Thread.sleep(Math.max(0, wait) + 50);
+				index = new FolderIndex(path);
+			}
+			synchronized (INDEXES) {
+				INDEXES.put(path, index);
+			}
+		}
+		catch (final InterruptedException e) {
+			Thread.currentThread().interrupt();
+		}
+		catch (final RuntimeException e) {
+			// The import is done; the index is made when a game asks for it.
+			Log.warn("The folder index cannot be made after an import: " + e);
+		}
+	}
+
+	/** Forgets the indexes held in memory, as a new start of the app does; for the tests. */
+	static void forgetIndexes() {
+		synchronized (INDEXES) {
+			INDEXES.clear();
+		}
+	}
 
 	private static final class FolderIndex {
-		private final Set<String> listfile = new HashSet<>();
+		// In the order of the walk, so that names that differ in case alone are resolved as they were the first time.
+		private final Set<String> listfile = new LinkedHashSet<>();
 		private final Map<String, String> lowerCaseToStoredPath = new HashMap<>();
 		private final IntSet keyHashes = new IntSet();
-		private final Map<Path, FileTime> folderTimes = new HashMap<>();
+		private final FolderSignature signature = new FolderSignature();
+		private final File folder;
 		/**
 		 * False when a folder changed so shortly before the listing that a file added right after it would leave the
 		 * modification time as it was (file systems stamp folders coarsely, FAT in two seconds).
 		 */
 		private boolean settled = true;
+		private boolean complete = true;
 
 		private FolderIndex(final Path folderPath) {
+			this.folder = folderPath.toFile();
+			final FolderIndexStore.Kept kept = FolderIndexStore.load(this.folder);
+			if (kept != null) {
+				this.signature.copyFrom(kept.signature);
+				for (final String relativePath : kept.files) {
+					add(relativePath);
+				}
+				return;
+			}
+			walk(folderPath);
+			if (this.settled && this.complete) {
+				FolderIndexStore.save(this.folder, this.signature, this.listfile);
+			}
+			else {
+				FolderIndexStore.remove(this.folder);
+			}
+		}
+
+		private void add(final String relativePath) {
+			this.listfile.add(relativePath);
+			final String key = relativePath.toLowerCase(Locale.US);
+			this.lowerCaseToStoredPath.put(key, relativePath);
+			this.keyHashes.add(key.hashCode());
+		}
+
+		private void walk(final Path folderPath) {
+			WALKS.incrementAndGet();
 			final long listedAt = System.currentTimeMillis();
 			try {
 				Files.walkFileTree(folderPath, new SimpleFileVisitor<Path>() {
 					@Override
 					public FileVisitResult preVisitDirectory(final Path dir, final BasicFileAttributes attrs) {
-						FolderIndex.this.folderTimes.put(dir, attrs.lastModifiedTime());
-						if (listedAt - attrs.lastModifiedTime().toMillis() < SETTLE_MILLIS) {
-							FolderIndex.this.settled = false;
+						// Read before the folder is listed, so that a change during the walk shows at the next check, and
+						// as the signature reads it (File and the attributes round a time of less than a millisecond
+						// differently).
+						final String relative = FolderSignature.relative(FolderIndex.this.folder, dir.toFile());
+						if (relative == null) {
+							FolderIndex.this.complete = false;
+						}
+						else {
+							FolderIndex.this.signature.dirs.put(relative, dir.toFile().lastModified());
 						}
 						return FileVisitResult.CONTINUE;
 					}
@@ -91,10 +175,13 @@ public class FolderDataSource implements DataSource {
 					public FileVisitResult visitFile(final Path file, final BasicFileAttributes attrs) {
 						if (attrs.isRegularFile()) {
 							final String relativePath = folderPath.relativize(file).toString();
-							FolderIndex.this.listfile.add(relativePath);
-							final String key = relativePath.toLowerCase(Locale.US);
-							FolderIndex.this.lowerCaseToStoredPath.put(key, relativePath);
-							FolderIndex.this.keyHashes.add(key.hashCode());
+							add(relativePath);
+							final String slashed = relativePath.replace(File.separatorChar, '/');
+							// A file that cannot be opened would make the index look changed at every check.
+							if (FolderSignature.isOpenedFile(slashed) && FolderSignature.isReadable(file.toFile())) {
+								FolderIndex.this.signature.keys.put(slashed,
+										new long[] { attrs.size(), file.toFile().lastModified() });
+							}
 						}
 						return FileVisitResult.CONTINUE;
 					}
@@ -102,6 +189,7 @@ public class FolderDataSource implements DataSource {
 					@Override
 					public FileVisitResult visitFileFailed(final Path file, final IOException exc) {
 						Log.error("Data folder entry left out, it cannot be read: " + exc);
+						FolderIndex.this.complete = false;
 						return FileVisitResult.CONTINUE;
 					}
 
@@ -109,6 +197,7 @@ public class FolderDataSource implements DataSource {
 					public FileVisitResult postVisitDirectory(final Path dir, final IOException exc) {
 						if (exc != null) {
 							Log.error("Data folder listed only in part, it cannot be read: " + exc);
+							FolderIndex.this.complete = false;
 						}
 						return FileVisitResult.CONTINUE;
 					}
@@ -117,23 +206,22 @@ public class FolderDataSource implements DataSource {
 			catch (final IOException e) {
 				throw new RuntimeException(e);
 			}
+			this.settled = this.signature.settled(listedAt);
 		}
 
 		private boolean isCurrent() {
-			if (!this.settled) {
+			if (!this.signature.matches(this.folder)) {
 				return false;
 			}
-			for (final Map.Entry<Path, FileTime> folder : this.folderTimes.entrySet()) {
-				try {
-					if (!Files.getLastModifiedTime(folder.getKey()).equals(folder.getValue())) {
-						return false;
-					}
-				}
-				catch (final IOException e) {
-					return false;
-				}
-			}
-			return true;
+			// A large folder that had just changed when it was walked is not walked at every call until it has settled
+			// (seconds over the shared storage of a phone): its index is used meanwhile and made once more then. A
+			// small one is walked at once, so that a file added right after the listing is never missed.
+			return this.settled || (this.listfile.size() >= FolderIndexStore.MIN_FILES
+					&& (System.currentTimeMillis() - this.signature.newest() < FolderSignature.settleMillis));
+		}
+
+		private long millisToSettle(final long now) {
+			return FolderSignature.settleMillis - (now - this.signature.newest());
 		}
 	}
 

@@ -235,8 +235,12 @@ final class RegionNatives extends CommonNatives {
 				(arguments, globalScope, triggerScope) -> {
 					final CRegion whichRegion = arguments.get(0)
 							.visit(ObjectJassValueVisitor.<CRegion>getInstance());
-					final CUnit whichUnit = arguments.get(1).visit(ObjectJassValueVisitor.<CUnit>getInstance());
-					return BooleanJassValue.of(whichUnit.isInRegion(whichRegion));
+					final CUnit whichUnit = nullable(arguments, 1, ObjectJassValueVisitor.<CUnit>getInstance());
+					if ((whichRegion == null) || (whichUnit == null)) {
+						return BooleanJassValue.FALSE;
+					}
+					return BooleanJassValue
+							.of(whichUnit.isInRegion(whichRegion, this.simulation.getRegionManager()));
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("IsPointInRegion",
 				(arguments, globalScope, triggerScope) -> {

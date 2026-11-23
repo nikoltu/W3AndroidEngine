@@ -30,6 +30,9 @@ public class WebGL {
 	public final com.badlogic.gdx.graphics.Texture emptyTexture;
 	/** Stands for a texture that is not uploaded yet, so what uses it draws nothing. */
 	private final com.badlogic.gdx.graphics.Texture transparentTexture;
+	/** Stand in for a normal map and an ORM map that could not be read, made when first needed. */
+	private com.badlogic.gdx.graphics.Texture neutralNormalTexture;
+	private com.badlogic.gdx.graphics.Texture neutralOrmTexture;
 	public ANGLEInstancedArrays instancedArrays;
 
 	public WebGL(final GL20 gl) {
@@ -68,6 +71,44 @@ public class WebGL {
 		this.currentShaderProgram = null;
 		this.emptyTexture.dispose();
 		this.transparentTexture.dispose();
+		if (this.neutralNormalTexture != null) {
+			this.neutralNormalTexture.dispose();
+			this.neutralNormalTexture = null;
+		}
+		if (this.neutralOrmTexture != null) {
+			this.neutralOrmTexture.dispose();
+			this.neutralOrmTexture = null;
+		}
+	}
+
+	/** Binds a normal map that leaves the surface flat, for a normal map that could not be read. */
+	public void bindNeutralNormal(final int unit) {
+		if (this.neutralNormalTexture == null) {
+			this.neutralNormalTexture = solidTexture(0x8080FFFF);
+		}
+		this.gl.glActiveTexture(GL20.GL_TEXTURE0 + unit);
+		this.neutralNormalTexture.bind();
+	}
+
+	/**
+	 * Binds an ORM map for a rough, unoccluded, non-metal surface with no team colour, for an ORM map that could not be
+	 * read.
+	 */
+	public void bindNeutralOrm(final int unit) {
+		if (this.neutralOrmTexture == null) {
+			this.neutralOrmTexture = solidTexture(0xFFCC0000);
+		}
+		this.gl.glActiveTexture(GL20.GL_TEXTURE0 + unit);
+		this.neutralOrmTexture.bind();
+	}
+
+	private static com.badlogic.gdx.graphics.Texture solidTexture(final int rgba8888) {
+		final Pixmap pixmap = new Pixmap(2, 2, Pixmap.Format.RGBA8888);
+		pixmap.setColor(rgba8888);
+		pixmap.fill();
+		final com.badlogic.gdx.graphics.Texture texture = new com.badlogic.gdx.graphics.Texture(pixmap);
+		pixmap.dispose();
+		return texture;
 	}
 
 	public ShaderProgram createShaderProgram(String vertexSrc, String fragmentSrc) {
@@ -92,13 +133,13 @@ public class WebGL {
 		if (shaderProgram.isCompiled()) {
 			return shaderProgram;
 		}
-		else {
-			Log.warn(shaderProgram.getLog());
-			if (true) {
-				throw new IllegalStateException("Bad shader");
-			}
-		}
-		return null;
+		shaderPrograms.remove(hash);
+		final String report = ShaderFailure.describe(this.gl, vertexSrc, fragmentSrc, shaderProgram.getLog());
+		shaderProgram.dispose();
+		Log.error(report);
+		Log.error(ShaderFailure.numbered("Vertex shader source", vertexSrc));
+		Log.error(ShaderFailure.numbered("Fragment shader source", fragmentSrc));
+		throw new ShaderFailure(report);
 	}
 
 	/**

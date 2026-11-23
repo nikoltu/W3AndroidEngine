@@ -51,7 +51,9 @@ public class AttachmentInstance implements UpdatableObject {
 		final MdxModel internalModel = attachment.internalModel;
 		final MdxComplexInstance internalInstance = (MdxComplexInstance) internalModel.addInstance();
 
-		internalInstance.setSequenceLoopMode(SequenceLoopMode.ALWAYS_LOOP);
+		// An attached model keeps the model's own loops: a collapse model that plays once with its parent (the rubble of
+		// a gate) must stop on its last frame, not fall again and again.
+		internalInstance.setSequenceLoopMode(SequenceLoopMode.MODEL_LOOP);
 		internalInstance.dontInheritScaling = false;
 		internalInstance.hide();
 		internalInstance.setParent(instance.nodes[attachment.objectId]);

@@ -19,6 +19,8 @@ public final class MdxShadowCaster {
 	private static final int MARCH_STEPS = 6;
 	/** In place of the steps: the ground is level, the shadow lands on the plane of the ground under the caster. */
 	private static final int FLAT = -1;
+	/** What of a shape is below the ground by more than this is under it, and casts no shadow. */
+	private static final int BURIED = 4;
 	private static final int HEIGHT_UNIT = 5;
 	private static final int BONE_UNIT = 15;
 
@@ -31,6 +33,7 @@ public final class MdxShadowCaster {
 			"    attribute vec3 a_position;\r\n" + //
 			"    attribute vec2 a_uv;\r\n" + //
 			"    varying vec2 v_uv;\r\n" + //
+			"    varying float v_height;\r\n" + //
 			"    float groundAt(vec2 xy) {\r\n" + //
 			"      return texture2D(u_heights, (xy - u_heightOrigin) * (u_heightPixel / 128.0) + u_heightPixel * 0.5).r * 128.0;\r\n"
 			+ //
@@ -39,7 +42,8 @@ public final class MdxShadowCaster {
 
 	private static String flatten(final int steps) {
 		if (steps == FLAT) {
-			return "      position.xy -= u_light.xy * (max(position.z - u_groundZ, 0.0) / u_light.z);\r\n" + //
+			return "      v_height = position.z - u_groundZ;\r\n" + //
+					"      position.xy -= u_light.xy * (max(position.z - u_groundZ, 0.0) / u_light.z);\r\n" + //
 					"      position.z = u_groundZ;\r\n" + //
 					"      v_uv = a_uv;\r\n" + //
 					"      gl_Position = u_vp * vec4(position, 1.0);\r\n" + //
@@ -48,6 +52,7 @@ public final class MdxShadowCaster {
 		return ("      float span = (position.z - u_groundZ + " + SHADOW_DEPTH + ".0) / u_light.z;\r\n" + //
 				"      float stride = span / STEPS.0;\r\n" + //
 				"      float previous = position.z - groundAt(position.xy);\r\n" + //
+				"      v_height = previous;\r\n" + //
 				"      float hit = previous <= 0.0 ? 0.0 : span;\r\n" + //
 				"      if (previous > 0.0) {\r\n" + //
 				"        for (int i = 1; i <= STEPS; i++) {\r\n" + //
@@ -123,7 +128,11 @@ public final class MdxShadowCaster {
 	private static final String FRAGMENT = "    uniform sampler2D u_texture;\r\n" + //
 			"    uniform bool u_cutout;\r\n" + //
 			"    varying vec2 v_uv;\r\n" + //
+			"    varying float v_height;\r\n" + //
 			"    void main() {\r\n" + //
+			"      if (v_height < -" + BURIED + ".0) {\r\n" + //
+			"        discard;\r\n" + //
+			"      }\r\n" + //
 			"      if (u_cutout && (texture2D(u_texture, v_uv).a < 0.6)) {\r\n" + //
 			"        discard;\r\n" + //
 			"      }\r\n" + //

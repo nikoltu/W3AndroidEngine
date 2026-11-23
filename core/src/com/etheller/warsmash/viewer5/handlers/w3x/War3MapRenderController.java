@@ -397,6 +397,17 @@ public class War3MapRenderController implements SimulationRenderController, Rend
 	}
 
 	@Override
+	public void removeItem(final CItem item) {
+		final RenderItem renderItem = this.viewer.itemToRenderPeer.remove(item);
+		if (renderItem == null) {
+			return;
+		}
+		this.viewer.widgets.remove(renderItem);
+		this.viewer.worldScene.removeInstance(renderItem.instance);
+		renderItem.onRemove(this.viewer);
+	}
+
+	@Override
 	public void removeDestructable(final CDestructable dest) {
 		final RenderDestructable renderPeer = this.viewer.destructableToRenderPeer
 				.remove(dest);
@@ -492,6 +503,9 @@ public class War3MapRenderController implements SimulationRenderController, Rend
 	public void spawnDeathExplodeEffect(final CUnit source,
 			final War3ID explodesOnDeathBuffId) {
 		final RenderUnit renderUnit = this.viewer.unitToRenderPeer.get(source);
+		if (renderUnit == null) {
+			return;
+		}
 		MdxComplexInstance modelInstance = null;
 		if (explodesOnDeathBuffId != null) {
 			EffectAttachmentUI effectAttachmentUI = this.viewer.getEffectAttachmentUI(explodesOnDeathBuffId,
@@ -536,6 +550,9 @@ public class War3MapRenderController implements SimulationRenderController, Rend
 	@Override
 	public void heroRevived(final CUnit source, final boolean doEyecandy) {
 		final RenderUnit renderUnit = this.viewer.unitToRenderPeer.get(source);
+		if (renderUnit == null) {
+			return;
+		}
 		renderUnit.instance.additiveOverrideMeshMode = false;
 		renderUnit.instance.setVertexAlpha(1.0f);
 		// Otherwise the model keeps the last frame of its death or dissipate animation, which floats out of sight.
@@ -563,6 +580,9 @@ public class War3MapRenderController implements SimulationRenderController, Rend
 	@Override
 	public void heroDeathEvent(final CUnit source) {
 		final RenderUnit renderUnit = this.viewer.unitToRenderPeer.get(source);
+		if (renderUnit == null) {
+			return;
+		}
 		renderUnit.instance.additiveOverrideMeshMode = true;
 	}
 
@@ -684,15 +704,18 @@ public class War3MapRenderController implements SimulationRenderController, Rend
 	@Override
 	public void unitRepositioned(final CUnit cUnit) {
 		final RenderUnit renderPeer = this.viewer.unitToRenderPeer.get(cUnit);
-		renderPeer.repositioned(this.viewer);
+		if (renderPeer != null) {
+			renderPeer.repositioned(this.viewer);
+		}
 	}
 
 	@Override
 	public void unitUpdatedType(final CUnit simulationUnit, final War3ID typeId,
 			final boolean updatePortrait) {
 		updateUnitType(simulationUnit, typeId, updatePortrait,
-				this.viewer.simulation.getPlayer(simulationUnit.getPlayerIndex()).getColor(), simulationUnit.getX(),
-				simulationUnit.getY(), simulationUnit.getFlyHeight());
+				simulationUnit.getTeamColorOverride() != -1 ? simulationUnit.getTeamColorOverride()
+						: this.viewer.simulation.getPlayer(simulationUnit.getPlayerIndex()).getColor(),
+				simulationUnit.getX(), simulationUnit.getY(), simulationUnit.getFlyHeight());
 	}
 
 	@Override
@@ -734,6 +757,9 @@ public class War3MapRenderController implements SimulationRenderController, Rend
 	@Override
 	public void changeUnitScale(final CUnit unit, final float scale, final boolean multiplier) {
 		final RenderUnit renderPeer = this.viewer.unitToRenderPeer.get(unit);
+		if (renderPeer == null) {
+			return;
+		}
 		if (multiplier) {
 			renderPeer.selectionScale *= scale;
 			Vector3 newScale = new Vector3(renderPeer.instance.localScale);
@@ -753,6 +779,14 @@ public class War3MapRenderController implements SimulationRenderController, Rend
 
 	@Override
 	public void changeUnitColorTo(final CUnit unit, final int color) {
+		final RenderUnit renderPeer = this.viewer.unitToRenderPeer.get(unit);
+		if (renderPeer != null) {
+			renderPeer.setPlayerColor(color);
+		}
+	}
+
+	@Override
+	public void setUnitTeamColor(final CUnit unit, final int color) {
 		final RenderUnit renderPeer = this.viewer.unitToRenderPeer.get(unit);
 		if (renderPeer != null) {
 			renderPeer.setPlayerColor(color);
@@ -860,7 +894,7 @@ public class War3MapRenderController implements SimulationRenderController, Rend
 	@Override
 	public void spawnUIUnitGetItemSound(final CUnit cUnit, final CItem item) {
 		final RenderUnit renderPeer = this.viewer.unitToRenderPeer.get(cUnit);
-		if (this.viewer.localPlayerIndex == renderPeer.getSimulationUnit().getPlayerIndex()) {
+		if ((renderPeer != null) && (this.viewer.localPlayerIndex == renderPeer.getSimulationUnit().getPlayerIndex())) {
 			this.viewer.uiSounds.getSound("ItemGet").play(
 					this.viewer.worldScene.audioContext, renderPeer.getX(),
 					renderPeer.getY(), renderPeer.getZ());
@@ -870,7 +904,7 @@ public class War3MapRenderController implements SimulationRenderController, Rend
 	@Override
 	public void spawnUIUnitDropItemSound(final CUnit cUnit, final CItem item) {
 		final RenderUnit renderPeer = this.viewer.unitToRenderPeer.get(cUnit);
-		if (this.viewer.localPlayerIndex == renderPeer.getSimulationUnit().getPlayerIndex()) {
+		if ((renderPeer != null) && (this.viewer.localPlayerIndex == renderPeer.getSimulationUnit().getPlayerIndex())) {
 			this.viewer.uiSounds.getSound("ItemDrop").play(
 					this.viewer.worldScene.audioContext, renderPeer.getX(),
 					renderPeer.getY(), renderPeer.getZ());

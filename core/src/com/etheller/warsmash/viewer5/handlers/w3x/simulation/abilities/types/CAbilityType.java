@@ -12,6 +12,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.AbstractC
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbility;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.ScriptFieldOverlay;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.generic.CLevelingAbility;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.impl.CAbilityTypeItemStatBonusLevelData;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.CTargetType;
 
 public abstract class CAbilityType<TYPE_LEVEL_DATA extends CAbilityTypeLevelData> {
@@ -101,6 +102,13 @@ public abstract class CAbilityType<TYPE_LEVEL_DATA extends CAbilityTypeLevelData
 			result.add(this.levelDataFactory.create(overlay, level));
 		}
 		return result;
+	}
+
+	/**
+	 * The attribute bonus an item ability of this type gives (strength, agility, intelligence), or null when it gives none.
+	 */
+	public CAbilityTypeItemStatBonusLevelData getItemStatBonus() {
+		return null;
 	}
 
 	public abstract CAbility createAbility(int handleId);

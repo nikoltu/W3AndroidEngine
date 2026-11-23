@@ -687,7 +687,9 @@ public class AIController {
 	 * about ten seconds after the script starts.
 	 */
 	public CUnit getMegaTarget() {
-		if ((this.megaTarget != null) && isGone(this.megaTarget)) {
+		// Measured: a target that has died is still returned until the next judgement; only one removed from the game
+		// is dropped at once.
+		if ((this.megaTarget != null) && this.megaTarget.isRemovedFromGame()) {
 			this.megaTarget = null;
 		}
 		return this.megaTarget;

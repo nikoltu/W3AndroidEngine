@@ -362,6 +362,11 @@ class BufferingRenderControllerTest {
 		}
 
 		@Override
+		public void removeItem(final CItem item) {
+			this.log.add("removeItem " + h(item));
+		}
+
+		@Override
 		public void removeDestructable(final CDestructable dest) {
 			this.log.add("removeDestructable " + h(dest));
 		}
@@ -536,6 +541,11 @@ class BufferingRenderControllerTest {
 		}
 
 		@Override
+		public void setUnitTeamColor(final CUnit unit, final int color) {
+			this.log.add("setUnitTeamColor " + h(unit) + " " + color);
+		}
+
+		@Override
 		public void changeUnitPlayerColor(final CUnit unit, final int previousColor, final int newColor) {
 			this.log.add("changeUnitPlayerColor " + h(unit) + " " + previousColor + " " + newColor);
 		}
@@ -597,6 +607,7 @@ class BufferingRenderControllerTest {
 		final CUnit other = c.createUnit(null, TYPE, 4, 1f, 2f, 3f);
 		final CItem item = c.createItem(null, TYPE, 5f, 6f);
 		c.updateItemModel(item);
+		c.removeItem(item);
 		final CDestructable dest = c.createDestructable(TYPE, 7f, 8f, 45f, 1.5f, 2);
 		final CDestructable destZ = c.createDestructableZ(TYPE, 9f, 10f, 11f, 12f, 0.75f, 3);
 
@@ -699,6 +710,7 @@ class BufferingRenderControllerTest {
 		c.unitUpdatedType(unit, TYPE, true);
 		c.changeUnitColor(unit, 6);
 		c.changeUnitPlayerColor(unit, 1, 2);
+		c.setUnitTeamColor(unit, 5);
 		c.changeUnitVertexColor(unit, new Color(0.1f, 0.2f, 0.3f, 0.4f));
 		c.changeUnitVertexColor(unit, 0.5f, 0.6f, 0.7f);
 		c.changeUnitVertexColor(unit, 0.8f, 0.9f, 1f, 0.5f);

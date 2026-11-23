@@ -589,7 +589,8 @@ final class MapViewerSimThread {
 		final War3MapViewer viewer = this.viewer;
 		drainOrdersNow();
 		publishPending();
-		if (viewer.gameEnded || viewer.worldHidden || viewer.isFastForwarding() || viewer.isGamePaused()) {
+		if (viewer.gameEnded || viewer.worldHidden || viewer.isFastForwarding()
+				|| viewer.isGamePausedOnSimulation()) {
 			return SimThread.BLOCKED;
 		}
 		if ((this.ring.capacity() - (this.ring.publishedCount() - this.ring.oldestHeld())) < 2) {

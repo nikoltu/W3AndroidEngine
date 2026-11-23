@@ -2,10 +2,13 @@ package com.etheller.warsmash.parsers.jass;
 
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Collection;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.List;
@@ -48,6 +51,7 @@ import com.etheller.warsmash.parsers.jass.triggers.UnitGroup;
 import com.etheller.warsmash.units.Element;
 import com.etheller.warsmash.util.GameDataConstants;
 import com.etheller.warsmash.util.Log;
+import com.etheller.warsmash.util.PerfStats;
 import com.etheller.warsmash.viewer5.Scene;
 import com.etheller.warsmash.viewer5.handlers.w3x.War3MapViewer;
 import com.etheller.warsmash.viewer5.handlers.w3x.save.SavedGame;
@@ -71,24 +75,84 @@ import static com.etheller.warsmash.parsers.jass.CommonNatives.nullable;
 public class Jass2 {
 	public static CommonEnvironment loadCommon(final DataSource dataSource, final Viewport uiViewport,
 			final Scene uiScene, final War3MapViewer war3MapViewer, final WarsmashUI meleeUI, final String... files) {
+		final CommonLoad load = new CommonLoad(dataSource, uiViewport, uiScene, war3MapViewer, meleeUI, files);
+		while (!load.next()) {
+		}
+		return load.getEnvironment();
+	}
 
-		final JassProgram jassProgramVisitor = new JassProgram();
-		final CommonEnvironment environment = new CommonEnvironment(jassProgramVisitor, dataSource, uiViewport, uiScene,
-				war3MapViewer, meleeUI, files);
-		// The scripts of the game are simulation data: the same for every graphics set.
-		final DataSource scripts = dataSource.graphicsIndependent();
-		final List<String> readPaths = new ArrayList<>();
-		for (final String file : files) {
+	/**
+	 * {@link #loadCommon} in slices: the natives, each script file, the initializers and each AI script's parse are
+	 * a slice of their own, in the order the one call ran them, so a loading screen can draw between them.
+	 */
+	public static final class CommonLoad {
+		private final DataSource dataSource;
+		private final Viewport uiViewport;
+		private final Scene uiScene;
+		private final War3MapViewer war3MapViewer;
+		private final WarsmashUI meleeUI;
+		private final String[] files;
+		private final Deque<Runnable> slices = new ArrayDeque<>();
+		private final List<String> readPaths = new ArrayList<>();
+		private JassProgram jassProgramVisitor;
+		private CommonEnvironment environment;
+		private DataSource scripts;
+		private int slicesRun;
+
+		public CommonLoad(final DataSource dataSource, final Viewport uiViewport, final Scene uiScene,
+				final War3MapViewer war3MapViewer, final WarsmashUI meleeUI, final String... files) {
+			this.dataSource = dataSource;
+			this.uiViewport = uiViewport;
+			this.uiScene = uiScene;
+			this.war3MapViewer = war3MapViewer;
+			this.meleeUI = meleeUI;
+			this.files = files;
+			this.slices.add(this::createEnvironment);
+		}
+
+		/** @return whether the load is done */
+		public boolean next() {
+			final Runnable slice = this.slices.pollFirst();
+			if (slice != null) {
+				final long start = System.nanoTime();
+				slice.run();
+				PerfStats.slowSetupPart("script slice " + this.slicesRun++, start);
+			}
+			return this.slices.isEmpty();
+		}
+
+		public CommonEnvironment getEnvironment() {
+			return this.environment;
+		}
+
+		private void createEnvironment() {
+			this.jassProgramVisitor = new JassProgram();
+			this.environment = new CommonEnvironment(this.jassProgramVisitor, this.dataSource, this.uiViewport,
+					this.uiScene, this.war3MapViewer, this.meleeUI, this.files);
+			// The scripts of the game are simulation data: the same for every graphics set.
+			this.scripts = this.dataSource.graphicsIndependent();
+			for (int part = 0; part < CommonEnvironment.NATIVE_PARTS; part++) {
+				final int nativePart = part;
+				this.slices.add(() -> this.environment.registerNatives(nativePart));
+			}
+			for (final String file : this.files) {
+				this.slices.add(() -> queueFile(file));
+			}
+			this.slices.add(this::initialize);
+		}
+
+		private void queueFile(final String file) {
 			String jassFilePath = file;
-			if (!scripts.has(jassFilePath)) {
+			final Deque<Runnable> reads = new ArrayDeque<>();
+			if (!this.scripts.has(jassFilePath)) {
 				jassFilePath = jassFilePath
 						.substring(Math.max(jassFilePath.lastIndexOf('/'), jassFilePath.lastIndexOf('\\')) + 1);
 			}
-			if (!scripts.has(jassFilePath)) {
+			if (!this.scripts.has(jassFilePath)) {
 				final String lowerCaseDirectoryPath = file.toLowerCase(Locale.US);
 				final String lowerCaseDirectoryPathLinux = file.toLowerCase(Locale.US).replace("\\", "/");
 
-				final Collection<String> listfile = scripts.getListfile();
+				final Collection<String> listfile = this.scripts.getListfile();
 				final Map<String, String> fixedListfile = new HashMap<>();
 				for (final String path : listfile) {
 					fixedListfile.put(path.toLowerCase(Locale.US), path);
@@ -98,35 +162,76 @@ public class Jass2 {
 					final String realPath = pathAndPath.getValue();
 					if (lowerCasePath.startsWith(lowerCaseDirectoryPath)
 							|| lowerCasePath.startsWith(lowerCaseDirectoryPathLinux)) {
-						environment.scriptFailed(readJassFile(scripts, jassProgramVisitor, realPath));
-						readPaths.add(realPath);
+						reads.add(() -> readFile(realPath));
 					}
 				}
 			}
 			else {
-				environment.scriptFailed(readJassFile(scripts, jassProgramVisitor, jassFilePath));
-				readPaths.add(jassFilePath);
+				final String path = jassFilePath;
+				reads.add(() -> readFile(path));
+			}
+			// What a file asks for comes before the files after it.
+			while (!reads.isEmpty()) {
+				this.slices.addFirst(reads.pollLast());
 			}
 		}
-		// The handles the global initializers make come before the players in 1.29.
-		war3MapViewer.simulation.getHandleIdAllocator().setEarlyIds(true);
-		try {
-			jassProgramVisitor.initialize();
+
+		private void readFile(final String path) {
+			this.environment.scriptFailed(readJassFile(this.scripts, this.jassProgramVisitor, path));
+			this.readPaths.add(path);
 		}
-		catch (final Exception e) {
-			Log.error(e);
-			JassLog.report(e);
-		}
-		finally {
-			war3MapViewer.simulation.getHandleIdAllocator().setEarlyIds(false);
-		}
-		jassProgramVisitor.getJassNativeManager().checkUnregisteredNatives();
-		for (final String path : readPaths) {
-			if (!isEngineScript(path)) {
-				preparseAIScripts(dataSource, uiViewport, uiScene, war3MapViewer, meleeUI, jassProgramVisitor, path);
+
+		private void initialize() {
+			// The handles the global initializers make come before the players in 1.29.
+			this.war3MapViewer.simulation.getHandleIdAllocator().setEarlyIds(true);
+			try {
+				this.jassProgramVisitor.initialize();
+			}
+			catch (final Exception e) {
+				Log.error(e);
+				JassLog.report(e);
+			}
+			finally {
+				this.war3MapViewer.simulation.getHandleIdAllocator().setEarlyIds(false);
+			}
+			this.jassProgramVisitor.getJassNativeManager().checkUnregisteredNatives();
+			for (final String path : this.readPaths) {
+				if (!isEngineScript(path)) {
+					this.slices.add(() -> beginAIPreparse(path));
+				}
 			}
 		}
-		return environment;
+
+		private void beginAIPreparse(final String mapScriptPath) {
+			final List<Runnable> parses = new ArrayList<>();
+			final boolean[] failed = new boolean[1];
+			try {
+				final String text = preparseAIScriptsPlan(this.scripts, mapScriptPath, parses, this.jassProgramVisitor,
+						this.dataSource, this.uiViewport, this.uiScene, this.war3MapViewer, this.meleeUI);
+				if (text == null) {
+					return;
+				}
+			}
+			catch (final Exception e) {
+				Log.info("AI script preparse skipped: " + e);
+				return;
+			}
+			for (int i = parses.size() - 1; i >= 0; i--) {
+				final Runnable parse = parses.get(i);
+				this.slices.addFirst(() -> {
+					if (!failed[0]) {
+						try {
+							parse.run();
+						}
+						catch (final Exception e) {
+							// Only an optimisation: a script that does not parse reports its error when the AI starts.
+							failed[0] = true;
+							Log.info("AI script preparse skipped: " + e);
+						}
+					}
+				});
+			}
+		}
 	}
 
 	/** @return the reason the file does not compile, or null */
@@ -593,53 +698,81 @@ public class Jass2 {
 					gamespeedType, gamedifficultyType, mapdensityType, locationType, playerType, playercolorType,
 					mapcontrolType, playerslotstateType, this.simulation, this.simulation.getHandleIdAllocator(),
 					war3MapViewer.getGameUI());
-			// With the simulation on its own thread the natives that touch the interface or the render side run on the render
-			// thread, which waits for the step; null otherwise.
-			final java.util.function.BiFunction<String, com.etheller.interpreter.ast.function.JassFunction, com.etheller.interpreter.ast.function.JassFunction> onRenderThread = war3MapViewer
-					.renderThreadNativeWrapper();
-			new ScriptNatives(this).register();
-			new TimerNatives(this).register();
-			new GroupNatives(this).register();
-			new OrderNatives(this).register();
-			new PlayerNatives(this).register();
-			new RegionNatives(this).register();
-			new TriggerNatives(this).register();
-			// Quest, interface, camera, sound and campaign natives choose per native what runs on the render thread.
-			new QuestNatives(this).register();
-			new InterfaceNatives(this).register();
-			jassProgramVisitor.getJassNativeManager().setNativeWrapper(null);
-			// these pick what they hand to the render thread themselves (RenderSide)
-			new DestructableNatives(this).register();
-			new ItemNatives(this).register();
-			new WorldNatives(this).register();
-			new CameraNatives(this).register();
-			new SoundNatives(this).register();
-			new EffectNatives(this).register();
-			new HashtableNatives(this).register();
-			new AINatives(this).register();
-			new UnitNatives(this).register();
-			new HeroNatives(this).register();
-			new AbilityNatives(this).register();
-			new AbilityBehaviorNatives(this).register();
-			new AbilityDataNatives(this).register();
-			new ProjectileBuffNatives(this).register();
-			CampaignNatives.register(jassProgramVisitor, war3MapViewer, meleeUI);
-			BlzNatives.register(jassProgramVisitor, war3MapViewer);
-			CustomMapNatives.register(jassProgramVisitor, war3MapViewer);
-			ObjectFieldNatives.register(jassProgramVisitor, war3MapViewer);
-			ReforgedInputNatives.register(jassProgramVisitor, war3MapViewer, meleeUI);
-			ReforgedEffectNatives.register(jassProgramVisitor, war3MapViewer);
-			AbilityFieldNatives.register(jassProgramVisitor, war3MapViewer);
-			WeaponFieldNatives.register(jassProgramVisitor, war3MapViewer);
-			ReforgedMiscNatives.register(jassProgramVisitor, war3MapViewer);
-			ReforgedDoodadNatives.register(jassProgramVisitor, war3MapViewer);
-			FrameNatives.register(jassProgramVisitor, war3MapViewer, uiViewport, meleeUI);
-			ScriptObjectNatives.register(jassProgramVisitor, war3MapViewer);
 		}
 
-		public void loadSavedGame(final War3MapViewer viewer, final FileHandle file) throws IOException {
+		/** The number of slices {@link #registerNatives} is called for. */
+		static final int NATIVE_PARTS = 12;
+
+		/** Registers the natives in parts, so that a loading screen can draw between them. */
+		void registerNatives(final int part) {
+			switch (part) {
+			case 0:
+				new ScriptNatives(this).register();
+				new TimerNatives(this).register();
+				new GroupNatives(this).register();
+				break;
+			case 1:
+				new OrderNatives(this).register();
+				new PlayerNatives(this).register();
+				new RegionNatives(this).register();
+				break;
+			case 2:
+				new TriggerNatives(this).register();
+				new QuestNatives(this).register();
+				new InterfaceNatives(this).register();
+				break;
+			case 3:
+				new DestructableNatives(this).register();
+				new ItemNatives(this).register();
+				new WorldNatives(this).register();
+				break;
+			case 4:
+				new CameraNatives(this).register();
+				new SoundNatives(this).register();
+				new EffectNatives(this).register();
+				break;
+			case 5:
+				new HashtableNatives(this).register();
+				new AINatives(this).register();
+				new UnitNatives(this).register();
+				break;
+			case 6:
+				new HeroNatives(this).register();
+				new AbilityNatives(this).register();
+				new AbilityBehaviorNatives(this).register();
+				break;
+			case 7:
+				new AbilityDataNatives(this).register();
+				new ProjectileBuffNatives(this).register();
+				CampaignNatives.register(this.jassProgramVisitor, this.war3MapViewer, this.meleeUI);
+				break;
+			case 8:
+				BlzNatives.register(this.jassProgramVisitor, this.war3MapViewer);
+				CustomMapNatives.register(this.jassProgramVisitor, this.war3MapViewer);
+				ObjectFieldNatives.register(this.jassProgramVisitor, this.war3MapViewer);
+				break;
+			case 9:
+				ReforgedInputNatives.register(this.jassProgramVisitor, this.war3MapViewer, this.meleeUI);
+				ReforgedEffectNatives.register(this.jassProgramVisitor, this.war3MapViewer);
+				AbilityFieldNatives.register(this.jassProgramVisitor, this.war3MapViewer);
+				break;
+			case 10:
+				WeaponFieldNatives.register(this.jassProgramVisitor, this.war3MapViewer);
+				ReforgedMiscNatives.register(this.jassProgramVisitor, this.war3MapViewer);
+				ReforgedDoodadNatives.register(this.jassProgramVisitor, this.war3MapViewer);
+				break;
+			case 11:
+				FrameNatives.register(this.jassProgramVisitor, this.war3MapViewer, uiViewport, this.meleeUI);
+				ScriptObjectNatives.register(this.jassProgramVisitor, this.war3MapViewer);
+				break;
+			default:
+				break;
+			}
+		}
+
+		public SavedGame.Loading beginSavedGameLoad(final War3MapViewer viewer, final FileHandle file) {
 			this.simulation.setGlobalScope(this.jassProgramVisitor.getGlobals());
-			SavedGame.load(viewer, file, this.aiScriptStarter);
+			return new SavedGame.Loading(viewer, file, this.aiScriptStarter);
 		}
 
 		private void scriptFailed(final Exception error) {
@@ -1006,47 +1139,57 @@ public class Jass2 {
 	}
 
 	/**
-	 * Parses what the map's own script says its computer players need while the map loads, not in the first game
-	 * ticks.
+	 * Lists the parses of what the map's own script says its computer players need while the map loads, not in the
+	 * first game ticks, one entry for each so they can be told apart by a loading screen.
+	 *
+	 * @param parses receives the parses in the order they are to run
+	 * @return null when the script needs none
 	 */
-	private static void preparseAIScripts(final DataSource dataSource, final Viewport uiViewport,
-			final Scene uiScene, final War3MapViewer war3MapViewer, final WarsmashUI meleeUI,
-			final JassProgram jassProgram, final String mapScriptPath) {
-		final DataSource scripts = dataSource.graphicsIndependent();
-		try {
-			final StringBuilder builder = new StringBuilder();
-			try (InputStreamReader reader = new InputStreamReader(scripts.getResourceAsStream(mapScriptPath),
-					StandardCharsets.UTF_8)) {
-				final char[] buffer = new char[8192];
-				int read;
-				while ((read = reader.read(buffer)) >= 0) {
-					builder.append(buffer, 0, read);
-				}
+	private static String preparseAIScriptsPlan(final DataSource scripts, final String mapScriptPath,
+			final List<Runnable> parses, final JassProgram jassProgram, final DataSource dataSource,
+			final Viewport uiViewport, final Scene uiScene, final War3MapViewer war3MapViewer,
+			final WarsmashUI meleeUI) throws IOException {
+		final StringBuilder builder = new StringBuilder();
+		try (InputStreamReader reader = new InputStreamReader(scripts.getResourceAsStream(mapScriptPath),
+				StandardCharsets.UTF_8)) {
+			final char[] buffer = new char[8192];
+			int read;
+			while ((read = reader.read(buffer)) >= 0) {
+				builder.append(buffer, 0, read);
 			}
-			final String text = builder.toString();
-			if (!(text.contains("StartCampaignAI") || text.contains("StartMeleeAI")
-					|| text.contains("MeleeStartingAI")) || !scripts.has(AI_COMMON_SCRIPT)) {
-				return;
-			}
-			parseAIFile(scripts, AI_COMMON_SCRIPT, jassProgram);
-			// The first computer player pays for the class loading of its natives; a throwaway one makes that
-			// happen here. It is built like a real one and then dropped, so no game state is touched.
+		}
+		final String text = builder.toString();
+		if (!(text.contains("StartCampaignAI") || text.contains("StartMeleeAI") || text.contains("MeleeStartingAI"))
+				|| !scripts.has(AI_COMMON_SCRIPT)) {
+			return null;
+		}
+		parses.add(() -> parseAIFileUnchecked(scripts, AI_COMMON_SCRIPT, jassProgram));
+		// The first computer player pays for the class loading of its natives; a throwaway one makes that
+		// happen here. It is built like a real one and then dropped, so no game state is touched.
+		parses.add(() -> {
 			final JassProgram warm = new JassProgram();
 			warm.inheritFrom(jassProgram);
 			new JassAIEnvironment(warm, dataSource, uiViewport, uiScene, war3MapViewer.simulation, 0, meleeUI);
 			AINatives.registerSharedCommonAIFunctions(warm, war3MapViewer, meleeUI, war3MapViewer.simulation);
-			final Matcher matcher = AI_SCRIPT_LITERAL.matcher(text);
-			while (matcher.find()) {
-				final String filename = matcher.group(1);
-				final String scriptPath = scripts.has(filename) ? filename : "Scripts\\" + filename;
-				if (scripts.has(scriptPath)) {
-					parseAIFile(scripts, scriptPath, jassProgram);
-				}
+		});
+		final Matcher matcher = AI_SCRIPT_LITERAL.matcher(text);
+		while (matcher.find()) {
+			final String filename = matcher.group(1);
+			final String scriptPath = scripts.has(filename) ? filename : "Scripts\\" + filename;
+			if (scripts.has(scriptPath)) {
+				parses.add(() -> parseAIFileUnchecked(scripts, scriptPath, jassProgram));
 			}
 		}
-		catch (final Exception e) {
-			// Only an optimisation: a script that does not parse reports its error when the AI starts.
-			Log.info("AI script preparse skipped: " + e);
+		return text;
+	}
+
+	private static void parseAIFileUnchecked(final DataSource scripts, final String aiFile,
+			final JassProgram cacheOwner) {
+		try {
+			parseAIFile(scripts, aiFile, cacheOwner);
+		}
+		catch (final IOException e) {
+			throw new UncheckedIOException(e);
 		}
 	}
 

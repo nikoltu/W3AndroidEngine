@@ -20,6 +20,7 @@ import android.text.InputFilter;
 import android.text.InputType;
 import android.text.SpannableString;
 import android.text.Spanned;
+import android.text.TextPaint;
 import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.text.style.RelativeSizeSpan;
@@ -65,8 +66,8 @@ abstract class LauncherViews {
 	/** What a map's issue is told with: the sentence, or the few words that stand beside the map in a list. */
 	String issueText(final MapIssue issue, final boolean tag) {
 		final String name = tag ? issue.tag : issue.message;
-		return this.activity.getString(this.activity.getResources().getIdentifier(name, "string",
-				R.class.getPackage().getName()));
+		final int id = this.activity.getResources().getIdentifier(name, "string", R.class.getPackage().getName());
+		return id != 0 ? this.activity.getString(id) : issue.english;
 	}
 
 	int px(final float design) {
@@ -102,6 +103,29 @@ abstract class LauncherViews {
 		view.setSingleLine(true);
 		view.setEllipsize(TextUtils.TruncateAt.END);
 		view.setShadowLayer(1, size * this.activity.scale * 0.07f, size * this.activity.scale * 0.07f, Color.BLACK);
+		return view;
+	}
+
+	/**
+	 * A text wider than its box shrinks, down to the given part of its size, before it is cut with an ellipsis. The
+	 * width is only known once the box is laid out, so the size follows the layout.
+	 */
+	TextView fitWidth(final TextView view, final float smallest) {
+		final float full = view.getTextSize();
+		view.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+			final int room = right - left - view.getPaddingLeft() - view.getPaddingRight();
+			final CharSequence shown = view.getText();
+			if ((room <= 0) || (shown.length() == 0)) {
+				return;
+			}
+			final TextPaint paint = new TextPaint(view.getPaint());
+			paint.setTextSize(full);
+			final float wide = paint.measureText(shown, 0, shown.length());
+			final float size = wide <= room ? full : Math.max(full * smallest, full * room / wide);
+			if (Math.abs(size - view.getTextSize()) > 0.5f) {
+				view.setTextSize(TypedValue.COMPLEX_UNIT_PX, size);
+			}
+		});
 		return view;
 	}
 
@@ -153,6 +177,11 @@ abstract class LauncherViews {
 		return this.activity.art.string(key, fallback);
 	}
 
+	/** The game data's text for the key; when it has none, the launcher's own text in the game language. */
+	String glue(final String key) {
+		return glue(key, this.activity.glueFallback(key));
+	}
+
 	/** A vertical or horizontal gradient with stops, which GradientDrawable cannot place. */
 	static Drawable gradient(final boolean vertical, final int[] colors, final float[] stops) {
 		final PaintDrawable drawable = new PaintDrawable();
@@ -184,7 +213,8 @@ abstract class LauncherViews {
 	float addTabs(final FrameLayout content, final int[] labels, final int selected,
 			final IntConsumer open) {
 		final LauncherBoard b = this.activity.board;
-		final float tabW = (b.contentW - (5 * b.tabGap)) / 6;
+		final int slots = Math.max(6, labels.length);
+		final float tabW = (b.contentW - ((slots - 1) * b.tabGap)) / slots;
 		for (int i = 0; i < labels.length; i++) {
 			final int tab = i;
 			final LauncherKit.GlueButton button = button(getString(labels[i]), b.tabH, b.tabText,
@@ -279,7 +309,7 @@ abstract class LauncherViews {
 		final LinearLayout row = new LinearLayout(this.activity);
 		row.setGravity(Gravity.CENTER_VERTICAL);
 		row.setPadding(px(6), 0, px(8), 0);
-		final TextView view = text(title, Math.min(rowH * 0.86f, 84) * 0.46f, this.activity.art.gold());
+		final TextView view = fitWidth(text(title, Math.min(rowH * 0.86f, 84) * 0.46f, this.activity.art.gold()), 0.7f);
 		final LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
 		params.leftMargin = px(18);
 		row.addView(view, params);
@@ -314,10 +344,14 @@ abstract class LauncherViews {
 		return LauncherKit.glueText(glue(key, fallback));
 	}
 
+	CharSequence glueLabel(final String key) {
+		return LauncherKit.glueText(glue(key));
+	}
+
 	String[] glueList(final String[][] table, final int keyColumn) {
 		final String[] labels = new String[table.length];
 		for (int i = 0; i < table.length; i++) {
-			labels[i] = glue(table[i][keyColumn], table[i][keyColumn + 1]);
+			labels[i] = glue(table[i][keyColumn]);
 		}
 		return labels;
 	}
@@ -343,7 +377,7 @@ abstract class LauncherViews {
 		label.setGravity(Gravity.CENTER_VERTICAL);
 		// A longer item shrinks to the button rather than being cut.
 		final int fullSize = Math.round(textSize * this.activity.scale);
-		label.setAutoSizeTextTypeUniformWithConfiguration(Math.max(1, Math.round(fullSize * 0.65f)), fullSize, 1,
+		label.setAutoSizeTextTypeUniformWithConfiguration(Math.max(1, Math.round(fullSize * 0.55f)), fullSize, 1,
 				TypedValue.COMPLEX_UNIT_PX);
 		final FrameLayout.LayoutParams labelParams = new FrameLayout.LayoutParams(MATCH, MATCH);
 		labelParams.leftMargin = px(rim + 4);
@@ -377,6 +411,8 @@ abstract class LauncherViews {
 		}
 		box.setEnabled(enabled);
 		box.setContentDescription(LauncherKit.glueText(items[selected]).toString());
+		// A long item that the button had to shrink is read in full on a long press.
+		box.setTooltipText(LauncherKit.glueText(items[selected]));
 		if (enabled && (chosen != null)) {
 			final int[] current = { selected };
 			onTap(box, false,
@@ -387,6 +423,7 @@ abstract class LauncherViews {
 							swatch.setBackgroundColor(colors[choice]);
 						}
 						box.setContentDescription(LauncherKit.glueText(items[choice]).toString());
+						box.setTooltipText(LauncherKit.glueText(items[choice]));
 						chosen.accept(choice);
 					}));
 		}
@@ -482,5 +519,56 @@ abstract class LauncherViews {
 			}
 			return false;
 		});
+	}
+
+	private static final long HINT_MILLIS = 3000;
+	private TextView hint;
+
+	/** A short tip beside a view, which goes by itself; long-press or tap on a mark shows it. */
+	void showHint(final View anchor, final String note) {
+		hideHint();
+		final LauncherBoard b = this.activity.board;
+		final int[] at = new int[2];
+		anchor.getLocationInWindow(at);
+		final int[] origin = new int[2];
+		this.activity.root.getLocationInWindow(origin);
+		// The tip stays inside the panel the choice is in.
+		View panel = anchor;
+		while ((panel.getParent() instanceof View) && !(panel instanceof ScrollView)) {
+			panel = (View) panel.getParent();
+		}
+		final int[] area = new int[2];
+		panel.getLocationInWindow(area);
+		final int left = area[0] - origin[0];
+		final int top = area[1] - origin[1];
+		final int width = panel instanceof ScrollView ? panel.getWidth() : px(b.width);
+		final int height = panel instanceof ScrollView ? panel.getHeight() : px(b.height);
+		final int border = px(b.tablet ? 8 : 6);
+		final TextView tip = text(note, b.small, Color.WHITE);
+		tip.setSingleLine(false);
+		tip.setEllipsize(null);
+		tip.setBackground(panelFrame(b.tablet ? 8 : 6, Color.rgb(0x08, 0x08, 0x10)));
+		tip.setPadding(border + px(12), border + px(8), border + px(12), border + px(8));
+		final int maxWidth = Math.min(px(b.tablet ? 900 : 700), width);
+		tip.setMaxWidth(maxWidth);
+		tip.measure(View.MeasureSpec.makeMeasureSpec(maxWidth, View.MeasureSpec.AT_MOST),
+				View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+		final FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+				ViewGroup.LayoutParams.WRAP_CONTENT);
+		params.leftMargin = Math.max(left, Math.min(at[0] - origin[0] - px(8), left + width - tip.getMeasuredWidth()));
+		final int below = at[1] - origin[1] + anchor.getHeight() + px(6);
+		// Above the choice when there is no room below it, so the tip never covers the choice.
+		params.topMargin = below + tip.getMeasuredHeight() <= top + height ? below
+				: Math.max(top, at[1] - origin[1] - px(6) - tip.getMeasuredHeight());
+		this.activity.root.addView(tip, params);
+		this.hint = tip;
+		tip.postDelayed(this::hideHint, HINT_MILLIS);
+	}
+
+	void hideHint() {
+		if (this.hint != null) {
+			this.activity.root.removeView(this.hint);
+			this.hint = null;
+		}
 	}
 }

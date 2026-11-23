@@ -95,7 +95,7 @@ final class MapViewerDoodads {
 			if (!file.toLowerCase(Locale.ROOT).endsWith(".mdx")) {
 				file += ".mdx";
 			}
-			model = (MdxModel) viewer.load(file, viewer.mapPathSolver, viewer.solverParams);
+			model = null;
 		}
 
 		final String pathingTexture = row.readSLKTag("pathTex");
@@ -138,7 +138,7 @@ final class MapViewerDoodads {
 		}
 
 		Log.info("Loading terrain doodad: " + file);
-		viewer.terrainDoodads.add(new TerrainDoodad(viewer, model, row, doodad, pathingTextureImage));
+		viewer.terrainDoodads.add(new TerrainDoodad(viewer, model, file, row, doodad, pathingTextureImage));
 	}
 
 	static void createDoodad(final War3MapViewer viewer, final GameObject row, final int doodadVariation, final float[] location,

@@ -2,7 +2,9 @@ package com.etheller.warsmash.viewer5.handlers.w3x.simulation.campaign;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.io.EOFException;
 import java.io.IOException;
+import java.util.Collections;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -35,6 +37,8 @@ public final class CCampaignProgress {
 		private boolean tutorialCleared;
 		private int menuCampaignIndex = -1;
 		private int classicMenuCampaignIndex = -1;
+		/** Which of the two menu choices a script made last: {@link #MENU_CLASSIC}, {@link #MENU_EXPANSION}, else 0. */
+		private int lastMenuChoice;
 		/** SetDefaultDifficulty, or -1 while the game difficulty is the default. */
 		private int defaultDifficulty = -1;
 		private final Set<Integer> customCampaignButtons = new HashSet<>();
@@ -86,6 +90,13 @@ public final class CCampaignProgress {
 	private static CampaignList campaignList = CampaignList.COMBINED;
 	private static final String STORE_FILE = "Campaigns.w3v";
 	private static final int STORE_VERSION = 6;
+	/**
+	 * After the lists a file may hold the menu choice order of each list: builds that know only the version 6 layout stop
+	 * reading after the lists and lose nothing but this order.
+	 */
+	private static final int MENU_ORDER_MARK = 0x4D454E55;
+	private static final int MENU_CLASSIC = 1;
+	private static final int MENU_EXPANSION = 2;
 	private static boolean loaded;
 	/** Test builds open every mission and campaign in the menus; the saved progress stays as it is. */
 	private static volatile boolean allMissionsOpen;
@@ -131,6 +142,12 @@ public final class CCampaignProgress {
 			out.writeUTF(entry.getKey().name());
 			entry.getValue().write(out);
 		}
+		out.writeInt(MENU_ORDER_MARK);
+		out.writeInt(PROGRESS.size());
+		for (final Map.Entry<CampaignList, Progress> entry : PROGRESS.entrySet()) {
+			out.writeUTF(entry.getKey().name());
+			out.writeInt(entry.getValue().lastMenuChoice);
+		}
 	}
 
 	public static void readAll(final DataInputStream in) throws IOException {
@@ -166,8 +183,35 @@ public final class CCampaignProgress {
 					// A list a later version knows about; this one cannot show it.
 				}
 			}
+			readMenuOrder(in, read);
 		}
 		return read;
+	}
+
+	private static void readMenuOrder(final DataInputStream in, final Map<CampaignList, Progress> read)
+			throws IOException {
+		try {
+			if (in.readInt() != MENU_ORDER_MARK) {
+				return;
+			}
+			final int lists = in.readInt();
+			for (int i = 0; i < lists; i++) {
+				final String listName = in.readUTF();
+				final int choice = in.readInt();
+				try {
+					final Progress progress = read.get(CampaignList.valueOf(listName));
+					if (progress != null) {
+						progress.lastMenuChoice = choice;
+					}
+				}
+				catch (final IllegalArgumentException e) {
+					// A list this version cannot show.
+				}
+			}
+		}
+		catch (final EOFException e) {
+			// A file written before the order was kept, or by a build that drops it.
+		}
 	}
 
 	/**
@@ -176,17 +220,39 @@ public final class CCampaignProgress {
 	 */
 	public static final class Snapshot {
 		private final Progress progress;
+		/** Campaigns opened by hand ({@link CampaignUnlock}), by number: shown as played through, never saved here. */
+		private final Set<Integer> unlocked;
 
 		private Snapshot(final Progress progress) {
+			this(progress, Collections.emptySet());
+		}
+
+		private Snapshot(final Progress progress, final Set<Integer> unlocked) {
 			this.progress = progress != null ? progress : new Progress();
+			this.unlocked = unlocked;
+		}
+
+		/** The same progress with these campaigns opened by hand; the progress itself is not touched. */
+		public Snapshot unlocking(final Set<Integer> campaigns) {
+			return new Snapshot(this.progress, new HashSet<>(campaigns));
+		}
+
+		/** What the profile has reached, without the campaigns opened by hand. */
+		public Snapshot real() {
+			return this.unlocked.isEmpty() ? this : new Snapshot(this.progress);
+		}
+
+		public boolean isUnlocked(final int campaign) {
+			return this.unlocked.contains(campaign);
 		}
 
 		public boolean isMissionAvailable(final int campaign, final int mission) {
-			return allMissionsOpen || this.progress.missions.contains(missionKey(campaign, mission));
+			return allMissionsOpen || this.unlocked.contains(campaign)
+					|| this.progress.missions.contains(missionKey(campaign, mission));
 		}
 
 		public boolean isCampaignAvailable(final int campaign) {
-			return allMissionsOpen || this.progress.campaigns.contains(campaign);
+			return allMissionsOpen || this.unlocked.contains(campaign) || this.progress.campaigns.contains(campaign);
 		}
 
 		public int getMenuCampaignIndex() {
@@ -194,7 +260,7 @@ public final class CCampaignProgress {
 		}
 
 		public boolean isOpeningCinematicAvailable(final int campaign) {
-			return this.progress.openingCinematics.contains(campaign);
+			return this.unlocked.contains(campaign) || this.progress.openingCinematics.contains(campaign);
 		}
 
 		/** A mission the player has won; scripts do not tell for every campaign's last mission. */
@@ -209,12 +275,30 @@ public final class CCampaignProgress {
 
 		/** Scripts open a campaign's ending cinematic when its last mission is won. */
 		public boolean isEndingCinematicAvailable(final int campaign) {
-			return this.progress.endingCinematics.contains(campaign);
+			return this.unlocked.contains(campaign) || this.progress.endingCinematics.contains(campaign);
 		}
 
 		public int getClassicMenuCampaignIndex() {
 			return this.progress.classicMenuCampaignIndex;
 		}
+
+		/**
+		 * The campaign a combined campaign list opens on: the menu choice a mission made last, whichever of the two
+		 * the mission's campaign makes. A file from before the order was kept has the expansion's choice, as it always
+		 * had.
+		 */
+		public int getCombinedMenuCampaignIndex() {
+			final Progress shown = this.progress;
+			if ((shown.lastMenuChoice == MENU_CLASSIC) && (shown.classicMenuCampaignIndex >= 0)) {
+				return shown.classicMenuCampaignIndex;
+			}
+			return shown.menuCampaignIndex >= 0 ? shown.menuCampaignIndex : shown.classicMenuCampaignIndex;
+		}
+	}
+
+	/** What the playing profile has reached in the campaign list the game plays, as the menus read a file. */
+	public static Snapshot currentSnapshot() {
+		return new Snapshot(current());
 	}
 
 	/** An empty progress, as a new profile has. */
@@ -322,12 +406,10 @@ public final class CCampaignProgress {
 	}
 
 	public static void setMenuCampaignIndex(final int campaignIndex) {
-		current().menuCampaignIndex = campaignIndex;
+		final Progress progress = current();
+		progress.menuCampaignIndex = campaignIndex;
+		progress.lastMenuChoice = MENU_EXPANSION;
 		save();
-	}
-
-	public static int getMenuCampaignIndex() {
-		return current().menuCampaignIndex;
 	}
 
 	/**
@@ -335,12 +417,10 @@ public final class CCampaignProgress {
 	 * expansion screen keeps its own choice (SetCampaignMenuRaceEx).
 	 */
 	public static void setClassicMenuCampaignIndex(final int campaignIndex) {
-		current().classicMenuCampaignIndex = campaignIndex;
+		final Progress progress = current();
+		progress.classicMenuCampaignIndex = campaignIndex;
+		progress.lastMenuChoice = MENU_CLASSIC;
 		save();
-	}
-
-	public static int getClassicMenuCampaignIndex() {
-		return current().classicMenuCampaignIndex;
 	}
 
 	/** The campaign difficulty the menu starts on, as an ordinal of the difficulties; -1 when scripts never set one. */

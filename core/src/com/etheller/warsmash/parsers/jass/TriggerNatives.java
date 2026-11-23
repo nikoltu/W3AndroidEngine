@@ -89,6 +89,9 @@ final class TriggerNatives extends CommonNatives {
 		jassProgramVisitor.getJassNativeManager().createNative("TriggerRegisterVariableEvent",
 				(arguments, globalScope, triggerScope) -> {
 					final Trigger trigger = arguments.get(0).visit(ObjectJassValueVisitor.<Trigger>getInstance());
+					if (trigger == null) {
+						return eventType.getNullValue();
+					}
 					final String varName = arguments.get(1).visit(StringJassValueVisitor.getInstance());
 					final CLimitOp limitOp = arguments.get(2).visit(ObjectJassValueVisitor.<CLimitOp>getInstance());
 					final Double limitval = arguments.get(3).visit(RealJassValueVisitor.getInstance());
@@ -99,6 +102,9 @@ final class TriggerNatives extends CommonNatives {
 		jassProgramVisitor.getJassNativeManager().createNative("TriggerRegisterTimerEvent",
 				(arguments, globalScope, triggerScope) -> {
 					final Trigger trigger = arguments.get(0).visit(ObjectJassValueVisitor.<Trigger>getInstance());
+					if (trigger == null) {
+						return eventType.getNullValue();
+					}
 					final Double timeout = arguments.get(1).visit(RealJassValueVisitor.getInstance());
 					final Boolean periodic = arguments.get(2).visit(BooleanJassValueVisitor.getInstance());
 					final CTimerNativeEvent timer = new CTimerNativeEvent(globalScope, trigger);
@@ -110,6 +116,9 @@ final class TriggerNatives extends CommonNatives {
 		jassProgramVisitor.getJassNativeManager().createNative("TriggerRegisterTimerExpireEvent",
 				(arguments, globalScope, triggerScope) -> {
 					final Trigger trigger = arguments.get(0).visit(ObjectJassValueVisitor.getInstance());
+					if (trigger == null) {
+						return eventType.getNullValue();
+					}
 					final CTimerJassBase timer = arguments.get(1).visit(ObjectJassValueVisitor.getInstance());
 					timer.addEvent(trigger);
 					return newEvent(eventType, new CTimerExpireTriggerEvent(trigger, timer));
@@ -130,6 +139,9 @@ final class TriggerNatives extends CommonNatives {
 		jassProgramVisitor.getJassNativeManager().createNative("TriggerRegisterUnitStateEvent",
 				(arguments, globalScope, triggerScope) -> {
 					final Trigger whichTrigger = arguments.get(0).visit(ObjectJassValueVisitor.getInstance());
+					if (whichTrigger == null) {
+						return eventType.getNullValue();
+					}
 					final CUnit whichUnit = nullable(arguments, 1, ObjectJassValueVisitor.getInstance());
 					final Object whichState = nullable(arguments, 2, ObjectJassValueVisitor.getInstance());
 					final Object opcode = nullable(arguments, 3, ObjectJassValueVisitor.getInstance());
@@ -149,6 +161,9 @@ final class TriggerNatives extends CommonNatives {
 		jassProgramVisitor.getJassNativeManager().createNative("TriggerRegisterDialogEvent",
 				(arguments, globalScope, triggerScope) -> {
 					final Trigger trigger = arguments.get(0).visit(ObjectJassValueVisitor.getInstance());
+					if (trigger == null) {
+						return eventType.getNullValue();
+					}
 					final CScriptDialog dialog = arguments.get(1).visit(ObjectJassValueVisitor.getInstance());
 					if (dialog == null) {
 						return eventType.getNullValue();
@@ -158,6 +173,9 @@ final class TriggerNatives extends CommonNatives {
 		jassProgramVisitor.getJassNativeManager().createNative("TriggerRegisterDialogButtonEvent",
 				(arguments, globalScope, triggerScope) -> {
 					final Trigger trigger = arguments.get(0).visit(ObjectJassValueVisitor.getInstance());
+					if (trigger == null) {
+						return eventType.getNullValue();
+					}
 					final CScriptDialogButton dialogButton = arguments.get(1)
 							.visit(ObjectJassValueVisitor.getInstance());
 					if (dialogButton == null) {
@@ -168,6 +186,9 @@ final class TriggerNatives extends CommonNatives {
 		jassProgramVisitor.getJassNativeManager().createNative("TriggerRegisterGameEvent",
 				(arguments, globalScope, triggerScope) -> {
 					final Trigger trigger = arguments.get(0).visit(ObjectJassValueVisitor.<Trigger>getInstance());
+					if (trigger == null) {
+						return eventType.getNullValue();
+					}
 					final JassGameEventsWar3 gameEvent = arguments.get(1)
 							.visit(ObjectJassValueVisitor.getInstance());
 					return newEvent(eventType,
@@ -176,6 +197,9 @@ final class TriggerNatives extends CommonNatives {
 		jassProgramVisitor.getJassNativeManager().createNative("TriggerRegisterEnterRegion",
 				(arguments, globalScope, triggerScope) -> {
 					final Trigger trigger = arguments.get(0).visit(ObjectJassValueVisitor.<Trigger>getInstance());
+					if (trigger == null) {
+						return eventType.getNullValue();
+					}
 					final CRegion region = arguments.get(1).visit(ObjectJassValueVisitor.<CRegion>getInstance());
 					final TriggerBooleanExpression boolexpr = nullable(arguments, 2,
 							ObjectJassValueVisitor.<TriggerBooleanExpression>getInstance());
@@ -185,6 +209,9 @@ final class TriggerNatives extends CommonNatives {
 		jassProgramVisitor.getJassNativeManager().createNative("TriggerRegisterLeaveRegion",
 				(arguments, globalScope, triggerScope) -> {
 					final Trigger trigger = arguments.get(0).visit(ObjectJassValueVisitor.<Trigger>getInstance());
+					if (trigger == null) {
+						return eventType.getNullValue();
+					}
 					final CRegion region = arguments.get(1).visit(ObjectJassValueVisitor.<CRegion>getInstance());
 					final TriggerBooleanExpression boolexpr = nullable(arguments, 2,
 							ObjectJassValueVisitor.<TriggerBooleanExpression>getInstance());
@@ -235,6 +262,9 @@ final class TriggerNatives extends CommonNatives {
 		jassProgramVisitor.getJassNativeManager().createNative("TriggerRegisterPlayerEvent",
 				(arguments, globalScope, triggerScope) -> {
 					final Trigger whichTrigger = arguments.get(0).visit(ObjectJassValueVisitor.getInstance());
+					if (whichTrigger == null) {
+						return eventType.getNullValue();
+					}
 					final CPlayerJass whichPlayer = arguments.get(1).visit(ObjectJassValueVisitor.getInstance());
 					if (whichPlayer == null) {
 						return eventType.getNullValue();
@@ -247,6 +277,9 @@ final class TriggerNatives extends CommonNatives {
 		jassProgramVisitor.getJassNativeManager().createNative("TriggerRegisterPlayerStateEvent",
 				(arguments, globalScope, triggerScope) -> {
 					final Trigger whichTrigger = arguments.get(0).visit(ObjectJassValueVisitor.getInstance());
+					if (whichTrigger == null) {
+						return eventType.getNullValue();
+					}
 					final CPlayerJass whichPlayer = arguments.get(1).visit(ObjectJassValueVisitor.getInstance());
 					final CPlayerState whichState = arguments.get(2).visit(ObjectJassValueVisitor.getInstance());
 					final CLimitOp opcode = arguments.get(3).visit(ObjectJassValueVisitor.getInstance());
@@ -260,6 +293,9 @@ final class TriggerNatives extends CommonNatives {
 		jassProgramVisitor.getJassNativeManager().createNative("TriggerRegisterPlayerAllianceChange",
 				(arguments, globalScope, triggerScope) -> {
 					final Trigger whichTrigger = arguments.get(0).visit(ObjectJassValueVisitor.getInstance());
+					if (whichTrigger == null) {
+						return eventType.getNullValue();
+					}
 					final CPlayerJass whichPlayer = arguments.get(1).visit(ObjectJassValueVisitor.getInstance());
 					final CAllianceType whichAlliance = arguments.get(2).visit(ObjectJassValueVisitor.getInstance());
 					if (!(whichPlayer instanceof CPlayer) || (whichAlliance == null)) {
@@ -271,6 +307,9 @@ final class TriggerNatives extends CommonNatives {
 		jassProgramVisitor.getJassNativeManager().createNative("TriggerRegisterPlayerUnitEvent",
 				(arguments, globalScope, triggerScope) -> {
 					final Trigger whichTrigger = arguments.get(0).visit(ObjectJassValueVisitor.getInstance());
+					if (whichTrigger == null) {
+						return eventType.getNullValue();
+					}
 					final CPlayer whichPlayer = arguments.get(1).visit(ObjectJassValueVisitor.getInstance());
 					final JassGameEventsWar3 whichPlayerEvent = arguments.get(2)
 							.visit(ObjectJassValueVisitor.getInstance());
@@ -312,12 +351,18 @@ final class TriggerNatives extends CommonNatives {
 		jassProgramVisitor.getJassNativeManager().createNative("TriggerRegisterDeathEvent",
 				(arguments, globalScope, triggerScope) -> {
 					final Trigger whichTrigger = arguments.get(0).visit(ObjectJassValueVisitor.getInstance());
+					if (whichTrigger == null) {
+						return eventType.getNullValue();
+					}
 					final CWidget whichWidget = arguments.get(1).visit(ObjectJassValueVisitor.getInstance());
 					return newEvent(eventType, whichWidget.addDeathEvent(globalScope, whichTrigger));
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("TriggerRegisterUnitEvent",
 				(arguments, globalScope, triggerScope) -> {
 					final Trigger whichTrigger = arguments.get(0).visit(ObjectJassValueVisitor.getInstance());
+					if (whichTrigger == null) {
+						return eventType.getNullValue();
+					}
 					final CUnit whichWidget = nullable(arguments, 1, ObjectJassValueVisitor.getInstance());
 					final JassGameEventsWar3 whichPlayerEvent = arguments.get(2)
 							.visit(ObjectJassValueVisitor.getInstance());
@@ -357,12 +402,18 @@ final class TriggerNatives extends CommonNatives {
 		jassProgramVisitor.getJassNativeManager().createNative("TriggerRegisterOnTick",
 				(arguments, globalScope, triggerScope) -> {
 					final Trigger trigger = arguments.get(0).visit(ObjectJassValueVisitor.getInstance());
+					if (trigger == null) {
+						return eventType.getNullValue();
+					}
 					this.simulation.registerOnTickEvent(trigger);
 					return newEvent(eventType, new TickEventRegistration(this.environment, trigger));
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("TriggerRegisterOnUnitTick",
 				(arguments, globalScope, triggerScope) -> {
 					final Trigger trigger = arguments.get(0).visit(ObjectJassValueVisitor.getInstance());
+					if (trigger == null) {
+						return eventType.getNullValue();
+					}
 					final CUnit unit = arguments.get(1).visit(ObjectJassValueVisitor.getInstance());
 					unit.registerOnTickEvent(trigger);
 					return newEvent(eventType, new UnitTickEventRegistration(trigger, unit));
@@ -812,45 +863,55 @@ final class TriggerNatives extends CommonNatives {
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("DestroyTrigger",
 				(arguments, globalScope, triggerScope) -> {
-					final Trigger trigger = arguments.get(0).visit(ObjectJassValueVisitor.<Trigger>getInstance());
-					trigger.destroy();
-					handleIds.release(trigger);
+					final Trigger trigger = nullable(arguments, 0, ObjectJassValueVisitor.<Trigger>getInstance());
+					if (trigger != null) {
+						trigger.destroy();
+						handleIds.release(trigger);
+					}
 					return null;
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("ResetTrigger",
 				(arguments, globalScope, triggerScope) -> {
-					final Trigger trigger = arguments.get(0).visit(ObjectJassValueVisitor.<Trigger>getInstance());
-					trigger.reset();
+					final Trigger trigger = nullable(arguments, 0, ObjectJassValueVisitor.<Trigger>getInstance());
+					if (trigger != null) {
+						trigger.reset();
+					}
 					return null;
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("EnableTrigger",
 				(arguments, globalScope, triggerScope) -> {
-					final Trigger trigger = arguments.get(0).visit(ObjectJassValueVisitor.<Trigger>getInstance());
-					trigger.setEnabled(true);
+					final Trigger trigger = nullable(arguments, 0, ObjectJassValueVisitor.<Trigger>getInstance());
+					if (trigger != null) {
+						trigger.setEnabled(true);
+					}
 					return null;
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("DisableTrigger",
 				(arguments, globalScope, triggerScope) -> {
-					final Trigger trigger = arguments.get(0).visit(ObjectJassValueVisitor.<Trigger>getInstance());
-					trigger.setEnabled(false);
+					final Trigger trigger = nullable(arguments, 0, ObjectJassValueVisitor.<Trigger>getInstance());
+					if (trigger != null) {
+						trigger.setEnabled(false);
+					}
 					return null;
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("IsTriggerEnabled",
 				(arguments, globalScope, triggerScope) -> {
-					final Trigger trigger = arguments.get(0).visit(ObjectJassValueVisitor.<Trigger>getInstance());
-					return BooleanJassValue.of(trigger.isEnabled());
+					final Trigger trigger = nullable(arguments, 0, ObjectJassValueVisitor.<Trigger>getInstance());
+					return BooleanJassValue.of((trigger != null) && trigger.isEnabled());
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("TriggerWaitOnSleeps",
 				(arguments, globalScope, triggerScope) -> {
-					final Trigger trigger = arguments.get(0).visit(ObjectJassValueVisitor.<Trigger>getInstance());
+					final Trigger trigger = nullable(arguments, 0, ObjectJassValueVisitor.<Trigger>getInstance());
 					final Boolean value = arguments.get(1).visit(BooleanJassValueVisitor.getInstance());
-					trigger.setWaitOnSleeps(value.booleanValue());
+					if (trigger != null) {
+						trigger.setWaitOnSleeps(value.booleanValue());
+					}
 					return null;
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("IsTriggerWaitOnSleeps",
 				(arguments, globalScope, triggerScope) -> {
-					final Trigger trigger = arguments.get(0).visit(ObjectJassValueVisitor.<Trigger>getInstance());
-					return BooleanJassValue.of(trigger.isWaitOnSleeps());
+					final Trigger trigger = nullable(arguments, 0, ObjectJassValueVisitor.<Trigger>getInstance());
+					return BooleanJassValue.of((trigger != null) && trigger.isWaitOnSleeps());
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("GetTriggeringTrigger",
 				(arguments, globalScope, triggerScope) -> {
@@ -863,13 +924,13 @@ final class TriggerNatives extends CommonNatives {
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("GetTriggerEvalCount",
 				(arguments, globalScope, triggerScope) -> {
-					final Trigger trigger = arguments.get(0).visit(ObjectJassValueVisitor.<Trigger>getInstance());
-					return IntegerJassValue.of(trigger.getEvalCount());
+					final Trigger trigger = nullable(arguments, 0, ObjectJassValueVisitor.<Trigger>getInstance());
+					return IntegerJassValue.of((trigger == null) ? 0 : trigger.getEvalCount());
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("GetTriggerExecCount",
 				(arguments, globalScope, triggerScope) -> {
-					final Trigger trigger = arguments.get(0).visit(ObjectJassValueVisitor.<Trigger>getInstance());
-					return IntegerJassValue.of(trigger.getExecCount());
+					final Trigger trigger = nullable(arguments, 0, ObjectJassValueVisitor.<Trigger>getInstance());
+					return IntegerJassValue.of((trigger == null) ? 0 : trigger.getExecCount());
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("ExecuteFunc",
 				(arguments, globalScope, triggerScope) -> {
@@ -936,9 +997,12 @@ final class TriggerNatives extends CommonNatives {
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("TriggerAddCondition",
 				(arguments, globalScope, triggerScope) -> {
-					final Trigger whichTrigger = arguments.get(0).visit(ObjectJassValueVisitor.<Trigger>getInstance());
+					final Trigger whichTrigger = nullable(arguments, 0, ObjectJassValueVisitor.<Trigger>getInstance());
 					final TriggerBooleanExpression condition = nullable(arguments, 1,
 							ObjectJassValueVisitor.<TriggerBooleanExpression>getInstance());
+					if (whichTrigger == null) {
+						return triggerconditionType.getNullValue();
+					}
 					final int index = whichTrigger.addCondition(condition);
 					return new HandleJassValue(triggerconditionType,
 							handleIds.assign(new TriggerCondition(condition, whichTrigger, index)));
@@ -957,14 +1021,19 @@ final class TriggerNatives extends CommonNatives {
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("TriggerClearConditions",
 				(arguments, globalScope, triggerScope) -> {
-					final Trigger whichTrigger = arguments.get(0).visit(ObjectJassValueVisitor.<Trigger>getInstance());
-					whichTrigger.clearConditions();
+					final Trigger whichTrigger = nullable(arguments, 0, ObjectJassValueVisitor.<Trigger>getInstance());
+					if (whichTrigger != null) {
+						whichTrigger.clearConditions();
+					}
 					return null;
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("TriggerAddAction",
 				(arguments, globalScope, triggerScope) -> {
-					final Trigger whichTrigger = arguments.get(0).visit(ObjectJassValueVisitor.<Trigger>getInstance());
+					final Trigger whichTrigger = nullable(arguments, 0, ObjectJassValueVisitor.<Trigger>getInstance());
 					final CodeJassValue actionFunc = arguments.get(1).visit(CodeJassValueVisitor.getInstance());
+					if (whichTrigger == null) {
+						return triggeractionType.getNullValue();
+					}
 					final int actionIndex = whichTrigger.addAction(actionFunc);
 					return new HandleJassValue(triggeractionType,
 							handleIds.assign(new TriggerAction(whichTrigger, actionFunc, actionIndex)));

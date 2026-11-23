@@ -101,6 +101,20 @@ public class CBehaviorTargetSpellBase extends CAbstractRangedBehavior {
 				final CBehavior prevBeh = this.unit.getCurrentBehavior();
 				this.unit.fireSpellEvents(simulation, JassGameEventsWar3.EVENT_UNIT_SPELL_CHANNEL, this.ability,
 						this.target);
+				if ((this.unit.getCurrentBehavior() == prevBeh)
+						&& !this.ability.canBeginCast(simulation, this.unit, this.target)) {
+					// Measured on 1.29 (Force of Nature without a tree): the channel event fires, then the cast ends
+					// with the finish and endcast events, with no cast or effect event, mana or cooldown.
+					this.castEventsFired = false;
+					this.unit.fireSpellEvents(simulation, JassGameEventsWar3.EVENT_UNIT_SPELL_FINISH, this.ability,
+							this.target);
+					this.unit.fireSpellEvents(simulation, JassGameEventsWar3.EVENT_UNIT_SPELL_ENDCAST, this.ability,
+							this.target);
+					this.doneEffect = true;
+					this.castPoint.cancel(simulation);
+					cancelBackswing(simulation);
+					return this.unit.pollNextOrderBehavior(simulation);
+				}
 				final int castingTicks = this.ability.isCastingTimeBeforeCast()
 						? CTimer.wholeSteps(this.ability.getCastingTime())
 						: 0;

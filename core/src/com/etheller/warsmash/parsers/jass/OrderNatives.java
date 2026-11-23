@@ -15,6 +15,8 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnitType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CWidget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbility;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.human.archmage.CAbilityMassTeleport;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.CAbilityPointTargetSpellBase;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.inventory.CAbilityInventory;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.queue.CAbilityReviveHero;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.CAbilitySpell;
@@ -60,6 +62,10 @@ final class OrderNatives extends CommonNatives {
 		final JassFunction issuePointOrderById = (arguments, globalScope, triggerScope) -> {
 			final CUnit whichUnit = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
 			final int orderId = arguments.get(1).visit(IntegerJassValueVisitor.getInstance());
+			// Measured on 1.29: a structure that goes on a gold mine is refused as a point order too, on the mine.
+			if ((whichUnit != null) && isBuiltOnMineOnly(orderId)) {
+				return BooleanJassValue.FALSE;
+			}
 			final boolean issued = (whichUnit != null) && issuePointOrder(whichUnit.getPlayerIndex(), whichUnit,
 					orderId, arguments.get(2).visit(RealJassValueVisitor.getInstance()).floatValue(),
 					arguments.get(3).visit(RealJassValueVisitor.getInstance()).floatValue());
@@ -112,6 +118,9 @@ final class OrderNatives extends CommonNatives {
 					if (!isUnitTypeId(unitId)) {
 						return BooleanJassValue.TRUE;
 					}
+					if (isBuiltOnMineOnly(unitId)) {
+						return BooleanJassValue.FALSE;
+					}
 					return BooleanJassValue.of(issuePointOrder(whichUnit.getPlayerIndex(), whichUnit, unitId,
 							arguments.get(2).visit(RealJassValueVisitor.getInstance()).floatValue(),
 							arguments.get(3).visit(RealJassValueVisitor.getInstance()).floatValue()));
@@ -119,9 +128,18 @@ final class OrderNatives extends CommonNatives {
 		jassProgramVisitor.getJassNativeManager().createNative("IssueTargetOrder",
 				(arguments, globalScope, triggerScope) -> {
 					final CUnit whichUnit = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
+					final String orderString = arguments.get(1).visit(StringJassValueVisitor.getInstance());
+					int orderId = OrderIdUtils.getOrderId(orderString);
+					if ((orderId == 0) && (orderString != null) && !orderString.isEmpty()) {
+						// Measured on 1.29: the name of a unit type gives its id as the order, so an Acolyte ordered
+						// to "undeadgoldmine2" on a gold mine raises the Haunted Gold Mine.
+						final CUnitType buildType = this.simulation.getUnitData().getUnitTypeByJassLegacyName(orderString);
+						if (buildType != null) {
+							orderId = buildType.getTypeId().getValue();
+						}
+					}
 					return BooleanJassValue.of((whichUnit != null) && issueTargetOrder(whichUnit.getPlayerIndex(), whichUnit,
-							OrderIdUtils.getOrderId(arguments.get(1).visit(StringJassValueVisitor.getInstance())),
-							nullable(arguments, 2, ObjectJassValueVisitor.getInstance())));
+							orderId, nullable(arguments, 2, ObjectJassValueVisitor.getInstance())));
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("IssueTargetOrderById",
 				(arguments, globalScope, triggerScope) -> {
@@ -155,7 +173,7 @@ final class OrderNatives extends CommonNatives {
 				(arguments, globalScope, triggerScope) -> {
 					final CUnitType buildType = this.simulation.getUnitData()
 							.getUnitTypeByJassLegacyName(arguments.get(1).visit(StringJassValueVisitor.getInstance()));
-					if (buildType == null) {
+					if ((buildType == null) || buildType.isCanBeBuiltOnThem()) {
 						return BooleanJassValue.FALSE;
 					}
 					final CUnit whichUnit = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
@@ -507,8 +525,11 @@ final class OrderNatives extends CommonNatives {
 	private void registerGroupOrders() {
 		jassProgramVisitor.getJassNativeManager().createNative("GroupImmediateOrder",
 				(arguments, globalScope, triggerScope) -> {
-					final List<CUnit> group = arguments.get(0)
-							.visit(ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					final List<CUnit> group = nullable(arguments, 0,
+							ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					if (group == null) {
+						return BooleanJassValue.FALSE;
+					}
 					final String order = arguments.get(1).visit(StringJassValueVisitor.getInstance());
 					final int orderId = OrderIdUtils.getOrderId(order);
 					boolean success = true;
@@ -519,8 +540,11 @@ final class OrderNatives extends CommonNatives {
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("GroupImmediateOrderById",
 				(arguments, globalScope, triggerScope) -> {
-					final List<CUnit> group = arguments.get(0)
-							.visit(ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					final List<CUnit> group = nullable(arguments, 0,
+							ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					if (group == null) {
+						return BooleanJassValue.FALSE;
+					}
 					final int order = arguments.get(1).visit(IntegerJassValueVisitor.getInstance());
 					boolean success = true;
 					for (final CUnit unit : group) {
@@ -530,8 +554,11 @@ final class OrderNatives extends CommonNatives {
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("GroupPointOrder",
 				(arguments, globalScope, triggerScope) -> {
-					final List<CUnit> group = arguments.get(0)
-							.visit(ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					final List<CUnit> group = nullable(arguments, 0,
+							ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					if (group == null) {
+						return BooleanJassValue.FALSE;
+					}
 					final String order = arguments.get(1).visit(StringJassValueVisitor.getInstance());
 					final Double x = arguments.get(2).visit(RealJassValueVisitor.getInstance());
 					final Double y = arguments.get(3).visit(RealJassValueVisitor.getInstance());
@@ -540,8 +567,11 @@ final class OrderNatives extends CommonNatives {
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("GroupPointOrderLoc",
 				(arguments, globalScope, triggerScope) -> {
-					final List<CUnit> group = arguments.get(0)
-							.visit(ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					final List<CUnit> group = nullable(arguments, 0,
+							ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					if (group == null) {
+						return BooleanJassValue.FALSE;
+					}
 					final String order = arguments.get(1).visit(StringJassValueVisitor.getInstance());
 					final AbilityPointTarget whichLocation = arguments.get(2)
 							.visit(ObjectJassValueVisitor.<AbilityPointTarget>getInstance());
@@ -550,8 +580,11 @@ final class OrderNatives extends CommonNatives {
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("GroupPointOrderById",
 				(arguments, globalScope, triggerScope) -> {
-					final List<CUnit> group = arguments.get(0)
-							.visit(ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					final List<CUnit> group = nullable(arguments, 0,
+							ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					if (group == null) {
+						return BooleanJassValue.FALSE;
+					}
 					final int orderId = arguments.get(1).visit(IntegerJassValueVisitor.getInstance());
 					final Double x = arguments.get(2).visit(RealJassValueVisitor.getInstance());
 					final Double y = arguments.get(3).visit(RealJassValueVisitor.getInstance());
@@ -559,8 +592,11 @@ final class OrderNatives extends CommonNatives {
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("GroupPointOrderByIdLoc",
 				(arguments, globalScope, triggerScope) -> {
-					final List<CUnit> group = arguments.get(0)
-							.visit(ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					final List<CUnit> group = nullable(arguments, 0,
+							ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					if (group == null) {
+						return BooleanJassValue.FALSE;
+					}
 					final int orderId = arguments.get(1).visit(IntegerJassValueVisitor.getInstance());
 					final AbilityPointTarget whichLocation = arguments.get(2)
 							.visit(ObjectJassValueVisitor.<AbilityPointTarget>getInstance());
@@ -568,16 +604,22 @@ final class OrderNatives extends CommonNatives {
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("GroupTargetOrder",
 				(arguments, globalScope, triggerScope) -> {
-					final List<CUnit> group = arguments.get(0)
-							.visit(ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					final List<CUnit> group = nullable(arguments, 0,
+							ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					if (group == null) {
+						return BooleanJassValue.FALSE;
+					}
 					final String order = arguments.get(1).visit(StringJassValueVisitor.getInstance());
 					final CWidget target = arguments.get(2).visit(ObjectJassValueVisitor.<CWidget>getInstance());
 					return BooleanJassValue.of(groupTargetOrder(group, OrderIdUtils.getOrderId(order), target));
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("GroupTargetOrderById",
 				(arguments, globalScope, triggerScope) -> {
-					final List<CUnit> group = arguments.get(0)
-							.visit(ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					final List<CUnit> group = nullable(arguments, 0,
+							ObjectJassValueVisitor.<List<CUnit>>getInstance());
+					if (group == null) {
+						return BooleanJassValue.FALSE;
+					}
 					final int orderId = arguments.get(1).visit(IntegerJassValueVisitor.getInstance());
 					final CWidget target = arguments.get(2).visit(ObjectJassValueVisitor.<CWidget>getInstance());
 					return BooleanJassValue.of(groupTargetOrder(group, orderId, target));
@@ -589,6 +631,13 @@ final class OrderNatives extends CommonNatives {
 				Math.min(group.size(), CGroupMove.MAX_SCRIPT_GROUP_ORDER_UNITS)));
 		return CGroupMove.order(this.simulation, units, orderId, x, y,
 				(unit, slotX, slotY) -> unit.order(this.simulation, orderId, new AbilityPointTarget(slotX, slotY)));
+	}
+
+	// Measured on 1.29: a point build order for a structure that goes on a gold mine (Haunted Gold Mine) is refused
+	// and gives no order; it takes the target order on the mine instead.
+	private boolean isBuiltOnMineOnly(final int id) {
+		final CUnitType type = this.simulation.getUnitData().getUnitType(new War3ID(id));
+		return (type != null) && type.isCanBeBuiltOnThem();
 	}
 
 	private boolean isUnitTypeId(final int id) {
@@ -619,6 +668,17 @@ final class OrderNatives extends CommonNatives {
 	}
 
 	private boolean issuePointOrder(final int orderingPlayerIndex, final CUnit whichUnit, final int orderId,
+			final float x, final float y, final boolean queue) {
+		this.simulation.setScriptPointOrder(true);
+		try {
+			return issuePointOrderChecked(orderingPlayerIndex, whichUnit, orderId, x, y, queue);
+		}
+		finally {
+			this.simulation.setScriptPointOrder(false);
+		}
+	}
+
+	private boolean issuePointOrderChecked(final int orderingPlayerIndex, final CUnit whichUnit, final int orderId,
 			final float x, final float y, final boolean queue) {
 		// Measured on 1.29: a drop order cannot be given as a point order, it needs the item (UnitDropItemPoint).
 		if (whichUnit.isLoaded() || CAbilityMirrorImage.isHidingCaster(whichUnit) || (orderId == OrderIds.dropitem)) {
@@ -693,7 +753,7 @@ final class OrderNatives extends CommonNatives {
 				this.simulation.getDefaultPlayerUnitOrderExecutor(orderingPlayerIndex).issueTargetOrder(
 						whichUnit.getHandleId(), abilityHandleId, orderId, whichTarget.getHandleId(), queue);
 			}
-			else if (whichTarget.visit(AbilityTargetVisitor.UNIT) != null) {
+			else {
 				return issueSpellPointOrderAtUnit(orderingPlayerIndex, whichUnit, orderId, whichTarget, queue);
 			}
 		}
@@ -704,8 +764,9 @@ final class OrderNatives extends CommonNatives {
 		return abilityHandleId != 0;
 	}
 
-	// Measured (1.29): a unit-target script order of a point-target spell (Dispel Magic,
-	// Disenchant, Flame Strike, Blizzard, Shockwave, Carrion Swarm) casts it at the unit.
+	// Measured (1.29): a target script order of a point-target spell (Dispel Magic,
+	// Disenchant, Flame Strike, Blizzard, Shockwave, Carrion Swarm) casts it where the widget stands: a unit, a tree,
+	// an item or another destructable.
 	private boolean issueSpellPointOrderAtUnit(final int orderingPlayerIndex, final CUnit whichUnit, final int orderId,
 			final CWidget whichTarget, final boolean queue) {
 		final BooleanAbilityActivationReceiver activationReceiver = BooleanAbilityActivationReceiver.INSTANCE;
@@ -714,15 +775,25 @@ final class OrderNatives extends CommonNatives {
 		for (final CAbility ability : whichUnit.getAbilities()) {
 			if (isMenuSpell(ability) || (!(ability instanceof CAbilitySpell)
 					&& !(ability instanceof AbilityBuilderActiveAbility)
-					&& !(ability instanceof CAbilityCarrionSwarmDummy))) {
+					&& !(ability instanceof CAbilityCarrionSwarmDummy))
+					// A living unit that Mass Teleport refuses is not a point to cast it at; trees, items and corpses are.
+					|| ((ability instanceof CAbilityMassTeleport) && (whichTarget instanceof CUnit)
+							&& !((CUnit) whichTarget).isDead())) {
 				continue;
 			}
 			ability.checkCanUse(this.simulation, whichUnit, orderingPlayerIndex, orderId, false, 
 					activationReceiver.reset());
 			if (activationReceiver.isOk()) {
 				final PointAbilityTargetCheckReceiver targetReceiver = PointAbilityTargetCheckReceiver.INSTANCE;
-				ability.checkCanTarget(this.simulation, whichUnit, orderingPlayerIndex, orderId, false, targetAsPoint,
-					targetReceiver.reset());
+				if ((ability instanceof CAbilityPointTargetSpellBase)
+						&& (orderId == ((CAbilityPointTargetSpellBase) ability).getBaseOrderId())) {
+					((CAbilityPointTargetSpellBase) ability).checkCanTargetWidgetPosition(this.simulation, whichUnit,
+							orderingPlayerIndex, orderId, whichTarget, targetAsPoint, targetReceiver.reset());
+				}
+				else {
+					ability.checkCanTarget(this.simulation, whichUnit, orderingPlayerIndex, orderId, false,
+							targetAsPoint, targetReceiver.reset());
+				}
 				if (targetReceiver.getTarget() != null) {
 					targetAsPoint = targetReceiver.getTarget();
 					abilityHandleId = ability.getHandleId();
@@ -757,6 +828,7 @@ final class OrderNatives extends CommonNatives {
 		}
 		final BooleanAbilityActivationReceiver activationReceiver = BooleanAbilityActivationReceiver.INSTANCE;
 		int abilityHandleId = 0;
+		boolean targetOrderAccepted = false;
 		for (final CAbility ability : whichUnit.getAbilities()) {
 			if (isMenuSpell(ability)) {
 				continue;
@@ -776,12 +848,16 @@ final class OrderNatives extends CommonNatives {
 				if (targetReceiver.isTargetable()) {
 					abilityHandleId = ability.getHandleId();
 				}
+				else if (ability.isTargetOrder(orderId)) {
+					targetOrderAccepted = true;
+				}
 			}
 		}
 		// Orders without an ability, such as stop, are still issued.
 		this.simulation.getDefaultPlayerUnitOrderExecutor(orderingPlayerIndex).issueImmediateOrder(
 				whichUnit.getHandleId(), abilityHandleId, orderId, queue);
 		// Measured on 1.29: stop is accepted (true) although no ability carries it.
-		return (abilityHandleId != 0) || ((orderId == OrderIds.stop) && !whichUnit.isDead());
+		// Measured on 1.29: the order of a spell that needs a target is accepted without one and does nothing.
+		return (abilityHandleId != 0) || targetOrderAccepted || ((orderId == OrderIds.stop) && !whichUnit.isDead());
 	}
 }

@@ -1297,6 +1297,24 @@ public class CBehaviorMove implements CBehavior {
 		return this.pathfindingActive;
 	}
 
+	/** For the movement trace: what the path search and the walk along the path are doing. */
+	public String traceSummary() {
+		final StringBuilder summary = new StringBuilder();
+		summary.append(this.pathfindingActive ? "search" : "walk");
+		if (this.path != null) {
+			summary.append(" nodes=").append(this.path.size());
+			if (!this.path.isEmpty()) {
+				final CPathPoint next = this.path.get(0);
+				summary.append(" next=").append(next.x).append(',').append(next.y);
+			}
+			summary.append(this.pathReachesGoal ? " reaches" : " partial");
+		}
+		if (this.target != null) {
+			summary.append(" goal=").append(this.target.x).append(',').append(this.target.y);
+		}
+		return summary.toString().replace(' ', '|');
+	}
+
 	@Override
 	public boolean interruptable() {
 		return true;

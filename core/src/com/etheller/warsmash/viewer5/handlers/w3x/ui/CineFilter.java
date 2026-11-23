@@ -65,6 +65,57 @@ public final class CineFilter {
 		this.elapsed = 0;
 	}
 
+	/** The filter's state for a saved game: what is shown, how far its change has gone and what it changes between. */
+	public float[] capture() {
+		final float[] state = new float[7 + 4 + 4 + 4 + 4];
+		state[0] = this.displayed ? 1 : 0;
+		state[1] = this.blendMode.ordinal();
+		state[2] = this.texMapFlags;
+		state[3] = this.duration;
+		state[4] = this.elapsed;
+		int at = 7;
+		for (final float value : this.startUV) {
+			state[at++] = value;
+		}
+		for (final float value : this.endUV) {
+			state[at++] = value;
+		}
+		for (final int value : this.startColor) {
+			state[at++] = value;
+		}
+		for (final int value : this.endColor) {
+			state[at++] = value;
+		}
+		return state;
+	}
+
+	public String getTexturePath() {
+		return this.texturePath;
+	}
+
+	public void restore(final String texturePath, final float[] state) {
+		setTexture(texturePath);
+		final CBlendMode[] blendModes = CBlendMode.values();
+		setBlendMode(((int) state[1] >= 0) && ((int) state[1] < blendModes.length) ? blendModes[(int) state[1]] : null);
+		this.texMapFlags = (int) state[2];
+		this.duration = state[3];
+		this.elapsed = state[4];
+		int at = 7;
+		for (int i = 0; i < 4; i++) {
+			this.startUV[i] = state[at++];
+		}
+		for (int i = 0; i < 4; i++) {
+			this.endUV[i] = state[at++];
+		}
+		for (int i = 0; i < 4; i++) {
+			this.startColor[i] = (int) state[at++];
+		}
+		for (int i = 0; i < 4; i++) {
+			this.endColor[i] = (int) state[at++];
+		}
+		this.displayed = state[0] != 0;
+	}
+
 	public boolean isDisplayed() {
 		return this.displayed;
 	}

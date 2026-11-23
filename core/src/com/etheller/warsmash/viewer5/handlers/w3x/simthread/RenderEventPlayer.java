@@ -223,6 +223,9 @@ public final class RenderEventPlayer {
 				this.peers.itemCreated(e.a, id(e.b), e.f0, e.f1, (WorldPeerData.Item) e.o0);
 			}
 			break;
+		case RenderCallCodes.ITEM_REMOVE:
+			this.target.removeItem(item(e.a));
+			break;
 		case RenderCallCodes.ITEM_UPDATE_MODEL:
 			this.target.updateItemModel(item(e.a));
 			break;
@@ -366,6 +369,9 @@ public final class RenderEventPlayer {
 			break;
 		case RenderCallCodes.UNIT_PLAYER_COLOR:
 			this.target.changeUnitPlayerColor(unit(e.a), e.b, e.c);
+			break;
+		case RenderCallCodes.UNIT_TEAM_COLOR:
+			this.target.setUnitTeamColor(unit(e.a), e.b);
 			break;
 		case RenderCallCodes.UNIT_VERTEX_COLOR:
 			this.target.changeUnitVertexColor(unit(e.a), new Color(e.f0, e.f1, e.f2, e.f3));

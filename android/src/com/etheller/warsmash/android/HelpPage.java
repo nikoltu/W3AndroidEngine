@@ -67,7 +67,8 @@ final class HelpPage extends LauncherViews {
 			{ LauncherKit.Pictogram.Kind.SHIFT, R.string.help_shift, R.string.help_shift_line },
 			{ LauncherKit.Pictogram.Kind.TWO, R.string.help_two, R.string.help_two_line },
 			{ LauncherKit.Pictogram.Kind.PINCH, R.string.help_pinch, R.string.help_pinch_line },
-			{ LauncherKit.Pictogram.Kind.MINIMAP, R.string.help_minimap, R.string.help_minimap_line } };
+			{ LauncherKit.Pictogram.Kind.MINIMAP, R.string.help_minimap, R.string.help_minimap_line },
+			{ LauncherKit.Pictogram.Kind.HOLD, R.string.help_skip, R.string.help_skip_line } };
 		float top = y + (b.tablet ? 4 : 4);
 		if (b.tablet) {
 			place(panel, text(getString(R.string.help_touch_title), b.title, this.activity.art.text()), x, y, w, -1);
@@ -87,7 +88,9 @@ final class HelpPage extends LauncherViews {
 					this.activity.art.bitmap(SkinArt.EDIT_BORDER), px(b.tablet ? 14 : 8))
 							.tiled(this.activity.art.bitmap(SkinArt.EDIT_BACKGROUND), px(b.tablet ? 110 : 60))
 							.fallback(Color.argb(0xCC, 0x05, 0x06, 0x0C)).line(this.activity.art.line());
-			card.setBackground(this.activity.art.reforged() ? border.centre() : border);
+			// The Reforged text-field art is made for a one-line box; stretched over a card its bottom edge is a bare strip.
+			card.setBackground(this.activity.art.reforged() ? panelFrame(b.tablet ? 8 : 6, Color.argb(0xDB, 0x0E, 0x0C, 0x0A))
+					: border);
 			place(panel, card, cx, cy, cardW, cardH);
 			final float icon = Math.min(cardH * 0.5f, cardW * 0.6f);
 			final View picture = new View(this.activity);

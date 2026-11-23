@@ -17,6 +17,8 @@ import com.etheller.warsmash.viewer5.handlers.w3x.DynamicShadowManager;
 import com.etheller.warsmash.viewer5.handlers.w3x.W3xSceneLightManager;
 
 public class BatchGroup extends GenericGroup {
+	private static final int GROUND_SHADOW_MAP_UNIT = 12;
+	private static final int GROUND_FOG_OF_WAR_MAP_UNIT = 13;
 	// Environment-map lighting of HD materials: overall strength, and the share kept at night when the DNC sun
 	// colour is black (the Reforged DNC lights carry no ambient). Tunable without a rebuild for screenshot matching.
 	private static final float HD_IBL_STRENGTH = Float.parseFloat(System.getProperty("warsmash.hdIblStrength", "1.0"));
@@ -52,7 +54,7 @@ public class BatchGroup extends GenericGroup {
 		final W3xSceneLightManager lightManager = (W3xSceneLightManager) scene.getLightManager();
 
 		if (hd) {
-			shader = handler.shaders.hd;
+			shader = instance.groundShading != null ? handler.shaders.groundHd : handler.shaders.hd;
 		}
 		else if (skinningType == SkinningType.ExtendedVertexGroups) {
 			if (DynamicShadowManager.IS_SHADOW_MAPPING) {
@@ -66,6 +68,9 @@ public class BatchGroup extends GenericGroup {
 			if (DynamicShadowManager.IS_SHADOW_MAPPING) {
 				shader = handler.shaders.complexShadowMap;
 			}
+			else if (instance.groundShading != null) {
+				shader = handler.shaders.groundComplex;
+			}
 			else {
 				shader = handler.shaders.complex;
 			}
@@ -76,12 +81,15 @@ public class BatchGroup extends GenericGroup {
 
 		shader.setUniformMatrix(hd ? locations.vp : locations.mvp, mvp);
 
-		final DataTexture unitLightsTexture = lightManager.getUnitLightsTexture();
+		final GroundShading groundShading = instance.groundShading;
+		final DataTexture lightsTexture = groundShading != null ? lightManager.getTerrainLightsTexture()
+				: lightManager.getUnitLightsTexture();
 
-		unitLightsTexture.bind(14);
+		lightsTexture.bind(14);
 		shader.setUniformi(locations.lightTexture, 14);
-		shader.setUniformf(locations.lightCount, lightManager.getUnitLightCount());
-		shader.setUniformf(locations.lightTextureHeight, unitLightsTexture.getHeight());
+		shader.setUniformf(locations.lightCount,
+				groundShading != null ? lightManager.getTerrainLightCount() : lightManager.getUnitLightCount());
+		shader.setUniformf(locations.lightTextureHeight, lightsTexture.getHeight());
 
 		// Instances of models with no bones don't have a bone texture.
 		if (instance.bindBones(shader, locations)) {
@@ -105,6 +113,17 @@ public class BatchGroup extends GenericGroup {
 			shader.setUniformf(locations.iblParams, HD_IBL_STRENGTH * lightManager.getHdIblScale(), HD_NIGHT_AMBIENT,
 					lightManager.getHdSpecularScale());
 			shader.setUniform4fv(locations.vertexColor, instance.vertexColor, 0, instance.vertexColor.length);
+			shader.setUniformf(locations.unlit, scene.unlit ? 1f : 0f);
+			if (shader == handler.shaders.groundHd) {
+				groundShading.bindGroundShading(shader, GROUND_SHADOW_MAP_UNIT, GROUND_FOG_OF_WAR_MAP_UNIT);
+			}
+			final float[] tone = lightManager.getHdTone();
+			if (tone != null) {
+				shader.setUniformf(locations.tone, tone[0], tone[1], tone[2], tone[3]);
+			}
+			else {
+				shader.setUniformf(locations.tone, 0f, 0f, 1f, 0f);
+			}
 
 			gl.glEnable(GL20.GL_BLEND);
 			gl.glEnable(GL20.GL_DEPTH_TEST);
@@ -117,6 +136,8 @@ public class BatchGroup extends GenericGroup {
 			tempFloat3Array[2] = camera.location.z;
 			shader.setUniform3fv(locations.eyePos, tempFloat3Array, 0, 3);
 
+			float lastUnshaded = -1f;
+			float lastUnfogged = -1f;
 			for (final int index : getObjectArray()) {
 				final Batch batch = batches.get(index);
 				final Geoset geoset = batch.geoset;
@@ -133,6 +154,16 @@ public class BatchGroup extends GenericGroup {
 				if ((geosetColor[3] > 0.01) && (layerAlpha > 0)) {
 					shader.setUniformf(locations.layerAlpha, layerAlpha * geosetColor[3]);
 					shader.setUniformf(locations.filterMode, diffuseLayer.filterMode);
+					final float unshaded = diffuseLayer.unshaded != 0 ? 1f : 0f;
+					if (unshaded != lastUnshaded) {
+						shader.setUniformf(locations.unshaded, unshaded);
+						lastUnshaded = unshaded;
+					}
+					final float unfogged = diffuseLayer.unfogged != 0 ? 1f : 0f;
+					if (unfogged != lastUnfogged) {
+						shader.setUniformf(locations.unfogged, unfogged);
+						lastUnfogged = unfogged;
+					}
 
 					final int diffuseId = Math.max(0, instance.layerTextures[diffuseLayer.index]);
 					final int normalsId = Math.max(0, instance.layerTextures[normalsLayer.index]);
@@ -197,11 +228,23 @@ public class BatchGroup extends GenericGroup {
 						continue;
 					}
 					webGL.bindTexture(diffuseTexture, 0);
-					webGL.bindTexture(normalsTexture, 1);
-					webGL.bindTexture(ormTexture, 2);
-					webGL.bindTexture(emissiveTexture, 3);
+					if (isFallback(normalsTexture)) {
+						webGL.bindNeutralNormal(1);
+					}
+					else {
+						webGL.bindTexture(normalsTexture, 1);
+					}
+					if (isFallback(ormTexture)) {
+						webGL.bindNeutralOrm(2);
+					}
+					else {
+						webGL.bindTexture(ormTexture, 2);
+					}
+					// The grey stand-in suits a diffuse map, but as light it would wash the model out: a missing
+					// emissive map emits nothing and a missing environment map reflects nothing.
+					webGL.bindTexture(isFallback(emissiveTexture) ? null : emissiveTexture, 3);
 					webGL.bindTexture(teamColorTexture, 4);
-					webGL.bindTexture(environmentMapTexture, 5);
+					webGL.bindTexture(isFallback(environmentMapTexture) ? null : environmentMapTexture, 5);
 
 					if (instance.vertexColor[3] < 1.0f) {
 						diffuseLayer.bindBlended(shader, locations.filterMode);
@@ -219,6 +262,9 @@ public class BatchGroup extends GenericGroup {
 			shader.setUniformi(locations.texture, 0);
 
 			shader.setUniform4fv(locations.vertexColor, instance.vertexColor, 0, instance.vertexColor.length);
+			if (shader == handler.shaders.groundComplex) {
+				groundShading.bindGroundShading(shader, GROUND_SHADOW_MAP_UNIT, GROUND_FOG_OF_WAR_MAP_UNIT);
+			}
 
 			for (final int index : getObjectArray()) {
 				final Batch batch = batches.get(index);
@@ -295,6 +341,10 @@ public class BatchGroup extends GenericGroup {
 			}
 		}
 
+	}
+
+	private static boolean isFallback(final Texture texture) {
+		return (texture != null) && texture.isFallback();
 	}
 
 	/** A texture still waiting for its upload draws as nothing rather than as black. */

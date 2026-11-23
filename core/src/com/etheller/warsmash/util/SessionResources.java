@@ -69,6 +69,13 @@ public final class SessionResources {
 		resource.dispose();
 	}
 
+	/** Tracks into this scope again, after {@link #end(Scope)}, over the ones open. */
+	public static synchronized void resume(final Scope scope) {
+		if ((scope != null) && !OPEN.contains(scope)) {
+			OPEN.add(scope);
+		}
+	}
+
 	/** Stops tracking into this scope; what it has is kept for its dispose. */
 	public static synchronized void end(final Scope scope) {
 		OPEN.remove(scope);

@@ -22,8 +22,13 @@
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="29" />
+    <!-- Android 6 to 10: the shared profiles folder and a content folder outside the app's own folder -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="29" />
 
     <application
+        android:requestLegacyExternalStorage="true"
         android:name=".WarsmashApplication"
         android:allowBackup="false"
         android:appCategory="game"
@@ -71,6 +76,12 @@
         <provider
             android:name=".CrashLogProvider"
             android:authorities="${applicationId}.crashlogs"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+        <!-- The system installer reads a downloaded update through this when the in-app install is refused -->
+        <provider
+            android:name=".UpdateApkProvider"
+            android:authorities="${applicationId}.updateapk"
             android:exported="false"
             android:grantUriPermissions="true" />
         <activity

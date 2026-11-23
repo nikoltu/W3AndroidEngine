@@ -29,6 +29,11 @@ public class CAbilityAbilityBuilderActivePointTarget extends CAbilityAbilityBuil
 	}
 
 	@Override
+	public boolean isTargetOrder(final int orderId) {
+		return (orderId != 0) && (orderId == getBaseOrderId());
+	}
+
+	@Override
 	public boolean isToggleOn() {
 		return false;
 	}

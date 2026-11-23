@@ -97,6 +97,9 @@ public class MenuUI {
 
 	UIFrame mainMenuFrame;
 
+	private boolean deferMenuModels;
+	private boolean deferredBackground;
+	private boolean deferredSideModels;
 	SpriteFrame glueSpriteLayerTopRight;
 
 	SpriteFrame glueSpriteLayerTopLeft;
@@ -143,6 +146,7 @@ public class MenuUI {
 	final PlayerProfileManager profileManager;
 	/** A launcher shows its own menu: the glue menu is never shown, only the loading screens of the games. */
 	private boolean launcherMode;
+	private boolean returnUnfinished;
 	/** Game data the menu's owner keeps open for the maps; null opens it again for every map. */
 	DataSource gameData;
 	BeginGameInformation beginGameInformation;
@@ -255,7 +259,13 @@ public class MenuUI {
 		this.rootFrame.setWideRoot(true);
 
 		if (!this.launcherMode) {
-			this.menuScreen.setModel(this.rootFrame.getSkinField("GlueSpriteLayerBackground"), this.menuFogSettings);
+			if (this.deferMenuModels) {
+				this.deferredBackground = true;
+			}
+			else {
+				this.menuScreen.setModel(this.rootFrame.getSkinField("GlueSpriteLayerBackground"),
+						this.menuFogSettings);
+			}
 		}
 		this.rootFrameListener.onCreate(this.rootFrame);
 		try {
@@ -293,16 +303,23 @@ public class MenuUI {
 		this.glueSpriteLayerTopRight = (SpriteFrame) this.rootFrame.createFrameByType("SPRITE",
 				"SmashGlueSpriteLayerTopRight", this.rootFrame, "", 0);
 		anchorGlueLayer(this.glueSpriteLayerTopRight, FramePoint.TOPRIGHT);
-		final String topRightModel = this.rootFrame.getSkinField("GlueSpriteLayerTopRight");
-		this.rootFrame.setSpriteFrameModel(this.glueSpriteLayerTopRight, topRightModel);
-		this.glueSpriteLayerTopRight.setSequence("MainMenu Birth");
+		// A previewed loading screen goes straight on to its map and hides these two layers.
+		final boolean deferSideModels = this.loadingScreen.isPreviewing() && !this.launcherMode;
+		this.deferredSideModels = deferSideModels;
+		if (!deferSideModels) {
+			final String topRightModel = this.rootFrame.getSkinField("GlueSpriteLayerTopRight");
+			this.rootFrame.setSpriteFrameModel(this.glueSpriteLayerTopRight, topRightModel);
+			this.glueSpriteLayerTopRight.setSequence("MainMenu Birth");
+		}
 
 		this.glueSpriteLayerTopLeft = (SpriteFrame) this.rootFrame.createFrameByType("SPRITE",
 				"SmashGlueSpriteLayerTopLeft", this.rootFrame, "", 0);
 		anchorGlueLayer(this.glueSpriteLayerTopLeft, FramePoint.TOPLEFT);
-		final String topLeftModel = this.rootFrame.getSkinField("GlueSpriteLayerTopLeft");
-		this.rootFrame.setSpriteFrameModel(this.glueSpriteLayerTopLeft, topLeftModel);
-		this.glueSpriteLayerTopLeft.setSequence("MainMenu Birth");
+		if (!deferSideModels) {
+			final String topLeftModel = this.rootFrame.getSkinField("GlueSpriteLayerTopLeft");
+			this.rootFrame.setSpriteFrameModel(this.glueSpriteLayerTopLeft, topLeftModel);
+			this.glueSpriteLayerTopLeft.setSequence("MainMenu Birth");
+		}
 
 		this.glueSpriteLayerCenter = (SpriteFrame) this.rootFrame.createFrameByType("SPRITE",
 				"SmashGlueSpriteLayerCenter", this.rootFrame, "", 0);
@@ -469,6 +486,11 @@ public class MenuUI {
 		this.campaigns.setEdition(edition);
 	}
 
+	/** The launcher's preferences, whose map version choice of the current profile the campaign screens follow. */
+	public void setLauncherPreferences(final String name) {
+		this.campaigns.setLauncherPreferences(name);
+	}
+
 	/** The profile a launcher starts the game with, for a loading screen previewed before it is taken on. */
 	public void setStartupProfile(final String profile) {
 		this.loadingScreen.setStartupProfile(profile);
@@ -501,6 +523,31 @@ public class MenuUI {
 
 	public void showMapLoadError() {
 		this.mapStart.showMapLoadError();
+	}
+
+	/**
+	 * Whether the game starts from a map given at startup: the menu's own 3D background and side panels are then not
+	 * read until the menu is shown. Must be set before the menu is built.
+	 */
+	public void setDeferMenuModels(final boolean deferMenuModels) {
+		this.deferMenuModels = deferMenuModels;
+	}
+
+	/** Reads the menu models a startup map left out, once the menu is to be seen; does nothing when none were. */
+	public void loadDeferredMenuModels() {
+		if (this.deferredBackground) {
+			this.deferredBackground = false;
+			this.menuScreen.setModel(this.rootFrame.getSkinField("GlueSpriteLayerBackground"), this.menuFogSettings);
+		}
+		if (this.deferredSideModels) {
+			this.deferredSideModels = false;
+			this.rootFrame.setSpriteFrameModel(this.glueSpriteLayerTopRight,
+					this.rootFrame.getSkinField("GlueSpriteLayerTopRight"));
+			this.glueSpriteLayerTopRight.setSequence("MainMenu Birth");
+			this.rootFrame.setSpriteFrameModel(this.glueSpriteLayerTopLeft,
+					this.rootFrame.getSkinField("GlueSpriteLayerTopLeft"));
+			this.glueSpriteLayerTopLeft.setSequence("MainMenu Birth");
+		}
 	}
 
 	/** Must be set before the menu is built. */
@@ -710,6 +757,7 @@ public class MenuUI {
 
 	/** The main menu's background model and cursor, after a campaign's or a map's. */
 	void restoreMainMenuBackground() {
+		loadDeferredMenuModels();
 		this.menuScreen.setModel(this.rootFrame.getSkinField("GlueSpriteLayerBackground"), this.menuFogSettings);
 		this.rootFrame.setSpriteFrameModel(this.cursorFrame, this.rootFrame.getSkinField("Cursor"));
 	}
@@ -1288,6 +1336,22 @@ public class MenuUI {
 	public void hide() {
 		this.glueScreenLoop.stop();
 		stopMusic();
+		this.returnUnfinished = false;
+	}
+
+	/** Whether the menu came back from a game straight into the loading of another one, without its sounds. */
+	public boolean isReturnUnfinished() {
+		return this.returnUnfinished;
+	}
+
+	/** The menu's music and ambient sound, held back for the game that was to follow, when that game did not start. */
+	void finishReturnFromGame() {
+		if (!this.returnUnfinished) {
+			return;
+		}
+		this.returnUnfinished = false;
+		switchToMainMenuGlueScreenLoop();
+		show();
 	}
 
 	public void dispose() {
@@ -1358,12 +1422,27 @@ public class MenuUI {
 	}
 
 	public void onReturnFromGame(final boolean forceCampaignSelect) {
+		onReturnFromGame(forceCampaignSelect, false);
+	}
+
+	/**
+	 * @param nextGameStarts whether another game (the next level, a loaded save, a replay) starts loading at once:
+	 *                       its loading screen then follows without the menu's background, music and ambient sound,
+	 *                       which wait for a game that ends to the menu
+	 */
+	public void onReturnFromGame(final boolean forceCampaignSelect, final boolean nextGameStarts) {
+		loadDeferredMenuModels();
 		this.rootFrame.restoreTemplates();
 		this.loadingScreen.hide();
 		final SavedGame.Loadability loadFailure = SavedGame.consumeLoadFailure();
 		if (loadFailure != null) {
 			this.dialog.showError(SavedGameDialog.reasonKey(loadFailure), null);
 		}
+		if (nextGameStarts) {
+			this.returnUnfinished = true;
+			return;
+		}
+		this.returnUnfinished = false;
 		switch (this.menuState) {
 		default:
 		case GOING_TO_MAIN_MENU:

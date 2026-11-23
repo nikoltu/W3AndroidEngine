@@ -6,6 +6,8 @@ import java.util.List;
 import java.util.Map;
 
 import com.etheller.warsmash.units.GameObject;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.CTargetType;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.orders.OrderIdUtils;
 import com.etheller.warsmash.units.ObjectData;
 import com.etheller.warsmash.util.Log;
 import com.etheller.warsmash.util.War3ID;
@@ -13,6 +15,7 @@ import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbility;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbilityGenericDoNothing;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbilityGenericSelfTargetOrder;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.cargohold.CAbilityDropInstant;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.item.CAbilityItemBundleOfLumber;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.item.CAbilityItemChestOfGold;
@@ -90,6 +93,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.ne
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.neutral.creeps.CAbilityHurlBoulder;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.neutral.creeps.CAbilityDeathDamage;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.neutral.creeps.CAbilityPermanentImmolation;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.neutral.alchemist.CAbilityHealingSpray;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.neutral.tinker.CAbilityClusterRockets;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.neutral.tinker.CAbilityFactory;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.neutral.tinker.CAbilityPocketFactory;
@@ -382,6 +386,10 @@ public class CAbilityData {
 				(handleId, alias) -> new CAbilityAntiMagicShell(handleId, alias)));
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Aps2"),
 				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityPossession(handleId, alias)));
+		// The creeps' Possession and the research-locked Banshee one share the code "Apos": a cast time and no
+		// channel, so the target changes hands at once.
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Apos"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityPossession(handleId, alias)));
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Auns"),
 				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityUnsummon(handleId, alias)));
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("Aapl"),
@@ -442,6 +450,9 @@ public class CAbilityData {
 		// Tinker
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("ANcs"),
 				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityClusterRockets(handleId, alias)));
+		// Alchemist
+		this.codeToAbilityTypeDefinition.put(War3ID.fromString("ANhs"),
+				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityHealingSpray(handleId, alias)));
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("ANfy"),
 				new CAbilityTypeDefinitionSpellBase((handleId, alias) -> new CAbilityFactory(handleId, alias, alias)));
 		this.codeToAbilityTypeDefinition.put(War3ID.fromString("ANsy"),
@@ -828,6 +839,17 @@ public class CAbilityData {
 		final CAbilityType<?> abilityType = getAbilityType(abilityId);
 		if (abilityType != null) {
 			return abilityType.createAbility(handleId);
+		}
+		final GameObject gameObject = this.abilityData.get(abilityId);
+		if (gameObject != null) {
+			final int orderId = OrderIdUtils.getOrderId(gameObject.getField("Order"));
+			// Measured on 1.29: a buff spell that allows no targets takes a target order on its caster only; the
+			// build and revive orders, which carry no buff, are not accepted that way.
+			if ((orderId != 0) && !gameObject.getField(AbilityFields.BUFF + 1).isEmpty()
+					&& CTargetType.parseTargetTypeSet(gameObject.getFieldAsList(AbilityFields.TARGETS_ALLOWED + 1))
+							.isEmpty()) {
+				return new CAbilityGenericSelfTargetOrder(abilityId, abilityId, handleId, orderId);
+			}
 		}
 		return new CAbilityGenericDoNothing(abilityId, abilityId, handleId);
 	}

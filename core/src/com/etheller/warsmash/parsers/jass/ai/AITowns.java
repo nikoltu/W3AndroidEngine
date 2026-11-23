@@ -22,8 +22,16 @@ final class AITowns {
 	}
 
 	static void initTowns(final AIController ai) {
-		final float[] start = ai.player.getStartLocation();
-		final CUnit mine = findGoldMineNear(ai, start[0], start[1], 1600f);
+		float[] start = ai.player.getStartLocation();
+		CUnit mine = findGoldMineNear(ai, start[0], start[1], 1600f);
+		if (mine == null) {
+			// A map can found a player's first town away from its start location; the town is where its hall stands.
+			final CUnit hall = findOwnHallNear(ai, start[0], start[1]);
+			if (hall != null) {
+				start = new float[] { hall.getX(), hall.getY() };
+				mine = findGoldMineNear(ai, start[0], start[1], 1600f);
+			}
+		}
 		ai.towns.add(new AITown(0, start[0], start[1], mine));
 		refreshTowns(ai);
 		if (!ai.attackCaptain.isHomeSet()) {
@@ -36,6 +44,22 @@ final class AITowns {
 		float bestDistance = radius;
 		for (final CUnit unit : ai.simulation.getUnits()) {
 			if (!unit.isDead() && (unit.getGoldMineData() != null) && (unit.getOverlayedGoldMineData() == null)) {
+				final float d = distance(x, y, unit.getX(), unit.getY());
+				if (d < bestDistance) {
+					bestDistance = d;
+					best = unit;
+				}
+			}
+		}
+		return best;
+	}
+
+	private static CUnit findOwnHallNear(final AIController ai, final float x, final float y) {
+		CUnit best = null;
+		float bestDistance = Float.MAX_VALUE;
+		for (final CUnit unit : ai.simulation.getUnits()) {
+			if (ai.isOurs(unit) && unit.isBuilding() && !unit.isDead()
+					&& unit.getClassifications().contains(CUnitClassification.TOWNHALL)) {
 				final float d = distance(x, y, unit.getX(), unit.getY());
 				if (d < bestDistance) {
 					bestDistance = d;

@@ -10,6 +10,8 @@ public class ArchivedFileStream implements SeekableByteChannel{
 	private boolean open;
 	private SeekableByteChannel from;
 	private ByteBuffer buffer;
+	/** The bytes of a sector, which is more than the buffer holds for a file smaller than one sector. */
+	private final int blockSize;
 	private ArchivedFile file;
 	private ArchivedFileExtractor extractor;
 	private long position;
@@ -20,10 +22,12 @@ public class ArchivedFileStream implements SeekableByteChannel{
 		this.extractor = extractor;
 		this.file = file;
 		if( file.hasFlag(BlockTable.FLAG_SINGLE_UNIT) ){
-			buffer = ByteBuffer.allocate(file.fileSize);
+			blockSize = file.fileSize;
 		}else{
-			buffer = ByteBuffer.allocate(512 << file.blockShift);
+			blockSize = 512 << file.blockShift;
 		}
+		// Map protectors set sectors of up to 16 MB, and a buffer that big for every small file filled the heap.
+		buffer = ByteBuffer.allocate(Math.max(0, Math.min(blockSize, file.fileSize)));
 		position = 0;
 		currentBlock = -1;
 		open = true;
@@ -56,10 +60,10 @@ public class ArchivedFileStream implements SeekableByteChannel{
 		position = newPosition;
 		// try and update the buffer position of loaded sectors
 		if( currentBlock != -1 ){		
-			if( currentBlock != newPosition / buffer.capacity() )
+			if( currentBlock != newPosition / blockSize )
 				currentBlock = -1;
 			else
-				buffer.position((int) (newPosition % buffer.capacity()));
+				buffer.position((int) (newPosition % blockSize));
 		}
 		
 		// *** return value as described by SeekableByteChannel interface
@@ -75,14 +79,14 @@ public class ArchivedFileStream implements SeekableByteChannel{
 		
 		// load current block if no block is currently loaded
 		if( currentBlock == -1 ){
-			currentBlock = (int) (position / buffer.capacity());
+			currentBlock = (int) (position / blockSize);
 			buffer.clear();
 			try {
-				buffer = extractor.readBlock(buffer, from, file, currentBlock);
+				buffer = extractor.readBlock(buffer, from, file, currentBlock, blockSize);
 			} catch (MPQException e) {
 				throw new IOException(e);
 			}
-			buffer.position((int) (position % buffer.capacity()));
+			buffer.position((int) (position % blockSize));
 			
 		}
 		
@@ -98,10 +102,10 @@ public class ArchivedFileStream implements SeekableByteChannel{
 				position+= buffer.remaining();
 				dst.put(buffer);
 				if(position < file.fileSize){
-					currentBlock = (int) (position / buffer.capacity());
+					currentBlock = (int) (position / blockSize);
 					buffer.clear();
 					try {
-						buffer = extractor.readBlock(buffer, from, file, currentBlock);
+						buffer = extractor.readBlock(buffer, from, file, currentBlock, blockSize);
 					} catch (MPQException e) {
 						throw new IOException(e);
 					}

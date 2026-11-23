@@ -447,16 +447,16 @@ public final class UpdateCheck {
 	public static String download(final Release release, final File target, final Progress progress) {
 		final File part = new File(target.getPath() + ".part");
 		if (!release.hasApk()) {
-			return "The release has no APK.";
+			return LauncherText.get("update_error_no_apk");
 		}
 		if (!release.apkUrl.startsWith("https://")) {
-			return "The release's APK is not on a secure address.";
+			return LauncherText.get("update_error_insecure");
 		}
 		HttpURLConnection connection = null;
 		try {
 			final File folder = target.getAbsoluteFile().getParentFile();
 			if ((folder != null) && !folder.isDirectory() && !folder.mkdirs()) {
-				return "The download folder cannot be made.";
+				return LauncherText.get("update_error_folder");
 			}
 			if (part.length() > release.apkSize) {
 				part.delete();
@@ -469,7 +469,7 @@ public final class UpdateCheck {
 				}
 				final int code = connection.getResponseCode();
 				if ((code != HttpURLConnection.HTTP_OK) && (code != HttpURLConnection.HTTP_PARTIAL)) {
-					return "The server answered " + code + ".";
+					return LauncherText.get("update_error_server", code);
 				}
 				if (code == HttpURLConnection.HTTP_OK) {
 					have = 0;
@@ -495,13 +495,13 @@ public final class UpdateCheck {
 			}
 			if (part.length() != release.apkSize) {
 				part.delete();
-				return "The download has the wrong size.";
+				return LauncherText.get("update_error_size");
 			}
 			if (target.exists() && !target.delete()) {
-				return "The old download cannot be replaced.";
+				return LauncherText.get("update_error_replace");
 			}
 			if (!part.renameTo(target)) {
-				return "The download cannot be kept.";
+				return LauncherText.get("update_error_keep");
 			}
 			return null;
 		}

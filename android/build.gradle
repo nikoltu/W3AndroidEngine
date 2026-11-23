@@ -1,6 +1,10 @@
 apply plugin: "com.android.application"
 
 android {
+    // The translations cover the launcher's visible texts; a text left out is shown in English.
+    lint {
+        disable "MissingTranslation"
+    }
     namespace = "com.etheller.warsmash.android"
     compileSdk = 36
     compileSdkMinor = 1
@@ -25,8 +29,8 @@ android {
         applicationId = "com.etheller.warsmash.android"
         minSdk = 26
         targetSdk = 36
-        versionCode = 4242
-        versionName = "0.4.242"
+        versionCode = 5000
+        versionName = "0.5.0"
         // Kept apart from the main build on a device: its own package, name and icon.
         applicationIdSuffix = ".multithread"
         versionNameSuffix = "-mt"
@@ -88,6 +92,8 @@ configurations {
 dependencies {
     implementation project(":core")
     implementation "com.badlogicgames.gdx:gdx-backend-android:$gdxVersion"
+    // Installs the baseline profile (baseline-prof.txt next to the manifest) for sideloaded APKs, which no store compiles ahead of time.
+    implementation "androidx.profileinstaller:profileinstaller:1.4.1"
     for (abi in ["armeabi-v7a", "arm64-v8a", "x86_64"]) {
         natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-$abi"
         natives "com.badlogicgames.gdx:gdx-freetype-platform:$gdxVersion:natives-$abi"

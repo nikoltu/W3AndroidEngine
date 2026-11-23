@@ -31,6 +31,11 @@ public class CBehaviorDrop implements CRangedBehavior {
 	private static final float NEAR_WATER_MARGIN = 32f;
 	private static final float MEETING_POINT_SLACK = 64f;
 	private static final float WALK_CHECK_STEP = 16f;
+	/**
+	 * Measured on 1.29: a Goblin Zeppelin sent to unload on a point flies on until it is this close to the point
+	 * (it does not drop at the cargo hold area as a ship does), then puts the units down on the point itself.
+	 */
+	private static final float FLYING_DROP_RANGE = 80f;
 
 	private final CUnit unit;
 	private final CAbilityDrop ability;
@@ -60,6 +65,10 @@ public class CBehaviorDrop implements CRangedBehavior {
 		if (dropSpot(game) != null) {
 			this.dropping = true;
 			return dropStep(game);
+		}
+		if (isFlying()) {
+			this.meetingPoint = target;
+			return this.unit.getMoveBehavior().reset(this.meetingPoint, this, false);
 		}
 		if (this.unit.isMovementDisabled() || isNearWater(game, cargoData)) {
 			return unloadAtShore(game, cargoData);
@@ -150,6 +159,9 @@ public class CBehaviorDrop implements CRangedBehavior {
 		}
 		final CUnit passenger = cargoData.getUnit(0);
 		final double distance = StrictMath.hypot(this.target.x - x, this.target.y - y);
+		if (isFlying() && (distance > FLYING_DROP_RANGE)) {
+			return null;
+		}
 		final float radius = cargoData.getDropRadius();
 		float spotX = this.target.x;
 		float spotY = this.target.y;
@@ -192,6 +204,10 @@ public class CBehaviorDrop implements CRangedBehavior {
 			}
 		}
 		return true;
+	}
+
+	private boolean isFlying() {
+		return this.unit.getMovementType() == MovementType.FLY;
 	}
 
 	private boolean isAtMeetingPoint() {

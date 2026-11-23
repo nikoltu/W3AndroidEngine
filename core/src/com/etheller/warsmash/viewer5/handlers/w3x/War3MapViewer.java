@@ -41,6 +41,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.UnsupportedEncodingException;
 import java.nio.channels.SeekableByteChannel;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -56,6 +57,7 @@ import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.BiFunction;
 import com.etheller.warsmash.util.StreamBytes;
@@ -98,6 +100,7 @@ import com.etheller.warsmash.units.GameObject;
 import com.etheller.warsmash.units.custom.WTS;
 import com.etheller.warsmash.util.ArgbImage;
 import com.etheller.warsmash.util.GameDataConstants;
+import com.etheller.warsmash.launcher.MapFiles;
 import com.etheller.warsmash.util.Log;
 import com.etheller.warsmash.util.MappedData;
 import com.etheller.warsmash.util.Quadtree;
@@ -119,6 +122,7 @@ import com.etheller.warsmash.viewer5.Scene;
 import com.etheller.warsmash.viewer5.SimpleScene;
 import com.etheller.warsmash.viewer5.SceneLightManager;
 import com.etheller.warsmash.viewer5.WorldScene;
+import com.etheller.warsmash.viewer5.gl.Extensions;
 import com.etheller.warsmash.viewer5.gl.WebGL;
 import com.etheller.warsmash.viewer5.handlers.AbstractMdxModelViewer;
 import com.etheller.warsmash.viewer5.handlers.ResourceHandler;
@@ -170,6 +174,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CItem;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CDoodadTable;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnitType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.campaign.CGameExit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.campaign.CImage;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.campaign.CTrackable;
@@ -203,6 +208,8 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 	private static final int MAX_STEPS_PER_FRAME = 3;
 	// A sound not decoded by then plays as soon as it is; the start of the game does not wait longer for it.
 	static final long SOUND_PRELOAD_WAIT_MILLIS = 3000;
+	/** How long one loading screen frame waits for the sounds to be decoded. */
+	static final long SOUND_PRELOAD_FRAME_MILLIS = 8;
 	/** Game seconds per real second (desktop -speed), so automated playthroughs of long games finish sooner. */
 	private static float defaultTimeScale = 1;
 	static final byte FOGGED_SHADE = (byte) 168;
@@ -215,9 +222,26 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 	private static final long MODEL_FINISH_SLICE_NANOS = 2_000_000L;
 	/** Up to the first fog update, 0.4 s into the game, the last of the game's slow first steps. */
 	private static final int OPENING_STEPS = 8;
+	private static final int FIRST_FRAME_SHADOWS = 0;
+	private static final int FIRST_FRAME_STEPS = 1;
+	private static final int FIRST_FRAME_SOUNDS = 2;
+	private static final int FIRST_FRAME_FINISH = 3;
+	private static final int FIRST_FRAME_DONE = 4;
+	private static final int FIRST_FRAME_PATHING = 5;
+	private int firstFrameStage = FIRST_FRAME_SHADOWS;
+	/** The unit types whose parts of the map are found once the opening steps have played, and the stage after. */
+	private final ArrayDeque<CUnitType> pathingPartsPending = new ArrayDeque<>();
+	private int firstFrameAfterPathing;
+	/** The unit types the map's games made, kept for the next loading; null where there is nowhere to keep them. */
+	MapTypeUsage typeUsage;
+	private int openingStepsDone;
+	private long openingStepsNanos;
 	/** A scene update with no time passing skips the animation work the first real one has to do. */
 	private static final float OPENING_UPDATE_SECONDS = 0.001f;
 	private boolean openingStepsPlayed;
+	private volatile BooleanSupplier scriptDialogPause = () -> false;
+	/** The supplier's last answer, kept by the simulation side for the render side's reads. */
+	private volatile boolean scriptDialogPaused;
 	float timeScale = defaultTimeScale;
 	private final CGameExit gameExit = new CGameExit();
 	final CSoundMixer soundMixer = new CSoundMixer();
@@ -281,6 +305,8 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 	private boolean modelCinematicsEnabled = true;
 	final List<UnitIndicator> unitIndicators = new ArrayList<>();
 	public List<RenderDoodad> decals = new ArrayList<>();
+	private int fogDoodadTicks;
+	private boolean doodadFogFading;
 	public List<TerrainDoodad> terrainDoodads = new ArrayList<>();
 	public boolean doodadsReady;
 	public boolean unitsAndItemsLoaded;
@@ -346,6 +372,7 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 
 	final DynamicShadowManager dynamicShadowManager = new DynamicShadowManager();
 	private Vector3 shadowSunDirection;
+	private Vector3 shadowSceneryDirection;
 
 	/** Seeds the simulation; -Dwarsmash.seed fixes it so test runs repeat. Kept in saved games. */
 	private int gameSeed = chooseGameSeed();
@@ -381,6 +408,8 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 	private volatile UiFrameSource uiFrameSource;
 	private MapViewerFog mapFog;
 	Collection<String> soundsToPreload;
+	private long soundWaitStartedMillis;
+	private int[] soundCounts;
 	int localPlayerIndex;
 	/**
 	 * The simulation thread's copies of who is viewed (what {@link #isViewedPlayer} answers from), written where the
@@ -581,11 +610,15 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 
 	public static War3Map beginLoadingMap(final DataSource gameDataSource, final String mapFilePath)
 			throws IOException {
-		if (mapFilePath.startsWith("/") || !gameDataSource.has(mapFilePath)) {
-			final File mapFile = new File(mapFilePath);
+		if (MapFiles.isAbsolute(mapFilePath) || !gameDataSource.has(mapFilePath)) {
+			File mapFile = MapFiles.find(mapFilePath);
+			if (mapFile == null) {
+				mapFile = new File(mapFilePath);
+			}
 			if (mapFile.exists()) {
 				return new War3Map(gameDataSource, mapFile);
 			} else {
+				Log.warn(MapFiles.describeMissing(mapFilePath));
 				throw new IllegalArgumentException("No such map file: " + mapFilePath);
 			}
 		}
@@ -616,6 +649,9 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 		closeReplaySession();
 		if (this.simulation != null) {
 			SimulationChecksum.gameClosed(this.simulation);
+		}
+		if (this.typeUsage != null) {
+			this.typeUsage.flush();
 		}
 		if (this.terrain != null) {
 			this.terrain.dispose();
@@ -770,6 +806,13 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 		}
 	}
 
+	/**
+	 * A loaded game has no fade to continue: the ground and the doodads take the shade of the fog state they have
+	 * now, so they match while the game is still paused.
+	 */
+	public void settleFogShading() {
+		this.mapFog.settle();
+	}
 	float snapRunTimeDestructableX(final GameObject row, final float x, final float facingDegrees) {
 		return MapViewerDoodads.snapRunTimeDestructableX(this, row, x, facingDegrees);
 	}
@@ -809,6 +852,19 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 		return this.pathingTextures.get(pathingTexture);
 	}
 
+	private static final long IDLE_MODEL_CHECK_NANOS = 2_000_000_000L;
+	private long nextIdleModelCheckNanos;
+
+	/** Lets go of the models of unit types that have not been shown for a while, see {@link RenderUnitTypeData#evictIdleModels}. */
+	private void evictIdleUnitModels() {
+		final long now = System.nanoTime();
+		if ((now - this.nextIdleModelCheckNanos) < 0) {
+			return;
+		}
+		this.nextIdleModelCheckNanos = now + IDLE_MODEL_CHECK_NANOS;
+		this.renderUnitTypeData.evictIdleModels(this, now);
+	}
+
 	public RenderUnitType getUnitTypeData(final War3ID key) {
 		return this.renderUnitTypeData.get(key);
 	}
@@ -827,7 +883,21 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 	}
 
 	public boolean isGamePaused() {
-		return this.pauseSources != 0;
+		return (this.pauseSources != 0) || this.scriptDialogPaused;
+	}
+
+	/**
+	 * {@link #isGamePaused()} for the side that steps the simulation: it asks the script dialog, which reads the
+	 * simulation's clock, and keeps the answer for the render side.
+	 */
+	public boolean isGamePausedOnSimulation() {
+		this.scriptDialogPaused = this.scriptDialogPause.getAsBoolean();
+		return isGamePaused();
+	}
+
+	/** Whether a script dialog on the screen has stopped the game; it is not a pause that a command or a save keeps. */
+	public void setScriptDialogPause(final BooleanSupplier scriptDialogPause) {
+		this.scriptDialogPause = scriptDialogPause;
 	}
 
 	public boolean isGamePaused(final PauseSource source) {
@@ -1377,7 +1447,7 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 			}
 			super.update(rawDeltaTime);
 			if (PerfStats.ENABLED) {
-				PerfStats.textures(getTextureBytes(), getEvictedTextures());
+				PerfStats.textures(getTextureBytes(), getEvictedTextures(), getEvictedModels());
 			}
 			releaseFinishedSounds();
 			PerfStats.end(PerfStats.Section.SCENE_UPDATE);
@@ -1494,6 +1564,13 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 				else {
 					this.typePrewarm.update(this);
 				}
+				evictIdleUnitModels();
+			}
+			else if (this.gameEnded) {
+				// The score screen's models queue their textures after the game ended; nothing else uploads them.
+				final long end = System.nanoTime() + MODEL_FINISH_SLICE_NANOS;
+				while (hasDeferredTextures() && finishReadyDeferredTexture() && (System.nanoTime() < end)) {
+				}
 			}
 			if (isSimulationThreaded()) {
 				// the simulation thread does a pause's work and the saves the steps ask for
@@ -1514,7 +1591,7 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 				final float dayRatio = timeOfDay / this.simulation.getGameplayConstants().getGameDayHours();
 				this.dncTerrain.setFrameByRatio(dayRatio);
 				this.dncTerrain.update(rawDeltaTime, null);
-				this.dynamicShadowManager.setSunLight(this.shadowSunDirection, dayRatio);
+				this.dynamicShadowManager.setSunLight(this.shadowSunDirection, this.shadowSceneryDirection, dayRatio);
 			}
 			if (this.dncUnit != null) {
 				this.dncUnit.setFrameByRatio(timeOfDay / this.simulation.getGameplayConstants().getGameDayHours());
@@ -1759,6 +1836,9 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 	 */
 	@Override
 	public void updateAndRender() {
+		if (this.typeUsage != null) {
+			this.typeUsage.flushIfDue();
+		}
 		if ((this.fastForwardTarget >= 0) && this.anyReady && !isGamePaused()) {
 			MapViewerUpdate.fastForwardSteps(this);
 		}
@@ -1789,34 +1869,131 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 	 * sounds of the units they make. Every step is the same step the frames would play; only when they are played
 	 * changes.
 	 */
+	/**
+	 * Whether the loading screen plays the game's first steps (see {@link #prepareFirstFrameNext}), after which the
+	 * map's script has made its first changes to the pathing.
+	 */
+	boolean playsOpeningSteps() {
+		return !NO_RENDER && (this.fastForwardTarget < 0) && !isReplayPlayback() && (this.savedGameToLoad == null);
+	}
+
+	/** Queues the types whose parts of the map are found after the opening steps instead of while loading. */
+	void deferPathingParts(final Collection<CUnitType> types) {
+		this.simulation.deferPathingParts();
+		this.pathingPartsPending.addAll(types);
+	}
+
 	public void prepareFirstFrame() {
-		this.dynamicShadowManager.prepare(this.webGL);
-		// Without the thread's own steps (SERIAL) the frames are made as the steps are, so they are left to the frames.
-		if (!this.anyReady || NO_RENDER || ((this.simThread != null) && !this.simThread.isThreaded())
-				|| (this.fastForwardTarget >= 0) || isReplayPlayback() || (this.simulation.getGameTurnTick() != 0)) {
-			return;
+		while (!prepareFirstFrameNext()) {
 		}
-		final long start = System.nanoTime();
-		final int played = isSimulationThreaded() ? this.simThread.playOpeningSteps(OPENING_STEPS)
-				: MapViewerUpdate.playOpeningSteps(this, OPENING_STEPS);
-		if (played == 0) {
-			return;
-		}
-		// The loading time must not be played as game time on top of them.
-		this.openingStepsPlayed = true;
-		if (this.soundsToPreload != null) {
-			final Collection<String> interfaceSoundKeys = this.soundsToPreload;
-			// with the thread on, the units are read while it makes no step; else with the frames
-			if (tryWhileSimulationHeld(() -> MapViewerLoading.preloadSounds(this, interfaceSoundKeys))) {
-				this.soundsToPreload = null;
+	}
+
+	/**
+	 * {@link #prepareFirstFrame} one slice at a time, the unit shadows' programs, then each of the steps and last what
+	 * follows them, so a loading screen can draw between them.
+	 *
+	 * @return whether the first frame is prepared
+	 */
+	public boolean prepareFirstFrameNext() {
+		switch (this.firstFrameStage) {
+		case FIRST_FRAME_SHADOWS:
+			this.dynamicShadowManager.prepare(this.webGL);
+			// Without the thread's own steps (SERIAL) the frames are made as the steps are, so they are left to the frames.
+			this.firstFrameStage = (!this.anyReady || NO_RENDER || ((this.simThread != null) && !this.simThread.isThreaded())
+					|| (this.fastForwardTarget >= 0) || isReplayPlayback() || (this.simulation.getGameTurnTick() != 0))
+							? FIRST_FRAME_DONE : FIRST_FRAME_STEPS;
+			break;
+		case FIRST_FRAME_STEPS: {
+			final long start = System.nanoTime();
+			if ((isSimulationThreaded() ? this.simThread.playOpeningSteps(1)
+					: MapViewerUpdate.playOpeningSteps(this, 1)) == 0) {
+				afterOpeningSteps(this.openingStepsDone == 0 ? FIRST_FRAME_DONE : FIRST_FRAME_SOUNDS);
 			}
+			else if (++this.openingStepsDone >= OPENING_STEPS) {
+				afterOpeningSteps(FIRST_FRAME_SOUNDS);
+			}
+			else if ((this.openingStepsDone == 1) && (this.soundsToPreload != null)) {
+				// The units the script made in the first step are known now; the steps that follow play while their
+				// sounds are decoded.
+				final Collection<String> interfaceSoundKeys = this.soundsToPreload;
+				tryWhileSimulationHeld(() -> MapViewerLoading.queueSounds(this, interfaceSoundKeys, false));
+			}
+			this.openingStepsNanos += System.nanoTime() - start;
+			break;
 		}
-		super.update(OPENING_UPDATE_SECONDS);
-		for (final RenderWidget unit : this.widgets.animated) {
-			unit.updateAnimations(this);
+		case FIRST_FRAME_PATHING: {
+			// One unit size a slice: the steps the script made its first changes in are played by now.
+			final long start = System.nanoTime();
+			final CUnitType pathingType = this.pathingPartsPending.poll();
+			whileSimulationHeld(() -> this.simulation.prewarmPathingParts(pathingType));
+			PerfStats.setupPart("pathing parts", start);
+			if (this.pathingPartsPending.isEmpty()) {
+				this.firstFrameStage = this.firstFrameAfterPathing;
+			}
+			this.openingStepsNanos += System.nanoTime() - start;
+			break;
 		}
-		updateDestructableAnimations();
-		PerfStats.openingStepsDone(played, System.nanoTime() - start);
+		case FIRST_FRAME_SOUNDS: {
+			final long start = System.nanoTime();
+			if ((this.soundsToPreload == null) || (getPresentedTick() <= 0)) {
+				this.firstFrameStage = FIRST_FRAME_FINISH;
+			}
+			else {
+				// The wait is spread over the frames of the loading screen instead of holding one for a second.
+				if (this.soundCounts == null) {
+					this.soundWaitStartedMillis = System.currentTimeMillis();
+					final Collection<String> interfaceSoundKeys = this.soundsToPreload;
+					final int[][] queued = new int[1][];
+					if (tryWhileSimulationHeld(() -> queued[0] = MapViewerLoading.queueSounds(this, interfaceSoundKeys, false))) {
+						this.soundCounts = queued[0];
+					}
+				}
+				else if (Extensions.audio.awaitLoading(SOUND_PRELOAD_FRAME_MILLIS)
+						|| ((System.currentTimeMillis() - this.soundWaitStartedMillis) >= SOUND_PRELOAD_WAIT_MILLIS)) {
+					// What is heard only after a selection is asked for now, and decodes while the game runs.
+					final Collection<String> interfaceSoundKeys = this.soundsToPreload;
+					final int[][] queued = new int[1][];
+					if (tryWhileSimulationHeld(() -> queued[0] = MapViewerLoading.queueSounds(this, interfaceSoundKeys, true))) {
+						this.soundCounts = queued[0];
+						Extensions.audio.finishLoading(0);
+						MapViewerLoading.logSoundsPreloaded(this.soundCounts, this.soundWaitStartedMillis);
+						this.soundsToPreload = null;
+						this.firstFrameStage = FIRST_FRAME_FINISH;
+					}
+				}
+			}
+			this.openingStepsNanos += System.nanoTime() - start;
+			break;
+		}
+		case FIRST_FRAME_DONE:
+			break;
+		default: {
+			final long start = System.nanoTime();
+			// The loading time must not be played as game time on top of them.
+			this.openingStepsPlayed = true;
+			if ((this.soundsToPreload != null) && (getPresentedTick() > 0)) {
+				final Collection<String> interfaceSoundKeys = this.soundsToPreload;
+				// with the thread on, the units are read while it makes no step; else with the frames
+				if (tryWhileSimulationHeld(() -> MapViewerLoading.preloadSounds(this, interfaceSoundKeys))) {
+					this.soundsToPreload = null;
+				}
+			}
+			super.update(OPENING_UPDATE_SECONDS);
+			for (final RenderWidget unit : this.widgets.animated) {
+				unit.updateAnimations(this);
+			}
+			updateDestructableAnimations();
+			PerfStats.openingStepsDone(this.openingStepsDone, this.openingStepsNanos + (System.nanoTime() - start));
+			this.firstFrameStage = FIRST_FRAME_DONE;
+			break;
+		}
+		}
+		return this.firstFrameStage == FIRST_FRAME_DONE;
+	}
+
+	private void afterOpeningSteps(final int next) {
+		this.firstFrameAfterPathing = next;
+		this.firstFrameStage = this.pathingPartsPending.isEmpty() ? next : FIRST_FRAME_PATHING;
 	}
 
 	public void fastForwardTo(final int tick, final FastForwardListener whenReached) {
@@ -1954,6 +2131,7 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 		if (this.skyScene == null) {
 			this.skyScene = addSimpleScene();
 			this.skyScene.alpha = true;
+			this.skyScene.unlit = true;
 		}
 		final MdxModel model = MapViewerEffects.loadModelMdx(this.dataSource, this, path, this.mapPathSolver, this.solverParams);
 		if (model == null) {
@@ -2149,7 +2327,8 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 	/** The faces of the map's data, which the loading lists ahead of the first spoken line. */
 	public FaceFxLibrary faceFxLibrary() {
 		if (this.faceFx == null) {
-			this.faceFx = new FaceFxLibrary(this.dataSource);
+			this.faceFx = new FaceFxLibrary(this.dataSource, this.gameDataSource,
+					this.mapMpq == null ? null : this.mapMpq.getMapContentsDataSource());
 		}
 		return this.faceFx;
 	}
@@ -2191,9 +2370,8 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 	}
 
 	/**
-	 * The direction of the main light of a day and night cycle model, from the ground towards the light, as the model
-	 * has it in the Classic data. The graphics packages' versions of these models light the world, but their light
-	 * stands higher than the one the shadows of the Reforged game fall along.
+	 * The direction of the main light of a day and night cycle model, from the ground towards the light. The Classic
+	 * models have one light for both; the Reforged ones give units and terrain a light each, which the shadows follow.
 	 */
 	private static Vector3 readSunDirection(final DataSource data, final String modelPath) {
 		final String path = mdx(modelPath);
@@ -2226,7 +2404,13 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 		SimThreadGuard.assertGl();
 		this.dayNightTerrainModel = terrainDNCFile;
 		this.dayNightUnitModel = unitDNCFile;
-		this.shadowSunDirection = readSunDirection(this.dataSource.graphicsIndependent(), terrainDNCFile);
+		this.shadowSunDirection = readSunDirection(this.dataSource, unitDNCFile);
+		final Vector3 terrainDirection = readSunDirection(this.dataSource, terrainDNCFile);
+		this.shadowSceneryDirection = ((terrainDirection == null) || (this.shadowSunDirection == null)
+				|| (terrainDirection.dst2(this.shadowSunDirection) < 1e-6f)) ? null : terrainDirection;
+		if (this.shadowSunDirection == null) {
+			this.shadowSunDirection = terrainDirection;
+		}
 		final MdxModel terrainDNCModel = loadModelMdx(terrainDNCFile);
 		this.dncTerrain = (MdxComplexInstance) terrainDNCModel.addInstance();
 		this.dncTerrain.setSequenceLoopMode(SequenceLoopMode.ALWAYS_LOOP);
@@ -2299,11 +2483,19 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 		}
 	}
 
+	@Override
+	public SceneLightManager createPortraitLightManager() {
+		return newPortraitLights();
+	}
+
+	private W3xScenePortraitLightManager newPortraitLights() {
+		return isPackageInterface() ? W3xScenePortraitLightManager.forPackageModels(this, this.lightDirection)
+				: new W3xScenePortraitLightManager(this, this.lightDirection);
+	}
+
 	/** The scene of the unit portrait: the only simple scene whose light SetPortraitLight replaces. */
 	public Scene addPortraitScene() {
-		final W3xScenePortraitLightManager portraitLights = isPackageInterface()
-				? W3xScenePortraitLightManager.forPackageModels(this, this.lightDirection)
-				: new W3xScenePortraitLightManager(this, this.lightDirection);
+		final W3xScenePortraitLightManager portraitLights = newPortraitLights();
 		portraitLights.setLightOverride(() -> (this.dncPortrait == null) || this.dncPortrait.lights.isEmpty() ? null
 				: this.dncPortrait.lights.get(0));
 		final Scene scene = new SimpleScene(this, portraitLights);
@@ -2774,6 +2966,11 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 	/** Whether the game is played with Reforged graphics, whose interface has the Reforged cinematics. */
 	public boolean isReforgedGraphics() {
 		return isReforgedGraphicsMap() || (LayeredDataSource.graphicsOf(this.gameDataSource) != GraphicsSet.CLASSIC);
+	}
+
+	/** Whether the world is drawn with the Reforged HD package (not Classic, not DE). */
+	public boolean isHdGraphics() {
+		return LayeredDataSource.graphicsOf(this.gameDataSource) == GraphicsSet.REFORGED;
 	}
 
 	/** Whether the interface comes from a graphics package (Reforged or DE), not from the Classic files. */
@@ -3255,7 +3452,13 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 		 */
 		public <T> void addSlices(final Iterator<T> items, final Consumer<T> each, final LoadMapTask after)
 				throws IOException {
-			if (!items.hasNext()) {
+			addSlices(items, each, () -> true, after);
+		}
+
+		/** {@link #addSlices(Iterator, Consumer, LoadMapTask)} that stops taking items once keepGoing says no. */
+		public <T> void addSlices(final Iterator<T> items, final Consumer<T> each, final BooleanSupplier keepGoing,
+				final LoadMapTask after) throws IOException {
+			if (!items.hasNext() || !keepGoing.getAsBoolean()) {
 				after.run();
 				return;
 			}
@@ -3264,8 +3467,9 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 				do {
 					each.accept(items.next());
 				}
-				while (items.hasNext() && (System.nanoTime() < end) && (pendingModelCount() < MODEL_BACKLOG));
-				addSlices(items, each, after);
+				while (items.hasNext() && keepGoing.getAsBoolean() && (System.nanoTime() < end)
+						&& (pendingModelCount() < MODEL_BACKLOG));
+				addSlices(items, each, keepGoing, after);
 			}));
 		}
 

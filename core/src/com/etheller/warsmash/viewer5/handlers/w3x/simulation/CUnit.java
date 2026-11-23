@@ -18,6 +18,7 @@ import com.etheller.interpreter.ast.scope.variableevent.CLimitOp;
 import com.etheller.warsmash.util.ArgbImage;
 import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.util.WarsmashConstants;
+import com.etheller.warsmash.viewer5.handlers.w3x.save.SavedDefault;
 import com.etheller.warsmash.viewer5.handlers.w3x.save.SavedTransient;
 import com.etheller.warsmash.viewer5.handlers.w3x.simthread.SimThreadGuard;
 import com.etheller.warsmash.parsers.jass.triggers.UnitGroup;
@@ -133,6 +134,9 @@ public class CUnit extends CWidget {
 	float handicap = 1f;
 	/** Vertex color {r, g, b, a} the game gave the unit (abilities, scripts), or null for its type's tint. */
 	private float[] vertexColor;
+	/** Team color a script gave the unit with SetUnitColor, or -1 while it shows its owner's color. */
+	@SavedDefault("-1")
+	private int teamColorOverride = -1;
 	private int finalSpeed;
 
 
@@ -198,6 +202,10 @@ public class CUnit extends CWidget {
 
 	final EnumSet<CUnitClassification> classifications = EnumSet.noneOf(CUnitClassification.class);
 	final EnumSet<CTargetType> targetedAs = EnumSet.noneOf(CTargetType.class);
+
+	/** The last enumeration that met the unit; see CWorldCollision. */
+	@SavedTransient
+	transient long enumStamp;
 
 	@SavedTransient
 	transient CUnitAnimationListener unitAnimationListener;
@@ -582,6 +590,9 @@ public class CUnit extends CWidget {
 	}
 
 	public void add(final CSimulation simulation, final CBuff ability) {
+		if (this.removedFromGame) {
+			return;
+		}
 		int index = this.abilities.indexOf(ability);
 		if (index >= 0 && (ability instanceof ABGenericTimedBuff)) {
 			((ABGenericTimedBuff) this.abilities.get(index)).updateExpiration(simulation, this);
@@ -672,6 +683,14 @@ public class CUnit extends CWidget {
 		this.vertexColor = vertexColor;
 	}
 
+	public int getTeamColorOverride() {
+		return this.teamColorOverride;
+	}
+
+	public void setTeamColorOverride(final int teamColorOverride) {
+		this.teamColorOverride = teamColorOverride;
+	}
+
 	public War3ID getTypeId() {
 		SimThreadGuard.assertSim();
 		return this.typeId;
@@ -711,6 +730,16 @@ public class CUnit extends CWidget {
 	public int getMaximumLife() {
 		SimThreadGuard.assertSim();
 		return this.stats.maximumLife;
+	}
+
+	/** The maximum life before the max life buffs, which setMaximumLife changes. */
+	public int getBaseMaximumLife() {
+		return this.stats.baseMaximumLife;
+	}
+
+	/** The maximum mana before the max mana buffs, which setMaximumMana changes. */
+	public int getBaseMaximumMana() {
+		return this.stats.baseMaximumMana;
 	}
 
 	public void setTypeId(final CSimulation game, final War3ID typeId, final boolean keepRatios) {
@@ -992,11 +1021,21 @@ public class CUnit extends CWidget {
 	}
 
 	public void setPlayerIndex(final CSimulation simulation, final int playerIndex, final boolean changeColor) {
+		if (!changeColor) {
+			keepShownTeamColor(simulation, playerIndex);
+		}
 		this.playerIndex = playerIndex;
 		if (changeColor) {
 			simulation.changeUnitColor(this, playerIndex);
 		}
 		this.computeUnitState(simulation, StateModBuffType.FALSE_OWNERSHIP);
+	}
+
+	/** A unit given away without its color changing keeps the color it shows; a saved game must know it is no longer its owner's. */
+	void keepShownTeamColor(final CSimulation simulation, final int newPlayerIndex) {
+		if ((this.teamColorOverride == -1) && (newPlayerIndex != this.playerIndex)) {
+			this.teamColorOverride = simulation.getPlayer(this.playerIndex).getColor();
+		}
 	}
 
 	public void changeOwner(final CSimulation simulation, final int newPlayerIndex, final boolean changeColor) {
@@ -1317,6 +1356,14 @@ public class CUnit extends CWidget {
 		return this.aggro.guarding;
 	}
 
+	public float getGuardX() {
+		return this.aggro.guardX;
+	}
+
+	public float getGuardY() {
+		return this.aggro.guardY;
+	}
+
 	static int secondsToTicks(final float seconds) {
 		return CTimer.wholeSteps(seconds);
 	}
@@ -1353,12 +1400,16 @@ public class CUnit extends CWidget {
 		CUnitAggro.onTargetedBySpell(this, simulation, caster);
 	}
 
+	public void fireSpellHitEvent(final CSimulation simulation, final CUnit caster) {
+		CUnitDamage.fireSpellHitEvent(this, simulation, caster);
+	}
+
 	public void onSpellMissileLaunched(final CUnit caster) {
 		CUnitAggro.onSpellMissileLaunched(this, caster);
 	}
 
-	void onSpellEffect(final CSimulation simulation, final CUnit caster) {
-		CUnitAggro.onSpellEffect(this, simulation, caster);
+	void onSpellEffect(final CSimulation simulation, final CUnit caster, final CAbility ability) {
+		CUnitAggro.onSpellEffect(this, simulation, caster, ability);
 	}
 
 	void alertCreeps(final CSimulation simulation, final CUnit target) {
@@ -1418,6 +1469,12 @@ public class CUnit extends CWidget {
 	public boolean canReachToPathing(final float range, final float rotationForPathing,
 			final ArgbImage buildingPathingPixelMap, final float targetX, final float targetY) {
 		return CUnitPlacement.canReachToPathing(this, range, rotationForPathing, buildingPathingPixelMap, targetX, targetY);
+	}
+
+	public boolean canReachToPathingTouching(final float rotationForPathing, final ArgbImage buildingPathingPixelMap,
+			final float targetX, final float targetY) {
+		return CUnitPlacement.canReachToPathingTouching(this, rotationForPathing, buildingPathingPixelMap, targetX,
+				targetY);
 	}
 
 	public void addStateListener(final CUnitStateListener listener) {
@@ -1731,6 +1788,15 @@ public class CUnit extends CWidget {
 
 	public void setConstructingPaused(final boolean constructingPaused) {
 		this.production.constructingPaused = constructingPaused;
+	}
+
+	/** The time the running construction or upgrade takes, which the progress bar counts against. */
+	public float getConstructionDuration(final CSimulation game) {
+		if (this.production.upgradeIdType != null) {
+			return game.getUnitData().getUnitType(this.production.upgradeIdType).getBuildTime();
+		}
+		return this.production.buildTimeOverride > 0 ? this.production.buildTimeOverride
+				: this.unitType.getBuildTime();
 	}
 
 	public void setBuildTimeOverride(final float buildTimeOverride) {
@@ -2282,8 +2348,8 @@ public class CUnit extends CWidget {
 		}
 	}
 
-	public boolean isInRegion(final CRegion region) {
-		return CUnitPlacement.isInRegion(this, region);
+	public boolean isInRegion(final CRegion region, final CRegionManager regionManager) {
+		return CUnitPlacement.isInRegion(this, region, regionManager);
 	}
 
 	@Override
@@ -2317,6 +2383,7 @@ public class CUnit extends CWidget {
 	}
 
 	public void onRemove(final CSimulation simulation) {
+		final boolean wasDead = isDead();
 		final CPlayer player = simulation.getPlayer(this.playerIndex);
 		if (WarsmashConstants.FIRE_DEATH_EVENTS_ON_REMOVEUNIT) {
 			// Firing userspace triggers here causes items to appear around the player bases
@@ -2340,6 +2407,9 @@ public class CUnit extends CWidget {
 		}
 		// Its auras no longer tick, so nothing else would take their bonuses off the units around it.
 		for (final CAbility ability : new ArrayList<>(this.abilities)) {
+			if (!wasDead && (ability instanceof final CAbilityOverlayedMine overlayedMine)) {
+				overlayedMine.revealParentMine();
+			}
 			if (ability instanceof AbstractCAbilityAbilityBuilderAuraTemplate) {
 				((AbstractCAbilityAbilityBuilderAuraTemplate) ability).emptyAura(simulation, this);
 			}

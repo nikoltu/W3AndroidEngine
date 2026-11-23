@@ -23,7 +23,7 @@ final class AIMapKnowledge {
 	private AIMapKnowledge() {
 	}
 
-	/** A group of creeps standing within linking distance of each other, as of one tick. */
+	/** A group of creeps whose camp spots lie within linking distance of each other, as of one tick. */
 	static final class Camp {
 		final List<CUnit> members = new ArrayList<>();
 		int level;
@@ -39,6 +39,18 @@ final class AIMapKnowledge {
 
 	private static int cellOf(final float v) {
 		return (int) Math.floor(v / CAMP_LINK_DISTANCE);
+	}
+
+	/**
+	 * Measured: a creep belongs to the camp it was placed in wherever it stands; ones drawn away from their camp by a
+	 * fight, or moved by a script, do not become camps of their own. Creeps are therefore linked by their camp spots.
+	 */
+	private static float spotX(final CUnit creep) {
+		return creep.isGuarding() ? creep.getGuardX() : creep.getX();
+	}
+
+	private static float spotY(final CUnit creep) {
+		return creep.isGuarding() ? creep.getGuardY() : creep.getY();
 	}
 
 	/** The camps do not change within a tick, so the grouping is made once per tick and reused. */
@@ -59,7 +71,7 @@ final class AIMapKnowledge {
 		final Map<Long, List<Integer>> cells = new HashMap<>();
 		for (int i = 0; i < creeps.size(); i++) {
 			final CUnit creep = creeps.get(i);
-			cells.computeIfAbsent(cellKey(cellOf(creep.getX()), cellOf(creep.getY())), (key) -> new ArrayList<>())
+			cells.computeIfAbsent(cellKey(cellOf(spotX(creep)), cellOf(spotY(creep))), (key) -> new ArrayList<>())
 					.add(i);
 		}
 		final boolean[] visited = new boolean[creeps.size()];
@@ -75,8 +87,8 @@ final class AIMapKnowledge {
 			visited[seed] = true;
 			for (int i = 0; i < camp.size(); i++) {
 				final CUnit member = camp.get(i);
-				final int cx = cellOf(member.getX());
-				final int cy = cellOf(member.getY());
+				final int cx = cellOf(spotX(member));
+				final int cy = cellOf(spotY(member));
 				candidates.clear();
 				for (int dx = -1; dx <= 1; dx++) {
 					for (int dy = -1; dy <= 1; dy++) {
@@ -89,8 +101,8 @@ final class AIMapKnowledge {
 				Collections.sort(candidates);
 				for (final int index : candidates) {
 					final CUnit other = creeps.get(index);
-					if (!visited[index] && (distance(member.getX(), member.getY(), other.getX(),
-							other.getY()) < CAMP_LINK_DISTANCE)) {
+					if (!visited[index] && (distance(spotX(member), spotY(member), spotX(other),
+							spotY(other)) < CAMP_LINK_DISTANCE)) {
 						visited[index] = true;
 						camp.add(other);
 					}
@@ -105,8 +117,8 @@ final class AIMapKnowledge {
 						|| (member.getUnitType().getLevel() > result.strongest.getUnitType().getLevel())) {
 					result.strongest = member;
 				}
-				x += member.getX();
-				y += member.getY();
+				x += spotX(member);
+				y += spotY(member);
 			}
 			result.x = x / camp.size();
 			result.y = y / camp.size();
@@ -195,6 +207,10 @@ final class AIMapKnowledge {
 	 * @param onlyPlayer -1 for the nearest opponent
 	 */
 	static CUnit findEnemyBase(final AIController ai, final int onlyPlayer) {
+		return findEnemyBase(ai, onlyPlayer, true);
+	}
+
+	private static CUnit findEnemyBase(final AIController ai, final int onlyPlayer, final boolean unitsAllowed) {
 		final AITown home = AITowns.getTown(ai, 0);
 		final float[] start = ai.player.getStartLocation();
 		final float hx = home == null ? start[0] : home.getX();
@@ -215,7 +231,7 @@ final class AIMapKnowledge {
 					best = unit;
 				}
 			}
-			else if (!unit.isHidden() && (d < bestUnitDistance)) {
+			else if (unitsAllowed && !unit.isHidden() && (d < bestUnitDistance)) {
 				bestUnitDistance = d;
 				bestUnit = unit;
 			}
@@ -270,7 +286,8 @@ final class AIMapKnowledge {
 	}
 
 	/**
-	 * An opponent whose army is far weaker than ours is worth an all-out attack on its main base.
+	 * An opponent whose army is far weaker than ours is worth an all-out attack on its main base. Measured: only a
+	 * building is ever the target; an opponent left with peasants alone gives none.
 	 */
 	static CUnit getMegaTarget(final AIController ai) {
 		final int ours = armyPower(ai, ai.playerIndex);
@@ -279,7 +296,7 @@ final class AIMapKnowledge {
 		}
 		for (int i = 0; i < ai.simulation.getGameData().getMaxPlayers(); i++) {
 			if (ai.isOpponent(i) && ((armyPower(ai, i) * 3) <= ours)) {
-				final CUnit base = findEnemyBase(ai, i);
+				final CUnit base = findEnemyBase(ai, i, false);
 				if (base != null) {
 					return base;
 				}

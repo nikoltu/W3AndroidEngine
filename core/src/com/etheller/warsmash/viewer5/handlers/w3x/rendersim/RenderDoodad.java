@@ -22,7 +22,6 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.C
 
 public class RenderDoodad {
 	private static final int SAMPLE_RADIUS = 4;
-	private static final float[] VERTEX_COLOR_BLACK = { 0f, 0f, 0f, 1f };
 	private static final float[] VERTEX_COLOR_HEAP = { 0f, 0f, 0f, 1f };
 	public final ModelInstance instance;
 	private final GameObject row;
@@ -251,14 +250,7 @@ public class RenderDoodad {
 		float pitch, roll;
 		this.x = location3D[0];
 		this.y = location3D[1];
-		{
-			if (!map.terrain.inPlayableArea(this.x, this.y)) {
-				((MdxComplexInstance) instance).setVertexColor(VERTEX_COLOR_BLACK);
-			}
-			else {
-				applyColor(row, doodadVariation + 1, instance);
-			}
-		}
+		applyColor(row, doodadVariation + 1, instance);
 		this.vertexColorBase = new float[] { ((MdxComplexInstance) instance).vertexColor[0],
 				((MdxComplexInstance) instance).vertexColor[1], ((MdxComplexInstance) instance).vertexColor[2] };
 		final float pitchSampleForwardX = this.x + (SAMPLE_RADIUS * (float) Math.cos(facingRadians));
@@ -354,12 +346,15 @@ public class RenderDoodad {
 
 	/**
 	 * @param shadeByState fog shade of each {@link CFogState}, by ordinal, worked out once for the whole pass
+	 * @param snap whether the shade jumps to the fog state instead of fading to it, as when a loaded game puts the
+	 *             fog in place at once
+	 * @return whether the shade has not reached the fog state yet
 	 */
-	public void updateFog(final War3MapViewer war3MapViewer, final CPlayerFogOfWar fogOfWar,
-			final PathingGrid pathingGrid, final byte[] shadeByState) {
+	public boolean updateFog(final War3MapViewer war3MapViewer, final CPlayerFogOfWar fogOfWar,
+			final PathingGrid pathingGrid, final byte[] shadeByState, final boolean snap) {
 		final CFogState newFogState = fogOfWar.getFogState(war3MapViewer.simulation,
 				pathingGrid.getFogOfWarIndexX(this.x), pathingGrid.getFogOfWarIndexY(this.y));
-		applyFogState(newFogState, shadeByState);
+		return applyFogState(newFogState, shadeByState, snap);
 	}
 
 	/**
@@ -368,25 +363,26 @@ public class RenderDoodad {
 	 * @param states the cells of the fog of war, rows of fogWidth
 	 * @param stateByCell the fog state each cell value stands for
 	 */
-	public void updateFog(final byte[] states, final int fogWidth, final PathingGrid pathingGrid,
-			final CFogState[] stateByCell, final byte[] shadeByState) {
+	public boolean updateFog(final byte[] states, final int fogWidth, final PathingGrid pathingGrid,
+			final CFogState[] stateByCell, final byte[] shadeByState, final boolean snap) {
 		final int index = (pathingGrid.getFogOfWarIndexY(this.y) * fogWidth) + pathingGrid.getFogOfWarIndexX(this.x);
 		final CFogState newFogState = ((index >= 0) && (index < states.length)) ? stateByCell[states[index] & 0xFF]
 				: CFogState.VISIBLE;
-		applyFogState(newFogState, shadeByState);
+		return applyFogState(newFogState, shadeByState, snap);
 	}
 
-	private void applyFogState(final CFogState newFogState, final byte[] shadeByState) {
+	private boolean applyFogState(final CFogState newFogState, final byte[] shadeByState, final boolean snap) {
 		this.fogState = newFogState;
 		applyFogAnimation();
 		final byte shade = shadeByState[newFogState.ordinal()];
 		if (shade != this.lastFogStateColor) {
-			this.lastFogStateColor = War3MapViewer.fadeLineOfSightColor(this.lastFogStateColor, shade);
+			this.lastFogStateColor = snap ? shade : War3MapViewer.fadeLineOfSightColor(this.lastFogStateColor, shade);
 			for (int i = 0; i < this.vertexColorBase.length; i++) {
 				VERTEX_COLOR_HEAP[i] = (this.vertexColorBase[i] * (255 - (this.lastFogStateColor & 0xFF))) / 255f;
 			}
 			((MdxComplexInstance) this.instance).setVertexColor(VERTEX_COLOR_HEAP);
 		}
+		return shade != this.lastFogStateColor;
 	}
 
 	public float[] getVertexColor() {

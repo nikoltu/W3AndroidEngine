@@ -34,6 +34,8 @@ public final class PerfStats {
 	/** Waits for the GPU at the end of every frame to time it (changes frame pacing; only while measuring). */
 	private static boolean finish = System.getProperty("warsmash.perf.finish") != null;
 	private static boolean checkedLocalFile;
+	/** The file the switch is kept in, relative to the application's local files. */
+	public static final String SWITCH_FILE = "warsmash.perf";
 
 	private static final long REPORT_NANOS = 5_000_000_000L;
 	private static final long[] TOTALS = new long[Section.values().length];
@@ -83,11 +85,15 @@ public final class PerfStats {
 	private static final int[] WINDOW_HISTOGRAM = new int[1001];
 	private static final int[] RUN_HISTOGRAM = new int[1001];
 	private static long firstFrame;
+	/** The last frame the loading screen drew, and the longest time between two of them, while a game loads. */
+	private static long lastLoadingFrame;
+	private static long worstLoadingFrame;
 	private static int frameLoads;
 	private static long frameLoadNanos;
 	private static long frameTextureNanos;
 	private static long textureBytes;
 	private static int evictedTextures;
+	private static int evictedModels;
 	private static long slowestLoadNanos;
 	private static String slowestLoad;
 	// Written by the simulation thread (sections) or the render thread (the rest) and read at the report, so atomic.
@@ -104,20 +110,81 @@ public final class PerfStats {
 	private static volatile boolean simThreadSeen;
 
 	/** The memory the game's model textures hold and how many were let go so far, for the next report. */
-	public static void textures(final long bytes, final int evicted) {
+	public static void textures(final long bytes, final int evicted, final int evictedModelCount) {
 		textureBytes = bytes;
 		evictedTextures = evicted;
+		evictedModels = evictedModelCount;
 	}
 
-	/** The game screen's setup runs as a single frame that frameStart never sees, so it is reported on its own. */
-	public static void showDone(final long start, final long uiMainStart, final long uiMainEnd, final long commonStart,
-			final long commonEnd) {
+	/**
+	 * The game screen's setup runs in steps under the loading screen, frames frameStart never sees, so it is reported
+	 * on its own. The loading screen of a game that follows another one (a level change, a loaded save) is drawn by
+	 * the menu, so it is reported here too and kept out of the frames of the games: counted as one frame, the whole
+	 * loading was the worst frame of the window it ended in.
+	 *
+	 * @param steps the time of each setup step: the interface's build and main, what loads after it, the script's
+	 *              load, its start or the save's load, the sound preload and the game's opening steps
+	 * @param frames the frames the setup took, a step of it can take several
+	 * @param longestFrame the longest of them
+	 */
+	public static void showDone(final long start, final long[] steps, final int frames, final long longestFrame) {
+		checkSwitchFile();
 		if (ENABLED) {
 			final long end = System.nanoTime();
-			System.err.println("Screen setup: total " + ((end - start) / 1_000_000) + " ms, interface build "
-					+ ((uiMainStart - start) / 1_000_000) + " ms, interface main " + ((uiMainEnd - uiMainStart) / 1_000_000)
-					+ " ms, script load and start " + ((commonEnd - commonStart) / 1_000_000) + " ms, sound preload "
-					+ ((end - commonEnd) / 1_000_000) + " ms");
+			long total = 0;
+			for (final long step : steps) {
+				total += step;
+			}
+			System.err.println("Screen setup: total " + (total / 1_000_000) + " ms in " + frames
+					+ " frames, longest " + (longestFrame / 1_000_000) + " ms (interface build " + (steps[0] / 1_000_000)
+					+ " ms, interface main " + (steps[1] / 1_000_000) + " ms, after interface "
+					+ (steps[2] / 1_000_000) + " ms, script load " + (steps[3] / 1_000_000)
+					+ " ms, script start or save load " + (steps[4] / 1_000_000) + " ms, sound preload "
+					+ (steps[5] / 1_000_000) + " ms, opening steps " + (steps[6] / 1_000_000) + " ms), switch "
+					+ ((end - start) / 1_000_000) + " ms");
+			if (lastLoadingFrame != 0) {
+				worstLoadingFrame = Math.max(worstLoadingFrame, end - lastLoadingFrame);
+			}
+			if (frameStart != 0) {
+				final long lastFrameEnd = lastRenderEnd != 0 ? lastRenderEnd : frameStart;
+				final long between = end - lastFrameEnd;
+				System.err.println("Game change: " + (between / 1_000_000) + " ms from the last frame of the game before,"
+						+ " longest loading screen frame " + (worstLoadingFrame / 1_000_000) + " ms, screen setup "
+						+ (total / 1_000_000) + " ms in " + frames + " frames");
+				if (reportStart != 0) {
+					reportStart += between;
+				}
+				frameStart = 0;
+				lastRenderEnd = 0;
+			}
+		}
+		lastLoadingFrame = 0;
+		worstLoadingFrame = 0;
+	}
+
+	/** A frame of the menu's loading screen, drawn while a game loads. */
+	public static void loadingFrame() {
+		if (ENABLED) {
+			final long now = System.nanoTime();
+			if (lastLoadingFrame != 0) {
+				worstLoadingFrame = Math.max(worstLoadingFrame, now - lastLoadingFrame);
+			}
+			lastLoadingFrame = now;
+		}
+	}
+
+	/** The time of one part of a setup step that runs in a single frame, to see where the frame goes. */
+	public static void setupPart(final String what, final long startNanos) {
+		if (ENABLED) {
+			System.err.println("Setup part: " + what + " " + ((System.nanoTime() - startNanos) / 1_000_000) + " ms");
+		}
+	}
+
+	/** {@link #setupPart} for what is worth a line only when it is slow. */
+	public static void slowSetupPart(final String what, final long startNanos) {
+		checkSwitchFile();
+		if (ENABLED && ((System.nanoTime() - startNanos) >= 20_000_000L)) {
+			setupPart(what, startNanos);
 		}
 	}
 
@@ -139,6 +206,36 @@ public final class PerfStats {
 		}
 	}
 
+	/** Whether the switch file is in this folder (the application's local files; the working folder on a desktop). */
+	public static boolean isSwitchedOn(final java.io.File folder) {
+		return new java.io.File(folder, SWITCH_FILE).isFile();
+	}
+
+	/**
+	 * Turns the logging on or off the way the switch file does, from the launcher, before any game runs: the file is
+	 * made or removed in the folder, and this run follows it. Options the file holds ("finish", "glmem") are kept.
+	 */
+	public static synchronized void setSwitch(final java.io.File folder, final boolean on) {
+		final java.io.File file = new java.io.File(folder, SWITCH_FILE);
+		try {
+			if (on) {
+				if (!file.exists()) {
+					folder.mkdirs();
+					java.nio.file.Files.write(file.toPath(), new byte[0]);
+				}
+			}
+			else {
+				java.nio.file.Files.deleteIfExists(file.toPath());
+			}
+		}
+		catch (final java.io.IOException e) {
+			Log.warn("The performance log switch could not be changed: " + e);
+			return;
+		}
+		ENABLED = on || (System.getProperty("warsmash.perf") != null);
+		checkedLocalFile = true;
+	}
+
 	/**
 	 * The start of a frame whose first work comes before the viewer's own update (the interface's update); the
 	 * viewer's frameStart that follows then does not start a second one.
@@ -148,7 +245,11 @@ public final class PerfStats {
 		frameBegun = ENABLED;
 	}
 
-	public static void frameStart() {
+	/**
+	 * Reads the switch file once. The game screen's setup runs before its first frame, and its report must not wait
+	 * for the first frame to find the switch.
+	 */
+	public static void checkSwitchFile() {
 		if (!checkedLocalFile) {
 			checkedLocalFile = true;
 			if ((Gdx.files != null) && Gdx.files.local("warsmash.perf").exists()) {
@@ -161,6 +262,10 @@ public final class PerfStats {
 				}
 			}
 		}
+	}
+
+	public static void frameStart() {
+		checkSwitchFile();
 		if (!ENABLED) {
 			return;
 		}
@@ -555,7 +660,8 @@ public final class PerfStats {
 			line.append(String.format(Locale.ROOT, " java_heap_mb=%.0f native_heap_mb=%.0f", Gdx.app.getJavaHeap() / 1048576.0,
 					Gdx.app.getNativeHeap() / 1048576.0));
 		}
-		line.append(String.format(Locale.ROOT, " texture_mb=%.0f evicted=%d", textureBytes / 1048576.0, evictedTextures));
+		line.append(String.format(Locale.ROOT, " texture_mb=%.0f evicted=%d models_evicted=%d", textureBytes / 1048576.0, evictedTextures,
+				evictedModels));
 		if (GlMemory.ON) {
 			line.append(' ').append(GlMemory.summary());
 			if (Gdx.app != null) {

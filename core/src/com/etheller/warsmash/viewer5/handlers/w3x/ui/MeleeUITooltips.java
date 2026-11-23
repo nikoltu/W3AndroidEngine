@@ -208,6 +208,10 @@ final class MeleeUITooltips {
 		MeleeUI.clickLocationTemp.x = unit.getX();
 		MeleeUI.clickLocationTemp.y = unit.getY();
 		MeleeUI.clickLocationTemp.z = unit.getZ();
+		this.ui.war3MapViewer.worldScene.camera.worldToScreen(MeleeUI.screenCoordsVector, MeleeUI.clickLocationTemp);
+		// The bar hangs above the middle of the unit: perspective leans the top of a tall building away from the
+		// screen's centre, so only the height is taken from the top.
+		final float centerScreenX = MeleeUI.screenCoordsVector.x;
 		final Bounds unitBounds = unit.getInstance().getBounds();
 		if (unitBounds != null) {
 			final BoundingBox unitBoundsBox = unitBounds.getBoundingBox();
@@ -216,12 +220,17 @@ final class MeleeUITooltips {
 			}
 		}
 		this.ui.war3MapViewer.worldScene.camera.worldToScreen(MeleeUI.screenCoordsVector, MeleeUI.clickLocationTemp);
+		MeleeUI.screenCoordsVector.x = centerScreenX;
 		simpleStatusBarFrame.getBarFrame().setTexture("SimpleHpBarConsole", this.ui.rootFrame);
 		simpleStatusBarFrame.getBorderFrame().setTexture("Textures\\Black32.blp", this.ui.rootFrame);
 		simpleStatusBarFrame.getBorderFrame().setColor(0f, 0f, 0f, alpha);
 		simpleStatusBarFrame.getBarFrame().setColor(red, green, blue, alpha);
 		final Vector2 unprojected = this.ui.uiViewport.unproject(MeleeUI.screenCoordsVector);
-		simpleStatusBarFrame.setWidth((unit.getSelectionScale() * 1.5f * Gdx.graphics.getWidth()) / 2560);
+		// A building's bar is as wide as its selection circle; a unit's is wider than its circle.
+		final boolean building = (unit instanceof RenderUnit) && ((RenderUnit) unit).getSimulationUnit().isBuilding();
+		final float widthPerSelectionScale = building ? 1.2f : 1.5f;
+		simpleStatusBarFrame
+				.setWidth((unit.getSelectionScale() * widthPerSelectionScale * Gdx.graphics.getWidth()) / 2560);
 		simpleStatusBarFrame.setHeight(16);
 		simpleStatusBarFrame.addSetPoint(new SetPoint(FramePoint.CENTER, this.ui.rootFrame, FramePoint.BOTTOMLEFT,
 				unprojected.x, unprojected.y - offsetY));

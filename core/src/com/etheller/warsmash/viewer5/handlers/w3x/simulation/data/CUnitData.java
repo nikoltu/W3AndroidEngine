@@ -255,7 +255,9 @@ public class CUnitData {
 	private final ObjectData unitData;
 	private final Map<War3ID, CUnitType> unitIdToUnitType = new HashMap<>();
 	private final Map<War3ID, CUnitType> unitIdToUnitTypeLightweight = new HashMap<>();
+	private final Map<War3ID, int[]> unitIdToStockData = new HashMap<>();
 	private final Map<String, War3ID> jassLegacyNameToUnitId = new HashMap<>();
+	private final Set<String> jassLegacyNameMisses = new HashSet<>();
 	private final Map<War3ID, List<War3ID>> unitIdToTechEquivalents = new HashMap<>();
 	private Map<War3ID, List<War3ID>> unitIdToUpgradedFrom;
 	private int lightweightScannedKeyCount = -1;
@@ -1179,9 +1181,37 @@ public class CUnitData {
 		return getUnitTypeInstance(rawcode, buildingPathingPixelMap, unitType);
 	}
 
+	/**
+	 * The stock a shop starts a sold unit type with, {maximum, replenish interval, start delay, initial}, read from
+	 * the data without making the whole unit type: a shop only needs these when it is made, and the type is made when
+	 * something else asks for it. Null for a type the game does not have.
+	 */
+	public int[] getStockData(final War3ID rawcode) {
+		final CUnitType made = this.unitIdToUnitType.get(rawcode);
+		if (made != null) {
+			return new int[] { made.getStockMax(), made.getStockReplenishInterval(), made.getStockStartDelay(),
+					made.getStockInitial() };
+		}
+		int[] stock = this.unitIdToStockData.get(rawcode);
+		if (stock == null) {
+			final GameObject unitType = this.unitData.get(rawcode.asStringValue());
+			if ((unitType == null) || WarsmashConstants.isOutOfMapVersion(unitType, this.mapGameVersion)) {
+				return null;
+			}
+			stock = new int[] { unitType.getFieldAsInteger(STOCK_MAX, 0),
+					unitType.getFieldAsInteger(STOCK_REPLENISH_INTERVAL, 0),
+					unitType.getFieldAsInteger(STOCK_START_DELAY, 0), unitType.getFieldAsInteger(STOCK_INITIAL, 0) };
+			this.unitIdToStockData.put(rawcode, stock);
+		}
+		return stock.clone();
+	}
+
 	public CUnitType getUnitTypeByJassLegacyName(final String jassLegacyName) {
 		final War3ID typeId = this.jassLegacyNameToUnitId.get(jassLegacyName);
 		if (typeId == null) {
+			if (this.jassLegacyNameMisses.contains(jassLegacyName)) {
+				return null;
+			}
 			// VERY inefficient, but this is a crazy system anyway, they should not be using
 			// this!
 			Log.warn(
@@ -1196,6 +1226,7 @@ public class CUnitData {
 					return getUnitType(foundTypeId);
 				}
 			}
+			this.jassLegacyNameMisses.add(jassLegacyName);
 			return null;
 		}
 		return getUnitType(typeId);

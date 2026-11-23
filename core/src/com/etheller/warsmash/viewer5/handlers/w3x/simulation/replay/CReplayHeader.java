@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import com.etheller.warsmash.launcher.MapFiles;
 import com.etheller.warsmash.launcher.ProjectInfo;
 import com.etheller.warsmash.viewer5.handlers.w3x.CampaignMaps;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.ai.AIDifficulty;

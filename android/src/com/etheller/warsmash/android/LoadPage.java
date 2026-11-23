@@ -61,9 +61,9 @@ final class LoadPage extends LauncherViews {
 		final TextView note = text(getString(R.string.game_loading_list), b.body, this.activity.art.text2());
 		place(listPanel, note, frame, frame, listW - (2 * frame), -1);
 		action(view, 0, glueLabel("BACK", getString(R.string.launcher_back)), v -> this.activity.homePage.showHome());
-		this.deleteButton = action(view, 1, glueLabel("DELETE", "Delete"), v -> askDelete());
+		this.deleteButton = action(view, 1, glueLabel("DELETE"), v -> askDelete());
 		this.deleteButton.setTone(LauncherKit.GlueButton.TONE_DANGER);
-		this.loadButton = action(view, 2, glueLabel("KEY_LOAD_GAME", "Load Game"), v -> startLoad());
+		this.loadButton = action(view, 2, glueLabel("KEY_LOAD_GAME"), v -> startLoad());
 		this.deleteButton.setEnabled(false);
 		this.loadButton.setEnabled(false);
 		this.activity.setPage(view, LauncherActivity.PAGE_LOAD);
@@ -253,11 +253,11 @@ final class LoadPage extends LauncherViews {
 			place(info, reason, factsX, factsY, factsW, -1);
 			return;
 		}
-		final TextView players = fact(info, glue("COLON_PLAYERS", "Players:"), "", factsX, factsY, factsW, size);
-		fact(info, glue("COLON_ELAPSED_TIME", "Elapsed Time:"), CampaignChoice.elapsed(entry.gameTime), factsX,
+		final TextView players = fact(info, glue("COLON_PLAYERS"), "", factsX, factsY, factsW, size);
+		fact(info, glue("COLON_ELAPSED_TIME"), CampaignChoice.elapsed(entry.gameTime), factsX,
 				factsY + step, factsW, size);
 		if (t) {
-			fact(info, glue("COLON_SAVED", "Saved:"),
+			fact(info, glue("COLON_SAVED"),
 					DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(new Date(entry.saved)),
 					factsX, factsY + (2 * step), factsW, size);
 		}

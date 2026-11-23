@@ -186,7 +186,7 @@ final class QuestNatives extends CommonNatives {
 					final CScriptDialog dialog = arguments.get(0).visit(ObjectJassValueVisitor.getInstance());
 					final String messageText = this.gameUI
 							.getTrigStr(arguments.get(1).visit(StringJassValueVisitor.getInstance()));
-					dialog.setTitle(this.gameUI, messageText);
+					meleeUI.setScriptDialogTitle(dialog, messageText);
 					return null;
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("DialogAddButton",

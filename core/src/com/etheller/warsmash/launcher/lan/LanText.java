@@ -1,10 +1,9 @@
 package com.etheller.warsmash.launcher.lan;
 
-import java.io.IOException;
-import java.io.InputStream;
 import java.util.Locale;
 
 import com.etheller.warsmash.launcher.LauncherStrings;
+import com.etheller.warsmash.launcher.LauncherText;
 import com.etheller.warsmash.launcher.MapIssue;
 
 import net.warsmash.lan.client.MapDownload;
@@ -18,47 +17,43 @@ import net.warsmash.lan.protocol.LanProtocol;
  * platform that does not have the file on its class path tells where they come from with {@link #use}.
  */
 public final class LanText {
-	/** Where the words come from: a resource name and the values of its %n$s places. */
-	public interface Source {
-		String get(String name, Object... arguments);
-	}
-
-	private static volatile Source source;
-
 	private LanText() {
 	}
 
-	public static void use(final Source words) {
-		source = words;
+	public static void use(final LauncherText.Source words) {
+		LauncherText.use(words);
 	}
 
 	public static void use(final LauncherStrings words) {
-		source = fromStrings(words);
-	}
-
-	private static Source fromStrings(final LauncherStrings words) {
-		return (name, arguments) -> arguments.length == 0 ? words.get(name) : words.get(name, arguments);
-	}
-
-	private static Source source() {
-		Source found = source;
-		if (found == null) {
-			try (InputStream in = LanText.class.getResourceAsStream("/strings.xml")) {
-				if (in != null) {
-					found = fromStrings(new LauncherStrings(in));
-					source = found;
-				}
-			}
-			catch (final IOException e) {
-				// the names stand in for the words
-			}
-		}
-		return found;
+		LauncherText.use(words);
 	}
 
 	private static String t(final String name, final Object... arguments) {
-		final Source words = source();
-		return words == null ? name : words.get(name, arguments);
+		return LauncherText.get(name, arguments);
+	}
+
+	public static String searchFailed() {
+		return t("lan_search_failed");
+	}
+
+	public static String leaveFirst() {
+		return t("lan_leave_first");
+	}
+
+	public static String createFailed(final String reason) {
+		return t("lan_create_failed", reason);
+	}
+
+	public static String launchFailed() {
+		return t("lan_launch_failed");
+	}
+
+	public static String slotOpen() {
+		return t("lan_slot_open");
+	}
+
+	public static String slotClosed() {
+		return t("lan_slot_closed");
 	}
 
 	public static String noWifi() {

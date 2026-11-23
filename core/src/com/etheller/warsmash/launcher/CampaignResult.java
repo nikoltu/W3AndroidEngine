@@ -20,14 +20,20 @@ public final class CampaignResult {
 	// The Reforged style sheet lays the banner out at 600 x 1086.
 	private static final float UNIT = 1f / 1086f;
 	public static final float CONTENT_WIDTH = 0.75f * 600 * UNIT;
+	/** The banner hangs above the screen's top by this much of the style sheet's units; its crown is cut off. */
+	private static final float BANNER_RISE = 40;
+	/** A mission name too long for the banner goes on in a second line, which pushes what follows down by this. */
+	private static final float NAME_LINE = 36;
+	/** The share of the banner's width a line of the name may fill; the style sheet's text box has room around it. */
+	private static final float NAME_FILL = 0.95f;
 
 	public static final int HEADING_GOLD = 0xFFFFD428;
 	public static final int LABEL_GREY = 0xFFD8D8D8;
 
-	/** The three rows of numbers: their icon, the heading's glue name and the two columns' glue names. */
-	public static final String[][] ROWS = { { SkinArt.RESULT_HEROES, "SCORE_TAB_HEROES", "Heroes", "KILLED", "Killed" },
-		{ SkinArt.RESULT_UNITS, "SCORE_TAB_UNITS", "Units", "KILLED", "Killed" },
-		{ SkinArt.RESULT_STRUCTURES, "SCORE_TAB_STRUCTURES", "Structures", "RAZED", "Razed" } };
+	/** The three rows of numbers: their icon, the heading's glue name and the second column's glue name. */
+	public static final String[][] ROWS = { { SkinArt.RESULT_HEROES, "SCORE_TAB_HEROES", "KILLED" },
+		{ SkinArt.RESULT_UNITS, "SCORE_TAB_UNITS", "KILLED" },
+		{ SkinArt.RESULT_STRUCTURES, "SCORE_TAB_STRUCTURES", "RAZED" } };
 
 	private CampaignResult() {
 	}
@@ -38,6 +44,8 @@ public final class CampaignResult {
 	 */
 	public static final class Layout {
 		public final float x;
+		/** The banner's top, above the screen's. */
+		public final float bannerY;
 		public final float w;
 		public final float h;
 		public final float contentX;
@@ -66,6 +74,8 @@ public final class CampaignResult {
 		public final float valueSize;
 		public final float nameY;
 		public final float nameH;
+		/** From one line of the name to the next. */
+		public final float nameStep;
 		public final float nameSize;
 		public final float durationY;
 		public final float durationH;
@@ -83,14 +93,22 @@ public final class CampaignResult {
 		 * @param screenH the screen's height, the banner's
 		 */
 		public Layout(final float centreX, final float screenW, final float screenH) {
+			this(centreX, screenW, screenH, 1);
+		}
+
+		/**
+		 * @param nameLines the lines the mission's name takes in the banner's width, see {@link #nameLines}
+		 */
+		public Layout(final float centreX, final float screenW, final float screenH, final int nameLines) {
 			final float u = screenH * UNIT;
 			this.h = screenH;
+			this.bannerY = -BANNER_RISE * u;
 			this.w = screenH * BANNER_ASPECT;
 			this.x = Math.max(0, Math.min(screenW - this.w, centreX - (this.w / 2)));
 			this.contentW = CONTENT_WIDTH * screenH;
 			this.contentX = this.x + ((this.w - this.contentW) / 2);
 			this.titleSize = 70 * u;
-			this.titleY = 80 * u;
+			this.titleY = (80 - BANNER_RISE) * u;
 			this.titleH = 76 * u;
 			// The style sheet moves the line right by 41 of its own width, which the banner's cut hides; half of it
 			// keeps the line under the title.
@@ -122,7 +140,8 @@ public final class CampaignResult {
 			this.nameSize = 36 * u;
 			this.nameY = y;
 			this.nameH = 40 * u;
-			this.dividerY[1] = this.nameY + this.nameH + (10 * u);
+			this.nameStep = NAME_LINE * u;
+			this.dividerY[1] = this.nameY + (this.nameStep * (Math.max(1, nameLines) - 1)) + this.nameH + (10 * u);
 			this.durationSize = 24 * u;
 			this.durationY = this.dividerY[1] + this.dividerH + (10 * u);
 			this.durationH = 28 * u;
@@ -242,16 +261,45 @@ public final class CampaignResult {
 		}
 	}
 
-	/** The result's title: its glue name and the text when the strings lack it. */
-	public static String[] title(final GameResult result) {
-		return "victory".equals(result.result) ? new String[] { "VICTORY", "Victory" }
-				: new String[] { "DEFEAT", "Defeat" };
+	/**
+	 * The mission's name cut into the lines the banner's width allows, at the spaces; a word wider than the banner
+	 * keeps a line of its own.
+	 *
+	 * @param width the width of a text in the size and font the name is set in
+	 */
+	public static List<String> nameLines(final String name, final java.util.function.ToDoubleFunction<String> width,
+			final float maxWidth) {
+		final List<String> lines = new java.util.ArrayList<>();
+		final StringBuilder line = new StringBuilder();
+		for (final String word : name.trim().split("\\s+")) {
+			if (word.isEmpty()) {
+				continue;
+			}
+			final String joined = line.length() == 0 ? word : line + " " + word;
+			if ((line.length() > 0) && (width.applyAsDouble(joined) > (maxWidth * NAME_FILL))) {
+				lines.add(line.toString());
+				line.setLength(0);
+				line.append(word);
+			}
+			else {
+				line.setLength(0);
+				line.append(joined);
+			}
+		}
+		if (line.length() > 0) {
+			lines.add(line.toString());
+		}
+		return lines;
 	}
 
-	/** The result's button: Continue after a victory, Restart (the mission again) after a loss; its glue key and text. */
-	public static String[] buttonLabel(final GameResult result) {
-		return "victory".equals(result.result) ? new String[] { "CONTINUE", "Continue" }
-				: new String[] { "RESTART", "Restart" };
+	/** The result's title: its glue name. */
+	public static String title(final GameResult result) {
+		return "victory".equals(result.result) ? "VICTORY" : "DEFEAT";
+	}
+
+	/** The result's button: Continue after a victory, Restart (the mission again) after a loss; its glue key. */
+	public static String buttonLabel(final GameResult result) {
+		return "victory".equals(result.result) ? "CONTINUE" : "RESTART";
 	}
 
 	/** Whether a game's end brings the result: a campaign mission won, lost or left, with its score. */
@@ -297,16 +345,16 @@ public final class CampaignResult {
 		}
 	}
 
-	/** The difficulty's icon and its glue name with the text when the strings lack it; null when not told. */
+	/** The difficulty's icon and its glue name; null when not told. */
 	public static String[] difficulty(final String difficulty) {
 		switch (difficulty == null ? "" : difficulty) {
 		case "easy":
-			return new String[] { SkinArt.DIFFICULTY_EASY, "EASY", "Story" };
+			return new String[] { SkinArt.DIFFICULTY_EASY, "EASY" };
 		case "normal":
-			return new String[] { SkinArt.DIFFICULTY_NORMAL, "NORMAL", "Normal" };
+			return new String[] { SkinArt.DIFFICULTY_NORMAL, "NORMAL" };
 		case "hard":
 		case "insane":
-			return new String[] { SkinArt.DIFFICULTY_HARD, "HARD", "Hard" };
+			return new String[] { SkinArt.DIFFICULTY_HARD, "HARD" };
 		default:
 			return null;
 		}
@@ -340,7 +388,7 @@ public final class CampaignResult {
 			return -1;
 		}
 		final String played = normal(mapFile);
-		final List<CampaignMission> missions = entry.getData().getMissions();
+		final List<CampaignMission> missions = entry.getMissions(true);
 		for (int i = 0; i < missions.size(); i++) {
 			for (final boolean reforged : new boolean[] { false, true }) {
 				final String map = catalog.missionMapFilename(entry, i, reforged);
@@ -371,7 +419,7 @@ public final class CampaignResult {
 		CampaignCatalog.Entry found = null;
 		for (final CampaignCatalog.Entry entry : catalog.getEntries()) {
 			boolean lists = false;
-			final int count = entry.getData().getMissions().size();
+			final int count = entry.getMissions(true).size();
 			for (int i = 0; (i < count) && !lists; i++) {
 				for (final boolean reforged : new boolean[] { false, true }) {
 					final String map = catalog.missionMapFilename(entry, i, reforged);
@@ -394,13 +442,13 @@ public final class CampaignResult {
 	 * missions are shown instead.
 	 */
 	public static int continueMission(final CampaignCatalog.Entry entry, final CCampaignProgress.Snapshot progress,
-			final int played, final boolean victory) {
-		final int count = entry.getData().getMissions().size();
+			final int played, final boolean victory, final boolean reforged) {
+		final int count = entry.getMissions(reforged).size();
 		if (played >= 0) {
 			final int next = victory ? played + 1 : played;
 			return (next < count) && CampaignCatalog.isMissionOpen(entry, next, progress) ? next : -1;
 		}
-		return CampaignChoice.furthestMission(entry, progress);
+		return CampaignChoice.furthestMission(entry, progress, reforged);
 	}
 
 	private static String normal(final String path) {

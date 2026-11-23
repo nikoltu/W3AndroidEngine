@@ -499,10 +499,9 @@ final class PlayerNatives extends CommonNatives {
 									count++;
 								}
 							}
-							else if (unit.isUprooted() && includeIncomplete) {
-								// Measured on 1.29: an uprooted ancient adds two to this count and none without
-								// incomplete structures.
-								count += 2;
+							else if (unit.isUprooted()) {
+								// Measured on 1.29: an uprooted ancient counts as one structure, complete or not.
+								count++;
 							}
 						}
 					}

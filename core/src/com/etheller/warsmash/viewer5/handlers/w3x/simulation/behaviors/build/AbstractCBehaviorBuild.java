@@ -56,6 +56,10 @@ public abstract class AbstractCBehaviorBuild extends CAbstractRangedBehavior {
 		if (buildingPathingPixelMap == null) {
 			return this.unit.canReach(this.target.getX(), this.target.getY(), getRangeWithoutPathing(unitType));
 		}
+		if (unitType.isCanBeBuiltOnThem()) {
+			return this.unit.canReachToPathingTouching(simulation.getGameplayConstants().getBuildingAngle(),
+					buildingPathingPixelMap, this.target.getX(), this.target.getY());
+		}
 		return this.unit.canReachToPathing(0, simulation.getGameplayConstants().getBuildingAngle(),
 				buildingPathingPixelMap, this.target.getX(), this.target.getY());
 	}

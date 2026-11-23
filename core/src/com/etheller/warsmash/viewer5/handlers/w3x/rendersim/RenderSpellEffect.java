@@ -117,10 +117,12 @@ public class RenderSpellEffect extends AllocatedHandle implements RenderEffect, 
 				&& this.scriptQueuedSequences.isEmpty();
 		if (everythingDone) {
 			if (this.killWhenDone) {
-				if (this.modelInstance.parent != null) {
-					this.modelInstance.setParent(null);
+				if (!war3MapViewer.worldScene.leaveParticles(this.modelInstance)) {
+					if (this.modelInstance.parent != null) {
+						this.modelInstance.setParent(null);
+					}
+					war3MapViewer.worldScene.removeInstance(this.modelInstance);
 				}
-				war3MapViewer.worldScene.removeInstance(this.modelInstance);
 				this.lastLocalZ = this.modelInstance.localLocation.z;
 				// A script may keep the handle for good; it must not keep the model with it.
 				this.modelInstance = null;

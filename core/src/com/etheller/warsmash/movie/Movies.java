@@ -100,19 +100,25 @@ public final class Movies {
 		final String[] gameFonts = { "Fonts\\FRIZQT__.TTF", "Fonts\\NIM_____.TTF",
 				"Fonts\\ARHEIU20M.TTF", "Fonts\\ARHEIU20_MD.TTF", "Fonts\\ARHEIGB_BD.TTF", "Fonts\\GHEI00B_T.TTF",
 				"Fonts\\DFHEIMD.TTF", "Fonts\\DFHEILT.TTF", "Fonts\\DFST-M3U.TTF", "Fonts\\TT5500M_.TTF",
-				"Fonts\\2002.TTF", "Fonts\\2002B.TTF", "Fonts\\DFKGOTHICMD.TTF", "Fonts\\ULEI00M.TTF" };
+				"Fonts\\2002.TTF", "Fonts\\2002B.TTF", "Fonts\\DFKGOTHICMD.TTF", "Fonts\\ULEI00M.TTF",
+				"Fonts\\BlizzardGlobal-v5_4.ttf" };
 		// Fonts of the computer that cover the scripts the game's own fonts miss: Windows, macOS, then Linux.
 		final String[] computerFonts = { "C:/Windows/Fonts/msyh.ttc", "C:/Windows/Fonts/malgun.ttf",
-				"C:/Windows/Fonts/msjh.ttc", "C:/Windows/Fonts/YuGothM.ttc", "C:/Windows/Fonts/msgothic.ttc",
+				"C:/Windows/Fonts/msjh.ttc", "C:/Windows/Fonts/YuGothM.ttc", "C:/Windows/Fonts/YuGothR.ttc",
+				"C:/Windows/Fonts/meiryo.ttc", "C:/Windows/Fonts/msgothic.ttc", "C:/Windows/Fonts/BIZ-UDGothicR.ttc",
 				"C:/Windows/Fonts/simsun.ttc", "C:/Windows/Fonts/segoeui.ttf", "C:/Windows/Fonts/arial.ttf",
 				"/System/Library/Fonts/PingFang.ttc", "/System/Library/Fonts/AppleSDGothicNeo.ttc",
 				"/System/Library/Fonts/Hiragino Sans GB.ttc",
+				"/System/Library/Fonts/\u30d2\u30e9\u30ae\u30ce\u89d2\u30b4\u30b7\u30c3\u30af W3.ttc",
+				"/System/Library/Fonts/Hiragino Sans W3.ttc",
 				"/System/Library/Fonts/Supplemental/Arial Unicode.ttf", "/Library/Fonts/Arial Unicode.ttf",
 				"/System/Library/Fonts/Helvetica.ttc", "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
 				"/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
 				"/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
 				"/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc",
 				"/usr/share/fonts/google-noto-sans-cjk-fonts/NotoSansCJK-Regular.ttc",
+				"/usr/share/fonts/truetype/fonts-japanese-gothic.ttf", "/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf",
+				"/usr/share/fonts/truetype/takao-gothic/TakaoGothic.ttf", "/usr/share/fonts/vlgothic/VL-Gothic-Regular.ttf",
 				"/usr/share/fonts/truetype/wqy/wqy-microhei.ttc", "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
 				"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/dejavu/DejaVuSans.ttf",
 				"/usr/share/fonts/TTF/DejaVuSans.ttf", "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf" };
@@ -145,7 +151,7 @@ public final class Movies {
 
 	private static void scanFonts(final File folder, final int depth, final List<File> found) {
 		final File[] children = folder.listFiles();
-		if ((children == null) || (depth > 4) || (found.size() >= 4)) {
+		if ((children == null) || (depth > 4) || (found.size() >= 8)) {
 			return;
 		}
 		Arrays.sort(children);
@@ -155,7 +161,9 @@ public final class Movies {
 			}
 			else {
 				final String name = child.getName().toLowerCase(Locale.ROOT);
-				if ((name.startsWith("notosanscjk") || name.startsWith("dejavusans.") || name.startsWith("liberationsans-regular"))
+				if ((name.startsWith("notosanscjk") || name.startsWith("notosansjp") || name.startsWith("sourcehansansjp")
+						|| name.startsWith("ipag") || name.startsWith("takao") || name.startsWith("vl-gothic")
+						|| name.startsWith("dejavusans.") || name.startsWith("liberationsans-regular"))
 						&& (name.endsWith(".ttf") || name.endsWith(".ttc") || name.endsWith(".otf"))) {
 					found.add(child);
 				}

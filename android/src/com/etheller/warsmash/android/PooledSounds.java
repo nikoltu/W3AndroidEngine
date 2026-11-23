@@ -96,6 +96,24 @@ final class PooledSounds {
 		}
 	}
 
+	/** Waits, at most this long, for the sounds made so far to be decoded. */
+	boolean awaitLoading(final long maxMillis) {
+		final long end = SystemClock.uptimeMillis() + maxMillis;
+		synchronized (this) {
+			long left;
+			while ((this.loading.size() > 0) && ((left = end - SystemClock.uptimeMillis()) > 0)) {
+				try {
+					wait(left);
+				}
+				catch (final InterruptedException e) {
+					Thread.currentThread().interrupt();
+					break;
+				}
+			}
+			return this.loading.size() == 0;
+		}
+	}
+
 	/** Waits until every sound made so far is decoded, or the time is up. */
 	void finishLoading(final long maxMillis) {
 		final long end = SystemClock.uptimeMillis() + maxMillis;

@@ -4,8 +4,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.function.IntFunction;
 
 import com.etheller.warsmash.datasources.DataSource;
@@ -38,11 +40,22 @@ public final class CampaignCatalog {
 		private final CampaignMenuData data;
 		private final int number;
 		private final String section;
+		private List<CampaignMission> reforgedMissions;
 
 		private Entry(final CampaignMenuData data, final int number, final String section) {
 			this.data = data;
 			this.number = number;
 			this.section = section;
+			this.reforgedMissions = data.getMissions();
+		}
+
+		/**
+		 * The missions of a version of the campaign maps. The Reforged list may go on past the classic one (its
+		 * prologue has three chapters more); the missions both lists have are the same, so the classic missions are
+		 * always the first ones of the Reforged list.
+		 */
+		public List<CampaignMission> getMissions(final boolean reforged) {
+			return reforged ? this.reforgedMissions : this.data.getMissions();
 		}
 
 		public CampaignMenuData getData() {
@@ -143,6 +156,19 @@ public final class CampaignCatalog {
 			try (InputStream stream = dataSource.getResourceAsStream(REFORGED_FILE)) {
 				this.reforgedStrings.readTXT(stream, true);
 			}
+			for (final Entry entry : this.entries) {
+				final Element element = this.reforgedStrings.get(entry.section);
+				if (element == null) {
+					continue;
+				}
+				final List<CampaignMission> classic = entry.data.getMissions();
+				final List<CampaignMission> remade = new CampaignMenuData(element).getMissions();
+				if (remade.size() > classic.size()) {
+					final List<CampaignMission> missions = new ArrayList<>(classic);
+					missions.addAll(remade.subList(classic.size(), remade.size()));
+					entry.reforgedMissions = Collections.unmodifiableList(missions);
+				}
+			}
 		}
 		return this;
 	}
@@ -168,10 +194,10 @@ public final class CampaignCatalog {
 
 	/**
 	 * The map a mission is played on: with reforged, the Reforged version of the mission when the data has its map,
-	 * else the one the campaign list names; null for no such mission.
+	 * else the one the campaign list names; null for no such mission in that version.
 	 */
 	public String missionMapFilename(final Entry entry, final int mission, final boolean reforged) {
-		final List<CampaignMission> missions = entry.data.getMissions();
+		final List<CampaignMission> missions = entry.getMissions(reforged);
 		if ((mission < 0) || (mission >= missions.size())) {
 			return null;
 		}
@@ -218,6 +244,17 @@ public final class CampaignCatalog {
 		return this.entries;
 	}
 
+	/** The numbers scripts know these campaigns by, for the campaigns of this list among the section names given. */
+	public Set<Integer> numbersOf(final Set<String> sections) {
+		final Set<Integer> numbers = new HashSet<>();
+		for (final Entry entry : this.entries) {
+			if (sections.contains(entry.section)) {
+				numbers.add(entry.number);
+			}
+		}
+		return numbers;
+	}
+
 	public Entry getEntry(final int number) {
 		return (number >= 0) && (number < this.entries.size()) ? this.entries.get(number) : null;
 	}
@@ -233,25 +270,65 @@ public final class CampaignCatalog {
 	}
 
 	/**
-	 * A mission the player has won: recorded at its victory, else known from what the victory opened, the next mission
-	 * or, after the last one, the campaign's ending cinematic.
+	 * Whether the campaign screen lists a mission of a version of the campaign maps: it is among that version's
+	 * missions and its campaign is open, the first mission and those a script made available show.
+	 *
+	 * @param opened the player opened the campaign by hand, which lists every mission of it
 	 */
-	public static boolean isMissionWon(final Entry entry, final int mission, final CCampaignProgress.Snapshot progress) {
+	public static boolean isMissionListed(final Entry entry, final int mission, final boolean reforged,
+			final boolean opened, final CCampaignProgress.Snapshot progress) {
+		return (mission >= 0) && (mission < entry.getMissions(reforged).size())
+				&& (opened || isMissionOpen(entry, mission, progress));
+	}
+
+	/**
+	 * A mission the player has won: recorded at its victory, else known from what the victory opened, the next mission
+	 * or, after the last one, the campaign's ending cinematic or the campaign after it in the list.
+	 */
+	public static boolean isMissionWon(final Entry entry, final int mission, final CCampaignProgress.Snapshot shown) {
+		return isMissionWon(entry, mission, shown, false);
+	}
+
+	/** Whether a mission is won, in the mission list of a version of the campaign maps. */
+	public static boolean isMissionWon(final Entry entry, final int mission, final CCampaignProgress.Snapshot shown,
+			final boolean reforged) {
+		// A campaign opened by hand is not a campaign won.
+		final CCampaignProgress.Snapshot progress = shown.real();
 		if (progress.isMissionWon(entry.number, mission)) {
 			return true;
 		}
-		final int last = entry.data.getMissions().size() - 1;
-		return mission < last ? isMissionOpen(entry, mission + 1, progress)
-				: (mission == last) && progress.isEndingCinematicAvailable(entry.number);
+		final int last = entry.getMissions(reforged).size() - 1;
+		if (mission < last) {
+			return isMissionOpen(entry, mission + 1, progress);
+		}
+		// Victories were not always recorded (older profiles, missions started from the engine's own menu). A last
+		// mission without an ending cinematic tells its victory only by opening the next campaign, which a script
+		// records even when that campaign is open by default; the mission itself must have been reached in this
+		// version, as the other version's list may end earlier.
+		return (mission == last) && (progress.isEndingCinematicAvailable(entry.number)
+				|| (progress.isCampaignAvailable(entry.number + 1) && isMissionOpen(entry, mission, progress)));
 	}
 
 	/** Whether the player has won the campaign's last mission. */
 	public static boolean isCompleted(final Entry entry, final CCampaignProgress.Snapshot progress) {
-		return isMissionWon(entry, entry.data.getMissions().size() - 1, progress);
+		return isCompleted(entry, progress, false);
 	}
 
-	/** The campaign the menu opens on: the one the last mission chose, else none (the caller keeps its own). */
+	/** Whether the player has won the last mission of a version of the campaign maps. */
+	public static boolean isCompleted(final Entry entry, final CCampaignProgress.Snapshot progress,
+			final boolean reforged) {
+		return isMissionWon(entry, entry.getMissions(reforged).size() - 1, progress, reforged);
+	}
+
+	/**
+	 * The campaign the menu opens on: the one the last mission chose, else none (the caller keeps its own). Reign of
+	 * Chaos missions choose by race and the expansion's by number; a combined list holds both kinds of campaigns, so
+	 * the choice of the mission played last counts, whichever campaign it was.
+	 */
 	public int menuCampaignNumber(final CCampaignProgress.Snapshot progress) {
+		if (this.unified) {
+			return progress.getCombinedMenuCampaignIndex();
+		}
 		return this.classicList ? progress.getClassicMenuCampaignIndex() : progress.getMenuCampaignIndex();
 	}
 }

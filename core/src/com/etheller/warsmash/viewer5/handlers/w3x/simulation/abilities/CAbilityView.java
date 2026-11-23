@@ -22,6 +22,22 @@ public interface CAbilityView extends CHandle {
 	void checkCanTargetNoTarget(CSimulation game, CUnit unit, int playerIndex, int orderId, boolean autoOrder,
 			AbilityTargetCheckReceiver<Void> receiver);
 
+	/**
+	 * Whether the command card asks the player for a target before this order is given, although the order is also
+	 * accepted from a script without one (a transport's unload-all).
+	 */
+	default boolean needsTargetFromCommandCard(final int orderId) {
+		return false;
+	}
+
+	/**
+	 * Whether this order is given to the ability with a unit or point target. A script's immediate order for it is
+	 * accepted when the ability is usable, although nothing happens without a target.
+	 */
+	default boolean isTargetOrder(final int orderId) {
+		return false;
+	}
+
 	void checkRequirementsMet(CSimulation game, CUnit unit, AbilityActivationReceiver receiver);
 
 	boolean isRequirementsMet(CSimulation game, CUnit unit);
@@ -54,6 +70,11 @@ public interface CAbilityView extends CHandle {
 	boolean isPhysical();
 
 	boolean isMagic();
+
+	/** Whether only one unit of a selected group casts the ability. */
+	default boolean isUniqueCast() {
+		return false;
+	}
 
 	boolean isUniversal();
 

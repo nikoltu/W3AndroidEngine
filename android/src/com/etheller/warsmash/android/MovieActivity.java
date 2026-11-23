@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import android.app.Activity;
 import android.content.Context;
@@ -30,6 +31,7 @@ import android.widget.FrameLayout;
 import android.widget.TextView;
 
 import com.etheller.warsmash.movie.AviReader;
+import com.etheller.warsmash.movie.CaptionFonts;
 import com.etheller.warsmash.movie.Movie;
 import com.etheller.warsmash.movie.MovieCaptions;
 
@@ -235,8 +237,12 @@ public final class MovieActivity extends Activity implements SurfaceHolder.Callb
 		fit(reader.getWidth(), reader.getHeight());
 		final String audio = this.audios.size() > index ? this.audios.get(index) : "";
 		final String captions = this.captionFiles.size() > index ? this.captionFiles.get(index) : "";
-		this.playing = new Playback(video, reader, audio.isEmpty() ? null : new File(audio),
-				MovieCaptions.read(captions.isEmpty() || !this.subtitles ? null : new File(captions)), startMicros);
+		final MovieCaptions movieCaptions = MovieCaptions.read(captions.isEmpty() || !this.subtitles ? null : new File(captions));
+		// The ideographs of Chinese, Japanese and Korean share code points; the text's locale picks the Japanese shapes.
+		this.captionView.setTextLocale(CaptionFonts.isJapanese(movieCaptions.getTexts(), CaptionFonts.gameLanguage())
+				? Locale.JAPAN : Locale.getDefault());
+		this.playing = new Playback(video, reader, audio.isEmpty() ? null : new File(audio), movieCaptions,
+				startMicros);
 		this.playing.start();
 	}
 

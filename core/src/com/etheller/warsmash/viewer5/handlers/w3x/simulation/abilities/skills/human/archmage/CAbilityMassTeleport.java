@@ -11,7 +11,7 @@ import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CItem;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
-import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.CAbilityTargetSpellBase;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.CAbilityUnitOrPointTargetSpellBase;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityTarget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityTargetVisitor;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.types.definitions.impl.AbilityFields;
@@ -21,7 +21,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.timers.CTimer;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.CEffectType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.SimulationRenderComponentModel;
 
-public class CAbilityMassTeleport extends CAbilityTargetSpellBase {
+public class CAbilityMassTeleport extends CAbilityUnitOrPointTargetSpellBase {
 	// Only the caster's own units go along, flying ones too, whatever the data's target flags say; never wards.
 	private static final Set<CTargetType> TELEPORTED_UNITS = Collections.unmodifiableSet(EnumSet.of(CTargetType.AIR,
 			CTargetType.GROUND, CTargetType.PLAYERUNITS, CTargetType.VULNERABLE, CTargetType.INVULNERABLE));

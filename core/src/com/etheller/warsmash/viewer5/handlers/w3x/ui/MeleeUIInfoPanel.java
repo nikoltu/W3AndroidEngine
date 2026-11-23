@@ -109,6 +109,8 @@ final class MeleeUIInfoPanel {
 	private int shownLayoutVersion = -1;
 	private ClickablePortrait clickablePortrait;
 	private StringFrame smashBuffStatusBar;
+	/** The "Status:" label is only drawn in front of buff icons, and only for a single non-building unit. */
+	private boolean buffStatusAllowed;
 	private final CommandCardActivationReceiverPreviewCallback activationReceiverPreviewCallback = new CommandCardActivationReceiverPreviewCallback();
 
 	final MeleeUI ui;
@@ -190,7 +192,7 @@ final class MeleeUIInfoPanel {
 		this.ui.simpleInfoPanelUnitDetail.add(this.smashBuffStatusBar);
 		this.smashBuffStatusBar.setHeight(GameUI.convertY(this.ui.uiViewport, 0.01f));
 		this.smashBuffStatusBar.addAnchor(new AnchorDefinition(FramePoint.BOTTOMLEFT,
-				GameUI.convertX(this.ui.uiViewport, 0.03f), GameUI.convertY(this.ui.uiViewport, 0.003f)));
+				GameUI.convertX(this.ui.uiViewport, 0.03f), GameUI.convertY(this.ui.uiViewport, 0.012f)));
 		this.smashBuffStatusBar.setWidth(GameUI.convertX(this.ui.uiViewport, 0.035f));
 		this.ui.rootFrame.setDecoratedText(this.smashBuffStatusBar, "COLON_STATUS");
 		UIFrame buffBarPreviousFrame = this.smashBuffStatusBar;
@@ -353,8 +355,8 @@ final class MeleeUIInfoPanel {
 					final CUnit simulationUnit = MeleeUIInfoPanel.this.ui.selectedUnit.getSimulationUnit();
 					final CAbilityCargoHold cargoData = simulationUnit.getCargoData();
 					if (cargoData != null) {
-						final CUnit unitInside = cargoData.getUnit(index);
 						if ((index >= 0) && (index < cargoData.getCargoCount())) {
+							final CUnit unitInside = cargoData.getUnit(index);
 							final BooleanAbilityActivationReceiver activationReceiver = BooleanAbilityActivationReceiver.INSTANCE.reset();
 							final CSimulation simulation = MeleeUIInfoPanel.this.ui.war3MapViewer.simulation;
 							cargoData.checkCanUse(simulation, simulationUnit,
@@ -636,7 +638,6 @@ final class MeleeUIInfoPanel {
 		}
 
 		public void update(final float dt) {
-			this.portraitCameraManager.updateCamera();
 			this.portraitCurrentDuration += (dt * 1000);
 			if (this.modelInstance != null) {
 				if (this.portraitTargetDuration != 0) {
@@ -659,6 +660,7 @@ final class MeleeUIInfoPanel {
 					}
 				}
 			}
+			this.portraitCameraManager.updateCamera();
 		}
 
 		public boolean isResetNeeded() {
@@ -710,7 +712,7 @@ final class MeleeUIInfoPanel {
 				}
 				else {
 					this.secondaryTags = unit.getSecondaryAnimationTags();
-					final MdxModel portraitModel = unit.portraitModel;
+					final MdxModel portraitModel = unit.getPortraitModel();
 					if (portraitModel != null) {
 						if (this.modelInstance != null) {
 							this.portraitScene.removeInstance(this.modelInstance);
@@ -722,6 +724,7 @@ final class MeleeUIInfoPanel {
 						this.modelInstance.setScene(this.portraitScene);
 						this.modelInstance.setVertexColor(unit.instance.vertexColor);
 						this.modelInstance.setTeamColor(unit.playerIndex);
+						showNewModel();
 					}
 				}
 			}
@@ -753,6 +756,7 @@ final class MeleeUIInfoPanel {
 						this.modelInstance.setSequenceLoopMode(SequenceLoopMode.NEVER_LOOP);
 						this.modelInstance.setScene(this.portraitScene);
 						this.modelInstance.setVertexColor(unit.instance.vertexColor);
+						showNewModel();
 					}
 				}
 			}
@@ -783,6 +787,7 @@ final class MeleeUIInfoPanel {
 						this.modelInstance.setBlendTime(portraitModel.blendTime);
 						this.modelInstance.setSequenceLoopMode(SequenceLoopMode.NEVER_LOOP);
 						this.modelInstance.setScene(this.portraitScene);
+						showNewModel();
 					}
 				}
 			}
@@ -806,6 +811,16 @@ final class MeleeUIInfoPanel {
 			}
 			this.lastUnit = null;
 			innerTalk(us, extraDuration);
+			showNewModel();
+		}
+
+		/**
+		 * The model and its portrait camera have to change in the same frame: the interface updates the portrait
+		 * before it switches it, so the new model would be drawn once with the camera of the old one and, with no
+		 * sequence yet, without the camera's animation.
+		 */
+		private void showNewModel() {
+			update(0);
 		}
 	}
 
@@ -982,7 +997,8 @@ final class MeleeUIInfoPanel {
 			this.ui.simpleInfoPanelDestructableDetail.setVisible(false);
 			this.ui.simpleInfoPanelUnitDetail.setVisible(!multiSelect);
 			final boolean constructing = d.constructing;
-			this.smashBuffStatusBar.setVisible(!multiSelect && !d.building && !constructing);
+			this.buffStatusAllowed = !multiSelect && !d.building && !constructing;
+			this.smashBuffStatusBar.setVisible(false);
 			if ((d.cargoCount > 0) && !multiSelect && !constructing) {
 				this.ui.attack1Icon.setVisible(false);
 				this.ui.attack2Icon.setVisible(false);
@@ -1167,13 +1183,13 @@ final class MeleeUIInfoPanel {
 						this.recycleStringBuilder.setLength(0);
 						if (d.itemPawnable[index]) {
 							this.recycleStringBuilder.append(
-									MeleeUICommands.touchItemHint(
+									MeleeUICommands.touchItemHint(this.ui.rootFrame,
 									this.ui.rootFrame.getTemplates().getDecoratedString("ITEM_PAWN_TOOLTIP")));
 							this.recycleStringBuilder.append("|n");
 						}
 						if (activelyUsed) {
 							this.recycleStringBuilder.append(
-									MeleeUICommands.touchItemHint(
+									MeleeUICommands.touchItemHint(this.ui.rootFrame,
 									this.ui.rootFrame.getTemplates().getDecoratedString("ITEM_USE_TOOLTIP")));
 							this.recycleStringBuilder.append("|n");
 						}
@@ -1208,6 +1224,15 @@ final class MeleeUIInfoPanel {
 		}
 		this.ui.commands.clearAndRepopulateCommandCard();
 		updateBuildTimeIndicators();
+	}
+
+	void hideBuffStatus() {
+		this.smashBuffStatusBar.setVisible(false);
+	}
+
+	/** The "Status:" label is drawn in front of the buff icons only. */
+	void showBuffStatus() {
+		this.smashBuffStatusBar.setVisible(this.buffStatusAllowed);
 	}
 
 	/** The buff bar is shown from the frame by {@link MeleeUICommands#showBuffs}; nothing calls the listener now. */

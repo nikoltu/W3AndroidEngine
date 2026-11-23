@@ -302,6 +302,14 @@ public abstract class CAbilitySpellBase extends AbstractGenericSingleIconNoSmart
 		return false;
 	}
 
+	/**
+	 * Whether the cast may begin once the caster is in range and facing the target: a spell that finds nothing to work
+	 * on (Force of Nature without a tree in its area) ends the order at that moment, before any mana or cooldown.
+	 */
+	public boolean canBeginCast(final CSimulation game, final CUnit caster, final AbilityTarget target) {
+		return true;
+	}
+
 	@Override
 	public boolean isUniversal() {
 		return false;

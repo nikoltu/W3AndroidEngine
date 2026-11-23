@@ -5,6 +5,7 @@ import java.io.InputStream;
 import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -289,10 +290,31 @@ final class MapViewerLoading {
 	 */
 	static void preloadSoundsAtStart(final War3MapViewer viewer, final Collection<String> interfaceSoundKeys) {
 		viewer.soundsToPreload = interfaceSoundKeys;
+		// The units the map file places are there already: their decoding runs while the opening steps are played.
+		queueSounds(viewer, interfaceSoundKeys, false);
 	}
 
 	static void preloadSounds(final War3MapViewer viewer, final Collection<String> interfaceSoundKeys) {
 		final long started = System.currentTimeMillis();
+		final int[] counts = queueSounds(viewer, interfaceSoundKeys, true);
+		Extensions.audio.finishLoading(War3MapViewer.SOUND_PRELOAD_WAIT_MILLIS);
+		logSoundsPreloaded(counts, started);
+	}
+
+	static void logSoundsPreloaded(final int[] counts, final long started) {
+		Log.info("Sounds preloaded for " + counts[0] + " unit types of the player, " + counts[1]
+				+ " they can make and " + counts[2] + " others in " + (System.currentTimeMillis() - started) + " ms");
+	}
+
+	/**
+	 * Starts the decoding of the sounds {@link #preloadSounds} waits for, without waiting. What is decoded already or
+	 * waited for is left alone, so it can be called again as the game makes more units. The answers of the other
+	 * players' units are asked for only when includeOthers is set: they are not heard before the player selects one.
+	 *
+	 * @return the unit types of the player, those they can make and the others
+	 */
+	static int[] queueSounds(final War3MapViewer viewer, final Collection<String> interfaceSoundKeys,
+			final boolean includeOthers) {
 		final Set<War3ID> own = new LinkedHashSet<>();
 		final Set<War3ID> others = new LinkedHashSet<>();
 		for (final CUnit unit : viewer.simulation.getUnits()) {
@@ -303,7 +325,7 @@ final class MapViewerLoading {
 		made.removeAll(own);
 		others.removeAll(own);
 		// Decoding them together lets what the loading screen has not decoded be done on all processors at once.
-		MapViewerPrewarm.prefetchSoundsOf(viewer, own, made, others);
+		MapViewerPrewarm.prefetchSoundsOf(viewer, own, made, includeOthers ? others : Collections.<War3ID>emptySet());
 		for (final String key : interfaceSoundKeys) {
 			viewer.uiSounds.getSound(key).prefetch();
 		}
@@ -320,19 +342,18 @@ final class MapViewerLoading {
 				soundset.what.preload();
 			}
 		}
-		for (final War3ID typeId : others) {
-			final UnitSoundset soundset = viewer.renderUnitTypeData.getSoundset(typeId);
-			if (soundset != null) {
-				soundset.what.preload();
+		if (includeOthers) {
+			for (final War3ID typeId : others) {
+				final UnitSoundset soundset = viewer.renderUnitTypeData.getSoundset(typeId);
+				if (soundset != null) {
+					soundset.what.preload();
+				}
 			}
 		}
 		for (final String key : interfaceSoundKeys) {
 			viewer.uiSounds.getSound(key).preload();
 		}
-		Extensions.audio.finishLoading(War3MapViewer.SOUND_PRELOAD_WAIT_MILLIS);
-		Log.info("Sounds preloaded for " + own.size() + " unit types of the player, " + made.size()
-				+ " they can make and " + others.size() + " others in " + (System.currentTimeMillis() - started)
-				+ " ms");
+		return new int[] { own.size(), made.size(), others.size() };
 	}
 
 	static void addMadeUnitTypes(final War3MapViewer viewer, final Set<War3ID> typeIds) {
@@ -358,5 +379,6 @@ final class MapViewerLoading {
 		// TODO condense ported MappedData from Ghostwolf and MutableObjectData from
 		// Retera
 
-	}
+	}
+
 }

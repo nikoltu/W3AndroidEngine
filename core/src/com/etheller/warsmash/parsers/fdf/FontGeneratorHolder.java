@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.BitmapFont.Glyph;
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
@@ -76,7 +77,45 @@ public class FontGeneratorHolder {
 		return font;
 	}
 
-	private BitmapFont create(final FreeTypeFontParameter parameter) {
+	/**
+	 * A font keeps the parameters it was made with to rasterize the glyphs that come later, so it needs a copy: callers
+	 * reuse one parameter object for fonts of several sizes, and a glyph made with another size than its font's lands
+	 * on the wrong baseline and at the wrong scale.
+	 */
+	private static FreeTypeFontParameter copyOf(final FreeTypeFontParameter source) {
+		final FreeTypeFontParameter copy = new FreeTypeFontParameter();
+		copy.size = source.size;
+		copy.mono = source.mono;
+		copy.hinting = source.hinting;
+		copy.color = new Color(source.color);
+		copy.gamma = source.gamma;
+		copy.renderCount = source.renderCount;
+		copy.borderWidth = source.borderWidth;
+		copy.borderColor = new Color(source.borderColor);
+		copy.borderStraight = source.borderStraight;
+		copy.borderGamma = source.borderGamma;
+		copy.shadowOffsetX = source.shadowOffsetX;
+		copy.shadowOffsetY = source.shadowOffsetY;
+		copy.shadowColor = new Color(source.shadowColor);
+		copy.spaceX = source.spaceX;
+		copy.spaceY = source.spaceY;
+		copy.padTop = source.padTop;
+		copy.padLeft = source.padLeft;
+		copy.padBottom = source.padBottom;
+		copy.padRight = source.padRight;
+		copy.characters = source.characters;
+		copy.kerning = source.kerning;
+		copy.packer = source.packer;
+		copy.flip = source.flip;
+		copy.genMipMaps = source.genMipMaps;
+		copy.minFilter = source.minFilter;
+		copy.magFilter = source.magFilter;
+		copy.incremental = source.incremental;
+		return copy;
+	}
+
+	private BitmapFont create(final FreeTypeFontParameter requested) {
+		final FreeTypeFontParameter parameter = copyOf(requested);
 		if (FreeTypeFontGenerator.DEFAULT_CHARS.equals(parameter.characters)) {
 			parameter.characters = BASIC_CHARS;
 		}

@@ -98,7 +98,8 @@ final class CampaignPage extends LauncherViews {
 		final Drawable drawable = still != null ? new LauncherKit.CoverDrawable(still, stillFocus, 0)
 				: this.activity.homePage.sceneStill();
 		view.addView(this.activity.sceneBackdrop(drawable, scene, focus, LauncherActivity.LAYER_PAGE,
-				entry != null ? entry.getData().getBackground() : "TutorialBackdrop", null,
+				this.activity.backdropField(entry != null ? entry.getData().getBackground() : "TutorialBackdrop"),
+				entry != null ? entry.getData().getBackground() : "TutorialBackdrop",
 				entry != null ? entry.getData().getBackgroundFogSettings() : null, 0, 0, 0, b.width, b.height, -1,
 				frame[1], frame[2]), 0, new FrameLayout.LayoutParams(MATCH, MATCH));
 		final View shade = new View(this.activity);
@@ -162,9 +163,10 @@ final class CampaignPage extends LauncherViews {
 		final CharSequence headerText = issue != MapIssue.NONE ? issueText(issue, true)
 				: reforged ? upper(glueLabel(header, header)) : glueLabel(header, header);
 		final CharSequence nameText = reforged ? upper(glueLabel(name, name)) : glueLabel(name, name);
-		place(row, text(headerText, headerSize, chosen ? this.activity.art.text() : this.activity.art.gold()), textX,
-				(rowH * 0.04f) + (headerSize * 0.15f), w - textX - 8, -1);
-		final TextView title = text(nameText, nameSize, chosen ? this.activity.art.gold() : this.activity.art.text());
+		place(row, fitWidth(text(headerText, headerSize, chosen ? this.activity.art.text() : this.activity.art.gold()),
+				0.7f), textX, (rowH * 0.04f) + (headerSize * 0.15f), w - textX - 8, -1);
+		final TextView title = fitWidth(text(nameText, nameSize,
+				chosen ? this.activity.art.gold() : this.activity.art.text()), 0.6f);
 		if (chosen) {
 			title.setShadowLayer(nameSize * this.activity.scale * 0.35f, 0, 0, this.activity.art.gold());
 		}
@@ -324,14 +326,18 @@ final class CampaignPage extends LauncherViews {
 		}
 		this.activity.campaignResult = null;
 		final CCampaignProgress.Snapshot progress = this.activity.campaigns.progress;
-		final List<CampaignMission> missions = entry.getData().getMissions();
-		// The mission last played, else the furthest one open: after a victory the one it opened.
+		final boolean reforgedMaps = reforgedMaps();
+		final List<CampaignMission> missions = entry.getMissions(reforgedMaps);
+		// The mission last played, else the first open one not yet won (after a victory the one it opened), else the
+		// first of a campaign that is won all through.
 		int chosen = this.activity.preferences.getInt(KEY_MISSION, -1);
 		if ((chosen < 0) || (chosen >= missions.size()) || !CampaignCatalog.isMissionOpen(entry, chosen, progress)) {
 			chosen = 0;
 			for (int i = 0; i < missions.size(); i++) {
-				if (CampaignCatalog.isMissionOpen(entry, i, progress)) {
+				if (CampaignCatalog.isMissionOpen(entry, i, progress)
+						&& !CampaignCatalog.isMissionWon(entry, i, progress, reforgedMaps)) {
 					chosen = i;
+					break;
 				}
 			}
 		}
@@ -374,7 +380,8 @@ final class CampaignPage extends LauncherViews {
 					: v -> launchMission(entry, number, LauncherActivity.PAGE_MISSIONS);
 			final View row;
 			if (reforged) {
-				final boolean won = (number >= 0) && CampaignCatalog.isMissionWon(entry, number, progress);
+				final boolean won = (number >= 0)
+						&& CampaignCatalog.isMissionWon(entry, number, progress, reforgedMaps);
 				row = chapterRow(mission, number == chosen,
 						number < 0 ? SkinArt.CHAPTER_CINEMATIC
 								: CampaignResult.chapterIcon(won, progress.getMissionWonDifficulty(entry.getNumber(), number)),
@@ -510,28 +517,35 @@ final class CampaignPage extends LauncherViews {
 		// The classic skin has no pictures of the Reforged interface: without the shield the texts start at the edge.
 		final String shieldArt = version == 0 ? SkinArt.VERSION_REFORGED : SkinArt.VERSION_CLASSIC;
 		final boolean shielded = this.activity.art.has(shieldArt);
+		final String campaignTip = getString(versions ? R.string.launcher_campaign_maps_tip
+				: R.string.launcher_campaign_maps_missing_tip);
 		if (shielded) {
-			place(content, image(shieldArt, ImageView.ScaleType.FIT_CENTER), left, y, shield, shield);
+			final ImageView mark = image(shieldArt, ImageView.ScaleType.FIT_CENTER);
+			holdForTip(mark, campaignTip);
+			place(content, mark, left, y, shield, shield);
 		}
 		final float tx = left + (shielded ? shield + (t ? 20 : 10) : (t ? 24 : 8));
 		final TextView header = fitted(text(upper(glueLabel(data.getHeader(), data.getHeader())), headerSize,
 				this.activity.art.gold()), headerSize, right - tx);
+		holdForTip(header, campaignTip);
 		place(content, header, tx, y + (shield * 0.1f), right - tx, -1);
 		final TextView name = fitted(text(upper(glueLabel(data.getName(), data.getName())), nameSize,
 				this.activity.art.text()), nameSize, right - tx);
+		holdForTip(name, campaignTip);
 		place(content, name, tx, y + (shield * 0.5f), right - tx, -1);
 		final float menuY = y + shield + gap;
 		final float textSize = t ? 32 : 22;
-		float mx = tx;
+		// On the phone the menus start under the shield: beside it the list column leaves too little for the labels.
+		float mx = t ? tx : left;
 		if (result != null) {
 			final float continueW = t ? 340 : 190;
-			final String[] label = CampaignResult.buttonLabel(result);
-			place(content, button(upper(glueLabel(label[0], label[1])), menuH, textSize,
+			final String label = CampaignResult.buttonLabel(result);
+			place(content, button(upper(glueLabel(label)), menuH, textSize,
 					v -> continueAfter(entry, result)), mx, menuY, continueW, menuH);
 			mx += continueW + gap;
 		}
 		else if (versions) {
-			final float versionW = t ? 400 : 170;
+			final float versionW = t ? 400 : 230;
 			place(content, dropdown(glueList(CAMPAIGN_MAPS, 1), version, true, menuH, textSize,
 					choice -> {
 						this.activity.profiles.setCampaignMaps(profile, CAMPAIGN_MAPS[choice][0]);
@@ -547,7 +561,7 @@ final class CampaignPage extends LauncherViews {
 					selected = i;
 				}
 			}
-			final float difficultyW = t ? 300 : 150;
+			final float difficultyW = t ? 300 : 190;
 			place(content, dropdown(glueList(DIFFICULTIES, 1), selected, true, menuH, textSize,
 					choice -> this.activity.preferences.edit().putString(KEY_DIFFICULTY, DIFFICULTIES[choice][0])
 							.apply()),
@@ -555,16 +569,24 @@ final class CampaignPage extends LauncherViews {
 			mx += difficultyW + gap;
 		}
 		if (this.activity.art.has(SkinArt.ICON_FOLDER_GOLD)) {
-			final float folderW = t ? 120 : 96;
+			final float folderW = t ? 120 : 84;
 			final LauncherKit.GlueButton saves = button("", menuH, textSize,
 					v -> this.activity.showPage(LauncherActivity.PAGE_LOAD));
-			saves.setContentDescription(glueLabel("KEY_LOAD_SAVED_GAME", "Load Saved Game"));
+			saves.setContentDescription(glueLabel("KEY_LOAD_SAVED_GAME"));
 			place(content, saves, mx, menuY, folderW, menuH);
 			final float icon = menuH * 0.5f;
 			place(content, image(SkinArt.ICON_FOLDER_GOLD, ImageView.ScaleType.FIT_CENTER),
 					mx + ((folderW - icon) / 2), menuY + ((menuH - icon) / 2), icon, icon);
 		}
 		return y + (shield * 0.5f);
+	}
+
+	/** Holding the campaign's shield or name tells how the campaign version comes about. */
+	private void holdForTip(final View view, final String tip) {
+		view.setOnLongClickListener(v -> {
+			showHint(view, tip);
+			return true;
+		});
 	}
 
 	/**
@@ -577,14 +599,20 @@ final class CampaignPage extends LauncherViews {
 		sceneBehind(view, entry);
 		final FrameLayout content = content(view, campaignExtra());
 		addCampaignBlock(content, entry, result);
-		final CampaignResult.Layout l = new CampaignResult.Layout(
-				b.contentX + campaignListX() + (campaignListW() / 2), b.width, b.height);
+		final float centre = b.contentX + campaignListX() + (campaignListW() / 2);
+		final CampaignResult.Layout first = new CampaignResult.Layout(centre, b.width, b.height);
+		// A name wider than the banner goes on in a second line, which moves what follows.
+		final String missionName = missionName(entry, result).toString();
+		final TextView probe = bold(text("", first.nameSize, Color.WHITE));
+		final List<String> nameLines = CampaignResult.nameLines(missionName,
+				line -> android.text.Layout.getDesiredWidth(smallCaps(line), probe.getPaint()), px(first.contentW));
+		final CampaignResult.Layout l = new CampaignResult.Layout(centre, b.width, b.height, nameLines.size());
 		// The banner falls in with its title; the numbers, the mission and the difficulty fade in after it.
 		final List<View> fading = new ArrayList<>();
 		final ImageView banner = image(CampaignResult.banner(entry.getSection()), ImageView.ScaleType.FIT_XY);
-		place(view, banner, l.x, 0, l.w, l.h);
-		final String[] title = CampaignResult.title(result);
-		final TextView titleView = bold(centred(view, upper(glueLabel(title[0], title[1])), l.titleSize, Color.WHITE,
+		place(view, banner, l.x, l.bannerY, l.w, l.h);
+		final String title = CampaignResult.title(result);
+		final TextView titleView = bold(centred(view, smallCaps(glueLabel(title)), l.titleSize, Color.WHITE,
 				l.contentX, l.titleY, l.contentW, l.titleH));
 		for (final float dividerY : l.dividerY) {
 			final ImageView divider = image(SkinArt.RESULT_DIVIDER, ImageView.ScaleType.FIT_XY);
@@ -598,24 +626,26 @@ final class CampaignPage extends LauncherViews {
 			final ImageView icon = image(row[0], ImageView.ScaleType.FIT_CENTER);
 			place(view, icon, l.iconX, y, l.icon, l.icon);
 			fading.add(icon);
-			fading.add(bold(line(view, upper(glueLabel(row[1], row[2])), l.headingSize, CampaignResult.HEADING_GOLD,
+			fading.add(bold(line(view, upper(glueLabel(row[1])), l.headingSize, CampaignResult.HEADING_GOLD,
 					l.detailsX, y + l.headingY, l.columnW * 2, l.headingH)));
-			final CharSequence[] labels = { glueLabel("SCORE", "Score"), glueLabel(row[3], row[4]) };
+			final CharSequence[] labels = { glueLabel("SCORE"), glueLabel(row[2]) };
 			for (int c = 0; c < 2; c++) {
 				final float x = l.detailsX + (c * l.columnW);
-				fading.add(bold(line(view, smallCaps(labels[c]), l.labelSize, CampaignResult.LABEL_GREY, x,
-						y + l.labelY, l.columnW, l.labelH)));
-				fading.add(bold(line(view, Integer.toString(numbers[c]), l.valueSize, Color.WHITE, x, y + l.valueY,
-						l.columnW, l.valueH)));
+				fading.add(line(view, smallCaps(labels[c]), l.labelSize, CampaignResult.LABEL_GREY, x, y + l.labelY,
+						l.columnW, l.labelH));
+				fading.add(line(view, Integer.toString(numbers[c]), l.valueSize, Color.WHITE, x, y + l.valueY,
+						l.columnW, l.valueH));
 			}
 		}
-		fading.add(fitted(bold(centred(view, smallCaps(missionName(entry, result)), l.nameSize, Color.WHITE, l.contentX,
-				l.nameY, l.contentW, l.nameH)), l.nameSize, l.contentW));
-		fading.add(bold(centred(view, result.playTime(), l.durationSize, CampaignResult.HEADING_GOLD, l.contentX,
-				l.durationY, l.contentW, l.durationH)));
+		for (int i = 0; i < nameLines.size(); i++) {
+			fading.add(fitted(bold(centred(view, smallCaps(nameLines.get(i)), l.nameSize, Color.WHITE, l.contentX,
+					l.nameY + (i * l.nameStep), l.contentW, l.nameH)), l.nameSize, l.contentW));
+		}
+		fading.add(centred(view, result.playTime(), l.durationSize, CampaignResult.HEADING_GOLD, l.contentX,
+				l.durationY, l.contentW, l.durationH));
 		final String[] difficulty = CampaignResult.difficulty(result.difficulty);
 		if (difficulty != null) {
-			fading.add(bold(centred(view, smallCaps(glueLabel(difficulty[1], difficulty[2])), l.difficultySize,
+			fading.add(bold(centred(view, smallCaps(glueLabel(difficulty[1])), l.difficultySize,
 					CampaignResult.LABEL_GREY, l.contentX, l.difficultyY, l.contentW, l.difficultyH)));
 			final ImageView mark = image(difficulty[0], ImageView.ScaleType.FIT_CENTER);
 			place(view, mark, l.difficultyIconX, l.difficultyIconY, l.difficultyIcon, l.difficultyIcon);
@@ -645,8 +675,8 @@ final class CampaignPage extends LauncherViews {
 		final int gold = this.activity.art.gold();
 		final int text = this.activity.art.text();
 		final int text2 = this.activity.art.text2();
-		final String[] title = CampaignResult.title(result);
-		centred(content, glueLabel(title[0], title[1]), l.titleSize, gold, l.contentX, l.titleY, l.contentW,
+		final String title = CampaignResult.title(result);
+		centred(content, glueLabel(title), l.titleSize, gold, l.contentX, l.titleY, l.contentW,
 				l.titleH);
 		for (final float lineY : l.lineY) {
 			classicLine(content, l.contentX, lineY, l.contentW, l.lineH);
@@ -655,9 +685,9 @@ final class CampaignPage extends LauncherViews {
 			final String[] row = CampaignResult.ROWS[i];
 			final int[] numbers = CampaignResult.numbers(result.score, i);
 			final float y = l.rowY[i];
-			fitted(line(content, glueLabel(row[1], row[2]), l.headingSize, gold, l.contentX, y, l.headingW, l.rowH),
+			fitted(line(content, glueLabel(row[1]), l.headingSize, gold, l.contentX, y, l.headingW, l.rowH),
 					l.headingSize, l.headingW);
-			final CharSequence[] labels = { glueLabel("SCORE", "Score"), glueLabel(row[3], row[4]) };
+			final CharSequence[] labels = { glueLabel("SCORE"), glueLabel(row[2]) };
 			for (int c = 0; c < 2; c++) {
 				line(content, labels[c], l.labelSize, text2, l.columnX[c], y + l.labelY, l.columnW, l.labelH);
 				line(content, Integer.toString(numbers[c]), l.valueSize, text, l.columnX[c], y + l.valueY, l.columnW,
@@ -669,11 +699,11 @@ final class CampaignPage extends LauncherViews {
 		centred(content, result.playTime(), l.durationSize, gold, l.contentX, l.durationY, l.contentW, l.durationH);
 		final String[] difficulty = CampaignResult.difficulty(result.difficulty);
 		if (difficulty != null) {
-			centred(content, glueLabel(difficulty[1], difficulty[2]), l.difficultySize, text2, l.contentX,
+			centred(content, glueLabel(difficulty[1]), l.difficultySize, text2, l.contentX,
 					l.difficultyY, l.contentW, l.difficultyH);
 		}
-		final String[] label = CampaignResult.buttonLabel(result);
-		place(content, button(glueLabel(label[0], label[1]), l.buttonH, b.buttonText,
+		final String label = CampaignResult.buttonLabel(result);
+		place(content, button(glueLabel(label), l.buttonH, b.buttonText,
 				v -> continueAfter(entry, result)), l.buttonX, l.buttonY, l.buttonW, l.buttonH);
 		action(view, 0, glueLabel("BACK", getString(R.string.launcher_back)), v -> {
 			this.activity.campaignResult = null;
@@ -719,7 +749,7 @@ final class CampaignPage extends LauncherViews {
 		if (played < 0) {
 			return "";
 		}
-		final CampaignMission mission = entry.getData().getMissions().get(played);
+		final CampaignMission mission = entry.getMissions(true).get(played);
 		return glueLabel(mission.getMissionName(), mission.getMissionName());
 	}
 
@@ -727,7 +757,7 @@ final class CampaignPage extends LauncherViews {
 	private void continueAfter(final CampaignCatalog.Entry entry, final GameResult result) {
 		final int played = CampaignResult.playedMission(this.activity.campaigns.catalog, entry, result.map);
 		final int next = CampaignResult.continueMission(entry, this.activity.campaigns.progress, played,
-				"victory".equals(result.result));
+				"victory".equals(result.result), reforgedMaps());
 		this.activity.campaignResult = null;
 		if (next >= 0) {
 			launchMission(entry, next, LauncherActivity.PAGE_MISSIONS);
@@ -766,9 +796,10 @@ final class CampaignPage extends LauncherViews {
 		final CharSequence headerText = issue != MapIssue.NONE ? issueText(issue, true)
 				: glueLabel(mission.getHeader(), mission.getHeader());
 		final CharSequence nameText = glueLabel(mission.getMissionName(), mission.getMissionName());
-		place(row, text(headerText, headerSize, this.activity.art.gold()), textX,
+		place(row, fitWidth(text(headerText, headerSize, this.activity.art.gold()), 0.6f), textX,
 				(rowH * 0.1f) + (headerSize * 0.15f), w - textX - 8, -1);
-		final TextView title = text(nameText, nameSize, chosen ? this.activity.art.gold() : this.activity.art.text());
+		final TextView title = fitWidth(text(nameText, nameSize,
+				chosen ? this.activity.art.gold() : this.activity.art.text()), 0.6f);
 		place(row, title, textX, (rowH * 0.42f) + (nameSize * 0.15f), w - textX - 8, -1);
 		onTap(row, false, listener);
 		if (issue != MapIssue.NONE) {
@@ -776,6 +807,12 @@ final class CampaignPage extends LauncherViews {
 		}
 		row.setContentDescription(headerText + " " + nameText);
 		return row;
+	}
+
+	/** Whether the current profile plays the Reforged campaign maps, whose mission lists the pages show. */
+	private boolean reforgedMaps() {
+		return this.activity.campaigns
+				.reforgedMaps(this.activity.profiles.campaignMaps(this.activity.profiles.current()));
 	}
 
 	private MapIssue missionIssue(final CampaignCatalog.Entry entry, final int mission) {

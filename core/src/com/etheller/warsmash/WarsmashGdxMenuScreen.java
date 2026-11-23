@@ -52,6 +52,7 @@ import com.etheller.warsmash.viewer5.RenderBatch;
 import com.etheller.warsmash.viewer5.Scene;
 import com.etheller.warsmash.viewer5.SolvedPath;
 import com.etheller.warsmash.viewer5.TextureMapper;
+import com.etheller.warsmash.viewer5.gl.ShaderFailure;
 import com.etheller.warsmash.viewer5.handlers.ModelHandler;
 import com.etheller.warsmash.viewer5.handlers.mdx.MdxComplexInstance;
 import com.etheller.warsmash.viewer5.handlers.mdx.MdxHandler;
@@ -70,7 +71,7 @@ public class WarsmashGdxMenuScreen implements InputProcessor, Screen, SingleMode
 	private static final String MAPS_DOWNLOAD_DEFAULT = "Maps/Download";
 	private static final boolean ENABLE_AUDIO = true;
 	private static final PathSolver DIRECT_PATHS = (src, solverParams) -> new SolvedPath(src,
-			src.substring(src.lastIndexOf('.')), true);
+			src.substring(src.lastIndexOf('.')));
 	private DataSource codebase;
 	/** Game data the caller opened and closes; the menu and its maps read it instead of opening their own. */
 	private DataSource gameData;
@@ -106,10 +107,12 @@ public class WarsmashGdxMenuScreen implements InputProcessor, Screen, SingleMode
 	private boolean reforgedLoadingScreens;
 	private int reforgedPortrait;
 	private GameEndListener gameEndListener;
+	private boolean startupFailed;
 	private String startupMap;
 	private String startupSlots;
 	private String startupProfile;
 	private String campaignEdition;
+	private String launcherPreferences;
 	private boolean launcherMode;
 	private boolean endsAtCampaignVictory;
 	/** The model cinematic of a campaign mission that is no map, while it plays in place of the menu; else null. */
@@ -138,6 +141,11 @@ public class WarsmashGdxMenuScreen implements InputProcessor, Screen, SingleMode
 		 *               launcher
 		 */
 		void gameEnded(GameResult result);
+
+		/** The menu could not be built, as when the GPU driver rejects a shader; the result is an error. */
+		default void startupFailed(final Throwable error, final GameResult result) {
+			gameEnded(result);
+		}
 	}
 
 	public WarsmashGdxMenuScreen(final DataTable warsmashIni, final WarsmashGdxMultiScreenGame game) {
@@ -154,17 +162,39 @@ public class WarsmashGdxMenuScreen implements InputProcessor, Screen, SingleMode
 			return;
 		}
 		Gdx.input.setInputProcessor(this);
-		this.menuUI.show();
+		if (!this.menuUI.isReturnUnfinished()) {
+			this.menuUI.show();
+		}
 	}
 
 	/**
 	 * Building the menu takes seconds, so it runs one step per frame with the loading view drawn in between.
 	 */
 	private void renderStartup() {
+		if (this.startupFailed) {
+			return;
+		}
 		if (this.startupStep < STARTUP_STEP_WEIGHTS.length) {
 			if (this.startupFrameShown) {
 				final long started = System.currentTimeMillis();
-				runStartupStep(this.startupStep);
+				try {
+					runStartupStep(this.startupStep);
+				}
+				catch (final ShaderFailure e) {
+					if (this.gameEndListener == null) {
+						throw e;
+					}
+					// A launcher waiting for the game tells the player why, rather than the program closing.
+					this.startupFailed = true;
+					final GameResult failed = new GameResult();
+					failed.result = "error";
+					failed.map = this.startupMap;
+					final String message = e.getMessage();
+					final int firstLineEnd = message.indexOf('\n');
+					failed.reason = firstLineEnd < 0 ? message : message.substring(0, firstLineEnd);
+					this.gameEndListener.startupFailed(e, failed);
+					return;
+				}
 				Log.warn("Startup step " + this.startupStep + ": " + (System.currentTimeMillis() - started)
 						+ " ms");
 				this.startupStep++;
@@ -195,6 +225,9 @@ public class WarsmashGdxMenuScreen implements InputProcessor, Screen, SingleMode
 		if (!this.previewTried && (this.startupMap != null) && (this.startupStep > FIRST_MENU_STEP)) {
 			this.previewTried = true;
 			this.previewing = this.menuUI.previewLoadingScreen(this.startupMap, this.startupSlots);
+			if (!this.previewing) {
+				this.menuUI.loadDeferredMenuModels();
+			}
 			if (this.previewing) {
 				resize(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
 			}
@@ -340,10 +373,14 @@ public class WarsmashGdxMenuScreen implements InputProcessor, Screen, SingleMode
 				}, new GamingNetworkConnectionImpl(server), mapDownloadDir);
 		this.menuUI.setWaitForTap(this.waitForTap);
 		this.menuUI.setLauncherMode(this.launcherMode);
+		this.menuUI.setDeferMenuModels(this.startupMap != null);
 		// The maps read the data the menu has open; the menu closes it, a finished map's close leaves it.
 		this.menuUI.setGameData(new BorrowedDataSource(this.codebase));
 		this.menuUI.setStartupProfile(this.startupProfile);
 		this.menuUI.setCampaignEdition(this.campaignEdition);
+		if (this.launcherPreferences != null) {
+			this.menuUI.setLauncherPreferences(this.launcherPreferences);
+		}
 		this.menuUI.setMapLoadFailureListener(this::mapLoadFailed);
 		this.menuUI.setReforgedLoadingScreens(this.reforgedLoadingScreens);
 		this.menuUI.setReforgedPortrait(this.reforgedPortrait);
@@ -388,7 +425,7 @@ public class WarsmashGdxMenuScreen implements InputProcessor, Screen, SingleMode
 		final MdxModel model2 = War3MapViewer.loadModelMdx(this.viewer.dataSource, this.viewer, path, new PathSolver() {
 			@Override
 			public SolvedPath solve(final String src, final Object solverParams) {
-				return new SolvedPath(src, src.substring(src.lastIndexOf('.')), true);
+				return new SolvedPath(src, src.substring(src.lastIndexOf('.')));
 			}
 		}, null);
 
@@ -1081,6 +1118,11 @@ public class WarsmashGdxMenuScreen implements InputProcessor, Screen, SingleMode
 		this.campaignEdition = campaignEdition;
 	}
 
+	/** See {@link MenuUI#setLauncherPreferences(String)}; must be set before the menu is built. */
+	public void setLauncherPreferences(final String launcherPreferences) {
+		this.launcherPreferences = launcherPreferences;
+	}
+
 	/** See {@link MenuUI#setLauncherMode(boolean)}; must be set before the menu is built. */
 	public void setLauncherMode(final boolean launcherMode) {
 		this.launcherMode = launcherMode;
@@ -1155,6 +1197,13 @@ public class WarsmashGdxMenuScreen implements InputProcessor, Screen, SingleMode
 		return true;
 	}
 
+	/** The menu is not drawn while a game runs: its textures give their GPU memory back, see {@link #onReturnFromGame}. */
+	public void releaseGameTextures() {
+		if (this.viewer != null) {
+			this.viewer.evictAllTextures();
+		}
+	}
+
 	/** See {@link MenuUI#releaseTemplates()}. */
 	public void releaseMenuTemplates() {
 		if (this.menuUI != null) {
@@ -1170,7 +1219,13 @@ public class WarsmashGdxMenuScreen implements InputProcessor, Screen, SingleMode
 	}
 
 	public void onReturnFromGame(final boolean forceCampaignSelect) {
-		this.menuUI.onReturnFromGame(forceCampaignSelect);
+		onReturnFromGame(forceCampaignSelect, false);
+	}
+
+	/** See {@link MenuUI#onReturnFromGame(boolean, boolean)}. */
+	public void onReturnFromGame(final boolean forceCampaignSelect, final boolean nextGameStarts) {
+		this.viewer.restoreTextures();
+		this.menuUI.onReturnFromGame(forceCampaignSelect, nextGameStarts);
 	}
 
 	public void showMapLoadError() {

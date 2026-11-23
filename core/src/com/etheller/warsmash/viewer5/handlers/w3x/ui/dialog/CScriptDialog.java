@@ -18,6 +18,7 @@ import com.etheller.warsmash.parsers.jass.scope.CommonTriggerExecutionScope;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.JassGameEventsWar3;
 
 public class CScriptDialog extends AllocatedHandle {
+	private static final float LOST_TITLE_HEIGHT = 0.0001f;
 	private final GlobalScope globalScope;
 	private SimpleFrame scriptDialogFrame;
 	private StringFrame scriptDialogTextFrame;
@@ -27,6 +28,14 @@ public class CScriptDialog extends AllocatedHandle {
 	private String title;
 	private boolean visible;
 	private int shownOrder;
+	private int shownTick;
+	/**
+	 * A dialog shown in the place of another one, and the one it took the place of, have no title on the screen until
+	 * a script sets their message again.
+	 */
+	private boolean titleLost;
+	/** Whether the title has been on the screen since the message was last set. */
+	private boolean titleApplied;
 
 	public CScriptDialog(final GlobalScope globalScope, final SimpleFrame scriptDialogFrame,
 			final StringFrame scriptDialogTextFrame) {
@@ -51,8 +60,14 @@ public class CScriptDialog extends AllocatedHandle {
 	public void setTitle(final GameUI rootFrame, final String text) {
 		this.title = text;
 		if (this.scriptDialogTextFrame != null) {
+			if (this.titleLost) {
+				// Back to the height of its text.
+				this.scriptDialogTextFrame.setHeight(0);
+			}
 			rootFrame.setText(this.scriptDialogTextFrame, text);
 		}
+		this.titleLost = false;
+		this.titleApplied = false;
 	}
 
 	public String getTitle() {
@@ -73,6 +88,8 @@ public class CScriptDialog extends AllocatedHandle {
 		this.lastAddedComponent = scriptDialogTextFrame;
 		this.buttons.clear();
 		this.title = null;
+		this.titleLost = false;
+		this.titleApplied = false;
 		this.visible = false;
 	}
 
@@ -83,6 +100,60 @@ public class CScriptDialog extends AllocatedHandle {
 	/** Which dialog was shown last: the larger, the later. */
 	public void setShownOrder(final int shownOrder) {
 		this.shownOrder = shownOrder;
+	}
+
+	/** The game step the dialog was displayed in. */
+	public int getShownTick() {
+		return this.shownTick;
+	}
+
+	public void setShownTick(final int shownTick) {
+		this.shownTick = shownTick;
+	}
+
+	/** The shown dialog among these that was shown last: a save from before dialogs replaced each other can hold several. */
+	public static CScriptDialog shownLast(final Iterable<CScriptDialog> dialogs) {
+		CScriptDialog last = null;
+		for (final CScriptDialog dialog : dialogs) {
+			if (dialog.isVisible() && ((last == null) || (dialog.getShownOrder() > last.getShownOrder()))) {
+				last = dialog;
+			}
+		}
+		return last;
+	}
+
+	public boolean isTitleLost() {
+		return this.titleLost;
+	}
+
+	public boolean isTitleApplied() {
+		return this.titleApplied;
+	}
+
+	public void setTitleApplied(final boolean titleApplied) {
+		this.titleApplied = titleApplied;
+	}
+
+	/** Takes the title off the box, which closes up around the buttons. */
+	public void loseTitle(final GameUI rootFrame, final Viewport uiViewport) {
+		this.titleLost = true;
+		if (this.scriptDialogTextFrame != null) {
+			// An empty text still stands one line high.
+			this.scriptDialogTextFrame.setHeight(LOST_TITLE_HEIGHT);
+			rootFrame.setText(this.scriptDialogTextFrame, "");
+			layOut(rootFrame, uiViewport);
+		}
+	}
+
+	/** Places the buttons again after the title changed, and fits the box around them. */
+	public void layOut(final GameUI rootFrame, final Viewport uiViewport) {
+		if (this.buttons.isEmpty() || (this.scriptDialogFrame == null)) {
+			return;
+		}
+		for (final CScriptDialogButton button : this.buttons) {
+			button.getButtonFrame().positionBounds(rootFrame, uiViewport);
+		}
+		fitHeight(rootFrame, uiViewport, this.buttons.get(this.buttons.size() - 1).getButtonFrame());
 	}
 
 	public void setVisible(final boolean flag) {
@@ -118,13 +189,17 @@ public class CScriptDialog extends AllocatedHandle {
 		this.scriptDialogFrame.add(buttonFrame);
 		this.lastAddedComponent = buttonFrame;
 		buttonFrame.positionBounds(rootFrame, uiViewport);
-		// The box is as tall as its content: from its top down to the last button, and the gap the title has above it
-		// below that.
+		fitHeight(rootFrame, uiViewport, buttonFrame);
+		scriptDialogButton.setupEvents(onPress);
+	}
+
+	// The box is as tall as its content: from its top down to the last button, and the gap the title has above it
+	// below that.
+	private void fitHeight(final GameUI rootFrame, final Viewport uiViewport, final UIFrame lastButtonFrame) {
 		final float top = this.scriptDialogFrame.getFramePointY(FramePoint.TOP);
 		final float titleInset = top - this.scriptDialogTextFrame.getFramePointY(FramePoint.TOP);
-		this.scriptDialogFrame.setHeight((top - buttonFrame.getFramePointY(FramePoint.BOTTOM)) + titleInset);
+		this.scriptDialogFrame.setHeight((top - lastButtonFrame.getFramePointY(FramePoint.BOTTOM)) + titleInset);
 		this.scriptDialogFrame.positionBounds(rootFrame, uiViewport);
-		scriptDialogButton.setupEvents(onPress);
 	}
 
 	public GlobalScope getGlobalScope() {

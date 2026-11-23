@@ -26,6 +26,7 @@ import java.util.function.Supplier;
 import com.badlogic.gdx.files.FileHandle;
 import com.etheller.warsmash.WarsmashGdxMapScreen;
 import com.etheller.warsmash.datasources.DataSource;
+import com.etheller.warsmash.datasources.GameLanguage;
 import com.etheller.warsmash.datasources.GraphicsSet;
 import com.etheller.warsmash.datasources.GraphicsSettings;
 import com.etheller.warsmash.movie.Movie;
@@ -44,10 +45,12 @@ import com.etheller.warsmash.units.custom.WTS;
 import com.etheller.warsmash.util.ArgbImage;
 import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.viewer5.handlers.w3x.War3MapViewer;
+import com.etheller.warsmash.viewer5.handlers.w3x.replay.GameMarks;
 import com.etheller.warsmash.viewer5.handlers.w3x.replay.GameReplays;
 import com.etheller.warsmash.viewer5.handlers.w3x.replay.W3gReplay;
 import com.etheller.warsmash.viewer5.handlers.w3x.save.SavedGame;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.campaign.CCampaignProgress;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.campaign.CampaignUnlock;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.campaign.CSaveStorage;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CMapControl;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.replay.CReplay;
@@ -80,10 +83,14 @@ public class GameCatalog {
 			this.mapIssues = mapIssues;
 		}
 
+		/** Whether the campaign maps the profile has chosen are the Reforged ones, whose mission lists it shows. */
+		public boolean reforgedMaps(final String campaignMaps) {
+			return LaunchRequest.CAMPAIGN_MAPS_REFORGED.equals(LaunchRequest.playedMaps(this.catalog, campaignMaps));
+		}
+
 		/** Why a mission cannot be played on the campaign maps the profile has chosen; NONE when it can. */
 		public MapIssue issue(final CampaignCatalog.Entry entry, final int mission, final String campaignMaps) {
-			final String file = this.catalog.missionMapFilename(entry, mission,
-					LaunchRequest.CAMPAIGN_MAPS_REFORGED.equals(LaunchRequest.playedMaps(this.catalog, campaignMaps)));
+			final String file = this.catalog.missionMapFilename(entry, mission, reforgedMaps(campaignMaps));
 			final MapIssue issue = file == null ? null : this.mapIssues.get(file.toLowerCase(Locale.ROOT));
 			return issue != null ? issue : MapIssue.NONE;
 		}
@@ -301,6 +308,8 @@ public class GameCatalog {
 	public GameCatalog(final DataTable ini, final String dataKey, final File saves, final Supplier<String> profile,
 			final File mapList, final Consumer<Runnable> main) {
 		this.ini = ini;
+		// The maps the catalog opens give their titles in the language of the configuration.
+		GameLanguage.useInGame(ini);
 		this.dataKey = dataKey;
 		this.saves = saves;
 		this.profile = profile;
@@ -448,7 +457,10 @@ public class GameCatalog {
 				movies = findMovies(data(), catalog);
 				this.campaignMovies.put(catalog, movies);
 			}
-			return new Campaigns(catalog, readProgress(catalog.getList()), movies, findMapIssues(data(), catalog));
+			// The campaigns opened by hand are laid over what the profile reached; its progress file is left as it is.
+			final CCampaignProgress.Snapshot progress = readProgress(catalog.getList())
+					.unlocking(catalog.numbersOf(CampaignUnlock.read(profileFolder())));
+			return new Campaigns(catalog, progress, movies, findMapIssues(data(), catalog));
 		}, done);
 	}
 
@@ -487,7 +499,7 @@ public class GameCatalog {
 	private static Map<String, MapIssue> findMapIssues(final DataSource data, final CampaignCatalog catalog) {
 		final Map<String, MapIssue> found = new HashMap<>();
 		for (final CampaignCatalog.Entry entry : catalog.getEntries()) {
-			final int count = entry.getData().getMissions().size();
+			final int count = entry.getMissions(true).size();
 			for (int mission = 0; mission < count; mission++) {
 				for (final boolean reforged : new boolean[] { false, true }) {
 					final String file = catalog.missionMapFilename(entry, mission, reforged);
@@ -539,6 +551,50 @@ public class GameCatalog {
 		}, done);
 	}
 
+	/** A campaign of the list that the player can open by hand, and whether it is. */
+	public static final class UnlockEntry {
+		public final String section;
+		public final String header;
+		public final String name;
+		public final boolean unlocked;
+
+		UnlockEntry(final String section, final String header, final String name, final boolean unlocked) {
+			this.section = section;
+			this.header = header;
+			this.name = name;
+			this.unlocked = unlocked;
+		}
+	}
+
+	/** Every campaign of the game data's list, with whether the current profile has opened it by hand; null when unreadable. */
+	public void unlockEntries(final Consumer<List<UnlockEntry>> done) {
+		final String asked = this.edition;
+		run(() -> {
+			final Set<String> unlocked = CampaignUnlock.read(profileFolder());
+			final List<UnlockEntry> found = new ArrayList<>();
+			for (final CampaignCatalog.Entry entry : campaignCatalog(asked).getEntries()) {
+				found.add(new UnlockEntry(entry.getSection(), entry.getData().getHeader(), entry.getData().getName(),
+						unlocked.contains(entry.getSection())));
+			}
+			return found;
+		}, done);
+	}
+
+	/**
+	 * Opens a campaign by hand for the current profile, or takes it back; the profile's progress is not changed.
+	 * Answers whether the choice was kept.
+	 */
+	public void setCampaignUnlocked(final String section, final boolean unlocked, final Consumer<Boolean> done) {
+		run(() -> {
+			final File folder = profileFolder();
+			final Set<String> sections = CampaignUnlock.read(folder);
+			if (unlocked ? !sections.add(section) : !sections.remove(section)) {
+				return true;
+			}
+			return CampaignUnlock.write(folder, sections);
+		}, done);
+	}
+
 	private CCampaignProgress.Snapshot readProgress(final CCampaignProgress.CampaignList list) {
 		return readProgress(list, profileFolder());
 	}
@@ -564,6 +620,7 @@ public class GameCatalog {
 	public void maps(final Consumer<List<MapEntry>> done) {
 		run(() -> {
 			final String header = MapListCache.header(this.dataKey, this.ini);
+			GameLanguage.useInGame(this.ini);
 			if ((this.maps == null) || !header.equals(this.mapsHeader)) {
 				MapListCache.Listing listing = MapListCache.read(this.mapList, header);
 				if (listing == null) {
@@ -742,13 +799,13 @@ public class GameCatalog {
 	/** The map's folder as words: frozenthrone is Frozen Throne, 2023season2 is 2023 Season 2. */
 	private static String folderLabel(final String path) {
 		if (path.toLowerCase(Locale.ROOT).endsWith(".w3m")) {
-			return "Reign of Chaos";
+			return LauncherText.get("map_folder_reign");
 		}
 		final String normal = path.replace('\\', '/');
 		final int end = normal.lastIndexOf('/');
 		final String folder = normal.substring(normal.lastIndexOf('/', end - 1) + 1, Math.max(end, 0));
 		if ("frozenthrone".equalsIgnoreCase(folder)) {
-			return "Frozen Throne";
+			return LauncherText.get("map_folder_frozen");
 		}
 		final StringBuilder words = new StringBuilder();
 		for (int i = 0; i < folder.length(); i++) {
@@ -931,6 +988,115 @@ public class GameCatalog {
 					: Long.compare(b.modified, a.modified));
 			return replays;
 		}, done);
+	}
+
+	/**
+	 * Completes a problem report the platform began (its facts and logs) with the replay of the latest game, its
+	 * marked moments, the map and the newest save, and writes it into the folder. Answers null when it could not be
+	 * written.
+	 *
+	 * @param request its replay is null for the latest game
+	 */
+	public void problemReport(final ProblemReport.Request request, final File folder,
+			final java.time.ZoneId zone, final Consumer<ProblemReport.Result> done) {
+		run(() -> {
+			if (request.replay == null) {
+				request.replay = latestReplay();
+			}
+			request.facts.put("Language", GameLanguage.effective(this.ini));
+			if (request.replay != null) {
+				final String stem = request.replay.getName().substring(0, request.replay.getName().lastIndexOf('.'));
+				request.marks = new File(request.replay.getParentFile(), stem + GameMarks.EXTENSION);
+				describeReplay(request);
+			}
+			final File unrecorded = new File(replayFolder(), GameMarks.UNRECORDED + GameMarks.EXTENSION);
+			if (unrecorded.isFile()
+					&& ((request.replay == null) || (unrecorded.lastModified() > request.replay.lastModified()))) {
+				request.unrecordedMarks = unrecorded;
+			}
+			request.save = newestSave(profileFolder(), 4);
+			return ProblemReport.write(request, folder, zone);
+		}, done);
+	}
+
+	/** The replay of the latest game: LastReplay, or the replay of a game cut off since (a crash). */
+	private File latestReplay() {
+		final File last = new File(replayFolder(), GameReplays.LAST_REPLAY + GameReplays.EXTENSION);
+		final File cutOff = new File(replayFolder(), GameReplays.TEMP_REPLAY + GameReplays.EXTENSION);
+		if (cutOff.isFile() && (!last.isFile() || (cutOff.lastModified() > last.lastModified()))) {
+			return cutOff;
+		}
+		return last.isFile() ? last : null;
+	}
+
+	private void describeReplay(final ProblemReport.Request request) {
+		final Map<String, String> facts = request.facts;
+		facts.put("Replay", request.replay.getName());
+		final CReplay replay;
+		try (InputStream in = new BufferedInputStream(new FileInputStream(request.replay))) {
+			replay = CReplay.read(in);
+		}
+		catch (final IOException | RuntimeException e) {
+			facts.put("Replay state", "cannot be read: " + e.getMessage());
+			return;
+		}
+		final CReplayHeader header = replay.getHeader();
+		facts.put("Replay engine", header.getEngineVersion() + ", commit " + header.getBuildCommit()
+				+ (header.isOfficialBuild() ? ", official build" : ""));
+		facts.put("Replay state", (replay.isComplete() ? "complete" : "cut off") + ", "
+				+ (GameReplays.isThisEngine(header) ? "recorded by this build" : "recorded by another build"));
+		final String mapPath = header.getMapPath();
+		final String mapName = mapPath.replace('\\', '/').substring(mapPath.replace('\\', '/').lastIndexOf('/') + 1);
+		facts.put("Map", mapName);
+		facts.put("Map path", mapPath);
+		facts.put("Map hash", String.format(Locale.ROOT, "CRC32 %08x, %d bytes", header.getMapChecksum(),
+				header.getMapSize()));
+		facts.put("Game data hash", String.format(Locale.ROOT, "%08x", header.getDataChecksum()));
+		facts.put("Campaign game", header.isCampaignGame() ? "yes" : "no");
+		final int seconds = (int) (replay.getLastTick() * WarsmashConstants.SIMULATION_STEP_TIME);
+		facts.put("Game length", String.format(Locale.ROOT, "%d:%02d:%02d (%d steps)", seconds / 3600,
+				(seconds / 60) % 60, seconds % 60, replay.getLastTick()));
+		request.map = mapFile(header.getMapPath());
+	}
+
+	/** The map as a file of its own (the player's own map), or null for a map of the game data. */
+	private File mapFile(final String mapPath) {
+		final File direct = new File(mapPath);
+		if (direct.isAbsolute() && direct.isFile()) {
+			return direct;
+		}
+		final File custom = CustomContent.folder(this.ini);
+		if (custom != null) {
+			final File inCustom = new File(custom, mapPath.replace('\\', File.separatorChar));
+			if (inCustom.isFile()) {
+				return inCustom;
+			}
+		}
+		return null;
+	}
+
+	/** The newest saved game in the profile's folder or its folders of saves (zone maps keep some there). */
+	private static File newestSave(final File folder, final int depth) {
+		final File[] files = folder.listFiles();
+		File newest = null;
+		if (files == null) {
+			return null;
+		}
+		for (final File file : files) {
+			File found = null;
+			if (file.isDirectory()) {
+				if (depth > 0) {
+					found = newestSave(file, depth - 1);
+				}
+			}
+			else if (file.getName().toLowerCase(Locale.ROOT).endsWith(CSaveStorage.SAVE_EXTENSION)) {
+				found = file;
+			}
+			if ((found != null) && ((newest == null) || (found.lastModified() > newest.lastModified()))) {
+				newest = found;
+			}
+		}
+		return newest;
 	}
 
 	private Boolean isMelee(final String path) {

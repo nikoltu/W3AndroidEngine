@@ -20,6 +20,17 @@ public abstract class Texture extends HandlerResource<ResourceHandler> implement
 		this.pending = pending;
 	}
 
+	private boolean fallback;
+
+	/** Whether the texture shows the neutral stand-in for a file that could not be read. */
+	public final boolean isFallback() {
+		return this.fallback;
+	}
+
+	protected final void setFallback(final boolean fallback) {
+		this.fallback = fallback;
+	}
+
 	public abstract void bind(final int unit);
 
 	/** Called each time the texture is bound for drawing, before its pending state is looked at. */

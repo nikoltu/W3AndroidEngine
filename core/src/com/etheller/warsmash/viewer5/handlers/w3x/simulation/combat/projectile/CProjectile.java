@@ -5,6 +5,7 @@ import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityTarget;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityTargetVisitor;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.timers.CTimer;
 
 public abstract class CProjectile extends CExtensibleHandleAbstract implements CEffect {
@@ -184,6 +185,13 @@ public abstract class CProjectile extends CExtensibleHandleAbstract implements C
 	}
 
 	protected abstract void onHitTarget(CSimulation game);
+
+	/** A unit target that left the game (removed, or removal pending in this step) or is hidden (loaded) takes no hit. */
+	protected final boolean isTargetGone(final CSimulation game) {
+		final CUnit targetUnit = (this.target == null) ? null : this.target.visit(AbilityTargetVisitor.UNIT);
+		return (targetUnit != null)
+				&& (targetUnit.isRemovedFromGame() || game.isRemovalPending(targetUnit) || targetUnit.isHidden());
+	}
 
 	/**
 	 * A missile launched at an exact time inside a step (a swing's or a cast's point) has flown this long by the step's

@@ -20,8 +20,9 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
 /**
- * The Android launcher looks some strings up by name at run time (options rows, LAN text, hotkey editor words), which
- * the resource shrinker of a release build cannot see: every such name must be defined and matched by the keep rule.
+ * The Android launcher looks some strings up by name at run time (options rows, LAN text, hotkey editor words, map
+ * problems), which the resource shrinker of a release build cannot see: every such name must be defined and matched by
+ * the keep rule.
  */
 class AndroidStringKeepTest {
 	private static Path root() {
@@ -102,6 +103,12 @@ class AndroidStringKeepTest {
 		assertTrue(words.find(), "the hotkey editor's word list is gone");
 		for (final String word : literals(words.group(1), "\"([a-z0-9_]+)\"")) {
 			names.add("controls_" + word);
+		}
+		for (final MapIssue issue : MapIssue.values()) {
+			if (issue.message != null) {
+				names.add(issue.message);
+				names.add(issue.tag);
+			}
 		}
 		for (final String file : new String[] { "OptionsPage", "HotkeyEditorPage", "LanPage", "LobbyPage" }) {
 			names.addAll(literals(read(root.resolve("android/src/com/etheller/warsmash/android/" + file + ".java")),

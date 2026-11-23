@@ -66,6 +66,7 @@ public class CItemData {
 	private static final String CLASSIFICATION = "class"; // replaced from 'icla'
 
 	private final Map<War3ID, CItemType> itemIdToItemType = new LinkedHashMap<>();
+	private final Map<War3ID, CItemType> availableItemTypes = new HashMap<>();
 	private final ObjectData itemData;
 	private final int mapGameVersion;
 
@@ -94,11 +95,18 @@ public class CItemData {
 	}
 
 	public CItemType getItemType(final War3ID typeId) {
+		// A shop asks for each item it sells every tick; the answer for a type in this map version does not change.
+		final CItemType known = this.availableItemTypes.get(typeId);
+		if (known != null) {
+			return known;
+		}
 		final GameObject itemType = this.itemData.get(typeId.asStringValue());
 		if ((itemType == null) || WarsmashConstants.isOutOfMapVersion(itemType, this.mapGameVersion)) {
 			return null;
 		}
-		return getItemTypeInstance(typeId, itemType);
+		final CItemType instance = getItemTypeInstance(typeId, itemType);
+		this.availableItemTypes.put(typeId, instance);
+		return instance;
 	}
 
 	private CItemType getItemTypeInstance(final War3ID typeId, final GameObject itemType) {

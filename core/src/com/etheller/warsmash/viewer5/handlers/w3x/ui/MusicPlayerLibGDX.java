@@ -37,6 +37,11 @@ public class MusicPlayerLibGDX implements MusicPlayer {
 	private boolean pausedByFocus;
 	private boolean playingBeforeFocusLoss;
 	private boolean playOnce;
+	// Asking a player whether it plays is a call into the media framework that now and then takes milliseconds;
+	// a playing track is checked twice a second, not every frame.
+	private static final long PLAYING_CHECK_NANOS = 500_000_000L;
+	private long nextPlayingCheckNanos;
+	private boolean playingAtCheck;
 
 	public MusicPlayerLibGDX(DataSource dataSource, DataTable musicSLK) {
 		this.dataSource = dataSource;
@@ -80,10 +85,17 @@ public class MusicPlayerLibGDX implements MusicPlayer {
 					|| (this.failedStarts >= Math.max(2, this.currentPaths.length))) {
 				return;
 			}
-			if ((this.currentMusic != null) && this.currentMusic.isPlaying()) {
-				this.currentMusicStarted = true;
-				this.failedStarts = 0;
-				return;
+			if (this.currentMusic != null) {
+				final long now = System.nanoTime();
+				if (now - this.nextPlayingCheckNanos >= 0) {
+					this.nextPlayingCheckNanos = now + PLAYING_CHECK_NANOS;
+					this.playingAtCheck = this.currentMusic.isPlaying();
+				}
+				if (this.playingAtCheck) {
+					this.currentMusicStarted = true;
+					this.failedStarts = 0;
+					return;
+				}
 			}
 			if (this.playOnce && this.currentMusicStarted) {
 				playDefaultMusic();
@@ -211,6 +223,7 @@ public class MusicPlayerLibGDX implements MusicPlayer {
 	private Music startTrack(final int index, final int fromMSecs) {
 		this.currentMusicIndex = index;
 		this.currentMusicStarted = false;
+		this.playingAtCheck = false;
 		this.nextStartNanos = System.nanoTime() + RETRY_NANOS;
 		final String path = this.currentPaths[index];
 		if ((this.currentMusic != null) && path.equals(this.currentMusicPath)) {
@@ -248,6 +261,7 @@ public class MusicPlayerLibGDX implements MusicPlayer {
 			// The session disposes what it tracked again at its end, which a disposed track ignores.
 			this.currentMusic.dispose();
 			this.currentMusic = null;
+			this.playingAtCheck = false;
 			this.currentMusicPath = null;
 		}
 	}

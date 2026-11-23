@@ -80,4 +80,27 @@ class LanOverlayTest {
 		assertNotEquals(LanOverlay.layoutOf(window(1000)), LanOverlay.layoutOf(play.window()));
 		assertEquals("Host migration...", LanOverlay.textOf(play.window()));
 	}
+
+	@Test
+	void aPlayerThatIsStillLoadingIsShownLoadingWithItsPercent() {
+		final LanGameSetup setup = new LanGameSetup();
+		final SlotInfo slot = new SlotInfo();
+		slot.kind = LanProtocol.SLOT_HUMAN;
+		setup.slots.add(slot);
+		for (int i = 0; i < 2; i++) {
+			final ParticipantInfo p = new ParticipantInfo();
+			p.id = i + 1;
+			p.name = i == 0 ? "Host" : "Guest";
+			p.slot = 0;
+			setup.participants.add(p);
+		}
+		final LanPlay play = new LanPlay(setup, 2, new LanTimings(), vote -> {
+		}, () -> 0L);
+		play.onLoadProgress(1, 35);
+		play.onPresence(1, LanProtocol.PRESENCE_ABSENT);
+		final String text = LanOverlay.textOf(play.window());
+		assertTrue(text.startsWith("Waiting for players to load..."));
+		assertTrue(text.contains("Host|r - loading - 35 %"));
+		assertNotEquals(LanOverlay.layoutOf(window(1000)), LanOverlay.layoutOf(play.window()));
+	}
 }

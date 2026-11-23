@@ -76,6 +76,13 @@ final class CUnitOrders {
 			if (harvest != null) {
 				harvest.setCycleForgotten(true);
 			}
+			if (!autoOrder) {
+				game.getHarmfulAreas().onStopped(self);
+			}
+		}
+		if (!queue && !autoOrder && (order != null) && (order.getOrderId() == OrderIds.holdposition)) {
+			// Measured: a hold position given to a unit on its way out ends the run like a stop does, with no walk back.
+			game.getHarmfulAreas().onStopped(self);
 		}
 		final boolean wasPostFight = self.aggro.postFight;
 		final int wasGuardReturn = self.aggro.guardReturn;

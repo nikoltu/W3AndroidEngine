@@ -4,10 +4,15 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
+import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.Preferences;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import com.etheller.warsmash.launcher.CampaignResult;
+import com.etheller.warsmash.launcher.LaunchRequest;
 import com.etheller.warsmash.launcher.LauncherKeys;
+import com.etheller.warsmash.launcher.Profiles;
 import com.etheller.warsmash.parsers.fdf.GameUI;
 import com.etheller.warsmash.parsers.fdf.datamodel.FramePoint;
 import com.etheller.warsmash.parsers.fdf.datamodel.MenuItem;
@@ -22,6 +27,7 @@ import com.etheller.warsmash.units.DataTable;
 import com.etheller.warsmash.units.Element;
 import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.campaign.CCampaignProgress;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.campaign.CampaignUnlock;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.config.CBasePlayer;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CMapControl;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CRace;
@@ -54,7 +60,7 @@ final class MenuCampaigns {
 	private DataTable campaignStrings;
 	private CampaignCatalog campaignCatalog;
 	private String edition;
-	private boolean classicCampaignList = false;
+	private String launcherPreferences = LauncherKeys.PREFERENCES;
 	private SpriteFrame campaignWarcraftIIILogo;
 	private CampaignMenuData currentCampaign;
 	private final List<CampaignEntry> campaignEntries = new ArrayList<>();
@@ -77,12 +83,20 @@ final class MenuCampaigns {
 		this.edition = edition;
 	}
 
+	/**
+	 * The preferences the launcher keeps the profiles' campaign map version in, which the campaign screens follow;
+	 * the Android launcher's by default.
+	 */
+	void setLauncherPreferences(final String name) {
+		this.launcherPreferences = name;
+	}
+
 	/** The game data's campaign list, which the campaign progress numbers its campaigns by. */
 	void loadCatalog() {
 		final CampaignCatalog campaignCatalog;
 		try {
 			final GameUI rootFrame = this.menu.rootFrame;
-			final int version = LauncherKeys.editionGameVersion(this.edition, WarsmashConstants.GAME_VERSION);
+			final int version = listGameVersion();
 			campaignCatalog = CampaignCatalog.load(this.menu.dataSource, CampaignCatalog
 					.campaignFile(this.menu.dataSource, v -> rootFrame.trySkinField("CampaignFile", v), version));
 		}
@@ -91,7 +105,6 @@ final class MenuCampaigns {
 		}
 		this.campaignCatalog = campaignCatalog;
 		this.campaignStrings = campaignCatalog.getStrings();
-		this.classicCampaignList = campaignCatalog.isClassicList();
 		CCampaignProgress.setCampaignList(campaignCatalog.getList());
 	}
 
@@ -150,7 +163,8 @@ final class MenuCampaigns {
 		});
 
 		this.campaignWarcraftIIILogo = (SpriteFrame) rootFrame.getFrameByName("WarCraftIIILogo", 0);
-		rootFrame.setSpriteFrameModel(this.campaignWarcraftIIILogo, rootFrame.getSkinField("MainMenuLogo"));
+		rootFrame.setSpriteFrameModel(this.campaignWarcraftIIILogo,
+				rootFrame.trySkinField("MainMenuLogo", listGameVersion()));
 		this.campaignWarcraftIIILogo.setVisible(false);
 		this.campaignWarcraftIIILogo.addSetPoint(new SetPoint(FramePoint.TOPRIGHT, this.campaignMenu,
 				FramePoint.TOPRIGHT, GameUI.convertX(uiViewport, -0.13f), GameUI.convertY(uiViewport, -0.08f)));
@@ -193,7 +207,9 @@ final class MenuCampaigns {
 		// Scripts number the campaigns by their place among the list's named entries (SetMissionAvailable,
 		// SetCampaignAvailable); a blank entry is a gap between groups of campaigns on the screen.
 		int campaignNumber = 0;
-		for (final CampaignMenuData campaign : campaignDatas) {
+		for (int listIndex = 0; listIndex < campaignDatas.length; listIndex++) {
+			final CampaignMenuData campaign = campaignDatas[listIndex];
+			final String section = campaignList[listIndex];
 			if (campaign == null) {
 				this.campaignRootMenuUI.addGap();
 			}
@@ -204,9 +220,16 @@ final class MenuCampaigns {
 				missionSelectMenuUI.setVisible(false);
 				placeCampaignMenuUI(missionSelectMenuUI);
 
-				for (final CampaignMission mission : campaign.getMissions()) {
+				// The Reforged list holds the classic missions first and may go on; which of them show follows the
+				// version chosen when the screen is opened.
+				final CampaignCatalog.Entry catalogEntry = this.campaignCatalog.getEntry(number);
+				final List<CampaignMission> listed = catalogEntry != null ? catalogEntry.getMissions(true)
+						: campaign.getMissions();
+				for (int missionIndex = 0; missionIndex < listed.size(); missionIndex++) {
+					final int index = missionIndex;
+					final CampaignMission mission = listed.get(missionIndex);
 					missionButtons.add(missionSelectMenuUI.addButton(mission.getHeader(), mission.getMissionName(),
-							() -> startMission(number, mission, false)));
+							() -> startListedMission(number, index)));
 				}
 
 				final CampaignButtonUI campaignButtonUI = this.campaignRootMenuUI.addButton(campaign.getHeader(),
@@ -229,7 +252,7 @@ final class MenuCampaigns {
 							rootFrame.setDecoratedText(missionName, campaign.getName());
 							rootFrame.setDecoratedText(missionNameHeader, campaign.getHeader());
 						});
-				this.campaignEntries.add(new CampaignEntry(campaign, campaignNumber++, campaignButtonUI,
+				this.campaignEntries.add(new CampaignEntry(campaign, section, campaignNumber++, campaignButtonUI,
 						missionSelectMenuUI, missionButtons));
 				if (campaign == this.currentCampaign) {
 					this.currentMissionSelectMenuUI = missionSelectMenuUI;
@@ -327,22 +350,59 @@ final class MenuCampaigns {
 		return true;
 	}
 
+	/** The map version the profile plays campaigns in, as the launcher keeps the choice; classic without Reforged maps. */
+	private boolean profileReforgedMaps() {
+		String chosen = null;
+		if (Gdx.app != null) {
+			final Preferences launcher = Gdx.app.getPreferences(this.launcherPreferences);
+			final String key = Profiles.campaignMapsKey(this.menu.profileManager.getCurrentProfile());
+			chosen = launcher.contains(key) ? launcher.getString(key) : null;
+		}
+		return LaunchRequest.CAMPAIGN_MAPS_REFORGED.equals(LaunchRequest.playedMaps(this.campaignCatalog,
+				chosen != null ? chosen : Profiles.DEFAULT_CAMPAIGN_MAPS));
+	}
+
+	/** A mission of a version of a campaign's maps, with the map that version plays it on; null when it has none. */
+	private CampaignMission versionMission(final CampaignEntry entry, final int missionIndex, final boolean reforged) {
+		final CampaignCatalog.Entry catalogEntry = this.campaignCatalog.getEntry(entry.number);
+		final List<CampaignMission> missions = catalogEntry != null ? catalogEntry.getMissions(reforged)
+				: entry.data.getMissions();
+		if ((missionIndex < 0) || (missionIndex >= missions.size())) {
+			return null;
+		}
+		final CampaignMission mission = missions.get(missionIndex);
+		if (catalogEntry != null) {
+			final String mapFilename = this.campaignCatalog.missionMapFilename(catalogEntry, missionIndex, reforged);
+			if ((mapFilename != null) && !mapFilename.equals(mission.getMapFilename())) {
+				return new CampaignMission(mission.getHeader(), mission.getMissionName(), mapFilename);
+			}
+		}
+		return mission;
+	}
+
+	/** A button of the mission list: the mission on the maps of the version the profile has chosen. */
+	private void startListedMission(final int campaignNumber, final int missionIndex) {
+		final boolean reforged = profileReforgedMaps();
+		for (final CampaignEntry entry : this.campaignEntries) {
+			if (entry.number == campaignNumber) {
+				final CampaignMission mission = versionMission(entry, missionIndex, reforged);
+				if (mission != null) {
+					// Its victory is recorded as one started by a launcher is.
+					this.startedEntry = this.campaignCatalog.getEntry(campaignNumber);
+					startMission(campaignNumber, mission, reforged);
+				}
+				return;
+			}
+		}
+	}
+
 	boolean startCampaignMission(final int campaignNumber, final int missionIndex, final CMapDifficulty difficulty,
 			final boolean reforgedMaps) {
 		for (final CampaignEntry entry : this.campaignEntries) {
 			if (entry.number == campaignNumber) {
-				final List<CampaignMission> missions = entry.data.getMissions();
-				if ((missionIndex < 0) || (missionIndex >= missions.size())) {
+				final CampaignMission mission = versionMission(entry, missionIndex, reforgedMaps);
+				if (mission == null) {
 					return false;
-				}
-				CampaignMission mission = missions.get(missionIndex);
-				final CampaignCatalog.Entry catalogEntry = this.campaignCatalog.getEntry(campaignNumber);
-				if (catalogEntry != null) {
-					final String mapFilename = this.campaignCatalog.missionMapFilename(catalogEntry, missionIndex,
-							reforgedMaps);
-					if ((mapFilename != null) && !mapFilename.equals(mission.getMapFilename())) {
-						mission = new CampaignMission(mission.getHeader(), mission.getMissionName(), mapFilename);
-					}
 				}
 				this.menu.mainMenuFrame.setVisible(false);
 				this.currentCampaign = entry.data;
@@ -350,7 +410,7 @@ final class MenuCampaigns {
 				if (difficulty != null) {
 					this.campaignDifficulty = difficulty;
 				}
-				this.startedEntry = catalogEntry;
+				this.startedEntry = this.campaignCatalog.getEntry(campaignNumber);
 				if (!startMission(campaignNumber, mission, reforgedMaps)) {
 					this.menu.mainMenuFrame.setVisible(true);
 					return false;
@@ -417,17 +477,24 @@ final class MenuCampaigns {
 	 * by a script, and in it the first mission and those a script made available.
 	 */
 	private void refreshCampaignAvailability() {
-		final int menuCampaignIndex = this.classicCampaignList ? CCampaignProgress.getClassicMenuCampaignIndex()
-				: CCampaignProgress.getMenuCampaignIndex();
+		final int menuCampaignIndex = this.campaignCatalog.menuCampaignNumber(CCampaignProgress.currentSnapshot());
 		CampaignEntry firstOpen = null;
 		CampaignEntry menuCampaign = null;
 		boolean currentOpen = false;
+		// Campaigns the player opened by hand show every mission; the profile's own progress is not changed.
+		final Set<String> unlocked = CampaignUnlock.current();
+		final boolean reforged = profileReforgedMaps();
+		final CCampaignProgress.Snapshot progress = CCampaignProgress.currentSnapshot();
 		for (final CampaignEntry entry : this.campaignEntries) {
-			final boolean open = entry.data.isDefaultOpen() || CCampaignProgress.isCampaignAvailable(entry.number);
+			final boolean opened = unlocked.contains(entry.section);
+			final boolean open = opened || entry.data.isDefaultOpen()
+					|| CCampaignProgress.isCampaignAvailable(entry.number);
 			entry.button.setVisible(open);
 			for (int i = 0; i < entry.missionButtons.size(); i++) {
-				entry.missionButtons.get(i)
-						.setVisible(open && ((i == 0) || CCampaignProgress.isMissionAvailable(entry.number, i)));
+				final CampaignCatalog.Entry catalogEntry = this.campaignCatalog.getEntry(entry.number);
+				entry.missionButtons.get(i).setVisible(catalogEntry != null
+						? CampaignCatalog.isMissionListed(catalogEntry, i, reforged, opened, progress)
+						: open && ((i == 0) || opened || CCampaignProgress.isMissionAvailable(entry.number, i)));
 			}
 			entry.missionMenu.positionBounds(this.menu.rootFrame, this.menu.uiViewport);
 			if (open) {
@@ -539,20 +606,28 @@ final class MenuCampaigns {
 		return race;
 	}
 
+	/** The skin names the background per game version; the campaign list's, not the engine's, picks the model. */
 	private String getCurrentBackgroundModel() {
-		return this.menu.rootFrame.getSkinField(this.currentCampaign.getBackground());
+		return this.menu.rootFrame.trySkinField(this.currentCampaign.getBackground(), listGameVersion());
+	}
+
+	private int listGameVersion() {
+		return LauncherKeys.editionGameVersion(this.edition, WarsmashConstants.GAME_VERSION);
 	}
 
 	private static final class CampaignEntry {
 		private final CampaignMenuData data;
+		private final String section;
 		private final int number;
 		private final CampaignButtonUI button;
 		private final CampaignMenuUI missionMenu;
 		private final List<CampaignButtonUI> missionButtons;
 
-		private CampaignEntry(final CampaignMenuData data, final int number, final CampaignButtonUI button,
-				final CampaignMenuUI missionMenu, final List<CampaignButtonUI> missionButtons) {
+		private CampaignEntry(final CampaignMenuData data, final String section, final int number,
+				final CampaignButtonUI button, final CampaignMenuUI missionMenu,
+				final List<CampaignButtonUI> missionButtons) {
 			this.data = data;
+			this.section = section;
 			this.number = number;
 			this.button = button;
 			this.missionMenu = missionMenu;

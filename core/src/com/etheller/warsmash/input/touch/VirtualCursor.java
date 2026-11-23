@@ -14,6 +14,10 @@ public final class VirtualCursor {
 	private static volatile boolean fingerInput;
 	private static volatile boolean touchDevice;
 
+	private static volatile boolean mouseOver;
+	private static volatile int mouseX;
+	private static volatile int mouseY;
+
 	private VirtualCursor() {
 	}
 
@@ -52,6 +56,30 @@ public final class VirtualCursor {
 		x = screenX;
 		y = screenY;
 		active = true;
+	}
+
+	/** A real mouse or touchpad pointer is over the screen at this position; fingers and pens never set this. */
+	public static void mouseAt(final int screenX, final int screenY) {
+		mouseX = screenX;
+		mouseY = screenY;
+		mouseOver = true;
+	}
+
+	/** The mouse left the screen, or a finger or pen took over. */
+	public static void mouseGone() {
+		mouseOver = false;
+	}
+
+	public static boolean isMouseOver() {
+		return mouseOver;
+	}
+
+	public static int getMouseX() {
+		return mouseX;
+	}
+
+	public static int getMouseY() {
+		return mouseY;
 	}
 
 	public static int getX() {

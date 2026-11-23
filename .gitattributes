@@ -1,0 +1,27 @@
+* text=auto
+
+*.java text=auto eol=lf
+*.gradle text=auto eol=lf
+*.properties text=auto eol=lf
+*.xml text=auto eol=lf
+*.json text=auto eol=lf
+*.md text=auto eol=lf
+*.sh text=auto eol=lf
+gradlew text=auto eol=lf
+*.bat text=auto eol=crlf
+
+*.png binary
+*.jpg binary
+*.jar binary
+*.blp binary
+*.mdx binary
+*.dds binary
+*.tga binary
+*.w3x binary
+*.w3m binary
+*.w3n binary
+*.mpq binary
+*.w3v binary
+*.ogg binary
+*.mp3 binary
+*.wav binary

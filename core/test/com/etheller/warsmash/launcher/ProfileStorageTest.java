@@ -209,6 +209,27 @@ class ProfileStorageTest {
 		assertEquals(0, result.copied);
 	}
 
+	@Test
+	void everyChangeReachesTheCopyAtOnce() {
+		final File shared = new File(this.temp, "shared");
+		final Profiles profiles = new Profiles(new MemoryStore(), new MemoryStore(), new File(shared, "Save")) {
+			@Override
+			protected void changed() {
+				ProfileMirror.write(this, shared);
+			}
+		};
+		profiles.create("Arthas", 2, true);
+		assertEquals(Arrays.asList("Arthas"), ProfileMirror.read(shared).names);
+		profiles.create("Jaina", 1, false);
+		assertTrue(profiles.rename("Jaina", "Kael"));
+		assertEquals(Arrays.asList("Arthas", "Kael"), ProfileMirror.read(shared).names);
+		profiles.delete("Kael");
+		assertEquals(Arrays.asList("Arthas"), ProfileMirror.read(shared).names);
+		final Profiles again = profiles(new MemoryStore(), new MemoryStore(), new File(shared, "Save"));
+		assertEquals(1, ProfileMirror.restore(again, shared));
+		assertEquals("Arthas", again.current());
+	}
+
 	private static Profiles profiles(final MemoryStore engine, final MemoryStore launcher, final File saves) {
 		return new Profiles(engine, launcher, saves);
 	}
@@ -355,5 +376,17 @@ class ProfileStorageTest {
 		profiles.rename("Jaina", "Sylvanas");
 		profiles.delete("Sylvanas");
 		assertTrue(changes[0] >= afterCreate + 4);
+	}
+
+	@Test
+	void hasFilesSeesOnlyRealFiles() throws IOException {
+		assertFalse(ProfileStorage.hasFiles(this.temp));
+		Files.createDirectories(new File(this.temp, "Save/Player/Sub").toPath());
+		Files.createDirectories(new File(this.temp, "Replay").toPath());
+		assertFalse(ProfileStorage.hasFiles(this.temp));
+		Files.write(new File(this.temp, "Other.txt").toPath(), new byte[] { 1 });
+		assertFalse(ProfileStorage.hasFiles(this.temp));
+		Files.write(new File(this.temp, "Save/Player/Sub/a.w3z").toPath(), new byte[] { 1 });
+		assertTrue(ProfileStorage.hasFiles(this.temp));
 	}
 }

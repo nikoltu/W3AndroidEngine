@@ -21,13 +21,19 @@ public class W3xScenePortraitLightManager implements SceneLightManager, W3xScene
 	 * light, none of the Classic light's ambient and less of the environment map and of the specular highlights than the
 	 * world: with the Classic values the faces and the light fur and bones come out overexposed.
 	 */
-	private static final float PACKAGE_LIGHT_INTENSITY = 0.6f;
+	private static final float PACKAGE_LIGHT_INTENSITY = 0.7f;
 	private static final float PACKAGE_LIGHT_RED = 1f;
 	private static final float PACKAGE_LIGHT_GREEN = 0.78f;
 	private static final float PACKAGE_LIGHT_BLUE = 0.6f;
 	private static final float PACKAGE_AMBIENT_INTENSITY = 0f;
-	private static final float PACKAGE_IBL_SCALE = 0.15f;
-	private static final float PACKAGE_SPECULAR_SCALE = 0.05f;
+	private static final float PACKAGE_IBL_SCALE = 0.2f;
+	private static final float PACKAGE_SPECULAR_SCALE = 0.25f;
+	/**
+	 * One light does not suit every model of a portrait: the diffuse light wraps a little round the model so that
+	 * the dark ones are not lost, and what is brighter than the knee is compressed so that the light stone and skin do
+	 * not burn out. The packages' environment lit them softer.
+	 */
+	private final float[] hdTone = { 0.25f, 1f, 0.7f, 0f };
 	private float hdIblScale = 1f;
 	private float hdSpecularScale = 1f;
 	public final List<SceneLightInstance> lights;
@@ -61,6 +67,11 @@ public class W3xScenePortraitLightManager implements SceneLightManager, W3xScene
 		lights.hdIblScale = PACKAGE_IBL_SCALE;
 		lights.hdSpecularScale = PACKAGE_SPECULAR_SCALE;
 		return lights;
+	}
+
+	@Override
+	public float[] getHdTone() {
+		return this.hdIblScale < 1f ? this.hdTone : null;
 	}
 
 	@Override

@@ -6,13 +6,14 @@ import com.etheller.warsmash.parsers.jass.JassTextGenerator;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityPointTarget;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.behavior.callback.booleancallbacks.ABBooleanCallback;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.behavior.callback.floatcallbacks.ABFloatCallback;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.behavior.callback.locationcallbacks.ABLocationCallback;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.core.ABSingleAction;
 
 /**
  * Marks a ground area that starts hurting the units in it after a delay, so that computer players' units step out of
- * it.
+ * it; a "stay" area only makes them answer its caster and does not send them out.
  */
 public class ABActionRegisterHarmfulArea implements ABSingleAction {
 
@@ -20,6 +21,7 @@ public class ABActionRegisterHarmfulArea implements ABSingleAction {
 	private ABFloatCallback radius;
 	private ABFloatCallback delay;
 	private ABFloatCallback duration;
+	private ABBooleanCallback stay;
 
 	@Override
 	public void runAction(final CSimulation game, final CUnit caster, final Map<String, Object> localStore,
@@ -28,7 +30,8 @@ public class ABActionRegisterHarmfulArea implements ABSingleAction {
 		game.getHarmfulAreas().add(game, caster, loc.getX(), loc.getY(),
 				this.radius.callback(game, caster, localStore, castId),
 				this.delay.callback(game, caster, localStore, castId),
-				this.duration.callback(game, caster, localStore, castId));
+				this.duration.callback(game, caster, localStore, castId), false,
+				(this.stay != null) && this.stay.callback(game, caster, localStore, castId));
 	}
 
 	@Override

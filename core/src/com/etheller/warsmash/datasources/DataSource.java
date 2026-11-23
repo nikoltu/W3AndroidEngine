@@ -155,5 +155,13 @@ public interface DataSource {
 		return this;
 	}
 
+	/**
+	 * Changes whenever the files this source answers for change while it is in use (a source added, the sources
+	 * refreshed), so that what was learned about a missing file is not kept past it.
+	 */
+	default int revision() {
+		return 0;
+	}
+
 	void close() throws IOException;
 }

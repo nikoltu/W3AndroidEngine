@@ -327,7 +327,8 @@ public final class GdxMoviePlayer implements Movies.Player {
 		if (captions != this.fontCaptions) {
 			this.fontCaptions = captions;
 			this.fontCharacters = characters(captions);
-			this.captionFont = chooseFont(movie.getCaptionFonts(), captions);
+			this.captionFont = chooseFont(CaptionFonts.order(movie.getCaptionFonts(),
+					CaptionFonts.isJapanese(captions.getTexts(), CaptionFonts.gameLanguage())), captions);
 			disposeFont();
 		}
 		final File fontFile = this.captionFont;

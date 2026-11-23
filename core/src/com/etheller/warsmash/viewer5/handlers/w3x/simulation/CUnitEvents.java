@@ -81,7 +81,7 @@ final class CUnitEvents {
 			game.spellEffectEvent(self, ability);
 			final CUnit targetUnit = (target == null) ? null : target.visit(AbilityTargetVisitor.UNIT);
 			if (targetUnit != null) {
-				targetUnit.onSpellEffect(game, self);
+				targetUnit.onSpellEffect(game, self, ability);
 			}
 		}
 		if (target == null) {

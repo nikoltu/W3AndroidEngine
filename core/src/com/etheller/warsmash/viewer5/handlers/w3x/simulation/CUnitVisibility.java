@@ -35,8 +35,12 @@ final class CUnitVisibility {
 	static boolean canBeTargetedBy(final CUnit self, final CSimulation simulation, final CUnit source, final boolean targeted,
 			final Set<CTargetType> targetsAllowed, final AbilityTargetCheckReceiver<CWidget> receiver,
 			final boolean throughFog) {
-		if ((self == source) && targetsAllowed.contains(CTargetType.NOTSELF)
-				&& !targetsAllowed.contains(CTargetType.SELF)) {
+		// Measured: "friend" alone does not name the caster (Lightning Shield: "friend,enemy,neutral"); "self" does,
+		// and "ally" and "player" cover it.
+		final boolean friendWithoutSelf = targetsAllowed.contains(CTargetType.FRIEND)
+				&& !targetsAllowed.contains(CTargetType.ALLIES) && !targetsAllowed.contains(CTargetType.PLAYERUNITS);
+		if ((self == source) && !targetsAllowed.contains(CTargetType.SELF)
+				&& (targetsAllowed.contains(CTargetType.NOTSELF) || friendWithoutSelf)) {
 			receiver.targetCheckFailed(CommandStringErrorKeys.UNABLE_TO_TARGET_SELF);
 			return false;
 		}
@@ -455,5 +459,6 @@ final class CUnitVisibility {
 			return true;
 		}
 		return toPlayer.getFogOfWar().isVisible(simulation, simulation.getPathingGrid(), self.getX(), self.getY());
-	}
+	}
+
 }

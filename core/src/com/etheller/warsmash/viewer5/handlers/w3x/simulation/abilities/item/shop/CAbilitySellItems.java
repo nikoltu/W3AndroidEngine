@@ -86,6 +86,10 @@ public final class CAbilitySellItems extends AbstractCAbility {
 					receiver.activationCheckFailed(CommandStringErrorKeys.A_VALID_PATRON_MUST_BE_NEARBY);
 				}
 				else if (itemSellState.getStock() > 0) {
+					if (buyerInventoryFull(unit, playerIndex, itemType)) {
+						receiver.activationCheckFailed(CommandStringErrorKeys.INVENTORY_IS_FULL);
+						return;
+					}
 					final CPlayer player = game.getPlayer(playerIndex);
 					if ((player.getGold() >= itemType.getGoldCost())) {
 						if ((player.getLumber() >= itemType.getLumberCost())) {
@@ -112,6 +116,34 @@ public final class CAbilitySellItems extends AbstractCAbility {
 		else {
 			receiver.useOk();
 		}
+	}
+
+	/**
+	 * Measured on 1.29: a purchase for a unit whose inventory has no room for the item (no free slot, no stack with
+	 * room) is refused before it takes any gold or stock.
+	 */
+	private static boolean buyerInventoryFull(final CUnit shop, final int playerIndex, final CItemType itemType) {
+		final CAbilityNeutralBuilding neutralBuildingData = shop.getNeutralBuildingData();
+		if (neutralBuildingData == null) {
+			return false;
+		}
+		final CUnit buyer = neutralBuildingData.getSelectedPlayerUnit(playerIndex);
+		final CAbilityInventory inventory = (buyer == null) ? null : buyer.getInventoryData();
+		if ((inventory == null) || itemType.isUseAutomaticallyWhenAcquired()) {
+			return false;
+		}
+		final int stackMax = itemType.getStackMax();
+		for (int i = 0; i < inventory.getItemCapacity(); i++) {
+			final CItem held = inventory.getItemInSlot(i);
+			if (held == null) {
+				return false;
+			}
+			if ((stackMax > 0) && (itemType.getNumberOfCharges() > 0)
+					&& held.getTypeId().equals(itemType.getTypeId()) && (held.getCharges() < stackMax)) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	@Override
@@ -214,9 +246,12 @@ public final class CAbilitySellItems extends AbstractCAbility {
 				if (purchasingInventoryData != null) {
 					if (game.getPlayer(playerIndex).charge(itemType.getGoldCost(), itemType.getLumberCost())) {
 						itemSellState.chargeStock(1);
-						final CItem newItem = game.createItem(itemTypeId, caster.getX(), caster.getY());
-						purchasingInventoryData.giveItem(game, purchasingHero, newItem, false);
+						// Measured on 1.29: the item is made at the buyer and the sell event runs before it is picked up.
+						final CItem newItem = game.createItem(itemTypeId, purchasingHero.getX(), purchasingHero.getY());
 						CShopEvents.fireSellItemEvents(game, caster, newItem, purchasingHero);
+						if ((newItem != null) && (newItem.getContainedInventory() == null)) {
+							purchasingInventoryData.giveItem(game, purchasingHero, newItem, false);
+						}
 					}
 				}
 			}

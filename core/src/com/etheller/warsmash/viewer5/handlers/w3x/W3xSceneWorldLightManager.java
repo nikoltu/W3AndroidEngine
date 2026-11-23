@@ -21,7 +21,21 @@ public class W3xSceneWorldLightManager implements SceneLightManager, W3xSceneLig
 	private static final float HD_NIGHT_SATURATION = Float
 			.parseFloat(System.getProperty("warsmash.hdNightSaturation", "0.3"));
 	private static final float HD_TERRAIN_NIGHT_FILL = Float
-			.parseFloat(System.getProperty("warsmash.hdTerrainNightFill", "0.85"));
+			.parseFloat(System.getProperty("warsmash.hdTerrainNightFill", "0.3"));
+	private static final float DE_TERRAIN_NIGHT_FILL = 0.85f;
+	/**
+	 * Some packages' night light (the summer tilesets') is nearly as strong as their day light, so a night map stayed
+	 * bright. In the HD package, at full night the light's strength (colour brightness times intensity) is lowered to at
+	 * most this.
+	 */
+	private static final float HD_NIGHT_MAX_STRENGTH = Float
+			.parseFloat(System.getProperty("warsmash.hdNightMaxStrength", "0.2"));
+	/**
+	 * The same ambient light of the sun's own hue for the models of the world, which the environment map alone left
+	 * nearly black (trees, crates, a mill) next to the lit ground: by day and at full night.
+	 */
+	private static final float HD_UNIT_DAY_FILL = 0.2f;
+	private static final float HD_UNIT_NIGHT_FILL = 0.45f;
 	public final List<LightInstance> lights;
 	private FloatBuffer lightDataCopyHeap;
 	private final DataTexture unitLightsTexture;
@@ -119,18 +133,30 @@ public class W3xSceneWorldLightManager implements SceneLightManager, W3xSceneLig
 		final float green = light.get(9);
 		final float blue = light.get(10);
 		final float grey = (0.299f * red) + (0.587f * green) + (0.114f * blue);
+		final boolean hd = this.viewer.isHdGraphics();
+		if (hd) {
+			final float maxStrength = 1f + ((HD_NIGHT_MAX_STRENGTH - 1f) * this.viewer.dynamicShadowManager.getNight());
+			if ((light.get(11) * grey) > maxStrength) {
+				light.put(11, maxStrength / grey);
+			}
+		}
 		final float strength = light.get(11) * grey;
 		final float night = 1f - Math.min(1f, strength);
 		final float saturation = HD_NIGHT_SATURATION + ((1f - HD_NIGHT_SATURATION) * (1f - night));
 		light.put(8, grey + ((red - grey) * saturation));
 		light.put(9, grey + ((green - grey) * saturation));
 		light.put(10, grey + ((blue - grey) * saturation));
-		if (terrain && (grey > 0.001f)) {
+		if (grey > 0.001f) {
 			final float scale = 1f / grey;
 			light.put(12, light.get(8) * scale);
 			light.put(13, light.get(9) * scale);
 			light.put(14, light.get(10) * scale);
-			light.put(15, HD_TERRAIN_NIGHT_FILL * night);
+			if (terrain) {
+				light.put(15, (hd ? HD_TERRAIN_NIGHT_FILL : DE_TERRAIN_NIGHT_FILL) * night);
+			}
+			else {
+				light.put(15, HD_UNIT_DAY_FILL + ((HD_UNIT_NIGHT_FILL - HD_UNIT_DAY_FILL) * night));
+			}
 		}
 	}
 

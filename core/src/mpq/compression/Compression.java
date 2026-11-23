@@ -155,7 +155,7 @@ public class Compression {
 		if( (mask & FLAG_SPARSE) != 0 )	Log.warn("sparse compression flag present in mpq version that lacked support");
 		
 		if( flip ){
-			bufferCache[size] = in;
+			if( size >= 0 ) bufferCache[size] = in;
 			return out;
 		}else return in;
 	}
@@ -174,7 +174,7 @@ public class Compression {
 		ByteBuffer out = fetchBuffer(size);
 		sectorExplode(in, out);
 		in.clear();
-		bufferCache[size] = in;
+		if( size >= 0 ) bufferCache[size] = in;
 		return out;
 	}
 	

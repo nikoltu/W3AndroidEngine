@@ -44,7 +44,7 @@ public class SpriteFrame2 extends AbstractUIFrame {
 	public SpriteFrame2(final String name, final UIFrame parent, final Viewport uiViewport, ModelViewer viewer) {
 		super(name, parent);
 		this.viewer = viewer;
-		this.scene = new SimpleScene(viewer, viewer.createLightManager(true));
+		this.scene = new SimpleScene(viewer, viewer.createPortraitLightManager());
 //		this.scene.alpha = true;
 		this.portraitCameraManager = new PortraitCameraManager();
 		this.portraitCameraManager.setupCamera(this.scene);

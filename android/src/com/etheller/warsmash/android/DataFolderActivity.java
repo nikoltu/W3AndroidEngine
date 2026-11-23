@@ -10,11 +10,14 @@ import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
 
+import android.Manifest;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
+import android.content.res.Resources;
 import android.database.Cursor;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -50,10 +53,13 @@ import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
+import com.etheller.warsmash.datasources.FolderIndexStore;
 import com.etheller.warsmash.datasources.GameLanguage;
 import com.etheller.warsmash.launcher.DataContentCheck;
 import com.etheller.warsmash.launcher.DataFolderCheck;
 import com.etheller.warsmash.launcher.DataPackage;
+import com.etheller.warsmash.launcher.LauncherSettingsMirror;
+import com.etheller.warsmash.launcher.StorageTree;
 
 /**
  * Lets the player choose the folder with the game data before the engine starts, and writes the engine configuration
@@ -68,6 +74,7 @@ public class DataFolderActivity extends Activity {
 	private static final String INI_TEMPLATE = "warsmash-template.ini";
 	private static final int REQUEST_FOLDER = 1;
 	private static final int REQUEST_ZIP = 2;
+	private static final int REQUEST_STORAGE = 3;
 	/** The unreadable files named in the status; the count is always whole. */
 	private static final int UNREADABLE_NAMES = 3;
 	/** A chosen folder as large as a whole storage is not walked to its end. */
@@ -84,8 +91,8 @@ public class DataFolderActivity extends Activity {
 	private static final int RED = Color.rgb(0xE2, 0x9A, 0x9A);
 
 	private enum Status {
-		WAITING, CHECKING, FOUND, FOUND_UNREADABLE, FOUND_INCOMPLETE, MISSING, NEEDS_ACCESS, GONE, UNREADABLE, WRITE_FAILED, IMPORTING,
-		IMPORT_FAILED
+		WAITING, RESTORE_ACCESS, CHECKING, FOUND, FOUND_UNREADABLE, FOUND_INCOMPLETE, MISSING, NEEDS_ACCESS, GONE, UNREADABLE, WRITE_FAILED, IMPORTING,
+		IMPORT_FAILED, PICK_FAILED
 	}
 
 	private enum Look {
@@ -181,6 +188,8 @@ public class DataFolderActivity extends Activity {
 		volatile DataPackage.ImportException failure;
 		/** What the package says of itself, once it is read. */
 		volatile String summary;
+		/** The folder the package went into, which is the one in use for a graphics set or a language pack. */
+		volatile File target;
 
 		ImportJob(final String name) {
 			this.name = name;
@@ -235,10 +244,44 @@ public class DataFolderActivity extends Activity {
 	private ProgressBar progressBar;
 	/** Why the last import stopped, shown until the next choice. */
 	private String importProblem;
+	/** Why the last picked folder was not taken, shown until the next choice. */
+	private String pickProblem;
+	/** The player refused the storage permission (Android 6 to 10) since the window opened. */
+	private boolean storageDenied;
+	/** A copy of the data folder from before a reinstall lies in the shared storage, closed until access is allowed. */
+	private boolean restoreWaiting;
+
+	private final LanguageResources languageResources = new LanguageResources();
+	private String gameLanguage;
+
+	/** The texts follow the game language of the configuration, as the launcher's do. */
+	@Override
+	public Resources getResources() {
+		final Resources plain = super.getResources();
+		if (getBaseContext() == null) {
+			return plain;
+		}
+		if (this.gameLanguage == null) {
+			this.gameLanguage = "";
+			try {
+				final File iniFile = SkinCache.iniFile(this);
+				if (iniFile.isFile()) {
+					this.gameLanguage = GameLanguage.configured(AndroidLauncher.loadWarsmashIni(iniFile));
+				}
+			}
+			catch (final IOException | RuntimeException e) {
+				// the language of the system stays
+			}
+		}
+		return this.languageResources.get(this, plain, this.gameLanguage);
+	}
 
 	@Override
 	protected void onCreate(final Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
+		if (GlesSupport.refuse(this)) {
+			return;
+		}
 		if (AndroidLauncher.showRunningGame(this)) {
 			finish();
 			return;
@@ -254,9 +297,29 @@ public class DataFolderActivity extends Activity {
 		proceed();
 	}
 
+	/**
+	 * Keeps what the walks of the game data folder find in the app's own files, so that neither the first check nor
+	 * the start of a game after the app starts walks a folder of tens of thousands of files over the shared storage
+	 * again. An update of the app keeps them: they are read again only when the checks themselves changed, or the
+	 * folder did.
+	 */
+	static void useFolderCache(final Context context) {
+		DataFolderCheck.useCache(new File(context.getFilesDir(), "folder-check.txt"));
+		FolderIndexStore.use(new File(context.getFilesDir(), "folder-index"));
+	}
+
 	private void proceed() {
+		useFolderCache(this);
+		if ("noaccess".equals(ProfileStorageAndroid.state()) && !lacksStorageAccess()) {
+			// The profiles were looked for when the process started, before access was allowed; nothing holds them yet.
+			ProfileStorageAndroid.init(this);
+		}
 		final File appData = appDataFolder();
-		final String saved = getSharedPreferences(PREFERENCES, MODE_PRIVATE).getString(KEY_DATA_FOLDER, null);
+		this.restoreWaiting = false;
+		String saved = getSharedPreferences(PREFERENCES, MODE_PRIVATE).getString(KEY_DATA_FOLDER, null);
+		if (saved == null) {
+			saved = restoredDataFolder();
+		}
 		this.dataFolder = saved != null ? new File(saved) : appData;
 		if ((saved == null) && (DataFolderCheck.detect(appData) == DataFolderCheck.Kind.NONE)) {
 			this.dataFolder = null;
@@ -274,9 +337,30 @@ public class DataFolderActivity extends Activity {
 		refresh();
 	}
 
+	/**
+	 * The data folder the launcher had before the app was reinstalled, which the shared storage kept; null when there is
+	 * none or the copy cannot be read yet (then restoreWaiting tells that allowing access is the next step).
+	 */
+	private String restoredDataFolder() {
+		final File copy = LauncherSettingsMirror.file(Environment.getExternalStorageDirectory());
+		if (lacksStorageAccess()) {
+			this.restoreWaiting = copy.exists();
+			return null;
+		}
+		return LauncherSettingsMirror.readDataFolder(copy);
+	}
+
 	@Override
 	protected void onResume() {
 		super.onResume();
+		if ((this.updatePrompt != null) && this.updatePrompt.closeInstalling()) {
+			return;
+		}
+		ProfileStorageAndroid.recheck(this);
+		if (this.restoreWaiting && (importJob == null) && !lacksStorageAccess()) {
+			proceed();
+			return;
+		}
 		if (this.folderField != null) {
 			if (importJob != null) {
 				watchImport();
@@ -298,6 +382,9 @@ public class DataFolderActivity extends Activity {
 	@Override
 	protected void onPause() {
 		super.onPause();
+		if (this.updatePrompt != null) {
+			this.updatePrompt.leaving();
+		}
 		this.handler.removeCallbacks(this.importWatch);
 	}
 
@@ -449,6 +536,7 @@ public class DataFolderActivity extends Activity {
 			this.chosenFolder = this.dataFolder;
 			this.writeFailed = false;
 			this.importProblem = null;
+			this.pickProblem = null;
 			refresh();
 		});
 		place(panel, this.appFolderButton, x + board.half + board.gap, board.halfY, board.half, board.buttonH);
@@ -526,11 +614,27 @@ public class DataFolderActivity extends Activity {
 		final File folder = this.dataFolder;
 		// Without access the files are hidden, and searching thousands of their folders only stalls the window.
 		final boolean search = (folder != null) && folder.isDirectory()
-				&& (!needsAllFilesAccess() || isInAppFolder(folder));
+				&& (!lacksStorageAccess() || isInAppFolder(folder));
 		if (search) {
 			show(Status.CHECKING);
 		}
 		new Thread(() -> {
+			try {
+				check(generation, folder, search);
+			}
+			catch (final RuntimeException e) {
+				Log.e(TAG, "Checking " + folder + " failed", e);
+				runOnUiThread(() -> {
+					if ((generation == this.checks) && !isFinishing()) {
+						show(null);
+					}
+				});
+			}
+		}, "DataFolderCheck").start();
+	}
+
+	private void check(final int generation, final File folder, final boolean search) {
+		{
 			File found = folder;
 			if (search) {
 				final File located = DataFolderCheck.locate(folder);
@@ -545,14 +649,13 @@ public class DataFolderActivity extends Activity {
 			final List<File> packages = zip != null ? DataPackage.packagesIn(found) : null;
 			final boolean unreadable = (foundKind == DataFolderCheck.Kind.NONE) && isUnreadable(found);
 			// Without access every file of another folder looks unreadable; that case has its own status. A folder
-			// found whole before is not walked again each time the window comes back.
-			final DataFolderCheck.Readability known = found == null ? null : DataFolderCheck.lastReadability(found);
-			final DataFolderCheck.Readability readability = (known != null) && (known.unreadable == 0)
-					&& !known.partial ? known
-							: (found != null) && found.isDirectory() && !unreadable
-									&& (!needsAllFilesAccess() || isInAppFolder(found))
-											? DataFolderCheck.readability(found, MAX_WALKED_FILES, UNREADABLE_NAMES)
-											: null;
+			// walked whole before, in this run or an earlier one, is not walked again while its folders look the same.
+			final DataFolderCheck.Readability known = found == null ? null : DataFolderCheck.current(found);
+			final DataFolderCheck.Readability readability = known != null ? known
+					: (found != null) && found.isDirectory() && !unreadable
+							&& (!lacksStorageAccess() || isInAppFolder(found))
+									? DataFolderCheck.readability(found, MAX_WALKED_FILES, UNREADABLE_NAMES)
+									: null;
 			final List<DataContentCheck.Problem> problems = foundKind == DataFolderCheck.Kind.NONE
 					? Collections.emptyList()
 					: DataContentCheck.check(foundKind, found);
@@ -561,7 +664,15 @@ public class DataFolderActivity extends Activity {
 				description = DataFolderCheck.describe(foundKind, found) + " · "
 						+ DataFolderCheck.checkedFile(foundKind);
 				final String locale = DataFolderCheck.locale(foundKind, found);
-				if (!locale.isEmpty()) {
+				final List<String> languages = DataFolderCheck.locales(foundKind, found);
+				if (languages.size() > 1) {
+					final StringBuilder names = new StringBuilder();
+					for (final String language : languages) {
+						names.append(names.length() == 0 ? "" : ", ").append(GameLanguage.displayName(language));
+					}
+					description += " · " + names;
+				}
+				else if (!locale.isEmpty()) {
 					description += " · " + locale;
 				}
 			}
@@ -582,7 +693,7 @@ public class DataFolderActivity extends Activity {
 				this.contentProblems = problems;
 				show(null);
 			});
-		}, "DataFolderCheck").start();
+		}
 	}
 
 	private String problemText(final DataContentCheck.Problem problem) {
@@ -610,8 +721,11 @@ public class DataFolderActivity extends Activity {
 		else if (this.importProblem != null) {
 			status = Status.IMPORT_FAILED;
 		}
+		else if (this.pickProblem != null) {
+			status = Status.PICK_FAILED;
+		}
 		else if (this.dataFolder == null) {
-			status = Status.WAITING;
+			status = this.restoreWaiting ? Status.RESTORE_ACCESS : Status.WAITING;
 		}
 		else if (this.writeFailed) {
 			status = Status.WRITE_FAILED;
@@ -620,7 +734,7 @@ public class DataFolderActivity extends Activity {
 			status = hasUnreadableFiles() ? Status.FOUND_UNREADABLE
 					: this.contentProblems.isEmpty() ? Status.FOUND : Status.FOUND_INCOMPLETE;
 		}
-		else if (needsAllFilesAccess() && !isInAppFolder(this.dataFolder)) {
+		else if (lacksStorageAccess() && !isInAppFolder(this.dataFolder)) {
 			status = Status.NEEDS_ACCESS;
 		}
 		else if (!this.dataFolder.exists()) {
@@ -650,7 +764,8 @@ public class DataFolderActivity extends Activity {
 				: this.appHasData ? R.string.data_folder_use_app : R.string.data_folder_use_app_empty);
 		look(this.appFolderButton, importing ? Look.DISABLED
 				: appInUse ? Look.IN_USE : this.appHasData ? Look.NORMAL : Look.DISABLED);
-		this.accessButton.setVisibility(status == Status.NEEDS_ACCESS ? View.VISIBLE : View.GONE);
+		this.accessButton.setVisibility((status == Status.NEEDS_ACCESS) || (status == Status.RESTORE_ACCESS)
+				? View.VISIBLE : View.GONE);
 		look(this.accessButton, Look.NEXT);
 		this.cancelButton.setVisibility(importing ? View.VISIBLE : View.GONE);
 		look(this.cancelButton, (job != null) && job.cancelled ? Look.DISABLED : Look.NORMAL);
@@ -696,7 +811,23 @@ public class DataFolderActivity extends Activity {
 			showStatus("✗", RED, failFill, failStroke, getString(R.string.data_folder_import_failed),
 					this.importProblem);
 			break;
+		case PICK_FAILED:
+			showStatus("✗", RED, failFill, failStroke, getString(R.string.data_folder_pick_failed), this.pickProblem);
+			break;
+		case RESTORE_ACCESS:
+			showStatus("!", GOLD, Color.rgb(0x2A, 0x20, 0x12), Color.rgb(0x6A, 0x54, 0x26),
+					getString(Build.VERSION.SDK_INT < Build.VERSION_CODES.R ? R.string.data_folder_needs_storage
+							: R.string.data_folder_needs_access),
+					getString(R.string.data_folder_restore_detail));
+			break;
 		case NEEDS_ACCESS:
+			if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+				showStatus("!", GOLD, Color.rgb(0x2A, 0x20, 0x12), Color.rgb(0x6A, 0x54, 0x26),
+						getString(R.string.data_folder_needs_storage),
+						getString(this.storageDenied ? R.string.data_folder_storage_denied
+								: R.string.data_folder_needs_storage_detail));
+				break;
+			}
 			showStatus("!", GOLD, Color.rgb(0x2A, 0x20, 0x12), Color.rgb(0x6A, 0x54, 0x26),
 					getString(R.string.data_folder_needs_access), getString(R.string.data_folder_needs_access_detail));
 			break;
@@ -817,7 +948,10 @@ public class DataFolderActivity extends Activity {
 		}
 		final ImportJob job = new ImportJob(name);
 		importJob = job;
-		final File target = appDataFolder();
+		final File appTarget = appDataFolder();
+		// A graphics set or a language pack joins the Classic data in use, wherever the player keeps it.
+		final File current = (this.kind == DataFolderCheck.Kind.FOLDER) || (this.kind == DataFolderCheck.Kind.LOCAL_FILES)
+				? this.dataFolder : null;
 		// The thread outlives this window; it keeps only the application.
 		final Context app = getApplicationContext();
 		new Thread(() -> {
@@ -832,6 +966,8 @@ public class DataFolderActivity extends Activity {
 						: app.getString(R.string.data_folder_import_package, name,
 								dataPackage.gameVersion.isEmpty() ? "?" : dataPackage.gameVersion,
 								dataPackage.fileCount(), Formatter.formatShortFileSize(app, dataPackage.totalBytes));
+				final File target = dataPackage.addsToClassic() && (current != null) ? current : appTarget;
+				job.target = target;
 				job.update(0, dataPackage.totalBytes, 0, dataPackage.fileCount());
 				// A full DE / HD set is tens of gigabytes; the shortfall is said before any file is written.
 				final long free = DataPackage.freeBytesFor(target);
@@ -894,7 +1030,7 @@ public class DataFolderActivity extends Activity {
 		getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 		this.importProblem = job.failure == null ? null : problemText(job.name, job.failure);
 		if (job.failure == null) {
-			this.dataFolder = appDataFolder();
+			this.dataFolder = job.target != null ? job.target : appDataFolder();
 			this.chosenFolder = this.dataFolder;
 			this.writeFailed = false;
 		}
@@ -929,6 +1065,8 @@ public class DataFolderActivity extends Activity {
 		case NO_CLASSIC_LANGUAGE:
 			return getString(R.string.data_folder_import_no_classic_language, name,
 					GameLanguage.displayName(failure.file));
+		case NOT_WRITABLE:
+			return getString(R.string.data_folder_import_not_writable, name);
 		case CANCELLED:
 			return getString(R.string.data_folder_import_cancelled);
 		case IO:
@@ -976,7 +1114,7 @@ public class DataFolderActivity extends Activity {
 	/** Shows a folder as the system names it: "Internal storage / WC3" rather than the raw path. */
 	private String displayPath(final File folder) {
 		final String path = folder.getAbsolutePath();
-		final String appFolder = getExternalFilesDir(null).getAbsolutePath();
+		final String appFolder = EngineResources.appFolder(this).getAbsolutePath();
 		if (path.startsWith(appFolder)) {
 			return "App folder" + path.substring(appFolder.length()).replace("/", " / ");
 		}
@@ -1002,18 +1140,26 @@ public class DataFolderActivity extends Activity {
 	}
 
 	private File appDataFolder() {
-		return new File(getExternalFilesDir(null), "data");
+		return new File(EngineResources.appFolder(this), "data");
 	}
 
 	/** The app's own folder is readable without "All files access". */
 	private boolean isInAppFolder(final File folder) {
-		final String appFolder = getExternalFilesDir(null).getAbsolutePath();
+		final String appFolder = EngineResources.appFolder(this).getAbsolutePath();
 		final String path = folder.getAbsolutePath();
 		return path.equals(appFolder) || path.startsWith(appFolder + File.separator);
 	}
 
-	private static boolean needsAllFilesAccess() {
-		return (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) && !Environment.isExternalStorageManager();
+	/**
+	 * Whether the files outside the app's own folder are still hidden from the game: Android 11 and newer ask for
+	 * "All files access", Android 6 to 10 for the storage permission (older ones grant it at install).
+	 */
+	private boolean lacksStorageAccess() {
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+			return !Environment.isExternalStorageManager();
+		}
+		return (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
+				&& (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED);
 	}
 
 	private void requestAllFilesAccess() {
@@ -1021,11 +1167,39 @@ public class DataFolderActivity extends Activity {
 			final Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
 					Uri.parse("package:" + getPackageName()));
 			startActivity(intent);
+			return;
+		}
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+			// After "don't ask again" the system shows no dialog any more; the app's settings are the only way.
+			if (this.storageDenied && !shouldShowRequestPermissionRationale(Manifest.permission.READ_EXTERNAL_STORAGE)) {
+				startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+						Uri.parse("package:" + getPackageName())));
+				return;
+			}
+			requestPermissions(new String[] { Manifest.permission.READ_EXTERNAL_STORAGE,
+				Manifest.permission.WRITE_EXTERNAL_STORAGE }, REQUEST_STORAGE);
+		}
+	}
+
+	@Override
+	public void onRequestPermissionsResult(final int requestCode, final String[] permissions,
+			final int[] grantResults) {
+		super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+		if (requestCode != REQUEST_STORAGE) {
+			return;
+		}
+		this.storageDenied = lacksStorageAccess();
+		ProfileStorageAndroid.recheck(this);
+		if (this.folderField != null) {
+			refresh();
 		}
 	}
 
 	private void chooseFolder() {
 		final Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+		// Pickers of Android 8 to 10 keep the internal storage out of the list unless asked.
+		intent.putExtra("android.content.extra.SHOW_ADVANCED", true);
+		intent.putExtra("android.provider.extra.SHOW_ADVANCED", true);
 		startActivityForResult(intent, REQUEST_FOLDER);
 	}
 
@@ -1042,35 +1216,65 @@ public class DataFolderActivity extends Activity {
 		if (requestCode != REQUEST_FOLDER) {
 			return;
 		}
-		final File folder = folderOfTree(data.getData());
-		if (folder != null) {
-			this.dataFolder = folder;
-			this.chosenFolder = folder;
-			this.writeFailed = false;
+		final StorageTree.Result result = resolveTree(data.getData());
+		// A card that was taken out, or a provider that names a place the device does not have, gives a path with nothing there.
+		// Before the storage permission is given the folder cannot be seen on Android 6 to 10, so it is checked only then.
+		if (!result.ok() || ((!lacksStorageAccess() || isInAppFolder(result.folder)) && !result.folder.isDirectory())) {
+			final StorageTree.Problem problem = result.ok() ? StorageTree.Problem.INVALID : result.problem;
+			Log.w(TAG, "Folder not usable: " + data.getData() + " " + problem);
+			this.pickProblem = treeProblemText(this, problem);
 			this.importProblem = null;
-			refresh();
+			show(null);
+			return;
+		}
+		final File folder = result.folder;
+		this.dataFolder = folder;
+		this.chosenFolder = folder;
+		this.writeFailed = false;
+		this.importProblem = null;
+		this.pickProblem = null;
+		this.storageDenied = false;
+		refresh();
+		if ((Build.VERSION.SDK_INT < Build.VERSION_CODES.R) && lacksStorageAccess() && !isInAppFolder(folder)) {
+			requestAllFilesAccess();
 		}
 	}
 
 	/**
 	 * The engine reads its data through plain files, so a picked tree is turned back into the path it stands for:
-	 * "primary:Games/WC3" is internal storage, "1234-ABCD:WC3" a removable card.
+	 * "primary:Games/WC3" is internal storage, "1234-ABCD:WC3" a removable card, a Downloads "raw:" id its own path.
 	 */
-	static File folderOfTree(final Uri treeUri) {
-		final String documentId = DocumentsContract.getTreeDocumentId(treeUri);
-		final int colon = documentId.indexOf(':');
-		if (colon < 0) {
-			return null;
+	static StorageTree.Result resolveTree(final Uri treeUri) {
+		String documentId = null;
+		try {
+			documentId = DocumentsContract.getTreeDocumentId(treeUri);
 		}
-		final String volume = documentId.substring(0, colon);
-		final String relative = documentId.substring(colon + 1);
-		final File base = "primary".equalsIgnoreCase(volume) ? Environment.getExternalStorageDirectory()
-				: new File("/storage/" + volume);
-		return relative.isEmpty() ? base : new File(base, relative);
+		catch (final IllegalArgumentException e) {
+			Log.w(TAG, "Not a tree: " + treeUri, e);
+		}
+		return StorageTree.resolve(treeUri.getAuthority(), documentId, Environment.getExternalStorageDirectory(),
+				Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS));
+	}
+
+	/** The folder of a picked tree, or null when it stands for no path of the device storage. */
+	static File folderOfTree(final Uri treeUri) {
+		return resolveTree(treeUri).folder;
+	}
+
+	/** Tells the player why a picked folder cannot be used and what to pick instead. */
+	static String treeProblemText(final Context context, final StorageTree.Problem problem) {
+		switch (problem) {
+		case UNKNOWN_PROVIDER:
+			return context.getString(R.string.data_folder_pick_provider);
+		case NO_PATH:
+			return context.getString(R.string.data_folder_pick_no_path);
+		default:
+			return context.getString(R.string.data_folder_pick_invalid);
+		}
 	}
 
 	private boolean start() {
-		final File appFolder = getExternalFilesDir(null);
+		final File appFolder = EngineResources.appFolder(this);
 		try {
 			EngineResources.ensureCurrent(this);
 			// The engine folder is listed as a data source only if it exists; scripts and maps are placed there later.
@@ -1089,6 +1293,8 @@ public class DataFolderActivity extends Activity {
 		final SharedPreferences.Editor editor = getSharedPreferences(PREFERENCES, MODE_PRIVATE).edit();
 		editor.putString(KEY_DATA_FOLDER, this.dataFolder.getAbsolutePath());
 		editor.apply();
+		mirrorDataFolder();
+		ProfileStorageAndroid.recheck(this);
 
 		final Bundle extras = getIntent().getExtras();
 		// A map asked for by name starts at once; otherwise the launcher opens.
@@ -1103,11 +1309,22 @@ public class DataFolderActivity extends Activity {
 		return true;
 	}
 
+	/** Keeps the data folder beside the profiles, where a reinstall finds it; a folder of the app itself is lost anyway. */
+	private void mirrorDataFolder() {
+		if (!ProfileStorageAndroid.wanted(this) || lacksStorageAccess() || isInAppFolder(this.dataFolder)) {
+			return;
+		}
+		LauncherSettingsMirror.writeDataFolder(LauncherSettingsMirror.file(Environment.getExternalStorageDirectory()),
+				this.dataFolder.getAbsolutePath());
+	}
+
 	private void writeIni(final File iniFile, final String dataSources) throws IOException {
 		// The touch thresholds and the in-game graphics are the player's own (Options) and outlive a change of game data.
 		final String touch = EngineSettings.ownSections(iniFile);
+		// Written beside and renamed over, so a stop half way leaves the old ini instead of a cut one.
+		final File temp = new File(iniFile.getPath() + ".tmp");
 		try (InputStream template = getAssets().open(INI_TEMPLATE);
-				OutputStream out = new FileOutputStream(iniFile)) {
+				OutputStream out = new FileOutputStream(temp)) {
 			out.write(dataSources.getBytes(StandardCharsets.UTF_8));
 			out.write('\n');
 			final byte[] buffer = new byte[4096];
@@ -1118,6 +1335,10 @@ public class DataFolderActivity extends Activity {
 			if (!touch.isEmpty()) {
 				out.write(("\n" + touch).getBytes(StandardCharsets.UTF_8));
 			}
+		}
+		if (!temp.renameTo(iniFile)) {
+			temp.delete();
+			throw new IOException("Unable to replace " + iniFile);
 		}
 	}
 }

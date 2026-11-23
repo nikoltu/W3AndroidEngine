@@ -2,6 +2,7 @@ package com.etheller.warsmash.viewer5.handlers.mdx;
 
 import java.util.Locale;
 
+import com.etheller.warsmash.viewer5.ModelViewer;
 import com.hiveworkshop.rms.parsers.mdlx.AnimationMap;
 import com.hiveworkshop.rms.parsers.mdlx.MdlxAttachment;
 
@@ -22,7 +23,7 @@ public class Attachment extends GenericObject {
 		this.internalModel = null;
 
 		// Second condition is against custom resources using arbitrary paths
-		if (!path.equals("") && (path.indexOf(".mdx") != -1)) {
+		if (!path.equals("") && (path.indexOf(".mdx") != -1) && !isAbsentVariation(model, path)) {
 			// While the game goes on, the model of a building's birth animation or the like is read and built a few
 			// units a frame like the model that attaches it, which waits for it before its instances load.
 			final boolean deferBefore = model.viewer.setDeferModelLoads(model.viewer.isDeferModelTextures());
@@ -39,6 +40,20 @@ public class Attachment extends GenericObject {
 				this.internalModel = internalModel;
 			}
 		}
+	}
+
+	/**
+	 * The HD hero models carry an attachment for a numbered variation of their effect model ("1_HeroBladeMasterSpin")
+	 * that no package holds; the game shows nothing for it, and so does this.
+	 */
+	private static boolean isAbsentVariation(final MdxModel model, final String path) {
+		final int nameStart = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\')) + 1;
+		int digits = nameStart;
+		while ((digits < path.length()) && Character.isDigit(path.charAt(digits))) {
+			digits++;
+		}
+		return (digits > nameStart) && (digits < path.length()) && (path.charAt(digits) == '_')
+				&& (ModelViewer.lookupSource(model.viewer.dataSource, path) == null);
 	}
 
 	@Override

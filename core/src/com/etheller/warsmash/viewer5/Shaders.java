@@ -149,9 +149,14 @@ public class Shaders {
 
 	public static String fogSystem(final boolean supportsUnfoggedMaterial,
 			final String fogIncreasesPixelColorBranchCondition) {
+		return fogSystem(supportsUnfoggedMaterial ? "!u_unfogged" : null, fogIncreasesPixelColorBranchCondition);
+	}
+
+	public static String fogSystem(final String skipFogCondition,
+			final String fogIncreasesPixelColorBranchCondition) {
 		String firstLine;
-		if (supportsUnfoggedMaterial) {
-			firstLine = "      if(!u_unfogged && u_fogParams.x > 0.5) {\r\n";
+		if (skipFogCondition != null) {
+			firstLine = "      if(" + skipFogCondition + " && u_fogParams.x > 0.5) {\r\n";
 		}
 		else {
 			firstLine = "      if(u_fogParams.x > 0.5) {\r\n";

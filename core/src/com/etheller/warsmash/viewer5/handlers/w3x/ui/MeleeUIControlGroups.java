@@ -113,8 +113,8 @@ final class MeleeUIControlGroups {
 		}
 	}
 
-	/** With the user interface disabled the hero buttons darken like the world behind them. */
-	void renderDisabledDim(final SpriteBatch batch, final Texture black, final float alpha) {
+	/** With a dialog on the screen the hero buttons darken like the world behind them. */
+	void renderDialogDim(final SpriteBatch batch, final Texture black, final float alpha) {
 		batch.setColor(1, 1, 1, alpha);
 		for (final HeroBarIcon icon : this.heroBarIcons) {
 			if ((icon != null) && icon.isVisible()) {

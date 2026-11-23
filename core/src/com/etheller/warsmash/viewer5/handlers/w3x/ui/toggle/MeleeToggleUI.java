@@ -106,6 +106,11 @@ public class MeleeToggleUI implements WarsmashUI {
 	}
 
 	@Override
+	public void setScriptDialogTitle(final CScriptDialog dialog, final String text) {
+		this.meleeUI.setScriptDialogTitle(dialog, text);
+	}
+
+	@Override
 	public CScriptDialogButton createScriptDialogButton(final CScriptDialog dialog, final String buttonText,
 			final char hotkeyInt) {
 		return this.meleeUI.createScriptDialogButton(dialog, buttonText, hotkeyInt);

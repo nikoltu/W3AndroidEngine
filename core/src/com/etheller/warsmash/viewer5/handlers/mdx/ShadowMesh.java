@@ -37,6 +37,14 @@ final class ShadowMesh {
 	 * trims an edge, and are drawn solid with the rest.
 	 */
 	private static final int EXACT_CUTOUT_VERTICES = 1200;
+	/** A blended geoset this small is a sprite or decal; as a solid it would cast the whole of its quad. */
+	private static final int SPRITE_VERTICES = 16;
+	/**
+	 * The larger cut-out geosets of scenery (the foliage of a tall tree) are joined in cells this much finer, and by
+	 * their texture coordinates, so that the narrow points of their shadow stay and are not a solid block.
+	 */
+	private static final float FINE_CELLS_ACROSS = 80f;
+	private static final float CUTOUT_UV_STEPS = 256f;
 
 	final int vertexBuffer;
 	final int indexBuffer;
@@ -135,6 +143,7 @@ final class ShadowMesh {
 			final float size = Math.max(box.max.x - box.min.x, Math.max(box.max.y - box.min.y, box.max.z - box.min.z));
 			cell = Math.max(cell, size / CELLS_ACROSS);
 		}
+		final float fineCell = Math.max(MIN_CELL / 2f, cell * CELLS_ACROSS / FINE_CELLS_ACROSS);
 		final int[] first = new int[batchCount];
 		final int[] count = new int[batchCount];
 		final boolean[] cutout = new boolean[batchCount];
@@ -152,7 +161,9 @@ final class ShadowMesh {
 			if (!batch.hd || (layer.filterMode > 2) || (n == 0) || (geoset.elements == 0)) {
 				continue;
 			}
-			final boolean isCutout = exactCutouts && (layer.filterMode != 0) && (n <= EXACT_CUTOUT_VERTICES);
+			final boolean isCutout = (exactCutouts || ((layer.filterMode == 2) && (n <= SPRITE_VERTICES)))
+					&& (layer.filterMode != 0);
+			final boolean exactVertices = isCutout && (n <= EXACT_CUTOUT_VERTICES);
 			final float[] positions = new float[n * 3];
 			final float[] uvs = isCutout ? new float[n * 2] : null;
 			final byte[] skin = new byte[n * 8];
@@ -192,9 +203,14 @@ final class ShadowMesh {
 				final float y = positions[(v * 3) + 1];
 				final float z = positions[(v * 3) + 2];
 				final Key key;
-				if (isCutout) {
+				if (exactVertices) {
 					key = new Key(Float.floatToIntBits(x), Float.floatToIntBits(y), Float.floatToIntBits(z), bone,
 							Float.floatToIntBits(uvs[v * 2]), Float.floatToIntBits(uvs[(v * 2) + 1]));
+				}
+				else if (isCutout) {
+					key = new Key((int) Math.floor(x / fineCell), (int) Math.floor(y / fineCell),
+							(int) Math.floor(z / fineCell), bone, Math.round(uvs[v * 2] * CUTOUT_UV_STEPS),
+							Math.round(uvs[(v * 2) + 1] * CUTOUT_UV_STEPS));
 				}
 				else {
 					key = new Key((int) Math.floor(x / cell), (int) Math.floor(y / cell), (int) Math.floor(z / cell),

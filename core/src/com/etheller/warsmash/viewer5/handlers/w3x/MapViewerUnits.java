@@ -50,6 +50,7 @@ final class MapViewerUnits {
 			viewer.renderUnitTypeData = new RenderUnitTypeData(modifications.getUnits(), mpq, viewer,
 					viewer.unitAckSoundsTable, viewer.terrain.uberSplatTable);
 			viewer.renderUnitTypeDataObjects = modifications;
+			viewer.renderUnitTypeData.warmModelLookups();
 		}
 		viewer.renderItemTypeData = new RenderItemTypeData(modifications.getItems(), mpq, viewer, viewer.miscData);
 
@@ -139,6 +140,14 @@ final class MapViewerUnits {
 				final float angle = (float) Math.toDegrees(unitAngle);
 				final CUnit simulationUnit = viewer.simulation.internalCreateUnit(unitId, playerIndex, unitX, unitY,
 						angle, buildingPathingPixelMap, editorConfigHitPointPercent, editorConfigManaAmount);
+				if ((customTeamColor != -1) && viewer.renderUnitTypeData.isAllowCustomTeamColor(unitId)
+						&& (customTeamColor != viewer.simulation.getPlayer(playerIndex).getColor())) {
+					// A color chosen for the placed unit is not derivable from its owner, so a loaded game needs it saved.
+					simulationUnit.setTeamColorOverride(customTeamColor);
+				}
+				if (trackCreeps && (viewer.typeUsage != null)) {
+					viewer.typeUsage.created(unitId, viewer.simulation.getGameTurnTick());
+				}
 				// The minimap's creep camps start from the creeps the map placed in its first tick, also those that the
 				// melee setup then removes around the start locations.
 				final int creepLevel = trackCreeps && (viewer.simulation.getGameTurnTick() <= 1)
@@ -321,6 +330,7 @@ final class MapViewerUnits {
 		}
 		viewer.terrain.setFogOfWarData(viewer.simulation, viewer.simulation.getPlayer(viewer.localPlayerIndex).getFogOfWar());
 		viewer.worldScene.fogFilter = viewer.viewerFogFilter;
+		viewer.settleFogShading();
 		viewer.widgets.wakeAllDestructables();
 	}
 
@@ -344,8 +354,9 @@ final class MapViewerUnits {
 		}
 		final float x = unit.getX();
 		final float y = unit.getY();
-		final int teamColor = renderUnitType.getTeamColor() != -1 ? renderUnitType.getTeamColor()
-				: viewer.simulation.getPlayer(unit.getPlayerIndex()).getColor();
+		final int teamColor = unit.getTeamColorOverride() != -1 ? unit.getTeamColorOverride()
+				: renderUnitType.getTeamColor() != -1 ? renderUnitType.getTeamColor()
+						: viewer.simulation.getPlayer(unit.getPlayerIndex()).getColor();
 		final float z = Math.max(viewer.getWalkableRenderHeight(x, y), viewer.terrain.getGroundHeight(x, y))
 				+ unit.getFlyHeight();
 		final String buildingShadow = renderUnitType.getBuildingShadow();
@@ -356,6 +367,10 @@ final class MapViewerUnits {
 		viewer.unitToRenderPeer.put(unit, renderUnit);
 		viewer.widgets.add(renderUnit);
 		viewer.units.add(renderUnit);
+		final float[] vertexColor = unit.getVertexColor();
+		if (vertexColor != null) {
+			renderUnit.setVertexColoring(viewer, vertexColor[0], vertexColor[1], vertexColor[2], vertexColor[3]);
+		}
 		renderUnit.shadow = createUnitShadow(viewer, renderUnitType.getRenderShadowType(), x, y);
 		if (renderUnitType.getUberSplat() != null) {
 			renderUnit.uberSplat = addUberSplatIngame(viewer, x, y, renderUnitType.getUberSplat(),

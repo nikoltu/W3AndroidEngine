@@ -27,6 +27,8 @@ public final class ReplayRecording implements ReplaySession {
 		this.written = written;
 		this.target = target;
 		written.parent().mkdirs();
+		// Marks left by a game that was cut off belong to that game, not to this one.
+		GameMarks.of(written).delete();
 		final CReplayWriter writer = new CReplayWriter(new BufferedOutputStream(written.write(false)), header);
 		this.recorder = new CReplayRecorder(simulation, writer, checksum);
 		CGameCache.setDisk(this.recorder.recordingDisk(CGameCache.profileDisk()));
@@ -43,6 +45,11 @@ public final class ReplayRecording implements ReplaySession {
 	 */
 	public void doNotSave() {
 		this.notSaved = true;
+	}
+
+	/** Where Capture a Bug keeps the moments of this game: beside the replay as it is written. */
+	public FileHandle marksFile() {
+		return GameMarks.of(this.written);
 	}
 
 	public boolean isSaved() {
@@ -71,11 +78,20 @@ public final class ReplayRecording implements ReplaySession {
 		if (this.written.equals(this.target)) {
 			return;
 		}
+		final FileHandle marks = GameMarks.of(this.written);
 		if (!isSaved()) {
 			this.written.delete();
+			marks.delete();
 		}
 		else if (complete) {
 			this.written.moveTo(this.target);
+			final FileHandle targetMarks = GameMarks.of(this.target);
+			if (marks.exists()) {
+				marks.moveTo(targetMarks);
+			}
+			else {
+				targetMarks.delete();
+			}
 		}
 	}
 
@@ -91,6 +107,10 @@ public final class ReplayRecording implements ReplaySession {
 		}
 		final FileHandle copy = GameReplays.folder().child(name + GameReplays.EXTENSION);
 		this.target.copyTo(copy);
+		final FileHandle marks = GameMarks.of(this.target);
+		if (marks.exists()) {
+			marks.copyTo(GameMarks.of(copy));
+		}
 		return copy;
 	}
 }

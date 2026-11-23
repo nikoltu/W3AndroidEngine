@@ -340,7 +340,23 @@ public class CAbilityAbilityBuilderActivePairing extends CAbilityAbilityBuilderG
 		if (checkTargetPrimeOrderId(game, unit, orderId) || checkTargetInternalOrderId(game, unit, orderId)) {
 			final CUnit targetUnit = target.visit(AbilityTargetVisitor.UNIT);
 
-			if ((targetUnit != null) && (unit.getPlayerIndex() != targetUnit.getPlayerIndex())) {
+			// Items and destructables reach this check from the pick filter and from script orders.
+			if (targetUnit == null) {
+				if ((this.config.getSpecialFields() != null)
+						&& (this.config.getSpecialFields().getPairUnitTypeError() != null)) {
+					receiver.targetCheckFailed(this.config.getSpecialFields().getPairUnitTypeError().getKey());
+				}
+				else if ((this.config.getSpecialFields() != null)
+						&& (this.config.getSpecialFields().getCantTargetError() != null)) {
+					receiver.targetCheckFailed(this.config.getSpecialFields().getCantTargetError().getKey());
+				}
+				else {
+					receiver.targetCheckFailed(CommandStringErrorKeys.UNABLE_TO_MERGE_WITH_THAT_UNIT);
+				}
+				return false;
+			}
+
+			if (unit.getPlayerIndex() != targetUnit.getPlayerIndex()) {
 				receiver.targetCheckFailed(CommandStringErrorKeys.MUST_TARGET_ONE_OF_YOUR_OWN_UNITS);
 				return false;
 			}

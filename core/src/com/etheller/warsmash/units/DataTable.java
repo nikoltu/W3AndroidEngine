@@ -597,7 +597,10 @@ public class DataTable implements ObjectData {
 		if (parentEntry != null) {
 			if (childEntry != null) {
 				for (final String key : parentEntry.keySet()) {
-					if (!childEntry.hasField(key)) {
+					// The tech requirement belongs to the rawcode itself: Sentinel without research and the Warlock's
+					// Unholy Frenzy do not take the research their base ability needs.
+					if (!childEntry.hasField(key) && !"Requires".equalsIgnoreCase(key)
+							&& !"Requiresamount".equalsIgnoreCase(key)) {
 						final List<String> fieldList = parentEntry.getFieldAsList(key);
 						for (int i = 0; i < fieldList.size(); i++) {
 							childEntry.setField(key, fieldList.get(i), i);

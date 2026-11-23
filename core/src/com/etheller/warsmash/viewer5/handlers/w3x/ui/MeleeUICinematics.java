@@ -34,6 +34,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.AnimationTokens.SecondaryTag;
 import com.etheller.warsmash.viewer5.handlers.w3x.SequenceUtils;
 import com.etheller.warsmash.viewer5.handlers.w3x.UnitSound;
 import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.RenderUnitType;
+import com.etheller.warsmash.viewer5.handlers.w3x.save.SavedInterfaceState;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayerColor;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.JassGameEventsWar3;
 
@@ -60,6 +61,8 @@ final class MeleeUICinematics {
 	private StringFrame cinematicDialogueText;
 	private boolean subtitleDisplayOverride;
 	private boolean cinematicPanelsHidden;
+	/** The scene a script last put on the screen, kept for a save until EndCinematicScene; null when there is none. */
+	private Scene scene;
 	private UIFrame cinematicScenePanel;
 	/** The Reforged stone frame art is in the data, so a Reforged portrait stands in it. */
 	private boolean reforgedPortraitFrame;
@@ -71,9 +74,12 @@ final class MeleeUICinematics {
 	}
 
 	void createCinematicPanel() {
+		this.ui.reforgedCinematics = this.ui.war3MapViewer.isReforgedGraphics();
+		if (!this.ui.reforgedCinematics) {
+			this.ui.rootFrame.expectMissingTexture("CinematicPanelBackground");
+		}
 		this.ui.cinematicPanel = this.ui.rootFrame.createFrame("CinematicPanel", this.ui.rootFrame, 0, 0);
 		this.ui.cinematicPanel.setVisible(false);
-		this.ui.reforgedCinematics = this.ui.war3MapViewer.isReforgedGraphics();
 		this.cinematicSpeakerText = (StringFrame) this.ui.rootFrame.getFrameByName("CinematicSpeakerText", 0);
 		this.ui.rootFrame.setText(this.cinematicSpeakerText, "");
 		this.cinematicDialogueText = (StringFrame) this.ui.rootFrame.getFrameByName("CinematicDialogueText", 0);
@@ -432,9 +438,12 @@ final class MeleeUICinematics {
 		}
 	}
 
-	/** Measured on 1.29: with the user interface disabled the world shows at about 0.36 of its brightness. */
-	boolean isUserUIDisabledDim() {
-		return !this.ui.userUIEnabled && !isInterfaceFading() && this.interfaceShown;
+	/**
+	 * Measured on 1.29: a dialog on the screen darkens the world and the buttons, the same with the user interface
+	 * enabled or disabled; EnableUserUI alone changes nothing on the screen.
+	 */
+	boolean isScriptDialogDim() {
+		return this.ui.isScriptDialogShown() && !isInterfaceFading() && this.interfaceShown;
 	}
 
 	boolean isInterfaceFading() {
@@ -489,6 +498,18 @@ final class MeleeUICinematics {
 		}
 	}
 
+	boolean isInterfaceShown() {
+		return this.interfaceShown;
+	}
+
+	boolean isCinematicPanelsHidden() {
+		return this.cinematicPanelsHidden;
+	}
+
+	boolean isSubtitleDisplayOverride() {
+		return this.subtitleDisplayOverride;
+	}
+
 	public void enableUserUI(final boolean enable) {
 		this.ui.userUIEnabled = enable;
 		applyInterfaceVisibility();
@@ -500,8 +521,7 @@ final class MeleeUICinematics {
 
 	/**
 	 * EnableUserUI(false) hides the game interface during a fade without entering cinematic mode, so the letterbox
-	 * follows ShowInterface alone. Outside a fade the interface stays and only the world is darkened (see
-	 * isUserUIDisabledDim).
+	 * follows ShowInterface alone. Outside a fade the interface stays as it is.
 	 */
 	private void applyInterfaceVisibility() {
 		if (isInterfaceFading()) {
@@ -539,8 +559,67 @@ final class MeleeUICinematics {
 		this.ui.updateWorldFrameViewport();
 	}
 
+	private static final class Scene {
+		final int portraitUnitId;
+		final CPlayerColor color;
+		final String speakerTitle;
+		final String text;
+		final float sceneDuration;
+		final float voiceoverDuration;
+		float elapsed;
+
+		Scene(final int portraitUnitId, final CPlayerColor color, final String speakerTitle, final String text,
+				final float sceneDuration, final float voiceoverDuration) {
+			this.portraitUnitId = portraitUnitId;
+			this.color = color;
+			this.speakerTitle = speakerTitle;
+			this.text = text;
+			this.sceneDuration = sceneDuration;
+			this.voiceoverDuration = voiceoverDuration;
+		}
+	}
+
+	void advanceScene(final float deltaTime) {
+		if (this.scene != null) {
+			this.scene.elapsed += deltaTime;
+		}
+	}
+
+	/** The scene and how long it has run, for a save. */
+	void captureScene(final SavedInterfaceState state) {
+		final Scene scene = this.scene;
+		if (scene != null) {
+			state.sceneActive = true;
+			state.sceneUnitId = scene.portraitUnitId;
+			state.sceneColor = scene.color == null ? -1 : scene.color.getHandleId();
+			state.sceneSpeaker = scene.speakerTitle;
+			state.sceneText = scene.text;
+			state.sceneDuration = scene.sceneDuration;
+			state.sceneVoiceover = scene.voiceoverDuration;
+			state.sceneElapsed = scene.elapsed;
+		}
+	}
+
+	void restoreScene(final SavedInterfaceState state) {
+		if (!state.sceneActive) {
+			return;
+		}
+		final CPlayerColor color = CPlayerColor.getColorByIndex(state.sceneColor);
+		final float left = Math.max(0, state.sceneDuration - state.sceneElapsed);
+		final float voiceLeft = Math.max(0, state.sceneVoiceover - state.sceneElapsed);
+		// Outside cinematic mode a scene that has run out leaves nothing on the screen; inside it the text stays
+		// until the script ends the scene.
+		if (color != null && (this.ui.cinematicPanel.isVisible() || (left > 0))) {
+			setCinematicScene(state.sceneUnitId, color, state.sceneSpeaker, state.sceneText, left, voiceLeft);
+			this.scene = new Scene(state.sceneUnitId, color, state.sceneSpeaker, state.sceneText,
+					state.sceneDuration, state.sceneVoiceover);
+			this.scene.elapsed = state.sceneElapsed;
+		}
+	}
+
 	public void setCinematicScene(final int portraitUnitId, final CPlayerColor color, final String speakerTitle,
 			final String text, final float sceneDuration, final float voiceoverDuration) {
+		this.scene = new Scene(portraitUnitId, color, speakerTitle, text, sceneDuration, voiceoverDuration);
 		final RenderUnitType unitTypeData = this.ui.war3MapViewer.getUnitTypeData(new War3ID(portraitUnitId));
 		if (this.ui.cinematicPanel.isVisible()) {
 			applyPortraitOption();
@@ -566,6 +645,7 @@ final class MeleeUICinematics {
 	}
 
 	public void endCinematicScene() {
+		this.scene = null;
 		this.ui.cinematicPortrait.endCinematicSequence();
 		this.ui.rootFrame.setText(this.cinematicSpeakerText, "");
 		this.ui.rootFrame.setText(this.cinematicDialogueText, "");

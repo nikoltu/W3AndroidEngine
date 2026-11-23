@@ -16,6 +16,7 @@ public final class DataErrors {
 	public static final String BAD_ENTRY = "bad data entry";
 	public static final String UNKNOWN_ID = "unknown id";
 	public static final String MISSING_STRING = "missing string";
+	public static final String BAD_TEXTURE = "undecodable texture";
 
 	private static final int MAX_ENTRIES = 4096;
 	private static final Map<String, int[]> COUNTS = new LinkedHashMap<>();
