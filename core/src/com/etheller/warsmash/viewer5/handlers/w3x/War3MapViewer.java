@@ -1595,6 +1595,13 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 				this.dncUnit.update(rawDeltaTime, null);
 			}
 
+			if (this.skyInstance != null) {
+				// The sky's animation is its day: the sun light's colour follows the time of day like the day and night light.
+				this.skyInstance.setFrameByRatio(
+						this.simulation.getGameTimeOfDay() / this.simulation.getGameplayConstants().getGameDayHours());
+				this.skyInstance.update(rawDeltaTime, null);
+			}
+
 			if (this.dncPortrait != null) {
 				this.dncPortrait.setFrameByRatio(timeOfDay / this.simulation.getGameplayConstants().getGameDayHours());
 				this.dncPortrait.update(rawDeltaTime, null);
@@ -2129,7 +2136,8 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 			return;
 		}
 		if (this.skyScene == null) {
-			this.skyScene = addSimpleScene();
+			// The sky is lit by its own sun light alone; the portrait scenes' default light would wash it out.
+			this.skyScene = addSimpleScene(new W3xScenePortraitLightManager(this.gl));
 			this.skyScene.alpha = true;
 			this.skyScene.unlit = true;
 		}
