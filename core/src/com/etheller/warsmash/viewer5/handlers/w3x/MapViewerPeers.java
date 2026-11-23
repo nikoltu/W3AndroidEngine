@@ -4,6 +4,7 @@ import com.badlogic.gdx.utils.IntMap;
 import com.etheller.warsmash.util.Log;
 import com.etheller.warsmash.util.PerfStats;
 import com.etheller.warsmash.util.War3ID;
+import com.etheller.warsmash.viewer5.handlers.w3x.simthread.AssetReadiness;
 import com.etheller.warsmash.viewer5.handlers.w3x.simthread.PeerQueue;
 import com.etheller.warsmash.viewer5.handlers.w3x.simthread.RenderEventPlayer;
 import com.etheller.warsmash.viewer5.handlers.w3x.simthread.WorldPeerData;
@@ -41,6 +42,12 @@ final class MapViewerPeers implements RenderEventPlayer.WorldPeers, PeerQueue.Bu
 		}
 	}
 
+	/** Whether the units made since wait for models that are loading. */
+	boolean waitingForModels() {
+		return AssetReadiness.ACTIVE && (this.queue.waitingForFiles() || this.viewer.typePrewarm.feed()
+				.anyColdTypeLoading(typeId -> this.viewer.renderUnitTypeData.isModelReady(typeId)));
+	}
+
 	/** Before the render thread does something that needs the peers of everything made so far. */
 	void flush() {
 		this.queue.flush();
@@ -76,8 +83,24 @@ final class MapViewerPeers implements RenderEventPlayer.WorldPeers, PeerQueue.Bu
 		}
 	}
 
+	@Override
+	public boolean ready(final Object data) {
+		return !(data instanceof WorldPeerData.Unit) || (this.viewer.renderUnitTypeData == null)
+				|| this.viewer.renderUnitTypeData.isModelReady(((WorldPeerData.Unit) data).typeId);
+	}
+
+	@Override
+	public void builtCold(final Object data) {
+		if (data instanceof WorldPeerData.Unit) {
+			this.viewer.typePrewarm.feed().noteCold(((WorldPeerData.Unit) data).typeId);
+		}
+	}
+
 	private void present(final int handle, final War3ID typeId) {
-		if (this.queue.present(handle)) {
+		// built ahead with its model still loading counts as late as one built now
+		if (this.queue.present(handle) || ((typeId != null) && (this.viewer.renderUnitTypeData != null)
+				&& this.viewer.typePrewarm.feed().isColdType(typeId)
+				&& !this.viewer.renderUnitTypeData.isModelReady(typeId))) {
 			PerfStats.latePeer(typeId == null ? "handle " + handle : typeId.toString());
 		}
 	}
@@ -101,6 +124,6 @@ final class MapViewerPeers implements RenderEventPlayer.WorldPeers, PeerQueue.Bu
 	}
 
 	String summary() {
-		return this.queue.summary();
+		return this.queue.summary() + " " + this.viewer.typePrewarm.feed().summary();
 	}
 }

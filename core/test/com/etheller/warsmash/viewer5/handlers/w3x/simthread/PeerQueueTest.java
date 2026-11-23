@@ -116,4 +116,44 @@ class PeerQueueTest {
 		this.queue.flush();
 		assertEquals(List.of(9), this.built);
 	}
+
+	@Test
+	void aPeerBuiltBeforeItsFilesAreLoadedIsCountedCold() {
+		final List<Integer> builtNow = new ArrayList<>();
+		final boolean[] ready = { false };
+		final PeerQueue cold = new PeerQueue(new PeerQueue.Builder() {
+			@Override
+			public void build(final int handle, final Object data) {
+				builtNow.add(handle);
+			}
+
+			@Override
+			public boolean ready(final Object data) {
+				return ready[0];
+			}
+		}, () -> 0L);
+		cold.announce(1, "a");
+		assertTrue(cold.waitingForFiles());
+		cold.beginFrame(1_000_000L, 2);
+		assertEquals(List.of(1), builtNow);
+		assertEquals(1, cold.cold());
+		assertFalse(cold.waitingForFiles());
+	}
+
+	@Test
+	void aPeerWhoseFilesAreLoadingCountsAsLateWhenItsEventComes() {
+		final PeerQueue late = new PeerQueue(new PeerQueue.Builder() {
+			@Override
+			public void build(final int handle, final Object data) {
+			}
+
+			@Override
+			public boolean ready(final Object data) {
+				return false;
+			}
+		}, () -> 0L);
+		late.announce(1, "a");
+		assertTrue(late.present(1));
+		assertEquals(1, late.late());
+	}
 }

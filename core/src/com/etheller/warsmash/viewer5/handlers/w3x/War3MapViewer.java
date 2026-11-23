@@ -1557,13 +1557,8 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 				finishReadyModels(MODEL_FINISH_SLICE_NANOS);
 			}
 			if (!this.gameEnded && (this.renderUnitTypeData != null)) {
-				if (isSimulationThreaded()) {
-					// it reads the units' queues; a frame the simulation is in a step it waits for the next
-					this.simThread.tryWhileHeld(() -> this.typePrewarm.update(this));
-				}
-				else {
-					this.typePrewarm.update(this);
-				}
+				// the simulation offers the types it needs, so no frame depends on the simulation's step
+				this.typePrewarm.update(this);
 				evictIdleUnitModels();
 			}
 			else if (this.gameEnded) {

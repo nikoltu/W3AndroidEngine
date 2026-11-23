@@ -231,6 +231,12 @@ public class RenderUnitTypeData extends RenderWidgetTypeData<RenderUnitType> {
 		return buildingPathingPixelMap;
 	}
 
+	/** Whether the type is made and its model loaded; nothing is loaded by asking. */
+	public boolean isModelReady(final War3ID key) {
+		final RenderUnitType type = peek(key);
+		return (type != null) && type.isModelReady();
+	}
+
 	/**
 	 * The unit type's answers, without loading its models as its render type would.
 	 *

@@ -88,6 +88,12 @@ public class RenderUnitType implements RenderWidgetType {
 		return this.model;
 	}
 
+	/** Whether the model is loaded and built, so that a unit made now shows it at once. */
+	boolean isModelReady() {
+		final MdxModel model = this.model;
+		return (model != null) && !model.isPending();
+	}
+
 	private static void claim(final MdxModel model) {
 		if ((model != null) && !"".equals(model.fetchUrl)) {
 			model.claim();

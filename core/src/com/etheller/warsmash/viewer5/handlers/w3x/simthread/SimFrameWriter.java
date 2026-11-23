@@ -58,6 +58,7 @@ public final class SimFrameWriter implements CSimulation.StepEndListener {
 	private boolean autoRelease;
 	private FrameVerifier verifier;
 	private BiConsumer<CSimulation, SimFrame> uiPart;
+	private java.util.function.Consumer<CSimulation> stepHook;
 	private ToIntFunction<CProjectile> projectileIds;
 
 	private long[] keys = new long[64];
@@ -125,6 +126,11 @@ public final class SimFrameWriter implements CSimulation.StepEndListener {
 	}
 
 	/** Fills the interface part of every frame, after the world part (the {@code UiFrameWriter}); null for none. */
+	/** Runs at the end of every step on the simulation thread, whether or not a frame is written. */
+	public void setStepHook(final java.util.function.Consumer<CSimulation> stepHook) {
+		this.stepHook = stepHook;
+	}
+
 	public void setUiPart(final BiConsumer<CSimulation, SimFrame> uiPart) {
 		this.uiPart = uiPart;
 	}
@@ -164,6 +170,9 @@ public final class SimFrameWriter implements CSimulation.StepEndListener {
 
 	@Override
 	public void onStepEnd(final CSimulation simulation) {
+		if (this.stepHook != null) {
+			this.stepHook.accept(simulation);
+		}
 		if (this.ring == null) {
 			return;
 		}

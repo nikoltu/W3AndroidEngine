@@ -69,6 +69,7 @@ final class MapViewerSimWorld implements BufferingRenderController.WorldFactory 
 		final BufferedAnimationListener listener = new BufferedAnimationListener(this.sink, handle);
 		listener.seedSecondaryTags(requiredAnimationTags(this.viewer.allObjectData.getUnits().get(typeId)));
 		data.unit.setUnitAnimationListener(listener);
+		MapViewerTypePrewarm.offer(this.viewer.typePrewarm.feed(), typeId, data.unit.getUnitType(), true);
 		announced(handle, data);
 		return data.unit;
 	}

@@ -40,6 +40,8 @@ public final class PresentationClockImpl implements PresentationClock {
 	/** The longest the picture is carried past the newest frame before it is held. */
 	public static final long EXTRAPOLATION_LIMIT_MILLIS = 300;
 	private static final float CATCH_UP = 1.25f;
+	/** The most real time one wait for models slows the clock. */
+	private static final double MODEL_WAIT_MILLIS = 300;
 	/** A gap this large (a load, a long hitch) is crossed by one jump to the normal distance behind the newest frame. */
 	private static final long JUMP_MILLIS = 1000;
 
@@ -62,6 +64,9 @@ public final class PresentationClockImpl implements PresentationClock {
 	private long extrapolated;
 	private float timeScale = 1f;
 	private boolean paused;
+	private boolean modelWait;
+	/** Real time the clock may still run slow for models in this wait. */
+	private double modelWaitBudgetMillis = MODEL_WAIT_MILLIS;
 	private BufferedWriter trace;
 	private int traceUnit;
 	private boolean traceAuto;
@@ -166,6 +171,15 @@ public final class PresentationClockImpl implements PresentationClock {
 		else if ((advance > 0) && ((distance - advance) < (DELAY_MILLIS / 2f))) {
 			// keep half a step in hand after this frame, as far as the floor allows
 			slow = (float) Math.max(SLOW_FLOOR, Math.min(1.0, (distance - (DELAY_MILLIS / 2f)) / advance));
+		}
+		if (this.modelWait && (advance > 0) && (slow > SLOW_FLOOR)) {
+			if (this.modelWaitBudgetMillis > 0) {
+				slow = SLOW_FLOOR;
+				this.modelWaitBudgetMillis -= realMillis;
+			}
+		}
+		else if (!this.modelWait) {
+			this.modelWaitBudgetMillis = MODEL_WAIT_MILLIS;
 		}
 		boolean held = false;
 		if (this.paused || newest.paused) {
@@ -342,6 +356,11 @@ public final class PresentationClockImpl implements PresentationClock {
 	/** Releases the frames the clock is past, but never one the caller has not played yet. */
 	public void releaseConsumed(final long playedUpTo) {
 		this.ring.release(Math.min(retainFromSequence(), playedUpTo));
+	}
+
+	@Override
+	public void setModelWait(final boolean waiting) {
+		this.modelWait = waiting;
 	}
 
 	@Override

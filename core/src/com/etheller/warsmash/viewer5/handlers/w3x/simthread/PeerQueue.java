@@ -25,6 +25,16 @@ public final class PeerQueue {
 	/** Builds the peer of an announced object. Render thread. */
 	public interface Builder {
 		void build(int handle, Object data);
+
+		/** Whether what the peer is built from is loaded, so that building it does not wait for a file. */
+		default boolean ready(final Object data) {
+			return true;
+		}
+
+		/** A peer is built with what it needs not loaded yet. */
+		default void builtCold(final Object data) {
+		}
+
 	}
 
 	private static final class Item {
@@ -49,6 +59,7 @@ public final class PeerQueue {
 	private long builtEarly;
 	private long builtAtEvent;
 	private long late;
+	private long cold;
 	private long maxWaitFrames;
 	private long totalBuildNanos;
 	private long frameBuildNanos;
@@ -80,6 +91,10 @@ public final class PeerQueue {
 
 	private long buildHead() {
 		final Item item = this.waiting.poll();
+		if (!this.builder.ready(item.data)) {
+			this.builder.builtCold(item.data);
+			this.cold++;
+		}
 		this.waitingByHandle.remove(item.handle);
 		this.maxWaitFrames = Math.max(this.maxWaitFrames, this.frame - item.announcedFrame);
 		final long start = this.nanos.getAsLong();
@@ -136,7 +151,7 @@ public final class PeerQueue {
 		if (item == null) {
 			return false;
 		}
-		final boolean wasLate = item.announcedFrame < this.frame;
+		final boolean wasLate = (item.announcedFrame < this.frame) || !this.builder.ready(item.data);
 		while (!this.waiting.isEmpty()) {
 			final boolean target = this.waiting.peek() == item;
 			buildHead();
@@ -150,6 +165,21 @@ public final class PeerQueue {
 			this.late++;
 		}
 		return wasLate;
+	}
+
+	/** Whether a waiting peer needs something that is still loading (looks at the first few that wait). */
+	public boolean waitingForFiles() {
+		takeIncoming();
+		int looked = 0;
+		for (final Item item : this.waiting) {
+			if (!this.builder.ready(item.data)) {
+				return true;
+			}
+			if (++looked >= 64) {
+				break;
+			}
+		}
+		return false;
 	}
 
 	/** Whether the object is announced and has no peer yet. */
@@ -169,6 +199,11 @@ public final class PeerQueue {
 
 	public long builtAtEvent() {
 		return this.builtAtEvent;
+	}
+
+	/** Peers that were built before the files they need were loaded. */
+	public long cold() {
+		return this.cold;
 	}
 
 	public long late() {
@@ -194,7 +229,7 @@ public final class PeerQueue {
 
 	public String summary() {
 		return "peers built=" + (this.builtEarly + this.builtAtEvent) + " early=" + this.builtEarly + " atEvent="
-				+ this.builtAtEvent + " late=" + this.late + " maxWaitFrames=" + this.maxWaitFrames + " buildMs="
+				+ this.builtAtEvent + " late=" + this.late + " cold=" + this.cold + " maxWaitFrames=" + this.maxWaitFrames + " buildMs="
 				+ (this.totalBuildNanos / 1_000_000L) + " maxFrameBuildMs=" + (maxFrameBuildNanos() / 1_000_000L)
 				+ " maxPerFrame=" + maxBuiltPerFrame();
 	}

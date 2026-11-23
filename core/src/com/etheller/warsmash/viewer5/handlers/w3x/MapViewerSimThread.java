@@ -251,6 +251,7 @@ final class MapViewerSimThread {
 		this.simulation = simulation;
 		this.writer = new SimFrameWriter(this.ring, this.viewer.localPlayerIndex);
 		this.writer.setUiPart(this::writeUi);
+		this.writer.setStepHook(this.viewer.typePrewarm::onStep);
 		this.writer.setProjectileIds(this.buffering::projectileId);
 		simulation.setStepEndListener(this.writer);
 		this.clock = new PresentationClockImpl(this.ring);
@@ -300,6 +301,7 @@ final class MapViewerSimThread {
 			return;
 		}
 		this.peers.beginFrame();
+		modelWait();
 		if ((this.writer != null) && (this.ring.publishedCount() == 0)) {
 			// the presentation clock has nothing to show the world from until a frame exists
 			this.thread.run(() -> this.writer.onStepEnd(this.simulation));
@@ -448,6 +450,13 @@ final class MapViewerSimThread {
 			finally {
 				this.free.release();
 			}
+		}
+		modelWait();
+	}
+
+	private void modelWait() {
+		if (this.clock != null) {
+			this.clock.setModelWait(this.peers.waitingForModels());
 		}
 	}
 

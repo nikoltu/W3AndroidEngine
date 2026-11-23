@@ -67,6 +67,13 @@ public interface PresentationClock {
 	/** Pauses or resumes the clock; the simulation's own pause arrives in the frames. */
 	void setPaused(boolean paused);
 
+	/**
+	 * Whether units the simulation made are waiting for their models to load: the clock then runs slower, within a
+	 * limit, so that the units are not shown later than the moment they were made at.
+	 */
+	default void setModelWait(final boolean waiting) {
+	}
+
 	/** Jumps to a game time after a load or a fast-forward, dropping the history. */
 	void reset(long gameTimeMillis);
 }

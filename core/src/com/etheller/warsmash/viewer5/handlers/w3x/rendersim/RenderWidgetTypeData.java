@@ -29,6 +29,11 @@ public abstract class RenderWidgetTypeData<T> {
 		return this.unitIdToTypeData.values();
 	}
 
+	/** The type if it was made already, else null; nothing is loaded. */
+	protected final T peek(final War3ID key) {
+		return this.unitIdToTypeData.get(key);
+	}
+
 	public final T get(War3ID key) {
 		T unitTypeData = this.unitIdToTypeData.get(key);
 		if (unitTypeData != null) {
