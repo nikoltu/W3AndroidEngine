@@ -37,6 +37,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CWidget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.CAbility;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.generic.CBuff;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.harvest.CAbilityHarvest;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.mine.CAbilityEntangledMine;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.neutral.CAbilityWayGate;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.orc.units.CBuffEnsnare;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.util.CBuffTimedLife;
@@ -1478,6 +1479,11 @@ final class UnitNatives extends CommonNatives {
 						// that is uprooting or rooting still reads that order.
 						orderId = 0;
 					}
+					else if ((whichUnit != null) && whichUnit.isPaused() && whichUnit.isHidden()
+							&& isInEntangledMine(whichUnit)) {
+						// 1.29: a Wisp inside the Entangled Gold Mine still reads harvest.
+						orderId = OrderIds.harvest;
+					}
 					else if ((whichUnit != null) && whichUnit.isPaused() && whichUnit.isHidden() && isLoaded(whichUnit)) {
 						// 1.29: a unit inside a transport has no order.
 						orderId = 0;
@@ -1815,6 +1821,15 @@ final class UnitNatives extends CommonNatives {
 		}
 		final CAbilityShadowmeld shadowmeld = unit.getFirstAbilityOfType(CAbilityShadowmeld.class);
 		return (shadowmeld != null) && shadowmeld.isUnseenAfterCreation(this.simulation);
+	}
+
+	private boolean isInEntangledMine(final CUnit unit) {
+		for (final CUnit transport : this.simulation.getUnitsIncludingNew()) {
+			if ((transport.getCargoData() != null) && transport.getCargoData().contains(unit)) {
+				return transport.getFirstAbilityOfType(CAbilityEntangledMine.class) != null;
+			}
+		}
+		return false;
 	}
 
 	private boolean isLoaded(final CUnit unit) {

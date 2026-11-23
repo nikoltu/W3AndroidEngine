@@ -49,6 +49,7 @@ public class AIController {
 	boolean harvestPassPending;
 	int harvestCallTick;
 	final Set<CUnit> harvestUnsent = new LinkedHashSet<>();
+	final Map<CUnit, int[]> harvestLeftoverWisps = new LinkedHashMap<>();
 	CUnit harvestStarter;
 	boolean harvestStarterChosen;
 	final Map<Integer, List<CDestructable>> townTrees = new HashMap<>();
