@@ -7,12 +7,22 @@ public class FrameTemplateEnvironment {
 	private final Map<String, String> idToDecoratedString = new HashMap<>();
 	private Map<String, FrameDefinition> idToFrame = new HashMap<>();
 	private Runnable reloader;
+	private Map<String, String> overrides = new HashMap<>();
 
 	public void addDecoratedString(final String id, final String value) {
 		this.idToDecoratedString.put(id, value);
 	}
 
+	/** Strings a map's own skin file sets: they replace the interface's strings of the same name, whenever those are read. */
+	public void putOverride(final String id, final String value) {
+		this.overrides.put(id, value);
+	}
+
 	public String getDecoratedString(final String id) {
+		final String override = this.overrides.get(id);
+		if (override != null) {
+			return override;
+		}
 		final String decoratedString = this.idToDecoratedString.get(id);
 		if (decoratedString != null) {
 			return decoratedString;

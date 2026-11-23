@@ -799,7 +799,7 @@ public class CUnitData {
 				neutralBuildingShowMinimapIcon, tilesets, special);
 		unitTypeInstance.setCanSleep(unitType.getFieldAsBoolean(CAN_SLEEP, 0));
 		unitTypeInstance.setOrientationInterpolation(unitType.getFieldAsInteger(ORIENTATION_INTERPOLATION, 0));
-		unitTypeInstance.setStock(unitType.getFieldAsInteger(STOCK_MAX, 0),
+		unitTypeInstance.setStock(stockMaxOf(unitType),
 				unitType.getFieldAsInteger(STOCK_REPLENISH_INTERVAL, 0),
 				unitType.getFieldAsInteger(STOCK_START_DELAY, 0), unitType.getFieldAsInteger(STOCK_INITIAL, 0));
 		applyTechEquivalents(unitTypeInstance);
@@ -1186,6 +1186,11 @@ public class CUnitData {
 	 * the data without making the whole unit type: a shop only needs these when it is made, and the type is made when
 	 * something else asks for it. Null for a type the game does not have.
 	 */
+	/** Measured on 1.29: a sold unit whose data leaves the maximum stock blank has a stock of one. */
+	private static int stockMaxOf(final GameObject unitType) {
+		return Math.max(1, unitType.getFieldAsInteger(STOCK_MAX, 0));
+	}
+
 	public int[] getStockData(final War3ID rawcode) {
 		final CUnitType made = this.unitIdToUnitType.get(rawcode);
 		if (made != null) {
@@ -1198,7 +1203,7 @@ public class CUnitData {
 			if ((unitType == null) || WarsmashConstants.isOutOfMapVersion(unitType, this.mapGameVersion)) {
 				return null;
 			}
-			stock = new int[] { unitType.getFieldAsInteger(STOCK_MAX, 0),
+			stock = new int[] { stockMaxOf(unitType),
 					unitType.getFieldAsInteger(STOCK_REPLENISH_INTERVAL, 0),
 					unitType.getFieldAsInteger(STOCK_START_DELAY, 0), unitType.getFieldAsInteger(STOCK_INITIAL, 0) };
 			this.unitIdToStockData.put(rawcode, stock);

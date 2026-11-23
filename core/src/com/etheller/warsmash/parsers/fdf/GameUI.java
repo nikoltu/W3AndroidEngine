@@ -153,6 +153,12 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 		this.fdfCoordinateResolutionDummyViewport = new FitViewport(0.8f, 0.6f);
 		this.skinData = skin.getSkinsTable();
 		this.errorStrings = this.skinData.get("Errors");
+		final Element frameStrings = this.skinData.get("FrameDef");
+		if (frameStrings != null) {
+			for (final String key : frameStrings.keySet()) {
+				this.templates.putOverride(key, frameStrings.getField(key));
+			}
+		}
 		this.glyphLayout = new GlyphLayout();
 		this.mapStrings = mapStrings;
 	}
