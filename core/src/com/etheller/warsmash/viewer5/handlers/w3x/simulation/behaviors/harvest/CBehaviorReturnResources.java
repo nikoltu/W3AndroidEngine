@@ -18,6 +18,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.CBehavior
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.CBehaviorCategory;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.orders.OrderIds;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayer;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.ResourceType;
 
 public class CBehaviorReturnResources extends CAbstractRangedBehavior implements AbilityTargetVisitor<CBehavior> {
 	private final CAbilityHarvest abilityHarvest;
@@ -69,7 +70,10 @@ public class CBehaviorReturnResources extends CAbstractRangedBehavior implements
 					CWidget nextTarget = null;
 					int received = this.abilityHarvest.getCarriedResourceAmount();
 					if (player.getAiScript() != null) {
-						received = player.getAiScript().getController().scaleHarvestedAmount(received);
+						received = player.getAiScript().getController().scaleHarvestedAmount(received,
+								this.abilityHarvest.getCarriedResourceType() == ResourceType.LUMBER
+										? this.abilityHarvest.getLumberCapacity()
+										: this.abilityHarvest.getGoldCapacity());
 					}
 					switch (this.abilityHarvest.getCarriedResourceType()) {
 					case FOOD:
