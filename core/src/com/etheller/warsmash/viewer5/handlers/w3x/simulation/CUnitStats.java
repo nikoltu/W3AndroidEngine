@@ -735,7 +735,10 @@ final class CUnitStats {
 					self.stats.baseMaximumLife);
 			final int newMaxLife = Math.round((self.stats.baseMaximumLife + totalNSMaxHPBuff) * self.handicap);
 			if (newMaxLife > self.stats.maximumLife) {
-				self.life += newMaxLife - self.stats.maximumLife;
+				// A corpse stays at 0 life; raising it would bring the unit back from the dead and kill it again.
+				if (!self.isDead()) {
+					self.life += newMaxLife - self.stats.maximumLife;
+				}
 				self.stats.maximumLife = newMaxLife;
 			} else {
 				self.stats.maximumLife = newMaxLife;

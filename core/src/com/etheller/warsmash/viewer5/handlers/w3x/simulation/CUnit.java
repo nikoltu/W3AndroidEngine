@@ -773,7 +773,9 @@ public class CUnit extends CWidget {
 		final int oldMaximumLife = getMaximumLife();
 		final float oldLife = getLife();
 		setMaximumLife(this.stats.baseMaximumLife + hitPointBonus);
-		setLife(game, (oldLife * getMaximumLife()) / oldMaximumLife);
+		if (oldLife > 0) {
+			setLife(game, (oldLife * getMaximumLife()) / oldMaximumLife);
+		}
 	}
 
 	/**
