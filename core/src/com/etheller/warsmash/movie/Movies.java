@@ -93,17 +93,9 @@ public final class Movies {
 		return new Movie(name, video, audio, captions, () -> captionFonts(data));
 	}
 
-	/** The fonts the captions can be drawn in: the game's own, then the computer's. */
-	private static List<File> captionFonts(final DataSource data) {
-		// The game's own fonts, the interface font first and then the ones its other languages use (Cyrillic, Chinese,
-		// Korean); the Latin one lacks their letters.
-		final String[] gameFonts = { "Fonts\\FRIZQT__.TTF", "Fonts\\NIM_____.TTF",
-				"Fonts\\ARHEIU20M.TTF", "Fonts\\ARHEIU20_MD.TTF", "Fonts\\ARHEIGB_BD.TTF", "Fonts\\GHEI00B_T.TTF",
-				"Fonts\\DFHEIMD.TTF", "Fonts\\DFHEILT.TTF", "Fonts\\DFST-M3U.TTF", "Fonts\\TT5500M_.TTF",
-				"Fonts\\2002.TTF", "Fonts\\2002B.TTF", "Fonts\\DFKGOTHICMD.TTF", "Fonts\\ULEI00M.TTF",
-				"Fonts\\BlizzardGlobal-v5_4.ttf" };
-		// Fonts of the computer that cover the scripts the game's own fonts miss: Windows, macOS, then Linux.
-		final String[] computerFonts = { "C:/Windows/Fonts/msyh.ttc", "C:/Windows/Fonts/malgun.ttf",
+	/** Fonts of the computer that cover the scripts the game's own fonts miss: Windows, macOS, then Linux. */
+	public static String[] computerFontPaths() {
+		return new String[] { "C:/Windows/Fonts/msyh.ttc", "C:/Windows/Fonts/malgun.ttf",
 				"C:/Windows/Fonts/msjh.ttc", "C:/Windows/Fonts/YuGothM.ttc", "C:/Windows/Fonts/YuGothR.ttc",
 				"C:/Windows/Fonts/meiryo.ttc", "C:/Windows/Fonts/msgothic.ttc", "C:/Windows/Fonts/BIZ-UDGothicR.ttc",
 				"C:/Windows/Fonts/simsun.ttc", "C:/Windows/Fonts/segoeui.ttf", "C:/Windows/Fonts/arial.ttf",
@@ -122,6 +114,18 @@ public final class Movies {
 				"/usr/share/fonts/truetype/wqy/wqy-microhei.ttc", "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
 				"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/dejavu/DejaVuSans.ttf",
 				"/usr/share/fonts/TTF/DejaVuSans.ttf", "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf" };
+	}
+
+	/** The fonts the captions can be drawn in: the game's own, then the computer's. */
+	private static List<File> captionFonts(final DataSource data) {
+		// The game's own fonts, the interface font first and then the ones its other languages use (Cyrillic, Chinese,
+		// Korean); the Latin one lacks their letters.
+		final String[] gameFonts = { "Fonts\\FRIZQT__.TTF", "Fonts\\NIM_____.TTF",
+				"Fonts\\ARHEIU20M.TTF", "Fonts\\ARHEIU20_MD.TTF", "Fonts\\ARHEIGB_BD.TTF", "Fonts\\GHEI00B_T.TTF",
+				"Fonts\\DFHEIMD.TTF", "Fonts\\DFHEILT.TTF", "Fonts\\DFST-M3U.TTF", "Fonts\\TT5500M_.TTF",
+				"Fonts\\2002.TTF", "Fonts\\2002B.TTF", "Fonts\\DFKGOTHICMD.TTF", "Fonts\\ULEI00M.TTF",
+				"Fonts\\BlizzardGlobal-v5_4.ttf" };
+		final String[] computerFonts = computerFontPaths();
 		final List<File> fonts = new ArrayList<>();
 		for (final String path : gameFonts) {
 			final File font = file(data, path);

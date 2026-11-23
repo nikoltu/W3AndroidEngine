@@ -1318,6 +1318,10 @@ public class MdxComplexInstance extends ModelInstance implements SceneUpdateWork
 	 * @param ray
 	 */
 	public boolean intersectRayWithCollisionSimple(final Ray ray, final Vector3 intersection) {
+		// A model that finishes loading late loads its instances afterwards; until then they have no nodes.
+		if (this.nodes == null) {
+			return false;
+		}
 		final MdxModel mdxModel = (MdxModel) this.model;
 		final List<CollisionShape> collisionShapes = mdxModel.collisionShapes;
 		boolean intersected = false;
@@ -1372,6 +1376,9 @@ public class MdxComplexInstance extends ModelInstance implements SceneUpdateWork
 	 */
 	public boolean intersectRayWithCollision(final Ray ray, final Vector3 intersection, final boolean alwaysUseMesh,
 			final boolean onlyUseMesh) {
+		if (this.nodes == null) {
+			return false;
+		}
 		final MdxModel mdxModel = (MdxModel) this.model;
 		final List<CollisionShape> collisionShapes = mdxModel.collisionShapes;
 		final float[] alphaHeap = SceneUpdateWorkers.heaps().alpha;
