@@ -223,6 +223,16 @@ public abstract class ModelViewer {
 		return this.pendingModels.size();
 	}
 
+	/** Whether a pending model is waiting that units are about to be shown with, see {@link Model#setUrgent}. */
+	public boolean hasUrgentPendingModels() {
+		for (final Model<?> model : this.pendingModels) {
+			if (model.isUrgent()) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	/**
 	 * Builds the models whose files are read and parsed, the oldest first, a unit of work (a texture, a geoset, a
 	 * node) at a time while the time lasts; at least one unit when a model is ready, none waits for its helper.
@@ -232,12 +242,26 @@ public abstract class ModelViewer {
 		startWaitingPreparations(end);
 		while (true) {
 			Model<?> next = this.building;
-			if (next == null) {
+			if ((next == null) || !next.isUrgent()) {
+				// the models of units about to be shown go first, also past one that is half built
+				Model<?> first = null;
+				Model<?> urgent = null;
 				for (final Model<?> model : this.pendingModels) {
 					if ((model.lazySource == null) && model.isPrepared()) {
-						next = model;
-						break;
+						if (model.isUrgent()) {
+							urgent = model;
+							break;
+						}
+						if (first == null) {
+							first = model;
+						}
 					}
+				}
+				if (urgent != null) {
+					next = urgent;
+				}
+				else if (next == null) {
+					next = first;
 				}
 				if (next == null) {
 					return;
@@ -260,16 +284,21 @@ public abstract class ModelViewer {
 			return;
 		}
 		final List<Model<?>> loadedNow = new ArrayList<>();
-		for (final Model<?> model : this.pendingModels) {
-			if (model.lazySource != null) {
-				if (!mayStartPreparation()) {
-					break;
-				}
-				if (!startPreparation(model)) {
-					loadedNow.add(model);
-				}
-				if (System.nanoTime() >= end) {
-					break;
+		for (int pass = 0; pass < 2; pass++) {
+			final boolean urgentPass = pass == 0;
+			for (final Model<?> model : this.pendingModels) {
+				if ((model.lazySource != null) && (model.isUrgent() == urgentPass)) {
+					if (!mayStartPreparation()) {
+						pass = 2;
+						break;
+					}
+					if (!startPreparation(model)) {
+						loadedNow.add(model);
+					}
+					if (System.nanoTime() >= end) {
+						pass = 2;
+						break;
+					}
 				}
 			}
 		}
@@ -431,6 +460,7 @@ public abstract class ModelViewer {
 			this.building = null;
 		}
 		model.setPending(false);
+		model.setUrgent(false);
 		model.preloadedInstances = new ArrayList<>();
 		model.waitingLoaded = 0;
 		final long nanos = model.buildNanos;

@@ -132,6 +132,14 @@ public class RenderUnitType implements RenderWidgetType {
 		return model.release() ? model : null;
 	}
 
+	/** Has the models a unit is shown with built before the other pending ones: a unit of the type was just made. */
+	public void prioritizeModels() {
+		getModel().setUrgent(true);
+		if (this.specialArtModel != null) {
+			this.specialArtModel.setUrgent(true);
+		}
+	}
+
 	/** Made when first asked for: most types are never selected, and their portraits would be read for nothing. */
 	public MdxModel getPortraitModel() {
 		if (!this.portraitLoaded) {

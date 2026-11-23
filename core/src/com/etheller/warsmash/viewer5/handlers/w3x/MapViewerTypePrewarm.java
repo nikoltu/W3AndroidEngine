@@ -1,5 +1,6 @@
 package com.etheller.warsmash.viewer5.handlers.w3x;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -28,6 +29,10 @@ final class MapViewerTypePrewarm {
 	/** Frames between looks at the queues: a production takes seconds, so a few frames late costs nothing. */
 	private static final int POLL_FRAMES = 15;
 	private static final long UPLOAD_SLICE_NANOS = 1_000_000;
+	/** The same while the models of units just made are loading: they draw nothing until their textures are up. */
+	private static final long URGENT_UPLOAD_SLICE_NANOS = 3_000_000;
+	/** Frames after a unit's type was taken in which its textures may use the larger slice. */
+	private static final int URGENT_FRAMES = 40;
 
 	/** Steps between looks at the queues when the simulation thread does them: a production takes seconds. */
 	private static final int SCAN_STEPS = 8;
@@ -37,6 +42,9 @@ final class MapViewerTypePrewarm {
 	private final AssetReadiness feed = new AssetReadiness();
 	private int framesToPoll;
 	private int stepsToScan;
+	private int urgentFrames;
+	/** Types whose model is loaded for a unit just made, and whose portrait, sounds and projectiles wait for a quiet frame. */
+	private final ArrayDeque<War3ID> extras = new ArrayDeque<>();
 
 	/** What the simulation tells the render side about the types it needs; see {@link AssetReadiness}. */
 	AssetReadiness feed() {
@@ -81,22 +89,36 @@ final class MapViewerTypePrewarm {
 	}
 
 	/**
-	 * One step a frame: the uploads of the prepared textures of models loaded since, as many as fit in a slice, or else
-	 * the model of the next type.
+	 * Start of a frame: the models of the units the simulation just made are asked for, so that their files are read
+	 * while the frame goes on and the models are built at its end, before the next frame plays the units' events.
 	 */
-	void update(final War3MapViewer viewer) {
+	void loadUrgent(final War3MapViewer viewer) {
 		final long urgentEnd = System.nanoTime() + URGENT_SLICE_NANOS;
 		War3ID made;
 		while ((made = this.feed.pollUrgent()) != null) {
 			if (!viewer.renderUnitTypeData.isModelReady(made)) {
-				load(viewer, made);
+				loadModel(viewer, made, true);
+				this.extras.add(made);
+				this.urgentFrames = URGENT_FRAMES;
 			}
 			if (System.nanoTime() >= urgentEnd) {
 				break;
 			}
 		}
+	}
+
+	/**
+	 * One step a frame: the uploads of the prepared textures of models loaded since, as many as fit in a slice, or else
+	 * the model of the next type.
+	 */
+	void update(final War3MapViewer viewer) {
+		loadUrgent(viewer);
+		if (this.urgentFrames > 0) {
+			this.urgentFrames--;
+		}
 		if (viewer.hasDeferredTextures()) {
-			final long end = System.nanoTime() + UPLOAD_SLICE_NANOS;
+			final long end = System.nanoTime()
+					+ (isUrgentLoading(viewer) ? URGENT_UPLOAD_SLICE_NANOS : UPLOAD_SLICE_NANOS);
 			while (viewer.finishReadyDeferredTexture() && (System.nanoTime() < end)) {
 			}
 			if (viewer.hasDeferredTextures()) {
@@ -109,8 +131,17 @@ final class MapViewerTypePrewarm {
 		}
 		final War3ID typeId = this.feed.pollPlanned();
 		if (typeId != null) {
-			load(viewer, typeId);
+			loadModel(viewer, typeId, false);
+			loadExtras(viewer, typeId);
 		}
+		else if (!this.extras.isEmpty() && !viewer.hasUrgentPendingModels()) {
+			loadExtras(viewer, this.extras.poll());
+		}
+	}
+
+	/** Whether models of units just made are loading, which the frame spends more of its time on. */
+	boolean isUrgentLoading(final War3MapViewer viewer) {
+		return (this.urgentFrames > 0) || viewer.hasUrgentPendingModels();
 	}
 
 	private static void scan(final CSimulation simulation, final AssetReadiness feed) {
@@ -139,7 +170,26 @@ final class MapViewerTypePrewarm {
 		}
 	}
 
-	private void load(final War3MapViewer viewer, final War3ID typeId) {
+	/** The type and its model, read on a helper thread and built in the frames after; the first thing a unit needs. */
+	private void loadModel(final War3MapViewer viewer, final War3ID typeId, final boolean urgent) {
+		final boolean before = viewer.setDeferTextureLoads(true);
+		try {
+			final RenderUnitType renderType = viewer.renderUnitTypeData.get(typeId);
+			if (urgent && (renderType != null)) {
+				renderType.prioritizeModels();
+			}
+		}
+		catch (final RuntimeException e) {
+			// The type is made again when its unit comes, and fails there as it would have anyway.
+			Log.error(e);
+		}
+		finally {
+			viewer.setDeferTextureLoads(before);
+		}
+	}
+
+	/** What a unit needs later than its model: the portrait, the sounds and the models its attacks launch. */
+	private void loadExtras(final War3MapViewer viewer, final War3ID typeId) {
 		final boolean before = viewer.setDeferTextureLoads(true);
 		try {
 			final RenderUnitType renderType = viewer.renderUnitTypeData.get(typeId);
@@ -147,7 +197,7 @@ final class MapViewerTypePrewarm {
 				renderType.getPortraitModel();
 			}
 			for (final String art : this.feed.art(typeId)) {
-				viewer.loadModelMdx(art);
+				viewer.loadWaitingModelMdx(art);
 			}
 			final UnitSoundset soundset = viewer.renderUnitTypeData.getSoundset(typeId);
 			if (soundset != null) {
@@ -156,7 +206,6 @@ final class MapViewerTypePrewarm {
 			}
 		}
 		catch (final RuntimeException e) {
-			// The type is made again when its unit comes, and fails there as it would have anyway.
 			Log.error(e);
 		}
 		finally {

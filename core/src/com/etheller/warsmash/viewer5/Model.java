@@ -18,6 +18,8 @@ public abstract class Model<HANDLER extends ModelHandler> extends HandlerResourc
 	/** Whether the build of a pending model is done and its waiting instances are being loaded. */
 	boolean built;
 	int waitingLoaded;
+	/** Whether units of the model are about to be shown, so that it is built before the models nobody waits for. */
+	private boolean urgent;
 	/** Whether a step of the model's build is running now. */
 	boolean stepping;
 	long buildNanos;
@@ -43,6 +45,15 @@ public abstract class Model<HANDLER extends ModelHandler> extends HandlerResourc
 	}
 
 	protected abstract ModelInstance createInstance(int type);
+
+	/** Asks for the model to be read and built ahead of the other pending models; ends when it is built. */
+	public void setUrgent(final boolean urgent) {
+		this.urgent = urgent && this.pending;
+	}
+
+	public boolean isUrgent() {
+		return this.urgent;
+	}
 
 	public ModelInstance addInstance() {
 		return addInstance(0);

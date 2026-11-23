@@ -220,6 +220,8 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 	private volatile int pauseSources;
 	/** The models read on helper threads that are built in one frame: one at least, more while this lasts. */
 	private static final long MODEL_FINISH_SLICE_NANOS = 2_000_000L;
+	/** The same while the models of units just made are built: those units show nothing until then. */
+	private static final long URGENT_MODEL_FINISH_SLICE_NANOS = 6_000_000L;
 	/** Up to the first fog update, 0.4 s into the game, the last of the game's slow first steps. */
 	private static final int OPENING_STEPS = 8;
 	private static final int FIRST_FRAME_SHADOWS = 0;
@@ -1554,7 +1556,7 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 				this.mapFog.update();
 			}
 			if (hasPendingModels()) {
-				finishReadyModels(MODEL_FINISH_SLICE_NANOS);
+				finishReadyModels(hasUrgentPendingModels() ? URGENT_MODEL_FINISH_SLICE_NANOS : MODEL_FINISH_SLICE_NANOS);
 			}
 			if (!this.gameEnded && (this.renderUnitTypeData != null)) {
 				// the simulation offers the types it needs, so no frame depends on the simulation's step
@@ -1789,6 +1791,9 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 	void beginSimulationFrame() {
 		if (this.simThread != null) {
 			this.simThread.beforeFrame();
+			if (!this.gameEnded && (this.renderUnitTypeData != null)) {
+				this.typePrewarm.loadUrgent(this);
+			}
 		}
 	}
 
