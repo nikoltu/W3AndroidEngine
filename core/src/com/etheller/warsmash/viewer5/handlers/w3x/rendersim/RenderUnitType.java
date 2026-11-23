@@ -1,6 +1,7 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.rendersim;
 
 import java.util.EnumSet;
+import java.util.function.Supplier;
 
 import com.badlogic.gdx.math.Vector3;
 import com.etheller.warsmash.units.manager.MutableObjectData.WorldEditorDataType;
@@ -10,8 +11,13 @@ import com.etheller.warsmash.viewer5.handlers.w3x.AnimationTokens.SecondaryTag;
 import com.etheller.warsmash.viewer5.handlers.w3x.UnitSoundset;
 
 public class RenderUnitType implements RenderWidgetType {
-	private final MdxModel model;
-	private final MdxModel portraitModel;
+	private MdxModel model;
+	private final Supplier<MdxModel> modelLoader;
+	private final Supplier<MdxModel> portraitLoader;
+	private boolean portraitLoaded;
+	private MdxModel portraitModel;
+	/** Since when no instance of the model was seen alive, 0 while one is or the model is not loaded. */
+	private long modelIdleSinceNanos;
 	private final MdxModel specialArtModel;
 	private final ArgbImage buildingPathingPixelMap;
 	private final float maxPitch;
@@ -35,7 +41,7 @@ public class RenderUnitType implements RenderWidgetType {
 	private final int orientationInterpolation;
 	private final float blendTime;
 
-	public RenderUnitType(MdxModel model, MdxModel portraitModel, MdxModel specialArtModel,
+	public RenderUnitType(MdxModel model, Supplier<MdxModel> modelLoader, Supplier<MdxModel> portraitLoader, MdxModel specialArtModel,
 			ArgbImage buildingPathingPixelMap, final float maxPitch, final float maxRoll, final float sampleRadius,
 			final boolean allowCustomTeamColor, final int teamColor, final float animationRunSpeed,
 			final float animationWalkSpeed, final float scalingValue, final String buildingShadow,
@@ -45,7 +51,9 @@ public class RenderUnitType implements RenderWidgetType {
 			Vector3 tintingColor, float selectScale, float selectHeight, int orientationInterpolation,
 			float blendTime) {
 		this.model = model;
-		this.portraitModel = portraitModel;
+		claim(model);
+		this.modelLoader = modelLoader;
+		this.portraitLoader = portraitLoader;
 		this.specialArtModel = specialArtModel;
 		this.buildingPathingPixelMap = buildingPathingPixelMap;
 		this.maxPitch = maxPitch;
@@ -70,11 +78,60 @@ public class RenderUnitType implements RenderWidgetType {
 		this.blendTime = blendTime;
 	}
 
+	/** The model of the type, read and built again when it was let go (see {@link #releaseModel}). */
 	public MdxModel getModel() {
+		if (this.model == null) {
+			this.model = this.modelLoader.get();
+			claim(this.model);
+		}
+		this.modelIdleSinceNanos = 0;
 		return this.model;
 	}
 
+	private static void claim(final MdxModel model) {
+		if ((model != null) && !"".equals(model.fetchUrl)) {
+			model.claim();
+		}
+	}
+
+	/** Whether the model was shown and no unit or picture of it exists now. */
+	boolean isModelIdle() {
+		final MdxModel model = this.model;
+		return (model != null) && !"".equals(model.fetchUrl) && model.isReleasable() && model.hasBeenShown()
+				&& !model.hasLiveInstances();
+	}
+
+	long getModelIdleSinceNanos() {
+		return this.modelIdleSinceNanos;
+	}
+
+	void setModelIdleSinceNanos(final long nanos) {
+		this.modelIdleSinceNanos = nanos;
+	}
+
+	/**
+	 * Lets go of the model of an idle type, which is read again when a unit of the type comes.
+	 *
+	 * @return the model when no other type holds it either, so that the viewer can drop it; else null
+	 */
+	MdxModel releaseModel() {
+		final MdxModel model = this.model;
+		this.model = null;
+		this.modelIdleSinceNanos = 0;
+		if (this.portraitModel == model) {
+			// a type with no portrait of its own shows its model: it is asked for again with the portrait
+			this.portraitModel = null;
+			this.portraitLoaded = false;
+		}
+		return model.release() ? model : null;
+	}
+
+	/** Made when first asked for: most types are never selected, and their portraits would be read for nothing. */
 	public MdxModel getPortraitModel() {
+		if (!this.portraitLoaded) {
+			this.portraitModel = this.portraitLoader.get();
+			this.portraitLoaded = true;
+		}
 		return this.portraitModel;
 	}
 

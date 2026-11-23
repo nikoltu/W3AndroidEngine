@@ -435,7 +435,8 @@ final class MeleeUIMenus {
 		}
 		final FrameDefinition text = new FrameDefinition(FrameClass.Frame, "TEXT", "MarkMomentButtonText");
 		text.inheritFrom(textTemplate, false);
-		text.set("Text", new StringFrameDefinitionField("Capture a Bug"));
+		text.set("Text", new StringFrameDefinitionField(
+				this.ui.rootFrame.smashString("SMASH_CAPTURE_A_BUG", "Capture a Bug")));
 		final FrameDefinition button = new FrameDefinition(FrameClass.Frame, "GLUETEXTBUTTON", "MarkMomentButton");
 		button.inheritFrom(buttonTemplate, true);
 		button.set("ButtonText", new StringFrameDefinitionField("MarkMomentButtonText"));
@@ -630,14 +631,15 @@ final class MeleeUIMenus {
 	private void onGameSaved(final FileHandle file, final boolean saved) {
 		if (this.savingFromMenu) {
 			this.savingFromMenu = false;
-			this.ui.messages.displayTimedText(0, 0, 10, saved ? savedMessage() : "Could not save the game.");
+			this.ui.messages.displayTimedText(0, 0, 10, saved ? savedMessage()
+					: this.ui.rootFrame.smashString("SMASH_SAVE_FAILED", "Could not save the game."));
 		}
 	}
 
 	private String savedMessage() {
 		final String text = this.ui.rootFrame.getTemplates().getDecoratedString("GAME_SAVED");
 		// 1.29 GlobalStrings has no GAME_SAVED; the lookup then returns the key itself.
-		return "GAME_SAVED".equals(text) ? "Game saved." : text;
+		return "GAME_SAVED".equals(text) ? this.ui.rootFrame.smashString("SMASH_GAME_SAVED", "Game saved.") : text;
 	}
 
 	private void restartMission() {

@@ -7,6 +7,7 @@ import java.util.Set;
 
 import com.etheller.warsmash.util.Log;
 import com.etheller.warsmash.util.War3ID;
+import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.RenderUnitType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnitType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.attacks.CUnitAttack;
@@ -90,7 +91,10 @@ final class MapViewerTypePrewarm {
 	private void load(final War3MapViewer viewer, final War3ID typeId) {
 		final boolean before = viewer.setDeferTextureLoads(true);
 		try {
-			viewer.renderUnitTypeData.get(typeId);
+			final RenderUnitType renderType = viewer.renderUnitTypeData.get(typeId);
+			if (renderType != null) {
+				renderType.getPortraitModel();
+			}
 			final CUnitType unitType = viewer.simulation.getUnitData().getUnitType(typeId);
 			if (unitType != null) {
 				for (final CUnitAttack attack : unitType.getAttacks()) {

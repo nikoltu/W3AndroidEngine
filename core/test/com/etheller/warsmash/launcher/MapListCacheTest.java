@@ -75,6 +75,38 @@ class MapListCacheTest {
 	}
 
 	@Test
+	void fingerprintIgnoresUnrelatedFoldersAndFiles() throws IOException {
+		final File data = new File(this.temp, "war3.w3mod");
+		touch(new File(data, "Maps/Download/a.w3x"), 1_000_000);
+		final DataTable ini = ini(data);
+		final String before = GameCatalog.mapFingerprint(ini);
+
+		touch(new File(data, "_locales/enus.w3mod/units/x.mdx"), 5_000_000);
+		touch(new File(this.temp, "war3.w3mod/Pack/y.dds"), 6_000_000);
+		touch(new File(data, "readme.txt"), 7_000_000);
+		assertTrue(new File(data, "_locales").setLastModified(9_000_000));
+		assertTrue(data.setLastModified(9_500_000));
+		assertEquals(before, GameCatalog.mapFingerprint(ini));
+		assertTrue(new File(data, "Pack/y.dds").delete());
+		assertEquals(before, GameCatalog.mapFingerprint(ini));
+	}
+
+	@Test
+	void fingerprintTellsRenamedMapFolderAndMapInNewTopFolder() throws IOException {
+		final File data = new File(this.temp, "war3.w3mod");
+		touch(new File(data, "Maps/Download/a.w3x"), 1_000_000);
+		final DataTable ini = ini(data);
+		final String before = GameCatalog.mapFingerprint(ini);
+
+		assertTrue(new File(data, "Maps/Download").renameTo(new File(data, "Maps/Custom")));
+		final String renamed = GameCatalog.mapFingerprint(ini);
+		assertNotEquals(before, renamed);
+
+		touch(new File(data, "Extra/Maps/c.w3x"), 2_000_000);
+		assertNotEquals(renamed, GameCatalog.mapFingerprint(ini));
+	}
+
+	@Test
 	void unchangedMapsUseTheKeptListAndANewMapMakesItAgain() throws Exception {
 		final File data = new File(this.temp, "war3.w3mod");
 		touch(new File(data, "Maps/Download/a.w3x"), 1_000_000);

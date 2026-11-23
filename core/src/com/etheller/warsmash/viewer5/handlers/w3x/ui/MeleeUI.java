@@ -371,7 +371,8 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 			// A referee pauses from the seat nobody plays, and as often as it likes.
 			final boolean referee = lan && viewer.simulation.getPlayer(playerIndex)
 					.getSlotState() != CPlayerSlotState.PLAYING;
-			final String who = referee ? "A referee" : viewer.simulation.getPlayer(playerIndex).getName();
+			final String who = referee ? MeleeUI.this.rootFrame.smashString("SMASH_A_REFEREE", "A referee")
+					: viewer.simulation.getPlayer(playerIndex).getName();
 			if (lan && paused && !referee) {
 				// Counted from the commands every machine gets, so every machine refuses the same pauses.
 				if (viewer.isGamePaused(War3MapViewer.PauseSource.PLAYER)) {
@@ -382,7 +383,8 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 					MeleeUI.this.pausesUsed.put(playerIndex, LanPlay.PAUSES_PER_PLAYER);
 					Log.warn("LAN: " + viewer.simulation.getPlayer(playerIndex).getName() + " has no pauses left");
 					if (playerIndex == viewer.getLocalPlayerIndex()) {
-						MeleeUI.this.messages.displayTimedText(0, 0, 5, "You have no pauses left.");
+						MeleeUI.this.messages.displayTimedText(0, 0, 5,
+								MeleeUI.this.rootFrame.smashString("SMASH_NO_PAUSES_LEFT", "You have no pauses left."));
 					}
 					return;
 				}
@@ -393,7 +395,10 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 				String text = MeleeUI.this.rootFrame.getTemplates().getDecoratedString("PAUSE_GAME_NOTIFY_NO_TIMEOUT")
 						.replace("%s", who);
 				if (remaining >= 0) {
-					text += " (" + remaining + (remaining == 1 ? " pause" : " pauses") + " remaining)";
+					text += " (" + String.format(Locale.ROOT, remaining == 1
+							? MeleeUI.this.rootFrame.smashString("SMASH_PAUSE_REMAINING", "%d pause remaining")
+							: MeleeUI.this.rootFrame.smashString("SMASH_PAUSES_REMAINING", "%d pauses remaining"),
+							remaining) + ")";
 					Log.warn("LAN: " + who + " paused the game, " + remaining + " pauses remaining");
 				}
 				MeleeUI.this.messages.displayTimedText(0, 0, 10, text);
@@ -870,12 +875,16 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 		final int maxX = minX + this.uiViewport.getScreenWidth();
 		final int minY = this.uiViewport.getScreenY();
 		final int maxY = minY + this.uiViewport.getScreenHeight();
-		final boolean edgeScroll = this.war3MapViewer.getGameData().isCatchCursor() && this.userControlEnabled
-				&& !GameOptions.get().isMouseScrollDisabled();
-		final boolean left = (mouseX <= (minX + 3)) && edgeScroll;
-		final boolean right = (mouseX >= (maxX - 3)) && edgeScroll;
-		final boolean up = (mouseY <= (minY + 3)) && edgeScroll;
-		final boolean down = (mouseY >= (maxY - 3)) && edgeScroll;
+		// Without a captured cursor (Android) only a real mouse scrolls at the edges, never a finger or pen.
+		final boolean padMouse = !this.war3MapViewer.getGameData().isCatchCursor() && VirtualCursor.isMouseOver();
+		final boolean edgeScroll = (this.war3MapViewer.getGameData().isCatchCursor() || padMouse)
+				&& this.userControlEnabled && !GameOptions.get().isMouseScrollDisabled();
+		final int edgeX = padMouse ? VirtualCursor.getMouseX() : mouseX;
+		final int edgeY = padMouse ? VirtualCursor.getMouseY() : mouseY;
+		final boolean left = (edgeX <= (minX + 3)) && edgeScroll;
+		final boolean right = (edgeX >= (maxX - 3)) && edgeScroll;
+		final boolean up = (edgeY <= (minY + 3)) && edgeScroll;
+		final boolean down = (edgeY >= (maxY - 3)) && edgeScroll;
 		this.cameraManager.applyVelocity(deltaTime, up, down, left, right);
 
 		mouseX = Math.max(minX, Math.min(maxX, mouseX));
@@ -1979,12 +1988,12 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 					GameMarks.text(number, tick, tick * WarsmashConstants.SIMULATION_STEP_TIME,
 							this.cameraManager.target.x, this.cameraManager.target.y, units));
 			this.markedMoments = number;
-			this.messages.showGameMessage(String.format(Locale.ROOT, "Bug %d captured (%s).",
+			this.messages.showGameMessage(String.format(Locale.ROOT, this.rootFrame.smashString("SMASH_BUG_CAPTURED", "Bug %d captured (%s)."),
 					number, gameClock(tick * WarsmashConstants.SIMULATION_STEP_TIME)), 6);
 		}
 		catch (final IOException e) {
 			Log.error("The moment could not be marked", e);
-			this.messages.showGameMessage("The moment could not be marked.", 6);
+			this.messages.showGameMessage(this.rootFrame.smashString("SMASH_BUG_FAILED", "The moment could not be marked."), 6);
 		}
 	}
 

@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
 import java.util.function.Predicate;
@@ -180,7 +181,12 @@ final class MenuMapStart {
 		this.menu.setGlueLayersSequence("Death");
 		this.menu.menuState = MenuState.GOING_TO_MAIN_MENU;
 		this.menu.dialog.showError(
-				this.mapLoadFailureIssue != MapIssue.NONE ? this.mapLoadFailureIssue.english : MAP_LOAD_ERROR, null);
+				this.mapLoadFailureIssue != MapIssue.NONE ? issueText(this.mapLoadFailureIssue) : MAP_LOAD_ERROR, null);
+	}
+
+	/** What a map's issue says on the menu's error dialog: the engine's text for the game language, else the English one. */
+	private String issueText(final MapIssue issue) {
+		return this.menu.rootFrame.smashString("SMASH_" + issue.message.toUpperCase(Locale.ROOT), issue.english);
 	}
 
 	/**

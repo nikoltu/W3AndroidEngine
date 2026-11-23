@@ -8,6 +8,11 @@ public interface CAbilityProjectileListener {
 
 	void onHit(CSimulation game, CProjectile projectile, AbilityTarget target);
 
+	/** Whether the hit still lands (at the missile's place) after its unit target left the game or was loaded. */
+	default boolean hitsGoneTarget() {
+		return false;
+	}
+
 	CAbilityProjectileListener DO_NOTHING = new CAbilityProjectileListener() {
 		@Override
 		public void onLaunch(CSimulation game, CProjectile projectile, AbilityTarget target) {

@@ -192,6 +192,32 @@ final class CUnitDamage {
 		return damagingEvent;
 	}
 
+	/**
+	 * Measured on 1.29: a unit-target spell of another player that takes effect on a unit (Slow, Curse, Storm Bolt,
+	 * Mana Burn, a Death Coil that heals) first raises the unit's damaged event with no damage, before any damage or
+	 * healing it brings, and not once its caster has left the game.
+	 */
+	static void fireSpellHitEvent(final CUnit self, final CSimulation simulation, final CUnit source) {
+		final List<CWidgetEvent> eventList = self.getEventList(JassGameEventsWar3.EVENT_UNIT_DAMAGED);
+		final CPlayer owner = simulation.getPlayer(self.getPlayerIndex());
+		final boolean playerListens = (owner != null)
+				&& owner.hasPlayerEvents(JassGameEventsWar3.EVENT_PLAYER_UNIT_DAMAGED);
+		if (((eventList == null) || eventList.isEmpty()) && !playerListens) {
+			return;
+		}
+		final CDamageEvent damagedEvent = new CDamageEvent(self, source, false, false, false, 0f, CAttackType.SPELLS,
+				CDamageType.MAGIC, "WHOKNOWS");
+		if (eventList != null) {
+			for (final CWidgetEvent event : new ArrayList<>(eventList)) {
+				event.fire(self, CommonTriggerExecutionScope.unitDamageScope(JassGameEventsWar3.EVENT_UNIT_DAMAGED,
+						event.getTrigger(), damagedEvent, null));
+			}
+		}
+		if (playerListens) {
+			owner.fireUnitDamageEvents(damagedEvent, JassGameEventsWar3.EVENT_PLAYER_UNIT_DAMAGED);
+		}
+	}
+
 	static float damage(final CUnit self, final CSimulation simulation, final CUnit source, final CDamageFlags flags,
 			final CAttackType attackType, final CDamageType damageType, final String weaponSoundType,
 			final float damage) {
@@ -203,6 +229,10 @@ final class CUnitDamage {
 			float bonusDamage) {
 		final boolean wasDead = self.isDead();
 		if (wasDead) {
+			return 0;
+		}
+		// A unit that left the game takes nothing, also from a missile or timer that still holds it.
+		if (self.isRemovedFromGame() || simulation.isRemovalPending(self)) {
 			return 0;
 		}
 		if (isImmuneToDamage(self, simulation, flags, attackType, damageType)) {

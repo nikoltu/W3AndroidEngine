@@ -145,12 +145,12 @@ public final class LanLobbyView {
 				break;
 			case LanProtocol.SLOT_CLOSED:
 				row.kind = CLOSED;
-				row.name = "Closed";
+				row.name = LanText.slotClosed();
 				row.hostMenu = view.iAmHost;
 				break;
 			default:
 				row.kind = OPEN;
-				row.name = "Open";
+				row.name = LanText.slotOpen();
 				row.hostMenu = view.iAmHost;
 				break;
 			}

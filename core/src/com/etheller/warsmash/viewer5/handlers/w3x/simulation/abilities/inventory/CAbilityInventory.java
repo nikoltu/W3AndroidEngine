@@ -289,11 +289,18 @@ public class CAbilityInventory extends AbstractGenericNoIconAbility {
 		return null;
 	}
 
-	/** Whether the ability is one of the abilities of an item held in this inventory. */
+	/** Whether the ability is one of the abilities of an item carried or worn in this inventory. */
 	public boolean isHeldItemAbility(final CAbility ability) {
 		for (final List<CAbility> slotAbilities : this.itemsHeldAbilities) {
 			if (slotAbilities.contains(ability)) {
 				return true;
+			}
+		}
+		if (this.loadoutAbilities != null) {
+			for (final List<CAbility> slotAbilities : this.loadoutAbilities) {
+				if ((slotAbilities != null) && slotAbilities.contains(ability)) {
+					return true;
+				}
 			}
 		}
 		return false;

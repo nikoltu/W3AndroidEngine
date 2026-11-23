@@ -385,7 +385,8 @@ final class MeleeUICommands {
 						}
 					}
 					// A hero's skills are learned by the hero shown on the card only.
-					if ((this.ui.selectedUnits.size() > 1) && !(abilityToUse instanceof CAbilityHero)) {
+					if ((this.ui.selectedUnits.size() > 1) && !(abilityToUse instanceof CAbilityHero)
+							&& !abilityToUse.isUniqueCast()) {
 						for (final RenderUnit otherSelectedUnit : this.ui.selectedUnits) {
 							if (otherSelectedUnit != this.ui.selectedUnit) {
 								abilityToUse = null;
@@ -1203,11 +1204,14 @@ final class MeleeUICommands {
 	}
 
 	/** The item hints describe mouse use; on a touch screen the same actions are a tap and a drag. */
-	static String touchItemHint(final String hint) {
+	static String touchItemHint(final GameUI strings, final String hint) {
 		if (!TouchInputRouter.isActive() || (hint == null)) {
 			return hint;
 		}
-		return hint.replace("Left-Click", "Tap").replace("Drop item on shop", "Drag item onto a shop");
+		return hint.replace(strings.smashString("SMASH_TOUCH_CLICK_FROM", "Left-Click"),
+				strings.smashString("SMASH_TOUCH_CLICK_TO", "Tap"))
+				.replace(strings.smashString("SMASH_TOUCH_DROP_FROM", "Drop item on shop"),
+						strings.smashString("SMASH_TOUCH_DROP_TO", "Drag item onto a shop"));
 	}
 
 	public void commandButton(final int buttonPositionX, final int buttonPositionY, final Texture icon,
@@ -1328,7 +1332,7 @@ final class MeleeUICommands {
 			this.ui.unitOrderListener.issueTargetOrder(this.ui.activeCommandUnit.getSimulationUnit().getHandleId(),
 					this.ui.activeCommand.getHandleId(), this.ui.activeCommandOrderId,
 					rayPickUnit.getSimulationWidget().getHandleId(), shiftDown);
-			if (this.ui.selectedUnits.size() > 1) {
+			if ((this.ui.selectedUnits.size() > 1) && !this.ui.activeCommand.isUniqueCast()) {
 				for (final RenderUnit otherSelectedUnit : this.ui.selectedUnits) {
 					if (otherSelectedUnit != this.ui.activeCommandUnit) {
 						CAbility abilityToUse = null;

@@ -18,6 +18,11 @@ public abstract class CAbilityPointTargetSpellBase extends CAbilitySpellBase {
 	}
 
 	@Override
+	public boolean isTargetOrder(final int orderId) {
+		return (orderId != 0) && (orderId == getBaseOrderId());
+	}
+
+	@Override
 	public void onAdd(final CSimulation game, final CUnit unit) {
 		this.behavior = new CBehaviorTargetSpellBase(unit, this);
 	}
@@ -55,6 +60,16 @@ public abstract class CAbilityPointTargetSpellBase extends CAbilitySpellBase {
 		else {
 			receiver.targetCheckFailed(CommandStringErrorKeys.TARGET_IS_OUTSIDE_RANGE);
 		}
+	}
+
+	/**
+	 * A target order at a unit, tree or item that a script gives to a point-target spell is a point order at the
+	 * widget's place.
+	 */
+	public void checkCanTargetWidgetPosition(final CSimulation game, final CUnit unit, final int playerIndex,
+			final int orderId, final CWidget widget, final AbilityPointTarget point,
+			final AbilityTargetCheckReceiver<AbilityPointTarget> receiver) {
+		checkCanTarget(game, unit, playerIndex, orderId, false, point, receiver);
 	}
 
 	protected void innerCheckCanTargetSpell(final CSimulation game, final CUnit unit, final int orderId,

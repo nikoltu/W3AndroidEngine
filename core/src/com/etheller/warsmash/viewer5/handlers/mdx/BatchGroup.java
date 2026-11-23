@@ -54,7 +54,7 @@ public class BatchGroup extends GenericGroup {
 		final W3xSceneLightManager lightManager = (W3xSceneLightManager) scene.getLightManager();
 
 		if (hd) {
-			shader = handler.shaders.hd;
+			shader = instance.groundShading != null ? handler.shaders.groundHd : handler.shaders.hd;
 		}
 		else if (skinningType == SkinningType.ExtendedVertexGroups) {
 			if (DynamicShadowManager.IS_SHADOW_MAPPING) {
@@ -114,6 +114,9 @@ public class BatchGroup extends GenericGroup {
 					lightManager.getHdSpecularScale());
 			shader.setUniform4fv(locations.vertexColor, instance.vertexColor, 0, instance.vertexColor.length);
 			shader.setUniformf(locations.unlit, scene.unlit ? 1f : 0f);
+			if (shader == handler.shaders.groundHd) {
+				groundShading.bindGroundShading(shader, GROUND_SHADOW_MAP_UNIT, GROUND_FOG_OF_WAR_MAP_UNIT);
+			}
 			final float[] tone = lightManager.getHdTone();
 			if (tone != null) {
 				shader.setUniformf(locations.tone, tone[0], tone[1], tone[2], tone[3]);
@@ -225,8 +228,18 @@ public class BatchGroup extends GenericGroup {
 						continue;
 					}
 					webGL.bindTexture(diffuseTexture, 0);
-					webGL.bindTexture(normalsTexture, 1);
-					webGL.bindTexture(ormTexture, 2);
+					if (isFallback(normalsTexture)) {
+						webGL.bindNeutralNormal(1);
+					}
+					else {
+						webGL.bindTexture(normalsTexture, 1);
+					}
+					if (isFallback(ormTexture)) {
+						webGL.bindNeutralOrm(2);
+					}
+					else {
+						webGL.bindTexture(ormTexture, 2);
+					}
 					// The grey stand-in suits a diffuse map, but as light it would wash the model out: a missing
 					// emissive map emits nothing and a missing environment map reflects nothing.
 					webGL.bindTexture(isFallback(emissiveTexture) ? null : emissiveTexture, 3);

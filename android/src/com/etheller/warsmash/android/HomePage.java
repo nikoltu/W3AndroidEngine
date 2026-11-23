@@ -148,12 +148,12 @@ final class HomePage extends LauncherViews {
 		for (int i = 0; i < LauncherActivity.RAIL.length; i++) {
 			final int entry = i;
 			final boolean open = true;
-			addHolder(view, glue(LauncherActivity.RAIL[i][0], LauncherActivity.RAIL[i][1]),
+			addHolder(view, glue(LauncherActivity.RAIL[i]),
 					b.holderY + (i * b.holderPitch), i == selected,
 					open ? v -> this.activity.openEntry(entry) : null, entry == LauncherActivity.RAIL_LAN);
 		}
 		if (b.quitY >= 0) {
-			addHolder(view, glue("KEY_QUIT", "Quit"), b.quitY, false, v -> this.activity.dialogs.showExit());
+			addHolder(view, glue("KEY_QUIT"), b.quitY, false, v -> this.activity.dialogs.showExit());
 			addFooter(view);
 		}
 		addProfile(view, home);
@@ -482,7 +482,7 @@ final class HomePage extends LauncherViews {
 		onTap(hit, true, v -> continueCampaign());
 		hit.setContentDescription(getString(R.string.launcher_continue_campaign));
 		box.addView(hit, frameParams(0, 0, b.bannerW, b.height));
-		place(box, button(LauncherKit.glueText(glue("CONTINUE", "Continue")), bh, b.tablet ? 44 : 30,
+		place(box, button(LauncherKit.glueText(glue("CONTINUE")), bh, b.tablet ? 44 : 30,
 				v -> continueCampaign()), ix, by, iw, bh);
 	}
 
@@ -514,7 +514,7 @@ final class HomePage extends LauncherViews {
 		final String profile = this.activity.profiles.current();
 		portrait.setImageBitmap(this.activity.profilePage.portraitBitmap(this.activity.profiles.portrait(profile)));
 		chip.addView(portrait, new LinearLayout.LayoutParams(px(b.chipH), px(b.chipH)));
-		final TextView name = text(this.activity.profiles.any() ? profile : glue("PLAYER", "Player"), b.name,
+		final TextView name = text(this.activity.profiles.any() ? profile : glue("PLAYER"), b.name,
 				this.activity.art.text());
 		final LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(
 				ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -587,7 +587,7 @@ final class HomePage extends LauncherViews {
 	String buildLine() {
 		final String origin = WarsmashApplication.originLabel(this.activity);
 		if (!origin.isEmpty()) {
-			return BuildInfo.current().displayVersion() + " - " + origin;
+			return BuildInfo.current().displayVersion() + " - " + BuildOrigin.text(origin);
 		}
 		return BuildInfo.current().displayVersion()
 				+ (BuildInfo.current().isOfficial() ? "" : " - " + getString(R.string.build_unofficial));
@@ -608,7 +608,7 @@ final class HomePage extends LauncherViews {
 		}
 		final String origin = WarsmashApplication.originLabel(this.activity);
 		final LauncherBoard b = this.activity.board;
-		final String notice = BuildOrigin.UNOFFICIAL.equals(origin) ? BuildOrigin.UNOFFICIAL_NOTICE : origin;
+		final String notice = BuildOrigin.notice(origin);
 		final TextView badge = text(notice, b.tablet ? 24 : 18, LauncherKit.GOLD);
 		badge.setSingleLine(false);
 		badge.setMaxLines(2);

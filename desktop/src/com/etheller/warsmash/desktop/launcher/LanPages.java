@@ -22,6 +22,7 @@ import com.etheller.warsmash.launcher.SkinArt;
 import com.etheller.warsmash.launcher.lan.LanLauncherModel;
 import com.etheller.warsmash.launcher.lan.LanLobbyView;
 import com.etheller.warsmash.launcher.lan.LanPortraitId;
+import com.etheller.warsmash.launcher.LauncherText;
 import com.etheller.warsmash.launcher.lan.LanText;
 
 import net.warsmash.lan.FileRejoinStore;
@@ -322,7 +323,7 @@ final class LanPages {
 		final float w = t ? 380 : 214;
 		final float gap = t ? 16 : 8;
 		final boolean net = this.model.networkAvailable();
-		final String[] labels = { "Join Game", "Create Game", LanText.joinByIp() };
+		final String[] labels = { LauncherText.get("lan_join_game"), LauncherText.get("lan_create_game"), LanText.joinByIp() };
 		final boolean create = this.model.mode() == LanLauncherModel.Mode.CREATE;
 		for (int i = 0; i < 3; i++) {
 			final int tone = !net ? Gui.TONE_OFF : (i == (create ? 1 : 0)) && (i < 2) ? Gui.TONE_DOWN : Gui.TONE_NORMAL;
@@ -443,8 +444,8 @@ final class LanPages {
 			final float fs = t ? 30 : 17;
 			final float kx = t ? 220 : 118;
 			final boolean sized = (info.mapWidth > 0) && (info.mapHeight > 0);
-			final String[][] facts = { { "Host:", info.hostName },
-				{ "Players:", info.players + " / " + info.maxPlayers }, { "Game Speed:", LanText.speed(info.speed) },
+			final String[][] facts = { { LauncherText.get("lan_host"), info.hostName },
+				{ LauncherText.get("lan_players"), info.players + " / " + info.maxPlayers }, { LauncherText.get("lan_game_speed_colon"), LanText.speed(info.speed) },
 				{ LanText.mapSize(), sized ? info.mapWidth + " x " + info.mapHeight : "" } };
 			for (int i = 0; i < (sized ? facts.length : facts.length - 1); i++) {
 				final float fy = my + (t ? 60 : 32) + (i * fs * 1.5f);
@@ -471,7 +472,7 @@ final class LanPages {
 		}
 		final float[] go = b.actionSlot(2);
 		final boolean canJoin = net && (chosen != null) && chosen.joinable() && !this.model.isConnecting();
-		if (g.button("lanJoin", chosen != null && chosen.rejoin ? "Rejoin" : "Join Game", go[0], b.backY, go[1], b.backH,
+		if (g.button("lanJoin", chosen != null && chosen.rejoin ? LauncherText.get("lan_rejoin") : LauncherText.get("lan_join_game"), go[0], b.backY, go[1], b.backH,
 				t ? 36 : 30, !canJoin ? Gui.TONE_OFF : this.s.art.reforged ? Gui.TONE_CONFIRM : Gui.TONE_DOWN)) {
 			this.s.playClick();
 			this.model.join(chosen);
@@ -479,7 +480,7 @@ final class LanPages {
 	}
 
 	private String glueBack() {
-		return this.s.glue("BACK", "Back");
+		return this.s.glue("BACK");
 	}
 
 	/** A participant's profile portrait framed in the player's color; the colored initial when it is not known. */
@@ -545,8 +546,8 @@ final class LanPages {
 			final float fs = t ? 28 : 16;
 			final float kx = t ? 200 : 110;
 			g.text(this.s.mapTitle(details), ix, my - 4, iw, t ? 50 : 30, t ? 40 : 22, g.palette.text, Align.left);
-			final String[][] facts = { { "Players:", details.suggested }, { "Map Size:", details.size },
-				{ "Tileset:", details.tileset } };
+			final String[][] facts = { { LauncherText.get("lan_players"), details.suggested }, { LanText.mapSize(), details.size },
+				{ LauncherText.get("lan_tileset"), details.tileset } };
 			for (int i = 0; i < facts.length; i++) {
 				final float fy = my + (t ? 60 : 32) + (i * fs * 1.5f);
 				g.text(facts[i][0], ix, fy, kx, fs * 1.4f, fs, g.palette.gold, Align.left);
@@ -565,17 +566,17 @@ final class LanPages {
 		if (t) {
 			final float fx = rx + pf + 330;
 			final float fw = rw - (2 * pf) - 340;
-			g.text("Game Settings", lx, sy + pf - 4, 600, 50, 30, g.palette.gold, Align.left);
-			g.text("Game Name", lx, sy + pf + 48, 300, 80, 28, g.palette.text, Align.left);
+			g.text(LauncherText.get("lan_game_settings"), lx, sy + pf - 4, 600, 50, 30, g.palette.gold, Align.left);
+			g.text(LauncherText.get("lan_game_name"), lx, sy + pf + 48, 300, 80, 28, g.palette.text, Align.left);
 			gameNameField("lanName", fx, sy + pf + 48, fw, 80, 28);
-			g.text("Game Speed", lx, sy + pf + 146, 300, 80, 28, g.palette.text, Align.left);
+			g.text(LauncherText.get("lan_game_speed"), lx, sy + pf + 146, 300, 80, 28, g.palette.text, Align.left);
 			g.dropdown("lanSpeed", speeds, this.speed, fx, sy + pf + 146, 420, 80, 28, true, null,
 					choice -> this.speed = choice);
-			g.text("Observers", lx, sy + pf + 238, 300, 80, 28, g.palette.text, Align.left);
+			g.text(LauncherText.get("lan_observers"), lx, sy + pf + 238, 300, 80, 28, g.palette.text, Align.left);
 			g.dropdown("lanObservers", observerModes, this.observers, fx, sy + pf + 238, 420, 80, 28, true, null,
 					choice -> this.observers = choice);
-			g.text("Advanced Options", lx, sy + pf + 340, 600, 50, 28, g.palette.gold, Align.left);
-			final String[] labels = { "Lock Teams", "Teams Together", "Full Shared Unit Control", "Random Races" };
+			g.text(this.s.glue("ADVANCED_OPTIONS"), lx, sy + pf + 340, 600, 50, 28, g.palette.gold, Align.left);
+			final String[] labels = { LauncherText.get("lan_option_lock_teams"), LauncherText.get("lan_option_teams_together"), LauncherText.get("lan_option_full_shared_control"), LauncherText.get("lan_option_random_races") };
 			final float colw = (rw - (2 * pf) - 16) / 2;
 			for (int i = 0; i < labels.length; i++) {
 				final float ox = lx + ((i % 2) * colw);
@@ -588,12 +589,12 @@ final class LanPages {
 			}
 		}
 		else {
-			g.text("Game Name", lx, sy + pf - 8, 140, 56, 18, g.palette.gold, Align.left);
+			g.text(LauncherText.get("lan_game_name"), lx, sy + pf - 8, 140, 56, 18, g.palette.gold, Align.left);
 			gameNameField("lanName", rx + pf + 150, sy + pf - 8, rw - (2 * pf) - 160, 56, 20);
-			g.text("Speed", lx, sy + pf + 54, 140, 56, 18, g.palette.gold, Align.left);
+			g.text(LauncherText.get("lan_speed"), lx, sy + pf + 54, 140, 56, 18, g.palette.gold, Align.left);
 			g.dropdown("lanSpeed", speeds, this.speed, rx + pf + 150, sy + pf + 54, 200, 56, 20, true, null,
 					choice -> this.speed = choice);
-			g.text("Observers", rx + pf + 372, sy + pf + 54, 110, 56, 18, g.palette.gold, Align.left);
+			g.text(LauncherText.get("lan_observers"), rx + pf + 372, sy + pf + 54, 110, 56, 18, g.palette.gold, Align.left);
 			g.dropdown("lanObservers", observerModes, this.observers, rx + pf + 480, sy + pf + 54,
 					rw - (2 * pf) - 490, 56, 20, true, null, choice -> this.observers = choice);
 		}
@@ -603,7 +604,7 @@ final class LanPages {
 		}
 		final float[] go = b.actionSlot(2);
 		final boolean ready = (details != null) && !this.creating && this.model.networkAvailable();
-		if (g.button("lanCreate", "Create Game", go[0], b.backY, go[1], b.backH, t ? 36 : 30,
+		if (g.button("lanCreate", LauncherText.get("lan_create_game"), go[0], b.backY, go[1], b.backH, t ? 36 : 30,
 				!ready ? Gui.TONE_OFF : this.s.art.reforged ? Gui.TONE_CONFIRM : Gui.TONE_DOWN)) {
 			this.s.playClick();
 			create(details);
@@ -629,8 +630,8 @@ final class LanPages {
 		this.s.catalog.lanMap(path, this.env.mapIndex(), shared -> {
 			this.creating = false;
 			if (shared == null) {
-				this.noticeTitle = "Create Game";
-				this.noticeLine = "This map cannot be shared in a LAN game.";
+				this.noticeTitle = LauncherText.get("lan_create_game");
+				this.noticeLine = LauncherText.get("lan_map_cannot_be_shared");
 				this.s.dialog = LauncherScreen.Dialog.LAN_NOTICE;
 				return;
 			}
@@ -649,7 +650,7 @@ final class LanPages {
 			settings.randomRaces = this.options[3];
 			final String problem = this.model.create(settings);
 			if (problem != null) {
-				this.noticeTitle = "Create Game";
+				this.noticeTitle = LauncherText.get("lan_create_game");
 				this.noticeLine = problem;
 				this.s.dialog = LauncherScreen.Dialog.LAN_NOTICE;
 			}
@@ -691,7 +692,7 @@ final class LanPages {
 		final float listH = b.contentH - pf - (listTop - top) - pf;
 		if (t) {
 			final float hy = listTop - 34;
-			final String[] heads = { "Race", "Team", "Color", "Handicap" };
+			final String[] heads = { this.s.glue("RACE"), this.s.glue("TEAM"), this.s.glue("COLOR"), LauncherText.get("lan_handicap") };
 			final float[] hx = { xr, xr + raceW + gp, xr + raceW + teamW + (2 * gp), xr + raceW + teamW + colW + (3 * gp) };
 			for (int i = 0; i < heads.length; i++) {
 				g.text(heads[i], hx[i], hy, 200, 28, 22, g.palette.text2, Align.left);
@@ -701,10 +702,10 @@ final class LanPages {
 		final float contentH = ((view.rows.size() + (watchRows > 0 ? 1 : 0) + watchRows) * (rowH + gp));
 		final float offset = g.beginList("lanSlots", x0 - 4, listTop, leftW - (2 * pf) - 4, listH, contentH);
 		float y = listTop - offset;
-		final String[] races = { "Random", "Human", "Orc", "Undead", "Night Elf" };
+		final String[] races = this.s.glueList(CustomGame.RACES, 0);
 		final String[] colorNames = new String[CustomGame.COLOR_NAMES.length];
 		for (int i = 0; i < colorNames.length; i++) {
-			colorNames[i] = this.s.glue(CustomGame.COLOR_NAMES[i][0], CustomGame.COLOR_NAMES[i][1]);
+			colorNames[i] = this.s.glue(CustomGame.COLOR_NAMES[i][0]);
 		}
 		final String[] teams = new String[Math.max(1, view.rows.size())];
 		for (int i = 0; i < teams.length; i++) {
@@ -718,14 +719,14 @@ final class LanPages {
 			y += rowH + gp;
 		}
 		if (watchRows > 0) {
-			g.text("Observers · Referees", x0, y + (rowH * 0.3f), 600, rowH * 0.4f, t ? 28 : 17, g.palette.gold,
+			g.text(LauncherText.get("lan_observers_referees_head"), x0, y + (rowH * 0.3f), 600, rowH * 0.4f, t ? 28 : 17, g.palette.gold,
 					Align.left);
 			y += rowH + gp;
 			for (final LanLobbyView.Watcher w : view.watchers) {
 				portrait(g, x0, y + ((rowH - pp) / 2), pp, w.portrait, 0xFF777777, w.name);
 				if (w.kickable) {
 					final int who = w.participantId;
-					g.dropdown("lanWatcher" + who, new String[] { w.name, "Kick" }, 0, x1, y + (rowH * 0.05f),
+					g.dropdown("lanWatcher" + who, new String[] { w.name, LauncherText.get("lan_kick") }, 0, x1, y + (rowH * 0.05f),
 							nameW - 8, rowH * 0.46f, t ? 30 : 17, true, null, choice -> {
 								if (choice == 1) {
 									this.model.kickWatcher(who);
@@ -750,7 +751,7 @@ final class LanPages {
 				if ((state & Gui.HOVER) != 0) {
 					g.image(this.s.art.image(SkinArt.ROW_HIGHLIGHT), x0, y, nameW * 3, rowH, 0.5f);
 				}
-				g.text(referees ? "Watch as a referee" : "Watch as an observer", x1, y, nameW * 3, rowH, t ? 30 : 18,
+				g.text(referees ? LauncherText.get("lan_watch_referee") : LauncherText.get("lan_watch_observer"), x1, y, nameW * 3, rowH, t ? 30 : 18,
 						g.palette.text2, Align.left);
 				if ((state & Gui.CLICK) != 0) {
 					this.s.playClick();
@@ -776,10 +777,10 @@ final class LanPages {
 		g.text(view.mapLabel(), fx, my - 4, fw, t ? 46 : 26, t ? 34 : 18, g.palette.text, Align.left);
 		final float fs = t ? 28 : 15;
 		final float kx = t ? 250 : 120;
-		final String[][] facts = { { "Game Speed:", LanText.speed(view.options.speed) },
-			{ "Observers:", LanText.observers(view.options.observers) },
-			{ "Lock Teams:", view.options.lockTeams ? LanText.yes() : LanText.no() },
-			{ "Teams Together:", view.options.teamsTogether ? LanText.yes() : LanText.no() } };
+		final String[][] facts = { { LauncherText.get("lan_game_speed_colon"), LanText.speed(view.options.speed) },
+			{ LanText.observersLabel(), LanText.observers(view.options.observers) },
+			{ LauncherText.get("lan_lock_teams_colon"), view.options.lockTeams ? LanText.yes() : LanText.no() },
+			{ LauncherText.get("lan_teams_together_colon"), view.options.teamsTogether ? LanText.yes() : LanText.no() } };
 		for (int i = 0; i < (t ? 4 : 3); i++) {
 			final float fy = my + (t ? 56 : 28) + (i * fs * 1.55f);
 			g.text(facts[i][0], fx, fy, kx, fs * 1.5f, fs, g.palette.gold, Align.left);
@@ -820,14 +821,14 @@ final class LanPages {
 			g.lines(LanText.hostNotFoundTip(), rx + pf + 10, cy + pf, inner, 120, lf * 0.9f, g.palette.text2, Align.left);
 		}
 		final float ey = (cy + ch) - pf - eh;
-		g.field("lanChat", this.chat, rx + pf + 4, ey, rightW - (2 * pf) - 8, eh, lf, 120, "Type a message…");
+		g.field("lanChat", this.chat, rx + pf + 4, ey, rightW - (2 * pf) - 8, eh, lf, 120, LauncherText.get("lan_chat_hint"));
 		if (g.keys.contains(Input.Keys.ENTER) && "lanChat".equals(g.focus) && (this.chat.length() > 0)) {
 			this.model.sendChat(this.chat.toString());
 			this.chat.setLength(0);
 		}
 
 		// actions
-		if (g.button("lanLeave", "Leave", b.backX, b.backY, b.backW, b.backH, t ? 36 : 30, Gui.TONE_NORMAL)) {
+		if (g.button("lanLeave", LauncherText.get("lan_leave"), b.backX, b.backY, b.backW, b.backH, t ? 36 : 30, Gui.TONE_NORMAL)) {
 			this.s.playClick();
 			leave();
 		}
@@ -835,7 +836,7 @@ final class LanPages {
 		final float[] pri = b.actionSlot(2);
 		if (view.iAmHost) {
 			if (countdown) {
-				if (g.button("lanCancel", "Cancel", sec[0], b.backY, sec[1], b.backH, t ? 36 : 30, Gui.TONE_NORMAL)) {
+				if (g.button("lanCancel", this.s.glue("CANCEL"), sec[0], b.backY, sec[1], b.backH, t ? 36 : 30, Gui.TONE_NORMAL)) {
 					this.s.playClick();
 					this.model.cancelStart();
 				}
@@ -846,9 +847,9 @@ final class LanPages {
 				this.s.dialog = LauncherScreen.Dialog.LAN_MAP;
 			}
 			final LanLobbyView.HostAction action = view.hostAction();
-			final String label = countdown ? "Starting… " + this.model.countdownSeconds()
-					: action == LanLobbyView.HostAction.START ? "Start Game"
-							: action == LanLobbyView.HostAction.NOT_READY ? "Not Ready" : "Ready";
+			final String label = countdown ? LauncherText.get("lan_starting", this.model.countdownSeconds())
+					: action == LanLobbyView.HostAction.START ? this.s.glue("KEY_START_GAME")
+							: action == LanLobbyView.HostAction.NOT_READY ? LauncherText.get("lan_not_ready") : LauncherText.get("lan_ready");
 			final boolean usable = !countdown && ((action == LanLobbyView.HostAction.START) || this.model.canReady());
 			if (g.button("lanStart", label, pri[0], b.backY, pri[1], b.backH, t ? 36 : 30,
 					!usable ? Gui.TONE_OFF
@@ -863,12 +864,12 @@ final class LanPages {
 		}
 		else {
 			final boolean mine = (view.mine != null) && view.mine.ready;
-			if (g.button("lanReady", mine ? "Not Ready" : "Ready", sec[0], b.backY, sec[1], b.backH, t ? 36 : 30,
+			if (g.button("lanReady", mine ? LauncherText.get("lan_not_ready") : LauncherText.get("lan_ready"), sec[0], b.backY, sec[1], b.backH, t ? 36 : 30,
 					!this.model.canReady() ? Gui.TONE_OFF : mine ? Gui.TONE_DOWN : Gui.TONE_NORMAL)) {
 				this.s.playClick();
 				this.model.setReady(!mine);
 			}
-			g.button("lanStartOff", "Start Game", pri[0], b.backY, pri[1], b.backH, t ? 36 : 30, Gui.TONE_OFF);
+			g.button("lanStartOff", this.s.glue("KEY_START_GAME"), pri[0], b.backY, pri[1], b.backH, t ? 36 : 30, Gui.TONE_OFF);
 		}
 	}
 
@@ -893,11 +894,11 @@ final class LanPages {
 			final String[] items;
 			final int selected;
 			if (human) {
-				items = new String[] { row.name, "Kick" };
+				items = new String[] { row.name, LauncherText.get("lan_kick") };
 				selected = 0;
 			}
 			else {
-				items = new String[] { "Open", "Closed", LanText.computer(0), LanText.computer(1), LanText.computer(2) };
+				items = new String[] { this.s.glue("OPEN"), this.s.glue("CLOSED"), LanText.computer(0), LanText.computer(1), LanText.computer(2) };
 				selected = row.kind == LanLobbyView.OPEN ? 0 : row.kind == LanLobbyView.CLOSED ? 1 : 2 + row.computerLevel;
 			}
 			g.dropdown("lanSlot" + slot, items, selected, x1, ry, nameW - 8, ph, size, true, null, choice -> {
@@ -1035,7 +1036,7 @@ final class LanPages {
 			break;
 		case LAN_BLOCK:
 			this.s.question(LanText.blockTitle(), LanText.blockText(this.blockedHosting),
-					new String[] { this.s.glue("CANCEL", "Cancel"), "Leave Lobby", "Back to Lobby" }, choice -> {
+					new String[] { this.s.glue("CANCEL"), LauncherText.get("lan_leave_lobby"), LauncherText.get("lan_back_to_lobby") }, choice -> {
 						if (choice == 1) {
 							leave();
 						}
@@ -1049,7 +1050,7 @@ final class LanPages {
 			break;
 		case LAN_LEAVE:
 			this.s.question(LanText.leaveTitle(), this.model.leaveConfirmation() == null ? "" : this.model.leaveConfirmation(),
-					new String[] { this.s.glue("CANCEL", "Cancel"), "Leave Lobby" }, choice -> {
+					new String[] { this.s.glue("CANCEL"), LauncherText.get("lan_leave_lobby") }, choice -> {
 						if (choice == 1) {
 							this.model.leave();
 						}
@@ -1101,7 +1102,7 @@ final class LanPages {
 						ms, ms);
 				final float fs = t ? 28 : 16;
 				g.text(this.s.mapTitle(details), rx, top + ms + 14, rw, fs * 1.6f, fs * 1.3f, g.palette.text, Align.left);
-				final String[][] facts = { { "Players:", details.suggested }, { LanText.mapSize(), details.size } };
+				final String[][] facts = { { LauncherText.get("lan_players"), details.suggested }, { LanText.mapSize(), details.size } };
 				for (int i = 0; i < facts.length; i++) {
 					final float fy = top + ms + 14 + (fs * 2) + (i * fs * 1.5f);
 					g.text(facts[i][0], rx, fy, rw * 0.45f, fs * 1.4f, fs, g.palette.gold, Align.left);
@@ -1110,7 +1111,7 @@ final class LanPages {
 			}
 		}
 		boolean close = false;
-		if (g.button("lanMapCancel", this.s.glue("CANCEL", "Cancel"), x + edge + 20, by, bw, bh, t ? 36 : 26,
+		if (g.button("lanMapCancel", this.s.glue("CANCEL"), x + edge + 20, by, bw, bh, t ? 36 : 26,
 				Gui.TONE_NORMAL)) {
 			close = true;
 		}
@@ -1136,7 +1137,7 @@ final class LanPages {
 			this.creating = false;
 			String problem;
 			if (shared == null) {
-				problem = "This map cannot be shared in a LAN game.";
+				problem = LauncherText.get("lan_map_cannot_be_shared");
 			}
 			else {
 				final LanLauncherModel.CreateSettings settings = new LanLauncherModel.CreateSettings();
@@ -1180,12 +1181,12 @@ final class LanPages {
 		final float bh = t ? 128 : 96;
 		final float by = (y + h) - edge - bh;
 		boolean close = false;
-		if (g.button("lanIpCancel", this.s.glue("CANCEL", "Cancel"), x + edge + 20, by, bw, bh, t ? 36 : 26,
+		if (g.button("lanIpCancel", this.s.glue("CANCEL"), x + edge + 20, by, bw, bh, t ? 36 : 26,
 				Gui.TONE_NORMAL)) {
 			close = true;
 		}
 		final boolean connecting = this.model.isConnecting();
-		if ((g.button("lanIpConnect", "Connect", (x + w) - edge - 20 - bw, by, bw, bh, t ? 36 : 26,
+		if ((g.button("lanIpConnect", LauncherText.get("lan_connect"), (x + w) - edge - 20 - bw, by, bw, bh, t ? 36 : 26,
 				connecting ? Gui.TONE_OFF : Gui.TONE_CONFIRM) || g.keys.contains(Input.Keys.ENTER)) && !connecting) {
 			this.s.playClick();
 			this.model.joinByIp(this.ip.toString());

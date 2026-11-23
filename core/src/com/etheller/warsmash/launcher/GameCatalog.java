@@ -799,13 +799,13 @@ public class GameCatalog {
 	/** The map's folder as words: frozenthrone is Frozen Throne, 2023season2 is 2023 Season 2. */
 	private static String folderLabel(final String path) {
 		if (path.toLowerCase(Locale.ROOT).endsWith(".w3m")) {
-			return "Reign of Chaos";
+			return LauncherText.get("map_folder_reign");
 		}
 		final String normal = path.replace('\\', '/');
 		final int end = normal.lastIndexOf('/');
 		final String folder = normal.substring(normal.lastIndexOf('/', end - 1) + 1, Math.max(end, 0));
 		if ("frozenthrone".equalsIgnoreCase(folder)) {
-			return "Frozen Throne";
+			return LauncherText.get("map_folder_frozen");
 		}
 		final StringBuilder words = new StringBuilder();
 		for (int i = 0; i < folder.length(); i++) {

@@ -53,6 +53,14 @@ class MapViewerPrewarmScriptPatternTest {
 	}
 
 	@Test
+	void obfuscatedScriptsWriteDecimalRawCodesAndEndLinesWithCarriageReturns() {
+		final String script = "call CreateUnit(Player(15),1211117657,0,0,270)\rcall SetUnitX(u,1000000000)\r"
+				+ "set t=CreateUnit(Player(0),v,0,0,0)\rset u=CreateUnit(Player(0),1751543663,0,0,0)\r";
+		assertEquals(Arrays.asList(new War3ID(1211117657), new War3ID(1751543663)),
+				MapViewerPrewarm.createdTypes(MapViewerPrewarm.SCRIPT_UNIT_CREATION, script));
+	}
+
+	@Test
 	void itemsAndDestructablesAreToldApart() {
 		final String script = "call CreateItem('ratf', 0, 0)\ncall CreateDestructable('LTlt', 0, 0, 0, 1, 0)\n"
 				+ "call CreateUnit(Player(0), 'hfoo', 0, 0, 0)\n";
@@ -89,6 +97,14 @@ class MapViewerPrewarmScriptPatternTest {
 	}
 
 	@Test
+	void typesEarlierGamesMadeMayTakeMoreThanTheBudgetUpToHalfTheHeap() {
+		final long mb = 1L << 20;
+		assertEquals(384 * mb, MapViewerPrewarm.learnedBudget(64 * mb, 2048 * mb));
+		assertEquals(256 * mb, MapViewerPrewarm.learnedBudget(64 * mb, 512 * mb));
+		assertEquals(96 * mb, MapViewerPrewarm.learnedBudget(64 * mb, 192 * mb));
+	}
+
+	@Test
 	void aDesktopTakesTheSmallerOfAGigabyteAndHalfItsHeap() {
 		final long mb = 1L << 20;
 		assertEquals(1024 * mb, MapViewerPrewarm.scriptCreationBudget(0, 4096 * mb));
@@ -100,5 +116,13 @@ class MapViewerPrewarmScriptPatternTest {
 		final List<War3ID> found = MapViewerPrewarm
 				.namedTypes("set udg_a[1] = 'ncen'\nset udg_a[2] = 'nowl'\nif GetUnitTypeId(u) == 'ncen' then\n");
 		assertEquals(Arrays.asList(War3ID.fromString("ncen"), War3ID.fromString("nowl")), found);
+	}
+
+	@Test
+	void rawCodesAreFoundQuotedAndAsIntegers() {
+		// 1211117642 is H00J; 1000000000 and a real number are not codes
+		final String script = "set a = 'ncen'\n" + "set b = 1211117642\n" + "set c = 1000000000\n"
+				+ "set d = 1211117642.5\n" + "set e = 1211117642\n";
+		assertEquals(Arrays.asList(War3ID.fromString("H00J"), War3ID.fromString("ncen")), MapViewerPrewarm.rawCodes(script));
 	}
 }

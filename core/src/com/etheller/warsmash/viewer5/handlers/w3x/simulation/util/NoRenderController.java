@@ -148,6 +148,11 @@ public class NoRenderController implements SimulationRenderController {
 	}
 
 	@Override
+	public void removeItem(final CItem item) {
+		this.world.removeItem(item);
+	}
+
+	@Override
 	public void removeDestructable(final CDestructable dest) {
 		this.world.removeDestructable(dest);
 	}

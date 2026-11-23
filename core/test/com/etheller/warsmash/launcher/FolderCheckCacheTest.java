@@ -13,6 +13,7 @@ import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.List;
 
+import com.etheller.warsmash.datasources.FolderSignature;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,7 +29,7 @@ class FolderCheckCacheTest {
 
 	@BeforeEach
 	void setUp() throws IOException {
-		FolderCheckCache.settleMillis = 0;
+		FolderSignature.settleMillis = 0;
 		this.data = new File(this.temp, "data");
 		this.cacheFile = new File(this.temp, "folder-check.txt");
 		write("units/UnitData.slk", "a");
@@ -36,14 +37,14 @@ class FolderCheckCacheTest {
 		write("maps/deep/er/(2)Map.w3x", "c");
 		write("config.txt", "d");
 		age(this.data);
-		DataFolderCheck.useCache(this.cacheFile, "v1");
+		DataFolderCheck.useCache(this.cacheFile);
 		DataFolderCheck.resetMemory();
 	}
 
 	@AfterEach
 	void tearDown() {
-		FolderCheckCache.settleMillis = 2500;
-		DataFolderCheck.useCache(null, "");
+		FolderSignature.settleMillis = 2500;
+		DataFolderCheck.useCache(null);
 		DataFolderCheck.resetMemory();
 	}
 
@@ -159,7 +160,7 @@ class FolderCheckCacheTest {
 
 	@Test
 	void aFolderThatChangedTooRecentlyIsNotKept() throws IOException {
-		FolderCheckCache.settleMillis = 5_000;
+		FolderSignature.settleMillis = 5_000;
 		write("units/fresh.slk", "x");
 		walk();
 		assertFalse(this.cacheFile.isFile()
@@ -168,11 +169,75 @@ class FolderCheckCacheTest {
 		assertNull(DataFolderCheck.current(this.data));
 	}
 
+	/** Takes a file written into the folder, as an import does, into the result kept for it. */
+	private long importFile(final String name) throws IOException {
+		DataFolderCheck.beforeImport(this.data);
+		write(name, "imported");
+		final DataFolderCheck.Tally added = new DataFolderCheck.Tally();
+		added.entries = 1;
+		added.files = 1;
+		added.touch(new File(this.data, name).getParentFile());
+		final long started = System.currentTimeMillis();
+		DataFolderCheck.added(this.data, added);
+		return System.currentTimeMillis() - started;
+	}
+
 	@Test
-	void anotherVersionOfTheAppReadsTheFolderAgain() {
+	void anImportWaitsForTheFoldersItChangedToSettleBeforeItsFilesAreTakenIn() throws IOException {
+		final DataFolderCheck.Readability before = walk();
+		FolderSignature.settleMillis = 400;
+		final long waited = importFile("units/imported.slk");
+		assertTrue(waited >= 350, "waited " + waited + " ms");
+		final DataFolderCheck.Readability after = DataFolderCheck.current(this.data);
+		assertNotNull(after);
+		assertEquals(before.files + 1, after.files);
+		assertEquals(before.fileCount + 1, after.fileCount);
+		restart();
+		assertNotNull(DataFolderCheck.current(this.data));
+	}
+
+	@Test
+	void anImportDoesNotWaitWhenNoTimeIsNeededToSettle() throws IOException {
+		walk();
+		final long waited = importFile("units/imported.slk");
+		assertTrue(waited < 300, "waited " + waited + " ms");
+		assertNotNull(DataFolderCheck.current(this.data));
+	}
+
+	@Test
+	void aFolderChangedWhileAnImportWaitsForItToSettleIsNotKept() throws Exception {
+		walk();
+		FolderSignature.settleMillis = 600;
+		final Thread other = new Thread(() -> {
+			try {
+				Thread.sleep(200);
+			}
+			catch (final InterruptedException e) {
+				return;
+			}
+			touch(new File(this.data, "units"));
+		});
+		other.start();
+		importFile("units/imported.slk");
+		other.join();
+		assertNull(DataFolderCheck.current(this.data));
+	}
+
+	@Test
+	void anUpdateOfTheAppKeepsTheResultsWhileTheChecksAreTheSame() {
 		walk();
 		restart();
-		DataFolderCheck.useCache(this.cacheFile, "v2");
+		DataFolderCheck.useCache(new File(this.cacheFile.getPath()));
+		assertNotNull(DataFolderCheck.current(this.data));
+	}
+
+	@Test
+	void resultsOfAnotherVersionOfTheChecksAreReadAgain() throws IOException {
+		walk();
+		final String kept = new String(Files.readAllBytes(this.cacheFile.toPath()), StandardCharsets.UTF_8);
+		Files.write(this.cacheFile.toPath(),
+				kept.replaceFirst("warsmash-folder-check \\d+", "warsmash-folder-check 1").getBytes(StandardCharsets.UTF_8));
+		restart();
 		assertNull(DataFolderCheck.current(this.data));
 	}
 
@@ -180,7 +245,7 @@ class FolderCheckCacheTest {
 	void aDamagedCacheFileIsIgnored() throws IOException {
 		walk();
 		Files.write(this.cacheFile.toPath(),
-				"warsmash-folder-check 1\nv1\nfolder\tx\ndir\tnot-a-number\ty\n".getBytes(StandardCharsets.UTF_8));
+				"warsmash-folder-check 3\nfolder\tx\ndir\tnot-a-number\ty\n".getBytes(StandardCharsets.UTF_8));
 		restart();
 		assertNull(DataFolderCheck.current(this.data));
 		assertEquals(4, walk().fileCount);

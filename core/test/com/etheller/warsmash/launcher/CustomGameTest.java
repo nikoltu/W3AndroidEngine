@@ -87,4 +87,65 @@ class CustomGameTest {
 		assertEquals("COMPUTER_NORMAL", slots.get(1).type);
 		assertEquals(1, slots.get(0).race);
 	}
+
+	@Test
+	void aFixedMapWhoseSlotsSkipNumbersLaunchesOnlyTheChosenComputersByPlayerNumber() {
+		final GameCatalog.MapDetails details = new GameCatalog.MapDetails("Maps/test.w3x");
+		details.fixedSettings = true;
+		details.customForces = true;
+		for (final int id : new int[] { 1, 2, 3, 4, 5, 7, 8, 9, 10, 11 }) {
+			details.slots.add(new GameCatalog.Slot(id, 1, 1, "Player " + id));
+		}
+		final CustomGame lobby = new CustomGame();
+		lobby.chooseSlots(details);
+		lobby.slotTypes[1] = 4;
+		lobby.slotTypes[8] = 4;
+		final List<LauncherSlot> slots = LauncherSlot.parse(lobby.request(details).slots);
+		assertEquals(2, slots.size());
+		assertEquals(2, slots.get(0).player);
+		assertEquals(10, slots.get(1).player);
+	}
+
+	private static GameCatalog.MapDetails selectableMap() {
+		final GameCatalog.MapDetails details = new GameCatalog.MapDetails("Maps/test.w3x");
+		details.fixedSettings = true;
+		details.customForces = true;
+		details.slots.add(new GameCatalog.Slot(0, 1, 0, "Player 0"));
+		details.slots.add(new GameCatalog.Slot(1, 1, 0, "Player 1"));
+		details.slots.add(new GameCatalog.Slot(2, 1, 2, "Player 2"));
+		details.slots.add(new GameCatalog.Slot(3, 2, 0, "Computer"));
+		return details;
+	}
+
+	@Test
+	void aFixedMapLetsTheHostPickTheRaceOnlyWhereTheMapLeavesItSelectable() {
+		final GameCatalog.MapDetails details = selectableMap();
+		assertTrue(CustomGame.raceEditable(details, 0));
+		assertTrue(CustomGame.raceEditable(details, 1));
+		assertFalse(CustomGame.raceEditable(details, 2));
+		assertFalse(CustomGame.raceEditable(details, 3));
+		assertTrue(CustomGame.raceEditable(map(false, 1, 2), 1));
+	}
+
+	@Test
+	void aFixedMapLaunchesThePlayersChosenRaceKeepingTeamAndColour() {
+		final GameCatalog.MapDetails details = selectableMap();
+		final CustomGame lobby = new CustomGame();
+		lobby.chooseSlots(details);
+		assertEquals("", lobby.request(details).slots);
+		lobby.slotRaces[0] = 4;
+		lobby.slotRaces[1] = 2;
+		lobby.slotTypes[1] = 4;
+		lobby.slotRaces[2] = 3;
+		final List<LauncherSlot> slots = LauncherSlot.parse(lobby.request(details).slots);
+		assertEquals(2, slots.size());
+		assertEquals("USER", slots.get(0).type);
+		assertEquals(4, slots.get(0).race);
+		assertEquals("COMPUTER_INSANE", slots.get(1).type);
+		assertEquals(2, slots.get(1).race);
+		for (final LauncherSlot slot : slots) {
+			assertEquals(LauncherSlot.MAP_VALUE, slot.team);
+			assertEquals(LauncherSlot.MAP_VALUE, slot.color);
+		}
+	}
 }

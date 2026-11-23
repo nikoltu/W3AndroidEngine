@@ -61,6 +61,20 @@ public class CAbilityWarClub extends CAbilityTargetSpellBase {
 		super.onAdd(game, unit);
 	}
 
+	/**
+	 * Measured (1.29): a right click on a tree takes the club from it.
+	 */
+	@Override
+	public void checkCanTarget(final CSimulation game, final CUnit unit, final int playerIndex, final int orderId,
+			final boolean autoOrder, final CWidget target, final AbilityTargetCheckReceiver<CWidget> receiver) {
+		if (orderId == OrderIds.smart) {
+			super.checkCanTarget(game, unit, playerIndex, getBaseOrderId(), autoOrder, target, receiver);
+		}
+		else {
+			super.checkCanTarget(game, unit, playerIndex, orderId, autoOrder, target, receiver);
+		}
+	}
+
 	@Override
 	protected void innerCheckCanTarget(final CSimulation game, final CUnit unit, final int orderId,
 			final CWidget target, final AbilityTargetCheckReceiver<CWidget> receiver) {

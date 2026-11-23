@@ -130,6 +130,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.ui.command.CommandErrorListene
 public class CSimulation implements CPlayerAPI, CSightWorld, HandleIdSource {
 	private boolean scriptOrder;
 	private boolean scriptTargetOrder;
+	private boolean scriptPointOrder;
 	private final War3MapConfig mapConfig;
 	private final CAbilityData abilityData;
 	private final CUnitData unitData;
@@ -266,7 +267,9 @@ public class CSimulation implements CPlayerAPI, CSightWorld, HandleIdSource {
 				pathingTextures, mapGameVersion, gameData.getGameVersion());
 		this.unitData.setTechEquivalents(this.itemData.getTechEquivalents());
 		this.unitData.setItemData(this.itemData);
+		final long unitTypesStart = System.nanoTime();
 		this.unitData.getAllUnitTypesLightweight(); // Quick hack to avoid lag on first cast of Mech Critter
+		PerfStats.slowSetupPart("unit type scan", unitTypesStart);
 		this.destructableData = new CDestructableData(parsedDestructableData, pathingTextures);
 		this.units = new ArrayList<>();
 		this.newUnits = new ArrayList<>();
@@ -1024,6 +1027,7 @@ public class CSimulation implements CPlayerAPI, CSightWorld, HandleIdSource {
 				speed == null ? abilityMissileSpeed(spellAlias) : speed, target,
 				homing == null ? abilityMissileHoming(spellAlias) : homing, source, projectileListener);
 		projectile.setHitQuantum(hitQuantum);
+		projectile.setSpellMissile(true);
 		this.simulationRenderController.spawnProjectileArt(projectile, source, spellAlias);
 		leadMidStepLaunch(projectile);
 		this.newProjectiles.add(projectile);
@@ -1176,7 +1180,24 @@ public class CSimulation implements CPlayerAPI, CSightWorld, HandleIdSource {
 		if (this.pathfindingGraph == null) {
 			this.pathfindingGraph = new CPathfindingProcessor.SharedGraph();
 		}
-		this.pathfindingGraph.prewarm(this.pathingGrid, unitType.getMovementType(), unitType.getCollisionSize());
+		this.pathfindingGraph.prewarm(this.pathingGrid, this.worldCollision, unitType.getMovementType(),
+				unitType.getCollisionSize());
+	}
+
+	/** Leaves the parts of the map the prewarm finds to {@link #prewarmPathingParts}, after the game's first steps. */
+	public void deferPathingParts() {
+		if (this.pathfindingGraph == null) {
+			this.pathfindingGraph = new CPathfindingProcessor.SharedGraph();
+		}
+		this.pathfindingGraph.deferParts();
+	}
+
+	/** Finds the parts of the map a unit of a type walks between, as the first search of its size would. */
+	public void prewarmPathingParts(final CUnitType unitType) {
+		if (this.pathfindingGraph == null) {
+			this.pathfindingGraph = new CPathfindingProcessor.SharedGraph();
+		}
+		this.pathfindingGraph.prewarmParts(this.pathingGrid, unitType.getMovementType(), unitType.getCollisionSize());
 	}
 
 	/** Whether a unit at a point can walk to within a reach of another point, ignoring other units. */
@@ -1750,6 +1771,14 @@ public class CSimulation implements CPlayerAPI, CSightWorld, HandleIdSource {
 		return this.scriptTargetOrder;
 	}
 
+	public void setScriptPointOrder(final boolean scriptPointOrder) {
+		this.scriptPointOrder = scriptPointOrder;
+	}
+
+	public boolean isScriptPointOrder() {
+		return this.scriptPointOrder;
+	}
+
 	public CQuestLog getQuestLog() {
 		return this.questLog;
 	}
@@ -2297,6 +2326,9 @@ public class CSimulation implements CPlayerAPI, CSightWorld, HandleIdSource {
 		if (this.handleIdToItem.remove(cItem.getHandleId(), cItem)) {
 			this.handleIdAllocator.release(cItem);
 			cItem.freePoolIds(this.handleIdAllocator);
+			// A removed item is gone for enumerations and checksums too; its id may already belong to a new item.
+			this.items.remove(cItem);
+			this.simulationRenderController.removeItem(cItem);
 		}
 	}
 

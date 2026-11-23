@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="lan_host_tip_wifi">¿Nadie encuentra tu partida? Comprueba que los demás estén en la misma red Wi-Fi o punto de acceso que este dispositivo.</string>
+</resources>

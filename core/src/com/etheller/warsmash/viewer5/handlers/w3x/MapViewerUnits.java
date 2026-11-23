@@ -48,6 +48,7 @@ final class MapViewerUnits {
 			viewer.renderUnitTypeData = new RenderUnitTypeData(modifications.getUnits(), mpq, viewer,
 					viewer.unitAckSoundsTable, viewer.terrain.uberSplatTable);
 			viewer.renderUnitTypeDataObjects = modifications;
+			viewer.renderUnitTypeData.warmModelLookups();
 		}
 		viewer.renderItemTypeData = new RenderItemTypeData(modifications.getItems(), mpq, viewer, viewer.miscData);
 

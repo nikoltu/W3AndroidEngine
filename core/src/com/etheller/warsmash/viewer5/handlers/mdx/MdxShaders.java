@@ -3,6 +3,17 @@ package com.etheller.warsmash.viewer5.handlers.mdx;
 import com.etheller.warsmash.viewer5.Shaders;
 
 public class MdxShaders {
+	/** The ground softens its fog of war this way; a model drawn as part of it has to fade with it. */
+	private static final String GROUND_FOG = "    float groundFog(vec2 uv) {\r\n" + //
+			"      vec2 t = u_fogTexel;\r\n" + //
+			"      float m = texture2D(u_groundFogOfWarMap, uv).r * 0.25;\r\n" + //
+			"      m += (texture2D(u_groundFogOfWarMap, uv + vec2(t.x, 0.0)).r + texture2D(u_groundFogOfWarMap, uv - vec2(t.x, 0.0)).r\r\n" + //
+			"          + texture2D(u_groundFogOfWarMap, uv + vec2(0.0, t.y)).r + texture2D(u_groundFogOfWarMap, uv - vec2(0.0, t.y)).r) * 0.125;\r\n" + //
+			"      m += (texture2D(u_groundFogOfWarMap, uv + t).r + texture2D(u_groundFogOfWarMap, uv - t).r\r\n" + //
+			"          + texture2D(u_groundFogOfWarMap, uv + vec2(t.x, -t.y)).r + texture2D(u_groundFogOfWarMap, uv + vec2(-t.x, t.y)).r) * 0.0625;\r\n" + //
+			"      return m;\r\n" + //
+			"    }\r\n";
+
 	public static final String vsHd = "#version 120\r\n" + Shaders.boneTexture + "\r\n" + //
 			"    uniform mat4 u_VP;\r\n" + //
 			"    uniform mat4 u_MV;\r\n" + //
@@ -262,8 +273,9 @@ public class MdxShaders {
 			"      gl_Position = u_VP * vec4(position, 1.0);\r\n" + //
 			"    }";
 
-	public static final String fsHd(final boolean menu) {
+	public static final String fsHd(final boolean menu, final boolean groundShaded) {
 		return "#version 120\r\n" + //
+				(groundShaded ? GROUND_SHADED : "") + //
 				"\r\n" + //
 				"\r\n" + //
 				"\r\n" + //
@@ -303,6 +315,21 @@ public class MdxShaders {
 				"varying vec3 v_worldTangent;\r\n" + //
 				"varying vec3 v_worldBinormal;\r\n" + //
 				"varying vec3 v_worldEye;\r\n" + //
+				"#ifdef GROUND_SHADED\r\n" + //
+				"uniform vec3 u_eyePos;\r\n" + //
+				"uniform vec4 u_groundMapping;\r\n" + //
+				"uniform sampler2D u_groundShadowMap;\r\n" + //
+				"uniform sampler2D u_groundFogOfWarMap;\r\n" + //
+				"uniform vec2 u_fogTexel;\r\n" + //
+				GROUND_FOG + //
+				// The world position comes back from the eye vector rather than from a varying of its own: the
+				// shader is already close to the varying limit of the older GLES drivers.
+				"vec3 groundShaded(vec3 color) {\r\n" + //
+				"  vec2 uv = (u_eyePos.xy - v_worldEye.xy - u_groundMapping.xy) * u_groundMapping.zw;\r\n" + //
+				"  float shadow = texture2D(u_groundShadowMap, uv).r + groundFog(uv);\r\n" + //
+				"  return color * (1.0 - clamp(shadow, 0.0, 1.0));\r\n" + //
+				"}\r\n" + //
+				"#endif\r\n" + //
 				"// varying vec3 v_lightDirWorld;\r\n" + //
 				"#if defined(ONLY_TANGENTS)\r\n" + //
 				"varying vec3 v_tangent;\r\n" + //
@@ -526,6 +553,9 @@ public class MdxShaders {
 				"  vec4 baseColor = getDiffuseColor();\r\n" + //
 				"  if (u_unlit > 0.5 || u_unshaded > 0.5) {\r\n" + //
 				"    vec3 color = baseColor.rgb * u_vertexColor.rgb;\r\n" + //
+				"    #ifdef GROUND_SHADED\r\n" + //
+				"    color = groundShaded(color);\r\n" + //
+				"    #endif\r\n" + //
 				Shaders.fogSystem("u_unfogged < 0.5", null) + //
 				"    gl_FragColor = vec4(color, baseColor.a * v_layerAlpha * u_vertexColor.a);\r\n" + //
 				"    return;\r\n" + //
@@ -597,6 +627,11 @@ public class MdxShaders {
 				"  vec3 iblDiffuse = envDiffuse * iblScale;\r\n" + //
 				"  vec3 iblSpecular = envSpecular * fresnel * (smoothness * smoothness) * iblScale * u_iblParams.z;\r\n" + //
 				"  vec3 color = clamp(specularSum, 0.0, 1.0) * u_iblParams.z + diffuse * (lambertFactorSum + iblDiffuse * aoFactor) + iblSpecular * aoFactor + emissive;\r\n" + //
+				// The ground is lit by its lights alone, with no environment map light or highlights, so a model that is part of
+				// it has to be as well to match it.
+				"  #ifdef GROUND_SHADED\r\n" + //
+				"  color = diffuse * clamp(lambertFactorSum, 0.0, 1.0) + emissive;\r\n" + //
+				"  #endif\r\n" + //
 				"  if (u_tone.y > 0.0) {\r\n" + //
 				"    color *= u_tone.y;\r\n" + //
 				"    vec3 over = max(color - vec3(u_tone.z), vec3(0.0));\r\n" + //
@@ -606,6 +641,9 @@ public class MdxShaders {
 				"  }\r\n" + //
 				// The fog of war shade and the unit tint come in the vertex color, as with the classic models.
 				"  color *= u_vertexColor.rgb;\r\n" + //
+				"  #ifdef GROUND_SHADED\r\n" + //
+				"  color = groundShaded(color);\r\n" + //
+				"  #endif\r\n" + //
 				Shaders.fogSystem("u_unfogged < 0.5", null) + //
 				// The unit's own transparency (invisibility, fading corpses, a trigger's alpha) and the geoset and layer alpha.
 				"  gl_FragColor = vec4(color, baseColor.a * v_layerAlpha * u_vertexColor.a);\r\n" + //
@@ -743,16 +781,7 @@ public class MdxShaders {
 			"    uniform sampler2D u_groundFogOfWarMap;\r\n" + //
 			"    uniform vec2 u_fogTexel;\r\n" + //
 			"    varying vec2 v_groundUv;\r\n" + //
-			// The ground softens its fog of war this way; a model drawn as part of it has to fade with it.
-			"    float groundFog(vec2 uv) {\r\n" + //
-			"      vec2 t = u_fogTexel;\r\n" + //
-			"      float m = texture2D(u_groundFogOfWarMap, uv).r * 0.25;\r\n" + //
-			"      m += (texture2D(u_groundFogOfWarMap, uv + vec2(t.x, 0.0)).r + texture2D(u_groundFogOfWarMap, uv - vec2(t.x, 0.0)).r\r\n" + //
-			"          + texture2D(u_groundFogOfWarMap, uv + vec2(0.0, t.y)).r + texture2D(u_groundFogOfWarMap, uv - vec2(0.0, t.y)).r) * 0.125;\r\n" + //
-			"      m += (texture2D(u_groundFogOfWarMap, uv + t).r + texture2D(u_groundFogOfWarMap, uv - t).r\r\n" + //
-			"          + texture2D(u_groundFogOfWarMap, uv + vec2(t.x, -t.y)).r + texture2D(u_groundFogOfWarMap, uv + vec2(-t.x, t.y)).r) * 0.0625;\r\n" + //
-			"      return m;\r\n" + //
-			"    }\r\n" + //
+			GROUND_FOG + //
 			"    #endif\r\n" + //
 			"    void main() {\r\n" + //
 			"      vec2 uv = v_uv;\r\n" + //

@@ -108,8 +108,8 @@ public final class MapListCache {
 
 	/**
 	 * Tells when the maps of the game data may have changed without opening the data: the map files of the folder
-	 * sources and the files the other sources are kept in, by name, size and time, and the folders that may hold maps
-	 * by time.
+	 * sources and the files the other sources are kept in, by name, size and time. Folder times are left out: a language or graphics pack
+	 * changes them without touching any map, and an added, removed or renamed map shows in the file names.
 	 */
 	static String fingerprint(final DataTable ini) {
 		final Element sources = ini.get("DataSources");
@@ -130,7 +130,10 @@ public final class MapListCache {
 				addMapFacts(facts, new File(root, "Maps"), "/Maps", 1, true);
 			}
 			else {
-				addFileFacts(facts, root, "");
+				// A directory's own time changes with any file added beside the maps, so only a file source counts.
+				if (root.isFile()) {
+					addFileFacts(facts, root, "");
+				}
 				// A CASC storage is updated through its build information.
 				addFileFacts(facts, new File(root, ".build.info"), ".build.info");
 			}
@@ -155,7 +158,6 @@ public final class MapListCache {
 			return;
 		}
 		Arrays.sort(children);
-		addFileFacts(facts, folder, name + "/");
 		for (final File child : children) {
 			final String childName = name + "/" + child.getName();
 			if (child.isDirectory()) {

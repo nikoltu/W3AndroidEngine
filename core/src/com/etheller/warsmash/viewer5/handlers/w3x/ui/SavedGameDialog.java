@@ -316,7 +316,7 @@ public final class SavedGameDialog {
 
 	private String reasonOf(final SavedGame.Loadability state) {
 		final String key = reasonKey(state);
-		return key == null ? "" : this.rootFrame.getTemplates().getDecoratedString(key);
+		return key == null ? "" : this.rootFrame.smashString(key, key);
 	}
 
 	/** The string list key that says why a save cannot be loaded, or null for one that can. */

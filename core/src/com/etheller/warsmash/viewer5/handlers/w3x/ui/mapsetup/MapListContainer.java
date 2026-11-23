@@ -130,8 +130,10 @@ public class MapListContainer {
 		}
 	}
 
-	private static String reasonText(final MapListCache.Problem problem) {
-		return problem == MapListCache.Problem.UNREADABLE ? "not a map file or damaged" : "no map information";
+	private String reasonText(final MapListCache.Problem problem) {
+		return problem == MapListCache.Problem.UNREADABLE
+				? this.rootFrame.smashString("SMASH_MAP_UNREADABLE", "not a map file or damaged")
+				: this.rootFrame.smashString("SMASH_MAP_NO_INFORMATION", "no map information");
 	}
 
 	/** Whether the list shows the map only to say it cannot be read, so that it cannot be started. */

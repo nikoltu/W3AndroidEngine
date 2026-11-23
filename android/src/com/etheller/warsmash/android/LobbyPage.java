@@ -26,6 +26,7 @@ import com.etheller.warsmash.launcher.LauncherBoard;
 import com.etheller.warsmash.launcher.SkinArt;
 import com.etheller.warsmash.launcher.lan.LanLauncherModel;
 import com.etheller.warsmash.launcher.lan.LanLobbyView;
+import com.etheller.warsmash.launcher.LauncherText;
 import com.etheller.warsmash.launcher.lan.LanText;
 
 import net.warsmash.lan.protocol.LanProtocol;
@@ -90,7 +91,7 @@ final class LobbyPage extends LauncherViews {
 			// The column heads sit over the slots' choices.
 			final float xr = frame + 8 + 84 + 20 + 260;
 			final float[] hx = { xr, xr + 312, xr + 312 + 142, xr + 312 + 142 + 112 };
-			final String[] heads = { "Race", "Team", "Color", "Handicap" };
+			final String[] heads = { glue("RACE"), glue("TEAM"), glue("COLOR"), LauncherText.get("lan_handicap") };
 			for (int i = 0; i < heads.length; i++) {
 				place(left, text(heads[i], 22, this.activity.art.text2()), hx[i], headY - 4, 200, -1);
 			}
@@ -106,7 +107,7 @@ final class LobbyPage extends LauncherViews {
 		final FrameLayout chat = framed(content, rx, cy, rightW, ch);
 		final float eh = t ? 90 : 56;
 		this.chatField = nameField(t ? 26 : 15);
-		this.chatField.setHint("Type a message…");
+		this.chatField.setHint(LauncherText.get("lan_chat_hint"));
 		this.chatField.setInputType(InputType.TYPE_CLASS_TEXT);
 		this.chatField.setImeOptions(EditorInfo.IME_ACTION_SEND | EditorInfo.IME_FLAG_NO_EXTRACT_UI);
 		this.chatField.setFilters(new android.text.InputFilter[] { new android.text.InputFilter.LengthFilter(120) });
@@ -140,9 +141,9 @@ final class LobbyPage extends LauncherViews {
 		chatColumn.addView(this.chatScroll, new LinearLayout.LayoutParams(MATCH, 0, 1));
 		place(chat, chatColumn, frame + 6, frame + (t ? 10 : 4), rightW - (2 * frame) - 12,
 				ch - (2 * frame) - eh - (t ? 120 : 70));
-		action(view, 0, "Leave", v -> leave());
-		this.secondary = action(view, 1, "Ready", v -> readyOrCancel());
-		this.primary = action(view, 2, "Start Game", v -> this.activity.lan().hostPrimary());
+		action(view, 0, LauncherText.get("lan_leave"), v -> leave());
+		this.secondary = action(view, 1, LauncherText.get("lan_ready"), v -> readyOrCancel());
+		this.primary = action(view, 2, glue("KEY_START_GAME"), v -> this.activity.lan().hostPrimary());
 		this.shownVersion = -1;
 		this.shownChat = 0;
 		this.activity.setPage(view, LauncherActivity.PAGE_LAN);
@@ -202,7 +203,7 @@ final class LobbyPage extends LauncherViews {
 			return;
 		}
 		this.activity.dialogs.showQuestion(LanText.leaveTitle(), confirm,
-				new CharSequence[] { glueLabel("CANCEL", "Cancel"), "Leave Lobby" }, new Runnable[] { null, () -> {
+				new CharSequence[] { glueLabel("CANCEL"), LauncherText.get("lan_leave_lobby") }, new Runnable[] { null, () -> {
 					model.leave();
 					this.activity.lanPage.showJoin();
 				} });
@@ -231,21 +232,21 @@ final class LobbyPage extends LauncherViews {
 		}
 		final boolean countdown = model.mode() == LanLauncherModel.Mode.COUNTDOWN;
 		if (view.iAmHost) {
-			this.secondary.setText(countdown ? "Cancel" : LanText.changeMap());
+			this.secondary.setText(countdown ? glue("CANCEL") : LanText.changeMap());
 			this.secondary.setEnabled(true);
 			this.secondary.setVisibility(View.VISIBLE);
 			this.primary.setVisibility(View.VISIBLE);
 			final LanLobbyView.HostAction action = view.hostAction();
-			this.primary.setText(countdown ? "Starting… " + model.countdownSeconds()
-					: action == LanLobbyView.HostAction.START ? "Start Game"
-							: action == LanLobbyView.HostAction.NOT_READY ? "Not Ready" : "Ready");
+			this.primary.setText(countdown ? LauncherText.get("lan_starting", model.countdownSeconds())
+					: action == LanLobbyView.HostAction.START ? glue("KEY_START_GAME")
+							: action == LanLobbyView.HostAction.NOT_READY ? LauncherText.get("lan_not_ready") : LauncherText.get("lan_ready"));
 			this.primary.setSelected(action == LanLobbyView.HostAction.NOT_READY);
 			this.primary.setEnabled(!countdown && ((action == LanLobbyView.HostAction.START) || model.canReady()));
 		}
 		else {
 			final boolean ready = (view.mine != null) && view.mine.ready;
 			this.secondary.setVisibility(View.VISIBLE);
-			this.secondary.setText(ready ? "Not Ready" : "Ready");
+			this.secondary.setText(ready ? LauncherText.get("lan_not_ready") : LauncherText.get("lan_ready"));
 			this.secondary.setSelected(ready);
 			this.secondary.setEnabled(model.canReady());
 			// Only the host starts the game: the guest's page has no button for it.
@@ -326,10 +327,10 @@ final class LobbyPage extends LauncherViews {
 		final float fw = rightW - fx - frame;
 		place(panel, text(view.mapLabel(), t ? 34 : 18, this.activity.art.text()), fx, frame - 4, fw, -1);
 		final float fs = t ? 28 : 15;
-		final String[][] rows = { { "Game Speed:", LanText.speed(view.options.speed) },
-			{ "Observers:", LanText.observers(view.options.observers) },
-			{ "Lock Teams:", view.options.lockTeams ? LanText.yes() : LanText.no() },
-			{ "Teams Together:", view.options.teamsTogether ? LanText.yes() : LanText.no() } };
+		final String[][] rows = { { LauncherText.get("lan_game_speed_colon"), LanText.speed(view.options.speed) },
+			{ LanText.observersLabel(), LanText.observers(view.options.observers) },
+			{ LauncherText.get("lan_lock_teams_colon"), view.options.lockTeams ? LanText.yes() : LanText.no() },
+			{ LauncherText.get("lan_teams_together_colon"), view.options.teamsTogether ? LanText.yes() : LanText.no() } };
 		for (int i = 0; i < (t ? 4 : 3); i++) {
 			fact(panel, rows[i][0], rows[i][1], fx, frame + (t ? 56 : 28) + (i * fs * 1.55f), fw, fs);
 		}
@@ -347,7 +348,7 @@ final class LobbyPage extends LauncherViews {
 		}
 		final int watching = view.watchers.size();
 		if (watching > 0 || view.canWatch) {
-			final TextView head = text("Observers · Referees", t ? 28 : 17, this.activity.art.gold());
+			final TextView head = text(LauncherText.get("lan_observers_referees_head"), t ? 28 : 17, this.activity.art.gold());
 			head.setGravity(Gravity.CENTER_VERTICAL);
 			head.setPadding(px(12), 0, 0, 0);
 			this.slotRows.addView(head, new LinearLayout.LayoutParams(MATCH, px(rowH * 0.6f)));
@@ -357,7 +358,7 @@ final class LobbyPage extends LauncherViews {
 		}
 		if (view.canWatch && (view.myRole == LanProtocol.ROLE_PLAYER)) {
 			final boolean referees = view.options.observers == LanProtocol.OBSERVERS_REFEREES;
-			final TextView watch = text(referees ? "Watch as a referee" : "Watch as an observer", t ? 30 : 18,
+			final TextView watch = text(referees ? LauncherText.get("lan_watch_referee") : LauncherText.get("lan_watch_observer"), t ? 30 : 18,
 					this.activity.art.text2());
 			watch.setGravity(Gravity.CENTER_VERTICAL);
 			watch.setPadding(px(12), 0, 0, 0);
@@ -380,7 +381,7 @@ final class LobbyPage extends LauncherViews {
 		nameLine.setGravity(Gravity.CENTER_VERTICAL);
 		if (w.kickable) {
 			final int who = w.participantId;
-			final View menu = dropdown(new String[] { w.name, "Kick" }, 0, true, rowH * 0.46f, t ? 30 : 17, choice -> {
+			final View menu = dropdown(new String[] { w.name, LauncherText.get("lan_kick") }, 0, true, rowH * 0.46f, t ? 30 : 17, choice -> {
 				if (choice == 1) {
 					this.activity.lan().kickWatcher(who);
 				}
@@ -438,11 +439,11 @@ final class LobbyPage extends LauncherViews {
 			final String[] items;
 			final int selected;
 			if (human) {
-				items = new String[] { row.name, "Kick" };
+				items = new String[] { row.name, LauncherText.get("lan_kick") };
 				selected = 0;
 			}
 			else {
-				items = new String[] { "Open", "Closed", LanText.computer(0), LanText.computer(1), LanText.computer(2) };
+				items = new String[] { glue("OPEN"), glue("CLOSED"), LanText.computer(0), LanText.computer(1), LanText.computer(2) };
 				selected = row.kind == LanLobbyView.OPEN ? 0 : row.kind == LanLobbyView.CLOSED ? 1 : 2 + row.computerLevel;
 			}
 			place(cell, dropdown(items, selected, true, ph, size, choice -> {
@@ -502,7 +503,7 @@ final class LobbyPage extends LauncherViews {
 			place(cell, bar, xr, py + ph - bh - 2, bw, bh);
 			return cell;
 		}
-		final String[] races = { "Random", "Human", "Orc", "Undead", "Night Elf" };
+		final String[] races = glueList(CustomGame.RACES, 0);
 		final int teamCount = Math.max(1, view.rows.size());
 		final String[] teams = new String[teamCount];
 		for (int i = 0; i < teamCount; i++) {
@@ -510,7 +511,7 @@ final class LobbyPage extends LauncherViews {
 		}
 		final String[] colors = new String[CustomGame.COLOR_NAMES.length];
 		for (int i = 0; i < colors.length; i++) {
-			colors[i] = glue(CustomGame.COLOR_NAMES[i][0], CustomGame.COLOR_NAMES[i][1]);
+			colors[i] = glue(CustomGame.COLOR_NAMES[i][0]);
 		}
 		final boolean edit = row.editable;
 		place(cell, dropdown(races, Math.min(row.race, races.length - 1), edit, ph, size,

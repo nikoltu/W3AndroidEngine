@@ -226,7 +226,7 @@ final class HotkeyEditorPage extends LauncherViews {
 	/** Once the chosen race's pictures show, the next race's are read quietly so a change of race has them at once. */
 	private void prefetchOthers(final HotkeyCatalog.Race shownRace) {
 		for (final HotkeyCatalog.Race other : this.hotkeys.races) {
-			if ((other == shownRace) || !this.prefetched.add(other.name == null ? "" : other.name[0])) {
+			if ((other == shownRace) || !this.prefetched.add(other.name == null ? "" : other.name)) {
 				continue;
 			}
 			final Set<String> missing = new HashSet<>();
@@ -304,9 +304,9 @@ final class HotkeyEditorPage extends LauncherViews {
 		final float width = (b.contentW - (2 * b.pageFrame) - (2 * b.labelX) - ((races.size() - 1) * gap)) / races.size();
 		for (int i = 0; i < races.size(); i++) {
 			final int index = i;
-			final String[] name = races.get(i).name;
+			final String name = races.get(i).name;
 			final LauncherKit.GlueButton button = button(
-					name == null ? getString(R.string.controls_common) : glue(name[0], name[1]), height,
+					name == null ? getString(R.string.controls_common) : glue(name), height,
 					b.tablet ? 32 : 22, v -> {
 						if (index != this.race) {
 							this.race = index;

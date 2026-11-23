@@ -626,7 +626,9 @@ final class MeleeUIInfoPanel {
 		if (this.ui.simpleBuildTimeIndicator.isVisible()) {
 			this.ui.simpleBuildTimeIndicator
 					.setValue(Math.min(this.ui.selectedUnit.getSimulationUnit().getConstructionProgress()
-							/ this.ui.selectedUnit.getSimulationUnit().getUnitType().getBuildTime(), 0.99f));
+							/ this.ui.selectedUnit.getSimulationUnit()
+									.getConstructionDuration(this.ui.war3MapViewer.simulation),
+							0.99f));
 		}
 		if (this.ui.simpleBuildingBuildTimeIndicator.isVisible()) {
 			this.ui.simpleBuildingBuildTimeIndicator
@@ -746,7 +748,7 @@ final class MeleeUIInfoPanel {
 				}
 				else {
 					this.secondaryTags = unit.getSecondaryAnimationTags();
-					final MdxModel portraitModel = unit.portraitModel;
+					final MdxModel portraitModel = unit.getPortraitModel();
 					if (portraitModel != null) {
 						if (this.modelInstance != null) {
 							this.portraitScene.removeInstance(this.modelInstance);
@@ -1334,13 +1336,13 @@ final class MeleeUIInfoPanel {
 						this.recycleStringBuilder.setLength(0);
 						if (pawnable) {
 							this.recycleStringBuilder.append(
-									MeleeUICommands.touchItemHint(
+									MeleeUICommands.touchItemHint(this.ui.rootFrame,
 									this.ui.rootFrame.getTemplates().getDecoratedString("ITEM_PAWN_TOOLTIP")));
 							this.recycleStringBuilder.append("|n");
 						}
 						if (activelyUsed) {
 							this.recycleStringBuilder.append(
-									MeleeUICommands.touchItemHint(
+									MeleeUICommands.touchItemHint(this.ui.rootFrame,
 									this.ui.rootFrame.getTemplates().getDecoratedString("ITEM_USE_TOOLTIP")));
 							this.recycleStringBuilder.append("|n");
 						}

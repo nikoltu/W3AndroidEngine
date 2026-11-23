@@ -4,9 +4,10 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.attribute.PosixFileAttributes;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -17,6 +18,8 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import com.etheller.warsmash.datasources.FolderIndexStore;
+import com.etheller.warsmash.datasources.FolderSignature;
 import com.etheller.warsmash.datasources.GameLanguage;
 import com.etheller.warsmash.units.Element;
 
@@ -64,7 +67,8 @@ public final class DataFolderCheck {
 		// lie unpacked in "_retail_", which the archives do not hold.
 		final File archives = child(child(folder, "Data"), "data");
 		if (isWarcraftBuildInfo(child(folder, ".build.info")) && hasCascIndex(archives)
-				&& isReadable(child(archives, "data.000")) && (detect(child(folder, "_retail_")) == Kind.NONE)) {
+				&& isReadable(child(archives, "data.000")) && (missingCascFile(folder) == null)
+				&& (detect(child(folder, "_retail_")) == Kind.NONE)) {
 			return Kind.CASC;
 		}
 		// An extracted game data folder, as the desktop Folder data source reads it.
@@ -76,6 +80,25 @@ public final class DataFolderCheck {
 			return Kind.LOCAL_FILES;
 		}
 		return Kind.NONE;
+	}
+
+	/**
+	 * The first file the engine opens to mount an installed game that is missing, by the exact names it opens them
+	 * (the lookups above ignore case, a phone's storage does not); null when all are there.
+	 */
+	public static String missingCascFile(final File folder) {
+		if (!new File(folder, ".build.info").isFile()) {
+			return ".build.info";
+		}
+		if (!new File(folder, "Data/data").isDirectory()) {
+			return "Data/data";
+		}
+		final String key = buildInfoField(folder, "Build Key");
+		if (key.length() < 4) {
+			return ".build.info";
+		}
+		final String config = "Data/config/" + key.substring(0, 2) + "/" + key.substring(2, 4) + "/" + key;
+		return new File(folder, config).isFile() ? null : config;
 	}
 
 	/** The locale layer a local files install keeps its text in; null for the other kinds. */
@@ -566,10 +589,6 @@ public final class DataFolderCheck {
 		}
 	}
 
-	/** The files every check of an extracted folder opens; they are tried for real, not only by their rights. */
-	private static final String[] OPENED_FILES = { "units/UnitData.slk", "ui/WorldEditGameStrings.txt",
-		".build.info" };
-
 	/**
 	 * Walks a folder for files the game cannot read: another user's files in the app's folder on Android, or files
 	 * without read rights on a computer. A file counts by its read right, except the few every check opens, which are
@@ -579,16 +598,31 @@ public final class DataFolderCheck {
 	 * @param maxNames how many names are kept
 	 */
 	public static Readability readability(final File folder, final int maxFiles, final int maxNames) {
-		final Readability kept = current(folder);
-		if ((kept != null) && (kept.files <= maxFiles)) {
-			return kept;
+		return readability(folder, maxFiles, maxNames, new FileRights());
+	}
+
+	static Readability readability(final File folder, final int maxFiles, final int maxNames, final Rights rights) {
+		// Two windows asking at once (the data folder window is opened and resumed) would walk the same folder twice.
+		synchronized (WALK_LOCK) {
+			final Readability kept = current(folder);
+			if ((kept != null) && (kept.files <= maxFiles)) {
+				return kept;
+			}
+			return walk(folder, maxFiles, maxNames, rights);
 		}
+	}
+
+	private static final Object WALK_LOCK = new Object();
+
+	private static Readability walk(final File folder, final int maxFiles, final int maxNames, final Rights rights) {
 		WALKS.incrementAndGet();
 		final long started = System.currentTimeMillis();
 		final FolderCheckCache.Snapshot snapshot = new FolderCheckCache.Snapshot();
 		final int[] counts = { 0, 0, 0 };
 		final List<String> names = new ArrayList<>();
-		final boolean partial = !walkReadability(folder, "", counts, names, maxFiles, maxNames, snapshot);
+		final List<String> listed = new ArrayList<>();
+		final boolean partial = !walkReadability(folder, "", counts, names, maxFiles, maxNames, snapshot, new Pace(rights),
+				listed);
 		final Readability readability = new Readability(counts[0], counts[1], names, partial, counts[2]);
 		synchronized (READABILITY) {
 			READABILITY.put(folder.getAbsolutePath(), readability);
@@ -607,6 +641,10 @@ public final class DataFolderCheck {
 			snapshot.entries = counts[0];
 			snapshot.files = counts[2];
 			FolderCheckCache.put(folder, snapshot, started);
+			// The data source needs the same list of files; it is kept for it, so that it does not walk the folder too.
+			if (snapshot.settled(started)) {
+				FolderIndexStore.keep(folder, snapshot, listed);
+			}
 		}
 		else {
 			FolderCheckCache.remove(folder);
@@ -631,10 +669,11 @@ public final class DataFolderCheck {
 
 	/**
 	 * Keeps what the walks of folders find in this file, so that the first check after the app starts does not walk a
-	 * large folder again. The stamp names the app version; another stamp reads the folders again.
+	 * large folder again. What is kept stays valid across updates of the app; see FolderCheckCache for when it is read
+	 * again.
 	 */
-	public static void useCache(final File file, final String stamp) {
-		FolderCheckCache.use(file, stamp);
+	public static void useCache(final File file) {
+		FolderCheckCache.use(file);
 	}
 
 	/**
@@ -746,24 +785,35 @@ public final class DataFolderCheck {
 	 * only its description, language and content are read anew. What was not read before stays unread, and files the
 	 * game cannot read send the next check over the whole folder.
 	 */
-	public static synchronized void added(final File folder, final Tally added) {
+	public static void added(final File folder, final Tally added) {
 		final String path = folder.getAbsolutePath();
-		DESCRIPTIONS.entrySet().removeIf(entry -> entry.getKey().endsWith(":" + path)
-				&& !entry.getKey().startsWith(Kind.FOLDER + ":") && !entry.getKey().startsWith(Kind.LOCAL_FILES + ":"));
 		final Readability known;
-		synchronized (READABILITY) {
-			known = READABILITY.remove(path);
-		}
 		final Integer count;
-		synchronized (FILE_COUNTS) {
-			count = FILE_COUNTS.remove(path);
+		synchronized (DataFolderCheck.class) {
+			DESCRIPTIONS.entrySet().removeIf(entry -> entry.getKey().endsWith(":" + path)
+					&& !entry.getKey().startsWith(Kind.FOLDER + ":")
+					&& !entry.getKey().startsWith(Kind.LOCAL_FILES + ":"));
+			synchronized (READABILITY) {
+				known = READABILITY.remove(path);
+			}
+			synchronized (FILE_COUNTS) {
+				count = FILE_COUNTS.remove(path);
+			}
+			if (added.unreadable > 0) {
+				DESCRIPTIONS.entrySet().removeIf(entry -> entry.getKey().endsWith(":" + path));
+				FolderCheckCache.remove(folder);
+				return;
+			}
 		}
-		if (added.unreadable > 0) {
-			DESCRIPTIONS.entrySet().removeIf(entry -> entry.getKey().endsWith(":" + path));
-			FolderCheckCache.remove(folder);
-			return;
-		}
+		// It may wait for the folder's times to settle, which must not hold up the checks asking for descriptions.
 		FolderCheckCache.afterImport(folder, added);
+		synchronized (DataFolderCheck.class) {
+			addedToMemory(path, added, known, count);
+		}
+	}
+
+	private static void addedToMemory(final String path, final Tally added, final Readability known,
+			final Integer count) {
 		if (count != null) {
 			final int total = count + added.files;
 			synchronized (FILE_COUNTS) {
@@ -800,9 +850,170 @@ public final class DataFolderCheck {
 		}
 	}
 
+	/**
+	 * How a walk learns whether the game can read a file. Asking the system for every file is slow where each answer
+	 * goes to another process (the shared storage of a phone: twenty seconds for the files of the game), so a file whose
+	 * owner, group and mode are those of a file of the same folder that was found readable is readable too.
+	 */
+	interface Rights {
+		/** What the read right of a file depends on besides its folder; null when that cannot be told. */
+		Object kindOf(File file);
+
+		boolean canRead(File file);
+
+		/**
+		 * Whether the file is a folder and its kind, from a single look at it (each look is a round trip too); null
+		 * when the rights cannot give both, and then the walk asks for each alone.
+		 */
+		default Look look(final File file) {
+			return null;
+		}
+
+		/** Whether a walk may time these answers to choose how it asks; false asks as the kinds allow, always. */
+		default boolean timed() {
+			return false;
+		}
+	}
+
+	/** What a single look at a file tells. */
+	static final class Look {
+		final boolean directory;
+		final Object kind;
+
+		Look(final boolean directory, final Object kind) {
+			this.directory = directory;
+			this.kind = kind;
+		}
+	}
+
+	/** The rights the system gives: owner, group and mode of a file where the file system has them. */
+	static final class FileRights implements Rights {
+		private boolean unsupported;
+
+		@Override
+		public Object kindOf(final File file) {
+			if (this.unsupported) {
+				return null;
+			}
+			try {
+				final PosixFileAttributes attributes = Files.readAttributes(file.toPath(), PosixFileAttributes.class);
+				return Arrays.asList(attributes.permissions(), attributes.owner(), attributes.group());
+			}
+			catch (final UnsupportedOperationException e) {
+				this.unsupported = true;
+				return null;
+			}
+			catch (final IOException | RuntimeException e) {
+				return null;
+			}
+		}
+
+		@Override
+		public Look look(final File file) {
+			if (this.unsupported) {
+				return null;
+			}
+			try {
+				final PosixFileAttributes attributes = Files.readAttributes(file.toPath(), PosixFileAttributes.class);
+				return new Look(attributes.isDirectory(),
+						Arrays.asList(attributes.permissions(), attributes.owner(), attributes.group()));
+			}
+			catch (final UnsupportedOperationException e) {
+				this.unsupported = true;
+				return null;
+			}
+			catch (final IOException | RuntimeException e) {
+				return null;
+			}
+		}
+
+		@Override
+		public boolean canRead(final File file) {
+			return file.canRead();
+		}
+
+		@Override
+		public boolean timed() {
+			return true;
+		}
+	}
+
+	/**
+	 * How a walk asks the rights. The shortcut by kind exists for storage where each answer is a round trip to another
+	 * process; where an answer costs about what a look at the file does (the app's own folders, internal storage) it
+	 * only adds the risk of a file that differs without its kind showing it. So the first files are asked for one by
+	 * one, with both answers timed, and the rest are asked by kind only when asking is much slower than looking.
+	 */
+	private static final class Pace {
+		/** Files asked for one by one before the walk chooses. */
+		static final int SAMPLE = 100;
+		/** An answer must take this many times a look at the file, and this long, to be worth sparing. */
+		static final long SLOWER_BY = 2;
+		static final long SLOW_NANOS = 50_000;
+		/** Files of a kind in a folder that must be found readable before the rest of the kind are taken to be. */
+		static final int CONFIRMED = 2;
+
+		private final Rights rights;
+		private final long[] reads = new long[SAMPLE];
+		private final long[] looks = new long[SAMPLE];
+		private int sampled;
+		private int looked;
+		private boolean measuring;
+		private boolean byKind = true;
+
+		Pace(final Rights rights) {
+			this.rights = rights;
+			this.measuring = rights.timed();
+		}
+
+		boolean looks() {
+			return this.measuring || this.byKind;
+		}
+
+		boolean canRead(final File file, final Look look, final long lookNanos,
+				final java.util.Map<Object, int[]> readableKinds) {
+			if (this.measuring) {
+				final long started = System.nanoTime();
+				final boolean readable = this.rights.canRead(file);
+				this.reads[this.sampled] = System.nanoTime() - started;
+				this.looks[this.sampled] = lookNanos;
+				if (look != null) {
+					this.looked++;
+				}
+				if (readable && (look != null) && (look.kind != null)) {
+					readableKinds.computeIfAbsent(look.kind, kind -> new int[1])[0]++;
+				}
+				if (++this.sampled >= SAMPLE) {
+					this.measuring = false;
+					// A typical answer, so that a pause of the thread in a few of them does not decide, against the
+					// quick looks: the first ones are slow while the code is new to the runtime.
+					Arrays.sort(this.reads);
+					Arrays.sort(this.looks);
+					final long read = this.reads[SAMPLE / 2];
+					final long quick = this.looks[SAMPLE / 10];
+					this.byKind = (this.looked == SAMPLE) && (read > SLOWER_BY * quick) && (read >= SLOW_NANOS);
+				}
+				return readable;
+			}
+			if (!this.byKind) {
+				return this.rights.canRead(file);
+			}
+			final Object kind = look == null ? this.rights.kindOf(file) : look.kind;
+			final int[] confirmed = kind == null ? null : readableKinds.get(kind);
+			if ((confirmed != null) && (confirmed[0] >= CONFIRMED)) {
+				return true;
+			}
+			final boolean readable = this.rights.canRead(file);
+			if (readable && (kind != null)) {
+				readableKinds.computeIfAbsent(kind, k -> new int[1])[0]++;
+			}
+			return readable;
+		}
+	}
+
 	private static boolean walkReadability(final File folder, final String relative, final int[] counts,
 			final List<String> names, final int maxFiles, final int maxNames,
-			final FolderCheckCache.Snapshot snapshot) {
+			final FolderCheckCache.Snapshot snapshot, final Pace pace, final List<String> listed) {
 		// The time is read before the folder is listed, so that a change during the walk shows at the next check.
 		snapshot.dirs.put(relative.isEmpty() ? "" : relative.substring(0, relative.length() - 1),
 				folder.lastModified());
@@ -812,19 +1023,25 @@ public final class DataFolderCheck {
 			return true;
 		}
 		Arrays.sort(children);
+		// Only a kind found readable by two of its files is remembered: any other file is asked for itself.
+		final java.util.Map<Object, int[]> readableKinds = new java.util.HashMap<>();
 		for (final File child : children) {
 			if (counts[0]++ >= maxFiles) {
 				return false;
 			}
 			final String path = relative + child.getName();
-			if (child.isDirectory()) {
-				if (!walkReadability(child, path + "/", counts, names, maxFiles, maxNames, snapshot)) {
+			final long looked = pace.looks() ? System.nanoTime() : 0;
+			final Look look = pace.looks() ? pace.rights.look(child) : null;
+			final long lookNanos = pace.looks() ? System.nanoTime() - looked : 0;
+			if (look == null ? child.isDirectory() : look.directory) {
+				if (!walkReadability(child, path + "/", counts, names, maxFiles, maxNames, snapshot, pace, listed)) {
 					return false;
 				}
 			}
 			else {
 				counts[2]++;
-				if (!child.canRead() || (isOpenedFile(path) && !isReadable(child))) {
+				listed.add(path);
+				if (!pace.canRead(child, look, lookNanos, readableKinds) || (isOpenedFile(path) && !isReadable(child))) {
 					unreadable(path, counts, names, maxNames);
 				}
 				else if (isOpenedFile(path)) {
@@ -836,14 +1053,7 @@ public final class DataFolderCheck {
 	}
 
 	private static boolean isOpenedFile(final String path) {
-		final String lower = path.toLowerCase(Locale.ROOT);
-		for (final String opened : OPENED_FILES) {
-			final String name = opened.toLowerCase(Locale.ROOT);
-			if (lower.equals(name) || lower.endsWith("/" + name)) {
-				return true;
-			}
-		}
-		return false;
+		return FolderSignature.isOpenedFile(path);
 	}
 
 	private static void unreadable(final String path, final int[] counts, final List<String> names,
@@ -872,15 +1082,7 @@ public final class DataFolderCheck {
 	}
 
 	static boolean isReadable(final File file) {
-		if ((file == null) || !file.isFile()) {
-			return false;
-		}
-		try (InputStream stream = new FileInputStream(file)) {
-			return stream.read() >= 0;
-		}
-		catch (final IOException e) {
-			return false;
-		}
+		return FolderSignature.isReadable(file);
 	}
 
 	/** Other Blizzard games are CASC installs too; their build info names another CDN path. */

@@ -156,7 +156,7 @@ final class SimulationClassPrewarm {
 				"pathing.CPathfindingProcessor$GridMapping$2", "pathing.CPathfindingProcessor$1",
 				"pathing.CPathfindingProcessor$Direction", "abilities.mine.CAbilityGoldMinable",
 				"abilities.mine.CAbilityOverlayedMine", "SimulationTypeCodes",
-				"behaviors.jass.CAbstractRangedBehaviorJass", "behaviors.channel.CBehaviorChannel",
+				"behaviors.jass.CAbstractRangedBehaviorJass",
 				"behaviors.cargohold.CBehaviorDrop", "abilitybuilder.behavior.CBehaviorFinishTransformation",
 				"behaviors.CBehaviorAttackListener", "behaviors.harvest.CBehaviorHarvest",
 				"behaviors.build.CBehaviorHumanBuild", "behaviors.build.CBehaviorHumanRepair",

@@ -9,6 +9,10 @@
 			}
 		},
 		"reuseCallbacks": {
+			"firstHitDelay": {
+				"type": "rawFloat",
+				"value": 0.2
+			},
 			"jumpCondition": {
 				"type": "and",
 				"conditions": [{
@@ -138,6 +142,13 @@
 					"type": "rawFloat",
 					"value": 0.25
 				},
+				"firstHitDelay": {
+					"type": "reuseFloat",
+					"name": {
+						"type": "rawString",
+						"value": "firstHitDelay"
+					}
+				},
 				"allowMultipleBouncesPerUnit": {
 					"type": "rawBoolean",
 					"value": "false"
@@ -174,6 +185,10 @@
 			}
 		}],
 		"reuseCallbacks": {
+			"firstHitDelay": {
+				"type": "rawFloat",
+				"value": 0
+			},
 			"targetCondition": {
 				"type": "setCantUseReasonOnFailure",
 				"condition": {

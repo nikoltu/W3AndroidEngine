@@ -746,7 +746,7 @@ final class MeleeUIInput {
 											this.ui.activeCommand.getHandleId(), this.ui.activeCommandOrderId,
 											clickLocationTemp2.x, clickLocationTemp2.y, shiftDown);
 								}
-								if (this.ui.selectedUnits.size() > 1) {
+								if ((this.ui.selectedUnits.size() > 1) && !this.ui.activeCommand.isUniqueCast()) {
 									for (final RenderUnit otherSelectedUnit : this.ui.selectedUnits) {
 										if (otherSelectedUnit != this.ui.activeCommandUnit) {
 											CAbility abilityToUse = null;
@@ -1222,6 +1222,15 @@ final class MeleeUIInput {
 		return (ownerIndex == localPlayerIndex) || (ownerIndex == (maxPlayers - 1));
 	}
 
+	/**
+	 * Also a unit whose owner hands its control to the local player answers: maps that keep their shops with a slot
+	 * of their own (a Player(15) shared with everyone) rely on that.
+	 */
+	static boolean isSelectionVoiced(final int ownerIndex, final int localPlayerIndex, final int maxPlayers,
+			final boolean ownerSharesControl) {
+		return ownerSharesControl || isSelectionVoiced(ownerIndex, localPlayerIndex, maxPlayers);
+	}
+
 	private void presentSelection(final List<RenderUnit> prevSelectedUnits, final List<RenderUnit> selectedUnits) {
 		if (!selectedUnits.isEmpty()) {
 			final RenderUnit unit = selectedUnits.get(0);
@@ -1237,8 +1246,11 @@ final class MeleeUIInput {
 				this.ui.selectedSoundCount = 0;
 			}
 			UnitSound USAudio = null;
-			if (isSelectionVoiced(unit.getSimulationUnit().getPlayerIndex(), this.ui.war3MapViewer.getLocalPlayerIndex(),
-					this.ui.war3MapViewer.getGameData().getMaxPlayers())) {
+			final int ownerIndex = unit.getSimulationUnit().getPlayerIndex();
+			final int localPlayerIndex = this.ui.war3MapViewer.getLocalPlayerIndex();
+			if (isSelectionVoiced(ownerIndex, localPlayerIndex, this.ui.war3MapViewer.getGameData().getMaxPlayers(),
+					this.ui.war3MapViewer.simulation.getPlayer(ownerIndex).hasAlliance(localPlayerIndex,
+							CAllianceType.SHARED_CONTROL))) {
 				if (unit.soundset != null) {
 					UnitSound ackSoundToPlay = unit.soundset.what;
 					int soundIndex;

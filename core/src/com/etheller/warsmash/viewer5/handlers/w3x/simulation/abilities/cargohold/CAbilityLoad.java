@@ -94,7 +94,7 @@ public class CAbilityLoad extends AbstractGenericSingleIconActiveAbility impleme
 	@Override
 	protected void innerCheckCanTarget(final CSimulation game, final CUnit unit, final int orderId,
 			final CWidget target, final AbilityTargetCheckReceiver<CWidget> receiver) {
-		if ((target instanceof CUnit)) {
+		if ((target instanceof CUnit) && (unit.getCargoData() != null)) {
 			if (target.canBeTargetedBy(game, unit, unit.getCargoData().getTargetsAllowed(), receiver)) {
 				if (target != unit) {
 					if (((CUnit) target).getPlayerIndex() == unit.getPlayerIndex()) {

@@ -10,13 +10,23 @@ import com.etheller.warsmash.BuildInfo;
 public final class BuildOrigin {
 	/** The SHA-256 of the certificate the project's releases are signed with. */
 	public static final String OFFICIAL_CERT_SHA256 = "c1133934fbf93ac25abd6f3a2ee144a577c59386435259991a33a2da7be273e2";
-	public static final String UNOFFICIAL = "Not an official release";
-	/** The longer notice Home shows under the menu, with where the official build is. */
-	public static final String UNOFFICIAL_NOTICE = UNOFFICIAL + " – get it from " + ProjectInfo.SOURCE_NAME;
+	/** The labels are the names of the launcher's texts; {@link #text} and {@link #notice} give the words. */
+	public static final String UNOFFICIAL = "build_not_official";
 	/** A debug build is always signed with a local debug key, so a mismatch would say nothing; it names the kind of build instead. */
-	public static final String DEBUG = "Debug build";
+	public static final String DEBUG = "build_debug";
 
 	private BuildOrigin() {
+	}
+
+	/** The words of a label from {@link #label}, in the game language. */
+	public static String text(final String label) {
+		return label.isEmpty() ? label : LauncherText.get(label);
+	}
+
+	/** The longer notice Home shows under the menu, with where the official build is. */
+	public static String notice(final String label) {
+		return UNOFFICIAL.equals(label) ? LauncherText.get("build_not_official_notice", ProjectInfo.SOURCE_NAME)
+				: text(label);
 	}
 
 	/** The label to show, or an empty text for a build signed with the project's key. */

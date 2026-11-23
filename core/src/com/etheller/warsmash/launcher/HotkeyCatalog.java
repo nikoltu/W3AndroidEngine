@@ -31,8 +31,7 @@ import com.etheller.warsmash.util.WarsmashConstants;
 public final class HotkeyCatalog {
 	/** The town halls the races start with: Human, Orc, Undead, Night Elf. */
 	private static final String[] HALLS = { "htow", "ogre", "unpl", "etol" };
-	private static final String[][] RACE_NAMES = { { "HUMAN", "Human" }, { "ORC", "Orc" }, { "UNDEAD", "Undead" },
-		{ "NIGHT_ELF", "Night Elf" } };
+	private static final String[] RACE_NAMES = { "HUMAN", "ORC", "UNDEAD", "NIGHT_ELF" };
 	private static final String[] BASE = { "CmdMove", "CmdStop", "CmdHoldPos", "CmdAttack", "CmdPatrol" };
 	private static final Map<String, String> BUILD_COMMANDS = new HashMap<>();
 	static {
@@ -98,11 +97,11 @@ public final class HotkeyCatalog {
 	}
 
 	public static final class Race {
-		/** The glue key of the race's name and its English fallback; null for the commands all races share. */
-		public final String[] name;
+		/** The glue key of the race's name; null for the commands all races share. */
+		public final String name;
 		public final List<Unit> units = new ArrayList<>();
 
-		Race(final String[] name) {
+		Race(final String name) {
 			this.name = name;
 		}
 	}
@@ -180,7 +179,7 @@ public final class HotkeyCatalog {
 		this.races.add(shared);
 	}
 
-	private void readRace(final String[] name, final String hall) {
+	private void readRace(final String name, final String hall) {
 		final Race race = new Race(name);
 		final List<String> reached = new ArrayList<>();
 		final Set<String> buildings = new LinkedHashSet<>();

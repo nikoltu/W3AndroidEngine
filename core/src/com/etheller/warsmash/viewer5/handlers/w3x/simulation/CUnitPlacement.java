@@ -390,9 +390,25 @@ final class CUnitPlacement {
 				rangeInCells * rangeInCells);
 	}
 
+	/**
+	 * Measured: a worker raising a structure over a mine (an Acolyte over a Gold Mine) starts once its footprint
+	 * touches the mine's blocked cells, from any side. canReachToPathing keeps a cell more off the footprint than that.
+	 */
+	static boolean canReachToPathingTouching(final CUnit self, final float rotationForPathing,
+			final ArgbImage buildingPathingPixelMap, final float targetX, final float targetY) {
+		return canReachToPathing(self, 0, rotationForPathing, buildingPathingPixelMap, targetX, targetY, 1, true);
+	}
+
 	static boolean canReachToPathing(final CUnit self, final float range, final float rotationForPathing,
 			final ArgbImage buildingPathingPixelMap, final float targetX, final float targetY,
 			final float rangeInCellsSquare) {
+		return canReachToPathing(self, range, rotationForPathing, buildingPathingPixelMap, targetX, targetY,
+				rangeInCellsSquare, false);
+	}
+
+	private static boolean canReachToPathing(final CUnit self, final float range, final float rotationForPathing,
+			final ArgbImage buildingPathingPixelMap, final float targetX, final float targetY,
+			final float rangeInCellsSquare, final boolean touching) {
 		if (buildingPathingPixelMap == null) {
 			return canReach(self, targetX, targetY, range);
 		}
@@ -441,7 +457,7 @@ final class CUnitPlacement {
 						// a point of the footprint within the reach (a footprint cell diagonal to the building's
 						// corner cell counts as one cell off both ways)
 						final boolean near = (((dx * dx) + (dy * dy)) <= rangeInCellsSquare)
-								|| (((fx * fx) + (fy * fy)) <= (rangeInCellsSquare - 1));
+								|| (((fx * fx) + (fy * fy)) <= (touching ? rangeInCellsSquare : (rangeInCellsSquare - 1)));
 						if (near) {
 							if (((getRGBFromPixelData(self, buildingPathingPixelMap, checkX, checkY, rotation)
 									& 0xFF0000) >>> 16) > 127) {

@@ -67,8 +67,8 @@ public class RenderItemTypeData extends RenderWidgetTypeData<RenderItemType> {
 			final float shadowY = itemShadowY;
 			final float shadowWidth = itemShadowWidth;
 			final float shadowHeight = itemShadowHeight;
-			final String shadowTexture = getShadowTexture(itemShadowFile);
-			if (this.dataSource.has(shadowTexture)) {
+			final String shadowTexture = findShadowTexture(itemShadowFile);
+			if (shadowTexture != null) {
 				renderShadowType = new RenderShadowType(shadowTexture, shadowX, shadowY, shadowWidth, shadowHeight);
 			}
 		}

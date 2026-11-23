@@ -59,7 +59,6 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.root.CBeh
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.skills.CBehaviorNoTargetSpellBase;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.skills.CBehaviorTargetSpellBase;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.skills.undead.dreadlord.CBehaviorCarrionSwarmDummy;
-import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.channel.CBehaviorChannel;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.projectile.CAbilityProjectile;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.projectile.CAttackProjectile;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.projectile.CAttackProjectileInstant;
@@ -104,7 +103,6 @@ final class SimulationTypeCodes {
 		add(CBehaviorBoard.class, "BehaviorBoard");
 		add(CBehaviorBoardTransport.class, "BehaviorBoardTransport");
 		add(CBehaviorCarrionSwarmDummy.class, "BehaviorCarrionSwarmDummy");
-		add(CBehaviorChannel.class, "BehaviorChannelTest");
 		add(CBehaviorDrop.class, "BehaviorDrop");
 		add(CBehaviorDropItem.class, "BehaviorDropItem");
 		add(CBehaviorFinishTransformation.class, "BehaviorFinishTransformation");

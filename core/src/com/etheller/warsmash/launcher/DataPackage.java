@@ -23,6 +23,7 @@ import java.util.zip.CRC32;
 import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
 import org.apache.commons.compress.archivers.zip.ZipFile;
 
+import com.etheller.warsmash.datasources.FolderDataSource;
 import com.etheller.warsmash.datasources.GameLanguage;
 import com.etheller.warsmash.datasources.LayeredDataSource;
 
@@ -442,6 +443,7 @@ public final class DataPackage implements Closeable {
 		keepGraphicsSets(old, target);
 		deleteTree(old);
 		DataFolderCheck.forget(target);
+		FolderDataSource.reindex(target);
 		return target;
 	}
 
@@ -488,10 +490,13 @@ public final class DataPackage implements Closeable {
 			deleteTree(staging);
 			if (!done) {
 				DataFolderCheck.forget(target);
+				FolderDataSource.dropIndex(target);
 			}
 		}
 		// What was read of the target stays; it is not counted over again for the few files added to it.
 		DataFolderCheck.added(target, added);
+		// The list of its files is made anew: the files added are few, but the list is a file of its own.
+		FolderDataSource.reindex(target);
 		return target;
 	}
 

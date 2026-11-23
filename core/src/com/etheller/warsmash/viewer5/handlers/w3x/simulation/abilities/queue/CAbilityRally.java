@@ -46,6 +46,13 @@ public class CAbilityRally extends AbstractCAbility implements CLevelingAbility 
 			final boolean autoOrder, final CWidget target, final AbilityTargetCheckReceiver<CWidget> receiver) {
 		switch (orderId) {
 		case OrderIds.smart:
+			if ((target instanceof CUnit) && ((CUnit) target).isDead()) {
+				// Measured on 1.29: a smart order on a corpse is refused.
+				receiver.orderIdNotAccepted();
+				break;
+			}
+			receiver.targetOk(target);
+			break;
 		case OrderIds.setrally:
 			receiver.targetOk(target);
 			break;

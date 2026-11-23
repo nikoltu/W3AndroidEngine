@@ -45,8 +45,10 @@ public class MdxHandler extends ModelHandler {
 		this.shaders.particles = viewer.webGL.createShaderProgram(MdxShaders.vsParticles(), MdxShaders.fsParticles);
 		// Shaders.simple = viewer.webGL.createShaderProgram(MdxShaders.vsSimple,
 		// MdxShaders.fsSimple);
-		this.shaders.hd = viewer.webGL.createShaderProgram(MdxShaders.vsHd, MdxShaders.fsHd((viewer instanceof AbstractMdxModelViewer)
-				&& (((AbstractMdxModelViewer) viewer).shaderEnvironmentType == ShaderEnvironmentType.MENU)));
+		final boolean hdMenu = (viewer instanceof AbstractMdxModelViewer)
+				&& (((AbstractMdxModelViewer) viewer).shaderEnvironmentType == ShaderEnvironmentType.MENU);
+		this.shaders.hd = viewer.webGL.createShaderProgram(MdxShaders.vsHd, MdxShaders.fsHd(hdMenu, false));
+		this.shaders.groundHd = viewer.webGL.createShaderProgram(MdxShaders.vsHd, MdxShaders.fsHd(hdMenu, true));
 		// TODO HD reforged
 
 		// If a shader failed to compile, don't allow the handler to be registered, and
@@ -76,5 +78,7 @@ public class MdxHandler extends ModelHandler {
 		public ShaderProgram simple;
 		public ShaderProgram particles;
 		public ShaderProgram hd;
+		/** {@link #hd} for a model drawn as part of the ground, see {@link GroundShading}. */
+		public ShaderProgram groundHd;
 	}
 }

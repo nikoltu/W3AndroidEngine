@@ -5,33 +5,29 @@ import java.util.List;
 
 /** The launcher's skirmish lobby: the slots of the chosen map, the advanced options and the game they start. */
 public final class CustomGame {
-	/** The slot choices of the skirmish lobby: the engine's lobby type, the glue string and its fallback. */
-	public static final String[][] SLOT_TYPES = { { "OPEN", "OPEN", "Open" }, { "CLOSED", "CLOSED", "Closed" },
-		{ "COMPUTER_NEWBIE", "COMPUTER_NEWBIE", "Computer (Easy)" },
-		{ "COMPUTER_NORMAL", "COMPUTER_NORMAL", "Computer (Normal)" },
-		{ "COMPUTER_INSANE", "COMPUTER_INSANE", "Computer (Insane)" } };
+	/** The slot choices of the skirmish lobby: the engine's lobby type and the glue string. */
+	public static final String[][] SLOT_TYPES = { { "OPEN", "OPEN" }, { "CLOSED", "CLOSED" },
+		{ "COMPUTER_NEWBIE", "COMPUTER_NEWBIE" }, { "COMPUTER_NORMAL", "COMPUTER_NORMAL" },
+		{ "COMPUTER_INSANE", "COMPUTER_INSANE" } };
 	public static final int SLOT_YOU = -1;
 	public static final int SLOT_HIDDEN = -2;
 	public static final int SLOT_OPEN = 0;
 	public static final int SLOT_COMPUTER_NORMAL = 3;
 	/** Race item indexes as the lobby and the map information count them: 0 is random. */
-	public static final String[][] RACES = { { "RANDOM", "Random" }, { "HUMAN", "Human" }, { "ORC", "Orc" },
-		{ "UNDEAD", "Undead" }, { "NIGHT_ELF", "Night Elf" } };
+	public static final String[][] RACES = { { "RANDOM" }, { "HUMAN" }, { "ORC" }, { "UNDEAD" }, { "NIGHT_ELF" } };
 	/** Advanced options in the order of the launch contract's names; Lock Teams is on in a new lobby. */
 	public static final String[] OPTION_NAMES = { "lockTeams", "teamsTogether", "sharedControl", "randomRaces",
 		"randomHero" };
 	/** The options the page shows; teams together is not among them and stays on, as the original starts it. */
 	public static final int[] OPTION_SHOWN = { 0, 2, 3, 4 };
 	public static final int OPTION_TEAMS_TOGETHER = 1;
-	/** The player colours by number: the glue string and the text used when the game data lacks it. */
-	public static final String[][] COLOR_NAMES = { { "COLOR_RED", "Red" }, { "COLOR_BLUE", "Blue" },
-		{ "COLOR_TEAL", "Teal" }, { "COLOR_PURPLE", "Purple" }, { "COLOR_YELLOW", "Yellow" },
-		{ "COLOR_ORANGE", "Orange" }, { "COLOR_GREEN", "Green" }, { "COLOR_PINK", "Pink" }, { "COLOR_GRAY", "Gray" },
-		{ "COLOR_LIGHT_BLUE", "Light Blue" }, { "COLOR_DARK_GREEN", "Dark Green" }, { "COLOR_BROWN", "Brown" },
-		{ "COLOR_MAROON", "Maroon" }, { "COLOR_NAVY", "Navy" }, { "COLOR_TURQUOISE", "Turquoise" },
-		{ "COLOR_VIOLET", "Violet" }, { "COLOR_WHEAT", "Wheat" }, { "COLOR_PEACH", "Peach" }, { "COLOR_MINT", "Mint" },
-		{ "COLOR_LAVENDER", "Lavender" }, { "COLOR_COAL", "Coal" }, { "COLOR_SNOW", "Snow" },
-		{ "COLOR_EMERALD", "Emerald" }, { "COLOR_PEANUT", "Peanut" } };
+	/** The player colours by number: the glue string. */
+	public static final String[][] COLOR_NAMES = { { "COLOR_RED" }, { "COLOR_BLUE" }, { "COLOR_TEAL" },
+		{ "COLOR_PURPLE" }, { "COLOR_YELLOW" }, { "COLOR_ORANGE" }, { "COLOR_GREEN" }, { "COLOR_PINK" },
+		{ "COLOR_GRAY" }, { "COLOR_LIGHT_BLUE" }, { "COLOR_DARK_GREEN" }, { "COLOR_BROWN" }, { "COLOR_MAROON" },
+		{ "COLOR_NAVY" }, { "COLOR_TURQUOISE" }, { "COLOR_VIOLET" }, { "COLOR_WHEAT" }, { "COLOR_PEACH" },
+		{ "COLOR_MINT" }, { "COLOR_LAVENDER" }, { "COLOR_COAL" }, { "COLOR_SNOW" }, { "COLOR_EMERALD" },
+		{ "COLOR_PEANUT" } };
 	public static final int[] PLAYER_COLORS = { 0xFFFF0303, 0xFF0042FF, 0xFF1CE6B9, 0xFF540081, 0xFFFFFC00,
 		0xFFFE8A0E, 0xFF20C000, 0xFFE55BB0, 0xFF959697, 0xFF7EBFF1, 0xFF106246, 0xFF4E2A04, 0xFF9B0000, 0xFF0000C3, 0xFF00EAFF, 0xFFBE00FE, 0xFFEBCD87, 0xFFF8A48B,
 		0xFFBFFF80, 0xFFDCB9EB, 0xFF504F55, 0xFFEBF0FF, 0xFF00781E, 0xFFA46F33 };
@@ -55,6 +51,15 @@ public final class CustomGame {
 	 */
 	public static boolean typeEditable(final GameCatalog.MapDetails details, final int index) {
 		return !fixedSlots(details) || (details.slots.get(index).type != 2);
+	}
+
+	/** Whether the lobby lets the host pick the race of a slot: fixed settings keep it, unless the map leaves it selectable. */
+	public static boolean raceEditable(final GameCatalog.MapDetails details, final int index) {
+		if (!fixedSlots(details)) {
+			return true;
+		}
+		final GameCatalog.Slot slot = details.slots.get(index);
+		return (slot.type == 1) && (slot.race == 0);
 	}
 
 	/** The advanced options as the launcher stores them: the names of those that are on. */
@@ -154,9 +159,17 @@ public final class CustomGame {
 				continue;
 			}
 			if (fixed) {
-				// The map keeps races, teams, colours and its own computers; only what the host changed goes on.
-				if (typeEditable(details, i) && (this.slotTypes[i] != SLOT_YOU) && (this.slotTypes[i] != SLOT_OPEN)) {
-					new LauncherSlot(details.slots.get(i).id, SLOT_TYPES[this.slotTypes[i]][0], LauncherSlot.MAP_VALUE,
+				// The map keeps teams, colours and its own computers; races only where it leaves them selectable.
+				final int race = raceEditable(details, i) && (this.slotRaces[i] > 0) ? this.slotRaces[i]
+						: LauncherSlot.MAP_VALUE;
+				if (this.slotTypes[i] == SLOT_YOU) {
+					if (race != LauncherSlot.MAP_VALUE) {
+						new LauncherSlot(details.slots.get(i).id, "USER", race, LauncherSlot.MAP_VALUE,
+								LauncherSlot.MAP_VALUE).appendTo(slots);
+					}
+				}
+				else if (typeEditable(details, i) && (this.slotTypes[i] != SLOT_OPEN)) {
+					new LauncherSlot(details.slots.get(i).id, SLOT_TYPES[this.slotTypes[i]][0], race,
 							LauncherSlot.MAP_VALUE, LauncherSlot.MAP_VALUE).appendTo(slots);
 				}
 				continue;

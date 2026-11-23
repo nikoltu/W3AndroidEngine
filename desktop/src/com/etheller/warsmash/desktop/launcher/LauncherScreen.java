@@ -68,6 +68,7 @@ import com.etheller.warsmash.launcher.LauncherLog;
 import com.etheller.warsmash.launcher.LauncherOptions;
 import com.etheller.warsmash.launcher.LauncherStore;
 import com.etheller.warsmash.launcher.LauncherStrings;
+import com.etheller.warsmash.launcher.LauncherText;
 import com.etheller.warsmash.launcher.Profiles;
 import com.etheller.warsmash.launcher.ProjectInfo;
 import com.etheller.warsmash.launcher.SharedDataSource;
@@ -104,10 +105,8 @@ public final class LauncherScreen implements Screen, InputProcessor {
 	public static final int MIN_WIDTH = 1280;
 	public static final int MIN_HEIGHT = 720;
 
-	private static final String[][] RAIL = { { "KEY_CAMPAIGN", "Campaign" },
-		{ "KEY_LOAD_SAVED_GAME", "Load Saved Game" }, { "KEY_VIEW_REPLAY", "View Replay" },
-		{ "KEY_CUSTOM_GAME", "Custom Games" }, { "KEY_LOCAL_AREA_NETWORK", "Local Area Network" },
-		{ "KEY_OPTIONS", "Options" }, { "KEY_HELP", "Help" } };
+	private static final String[] RAIL = { "KEY_CAMPAIGN", "KEY_LOAD_SAVED_GAME", "KEY_VIEW_REPLAY", "KEY_CUSTOM_GAME",
+		"KEY_LOCAL_AREA_NETWORK", "KEY_OPTIONS", "KEY_HELP" };
 	private static final int[] RAIL_KEYS = { Input.Keys.C, Input.Keys.L, Input.Keys.R, Input.Keys.U, Input.Keys.N,
 		Input.Keys.O, Input.Keys.H };
 	private static final boolean[] RAIL_OPEN = { true, true, true, true, true, true, true };
@@ -246,16 +245,34 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		this.launcherPreferences = Gdx.app.getPreferences(PREFERENCES);
 		this.preferences = new DesktopStore(this.launcherPreferences);
 		this.engineStore = new DesktopStore(Gdx.app.getPreferences(Profiles.ENGINE_PREFERENCES));
+		useIni(ini, iniPath);
+		readStrings();
+		this.profiles = new Profiles(this.engineStore, this.preferences, this.saves);
+		this.lan = new LanPages(this);
+		openData();
+	}
+
+	/** The launcher's texts, in the game language where a translation of them exists. */
+	private void readStrings() {
 		try (InputStream in = LauncherScreen.class.getResourceAsStream("/strings.xml")) {
 			this.strings = new LauncherStrings(in);
 		}
 		catch (final IOException | RuntimeException e) {
 			throw new IllegalStateException("The launcher's texts are missing from the class path", e);
 		}
-		useIni(ini, iniPath);
-		this.profiles = new Profiles(this.engineStore, this.preferences, this.saves);
-		this.lan = new LanPages(this);
-		openData();
+		final String language = GameLanguage.configured(this.ini);
+		if (language.length() >= 2) {
+			try (InputStream in = LauncherScreen.class
+					.getResourceAsStream("/values-" + language.substring(0, 2).toLowerCase(Locale.ROOT) + "/strings.xml")) {
+				if (in != null) {
+					this.strings.overlay(in);
+				}
+			}
+			catch (final IOException | RuntimeException e) {
+				LauncherLog.w("The launcher's translation could not be read", e);
+			}
+		}
+		LauncherText.use(this.strings);
 	}
 
 	/** The configuration in use: the one given on the command line, else the game data the player chose here. */
@@ -280,7 +297,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		final Thread thread = new Thread(() -> {
 			try {
 				final DataSource opened = WarsmashGdxMapScreen.parseDataSources(ini);
-				final Map<String, String> read = GlueText.read(opened);
+				final Map<String, String> read = GlueText.read(ini, opened);
 				this.glue = read != null ? read : new HashMap<>();
 				// The catalog reads the same data on its own thread and closes it.
 				this.data = new SharedDataSource(opened);
@@ -384,6 +401,11 @@ public final class LauncherScreen implements Screen, InputProcessor {
 	String glue(final String key, final String fallback) {
 		final String value = this.glue.get(key.toUpperCase(Locale.ROOT));
 		return value != null ? value : fallback;
+	}
+
+	/** The game data's text for the key; when it has none, the launcher's own text in the game language. */
+	String glue(final String key) {
+		return glue(key, s("glue_" + key.toLowerCase(Locale.ROOT)));
 	}
 
 	private int uiPercent() {
@@ -808,13 +830,13 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		}
 		for (int i = 0; i < RAIL.length; i++) {
 			final float y = b.holderY + (i * b.holderPitch);
-			if (railEntry("rail" + i, glue(RAIL[i][0], RAIL[i][1]), y, i == selected, RAIL_OPEN[i],
+			if (railEntry("rail" + i, glue(RAIL[i]), y, i == selected, RAIL_OPEN[i],
 					(i == 4) && this.lan.lit())) {
 				railChosen(i);
 			}
 		}
 		if (b.quitY > 0) {
-			if (railEntry("quit", glue("KEY_QUIT", "Quit"), b.quitY, false, true, false)) {
+			if (railEntry("quit", glue("KEY_QUIT"), b.quitY, false, true, false)) {
 				this.dialog = Dialog.EXIT;
 			}
 		}
@@ -994,7 +1016,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 				g.palette.gold, Align.left);
 		g.lines(next.title, ix, by - (t ? 250 : 150), iw, t ? 140 : 84, t ? 60 : 34, g.palette.text, Align.left);
 		g.text(next.line, ix, by - (t ? 88 : 50), iw, t ? 40 : 28, t ? 30 : 20, g.palette.text2, Align.left);
-		if (g.button("continue", glue("CONTINUE", "Continue"), ix, by, iw, bh, t ? 44 : 30, Gui.TONE_NORMAL)) {
+		if (g.button("continue", glue("CONTINUE"), ix, by, iw, bh, t ? 44 : 30, Gui.TONE_NORMAL)) {
 			playClick();
 			continueCampaign();
 		}
@@ -1310,7 +1332,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 					choice -> this.profiles.setCampaignMaps(profile, LauncherKeys.CAMPAIGN_MAPS[choice][0]));
 		}
 		g.edit(dx, dy, boxW, boxH, edge, 0);
-		g.text(glue("SELECT_DIFFICULTY_LEVEL", "Difficulty Level:"), dx + inner, dy + inner, innerW, labelH, label,
+		g.text(glue("SELECT_DIFFICULTY_LEVEL"), dx + inner, dy + inner, innerW, labelH, label,
 				g.palette.gold, Align.left);
 		final String current = this.preferences.getString(LauncherKeys.KEY_DIFFICULTY,
 				LauncherKeys.DIFFICULTIES[0][0]);
@@ -1328,10 +1350,10 @@ public final class LauncherScreen implements Screen, InputProcessor {
 				g.palette.text, Align.left);
 	}
 
-	private String[] glueList(final String[][] table, final int keyColumn) {
+	String[] glueList(final String[][] table, final int keyColumn) {
 		final String[] labels = new String[table.length];
 		for (int i = 0; i < table.length; i++) {
-			labels[i] = glue(table[i][keyColumn], table[i][keyColumn + 1]);
+			labels[i] = glue(table[i][keyColumn]);
 		}
 		return labels;
 	}
@@ -1502,8 +1524,8 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		float mx = tx;
 		if (result != null) {
 			final float continueW = t ? 340 : 170;
-			final String[] button = CampaignResult.buttonLabel(result);
-			if (g.button("continue", upper(GlueText.plain(glue(button[0], button[1]))), mx, menuY, continueW, menuH, text,
+			final String button = CampaignResult.buttonLabel(result);
+			if (g.button("continue", upper(GlueText.plain(glue(button))), mx, menuY, continueW, menuH, text,
 					Gui.TONE_NORMAL)) {
 				playClick();
 				continueAfter(entry, result);
@@ -1536,7 +1558,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 			showPage(Page.LOAD);
 		}
 		if (g.over(mx, menuY, folderW, menuH)) {
-			g.tip(GlueText.plain(glue("KEY_LOAD_SAVED_GAME", "Load Saved Game")));
+			g.tip(GlueText.plain(glue("KEY_LOAD_SAVED_GAME")));
 		}
 		final float icon = menuH * 0.5f;
 		g.image(SkinArt.ICON_FOLDER_GOLD, mx + ((folderW - icon) / 2), menuY + ((menuH - icon) / 2), icon, icon);
@@ -1570,8 +1592,8 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		final float fall = ResultMotion.bannerOffset(elapsed) * l.h;
 		final float shown = ResultMotion.contentAlpha(elapsed);
 		g.image(CampaignResult.banner(entry.getSection()), l.x, l.bannerY + fall, l.w, l.h);
-		final String[] title = CampaignResult.title(result);
-		g.smallCaps(glue(title[0], title[1]), l.contentX, l.titleY + fall, l.contentW, l.titleH, l.titleSize,
+		final String title = CampaignResult.title(result);
+		g.smallCaps(glue(title), l.contentX, l.titleY + fall, l.contentW, l.titleH, l.titleSize,
 				0xFFFFFFFF, Align.center);
 		for (final float dividerY : l.dividerY) {
 			g.image(SkinArt.RESULT_DIVIDER, l.dividerX, dividerY, l.dividerW, l.dividerH, shown);
@@ -1582,11 +1604,11 @@ public final class LauncherScreen implements Screen, InputProcessor {
 			final float y = l.rowY[i];
 			g.image(row[0], l.iconX, y, l.icon, l.icon, shown);
 			g.bold(true);
-			g.text(upper(glue(row[1], row[2])), l.detailsX, y + l.headingY, l.columnW * 2, l.headingH, l.headingSize,
+			g.text(upper(glue(row[1])), l.detailsX, y + l.headingY, l.columnW * 2, l.headingH, l.headingSize,
 					faded(CampaignResult.HEADING_GOLD, shown), Align.left);
 			// The labels and numbers are set in the lighter weight.
 			g.bold(false);
-			final String[] labels = { glue("SCORE", "Score"), glue(row[3], row[4]) };
+			final String[] labels = { glue("SCORE"), glue(row[2]) };
 			for (int c = 0; c < 2; c++) {
 				final float x = l.detailsX + (c * l.columnW);
 				g.smallCaps(labels[c], x, y + l.labelY, l.columnW, l.labelH, l.labelSize,
@@ -1605,7 +1627,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 				faded(CampaignResult.HEADING_GOLD, shown), Align.center);
 		final String[] difficulty = CampaignResult.difficulty(result.difficulty);
 		if (difficulty != null) {
-			g.smallCaps(glue(difficulty[1], difficulty[2]), l.contentX, l.difficultyY, l.contentW, l.difficultyH,
+			g.smallCaps(glue(difficulty[1]), l.contentX, l.difficultyY, l.contentW, l.difficultyH,
 					l.difficultySize, faded(CampaignResult.LABEL_GREY, shown), Align.center);
 			g.image(difficulty[0], l.difficultyIconX, l.difficultyIconY, l.difficultyIcon, l.difficultyIcon, shown);
 		}
@@ -1635,8 +1657,8 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		final CampaignResult.ClassicLayout l = new CampaignResult.ClassicLayout(listX(), b.contentY, t ? 924 : 600,
 				bottom - b.contentY, b.pageFrame, b.buttonH);
 		g.panel(l.x, l.y, l.w, l.h, b.pageFrame);
-		final String[] title = CampaignResult.title(result);
-		g.text(glue(title[0], title[1]), l.contentX, l.titleY, l.contentW, l.titleH, l.titleSize, g.palette.gold,
+		final String title = CampaignResult.title(result);
+		g.text(glue(title), l.contentX, l.titleY, l.contentW, l.titleH, l.titleSize, g.palette.gold,
 				Align.center);
 		for (final float lineY : l.lineY) {
 			final int line = g.palette.line;
@@ -1648,10 +1670,10 @@ public final class LauncherScreen implements Screen, InputProcessor {
 			final String[] row = CampaignResult.ROWS[i];
 			final int[] numbers = CampaignResult.numbers(result.score, i);
 			final float y = l.rowY[i];
-			final String heading = glue(row[1], row[2]);
+			final String heading = glue(row[1]);
 			g.text(heading, l.contentX, y, l.headingW, l.rowH, fitted(GlueText.plain(heading), l.headingSize,
 					l.headingW), g.palette.gold, Align.left);
-			final String[] labels = { glue("SCORE", "Score"), glue(row[3], row[4]) };
+			final String[] labels = { glue("SCORE"), glue(row[2]) };
 			for (int c = 0; c < 2; c++) {
 				g.text(labels[c], l.columnX[c], y + l.labelY, l.columnW, l.labelH, l.labelSize, g.palette.text2,
 						Align.left);
@@ -1666,11 +1688,11 @@ public final class LauncherScreen implements Screen, InputProcessor {
 				Align.center);
 		final String[] difficulty = CampaignResult.difficulty(result.difficulty);
 		if (difficulty != null) {
-			g.text(glue(difficulty[1], difficulty[2]), l.contentX, l.difficultyY, l.contentW, l.difficultyH,
+			g.text(glue(difficulty[1]), l.contentX, l.difficultyY, l.contentW, l.difficultyH,
 					l.difficultySize, g.palette.text2, Align.center);
 		}
-		final String[] button = CampaignResult.buttonLabel(result);
-		if (g.button("continue", GlueText.plain(glue(button[0], button[1])), l.buttonX, l.buttonY, l.buttonW, l.buttonH,
+		final String button = CampaignResult.buttonLabel(result);
+		if (g.button("continue", GlueText.plain(glue(button)), l.buttonX, l.buttonY, l.buttonW, l.buttonH,
 				b.buttonText, Gui.TONE_NORMAL)) {
 			playClick();
 			continueAfter(entry, result);
@@ -1814,8 +1836,8 @@ public final class LauncherScreen implements Screen, InputProcessor {
 						b.contentY + pf + 10, 392, 392);
 				final float tx = rx + 480;
 				g.text(mapTitle(details), tx, b.contentY + 50, mw - 490 - pf, 60, 42, g.palette.text, Align.left);
-				final String[][] facts = { { glue("SUGGESTED_PLAYERS", "Suggested Players:"), details.suggested },
-					{ glue("MAP_SIZE", "Map Size:"), details.size }, { glue("TILESET", "Tileset:"), details.tileset } };
+				final String[][] facts = { { glue("SUGGESTED_PLAYERS"), details.suggested },
+					{ glue("MAP_SIZE"), details.size }, { glue("TILESET"), details.tileset } };
 				for (int i = 0; i < facts.length; i++) {
 					g.text(facts[i][0], tx, b.contentY + 118 + (i * 46), 270, 46, 30, g.palette.gold, Align.left);
 					g.text(facts[i][1], tx + 279, b.contentY + 118 + (i * 46), mw - 490 - pf - 279, 46, 30,
@@ -1854,13 +1876,13 @@ public final class LauncherScreen implements Screen, InputProcessor {
 				this.dialog = Dialog.ADVANCED;
 			}
 		}
-		if (g.button("cancel", glue("CANCEL", "Cancel"), b.backX, b.backY, b.backW, b.backH, t ? 36 : 30,
+		if (g.button("cancel", glue("CANCEL"), b.backX, b.backY, b.backW, b.backH, t ? 36 : 30,
 				Gui.TONE_NORMAL)) {
 			playClick();
 			showPage(Page.HOME);
 		}
 		final float[] start = b.actionSlot(2);
-		if (g.button("start", glue("KEY_START_GAME", "Start Game"), start[0], b.backY, start[1], b.backH, t ? 36 : 30,
+		if (g.button("start", glue("KEY_START_GAME"), start[0], b.backY, start[1], b.backH, t ? 36 : 30,
 				details == null ? Gui.TONE_OFF : this.art.reforged ? Gui.TONE_CONFIRM : Gui.TONE_DOWN)) {
 			startCustom();
 		}
@@ -1956,7 +1978,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 					startWhenRead(entry.path);
 				}
 				if (((state & Gui.RIGHT) != 0) && !this.lanMapList) {
-					g.contextMenu("mapMenu", new String[] { glue("KEY_START_GAME", "Start Game") }, null,
+					g.contextMenu("mapMenu", new String[] { glue("KEY_START_GAME") }, null,
 							choice -> startWhenRead(entry.path));
 				}
 			}
@@ -2013,7 +2035,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 	private void advancedOptions(final float x, final float y, final float w, final float step, final float box,
 			final float size, final float titleSize) {
 		final Gui g = this.gui;
-		g.text(glue("ADVANCED_OPTIONS", "Advanced Options"), x, y, w, 48, titleSize, g.palette.gold, Align.left);
+		g.text(glue("ADVANCED_OPTIONS"), x, y, w, 48, titleSize, g.palette.gold, Align.left);
 		final String[] labels = optionLabels();
 		for (int i = 0; i < labels.length; i++) {
 			final int option = CustomGame.OPTION_SHOWN[i];
@@ -2028,9 +2050,9 @@ public final class LauncherScreen implements Screen, InputProcessor {
 	}
 
 	private String[] optionLabels() {
-		return new String[] { glue("LOCK_TEAMS", "Lock Teams"),
-			glue("FULL_SHARED_UNIT_CONTROL", s("game_shared_control")), glue("RANDOM_RACES", "Random Races"),
-			glue("RANDOM_HERO", "Random Hero") };
+		return new String[] { glue("LOCK_TEAMS"),
+			glue("FULL_SHARED_UNIT_CONTROL", s("game_shared_control")), glue("RANDOM_RACES"),
+			glue("RANDOM_HERO") };
 	}
 
 	private void slotRows(final GameCatalog.MapDetails details, final float x, final float top, final float w,
@@ -2042,8 +2064,8 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		final float[] widths = { available * 0.42f, available * 0.246f, available * 0.148f, available * 0.186f };
 		float rowsTop = top + 20;
 		if (headSize > 0) {
-			final String[] heads = { glue("PLAYERS", "Player"), glue("RACE", "Race"), glue("TEAM", "Team"),
-				glue("COLOR", "Color") };
+			final String[] heads = { glue("PLAYERS"), glue("RACE"), glue("TEAM"),
+				glue("COLOR") };
 			float hx = x;
 			for (int i = 0; i < heads.length; i++) {
 				g.text(heads[i], hx, top + 41, widths[i], 40, headSize, g.palette.gold, Align.left);
@@ -2083,8 +2105,8 @@ public final class LauncherScreen implements Screen, InputProcessor {
 						CustomGame.typeEditable(details, index), null, choice -> this.lobby.slotTypes[index] = choice);
 			}
 			cx += widths[0] + gap;
-			g.dropdown("race" + index, races, this.lobby.slotRaces[index], cx, y, widths[1], menuH, size, editable,
-					null, choice -> this.lobby.slotRaces[index] = choice);
+			g.dropdown("race" + index, races, this.lobby.slotRaces[index], cx, y, widths[1], menuH, size,
+					CustomGame.raceEditable(details, index), null, choice -> this.lobby.slotRaces[index] = choice);
 			cx += widths[1] + gap;
 			final int team = this.lobby.slotTeams[index] >= 0 ? this.lobby.slotTeams[index]
 					: CustomGame.defaultTeam(details, index);
@@ -2107,7 +2129,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 			return names;
 		}
 		final String[] names = new String[details.slots.size()];
-		final String format = glue("TEAM_FORMAT", "Team %d").replace("%s", "%d");
+		final String format = glue("TEAM_FORMAT").replace("%s", "%d");
 		for (int i = 0; i < names.length; i++) {
 			try {
 				names[i] = String.format(Locale.ROOT, format, i + 1);
@@ -2220,7 +2242,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 					}
 					else if ((state & Gui.RIGHT) != 0) {
 						g.contextMenu("saveMenu",
-								new String[] { glue("LOAD_GAME", "Load Game"), glue("DELETE", "Delete") },
+								new String[] { glue("LOAD_GAME"), glue("DELETE") },
 								new boolean[] { loadable, true }, choice -> {
 									if (choice == 0) {
 										launchGame(loadRequest(entry), Page.LOAD);
@@ -2252,9 +2274,9 @@ public final class LauncherScreen implements Screen, InputProcessor {
 						200, t ? 30 : 20, SkinArt.Palette.DANGER_TEXT, Align.center);
 			}
 			else {
-				final String[][] facts = { { glue("COLON_ELAPSED_TIME", "Elapsed Time:"),
+				final String[][] facts = { { glue("COLON_ELAPSED_TIME"),
 					CampaignChoice.elapsed(chosen.gameTime) },
-					{ glue("COLON_SAVED", "Saved:"), DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
+					{ glue("COLON_SAVED"), DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
 							.format(new Date(chosen.saved)) } };
 				for (int i = 0; i < facts.length; i++) {
 					final float fy = py + ph + (t ? 40 : 20) + (i * (t ? 48 : 34));
@@ -2272,13 +2294,13 @@ public final class LauncherScreen implements Screen, InputProcessor {
 			showPage(Page.HOME);
 		}
 		final float[] delete = b.actionSlot(1);
-		if (g.button("delete", glue("DELETE", "Delete"), delete[0], b.backY, delete[1], b.backH, size,
+		if (g.button("delete", glue("DELETE"), delete[0], b.backY, delete[1], b.backH, size,
 				chosen == null ? Gui.TONE_OFF : this.art.reforged ? Gui.TONE_DANGER : Gui.TONE_NORMAL)) {
 			this.dialog = Dialog.DELETE_SAVE;
 		}
 		final float[] load = b.actionSlot(2);
 		final boolean loadable = (chosen != null) && (chosen.loadability == SavedGame.Loadability.LOADABLE);
-		if (g.button("load", glue("LOAD_GAME", "Load Game"), load[0], b.backY, load[1], b.backH, size,
+		if (g.button("load", glue("LOAD_GAME"), load[0], b.backY, load[1], b.backH, size,
 				!loadable ? Gui.TONE_OFF : this.art.reforged ? Gui.TONE_CONFIRM : Gui.TONE_DOWN)) {
 			launchGame(loadRequest(chosen), Page.LOAD);
 		}
@@ -2326,8 +2348,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 	}
 
 	private String raceName(final GameCatalog.ReplayPlayer player) {
-		final String[] race = CustomGame.RACES[player.raceIndex()];
-		return glue(race[0], race[1]);
+		return glue(CustomGame.RACES[player.raceIndex()][0]);
 	}
 
 	/** Races as the list's second line names them: "Orc vs Human", or the number of players. */
@@ -2338,7 +2359,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		if (entry.players.size() == 2) {
 			return raceName(entry.players.get(0)) + " vs " + raceName(entry.players.get(1));
 		}
-		return entry.players.size() + " " + glue("PLAYERS", "players").toLowerCase(Locale.ROOT);
+		return entry.players.size() + " " + glue("PLAYERS").toLowerCase(Locale.ROOT);
 	}
 
 	private void startReplay(final GameCatalog.ReplayEntry entry) {
@@ -2414,8 +2435,8 @@ public final class LauncherScreen implements Screen, InputProcessor {
 					}
 					else if ((state & Gui.RIGHT) != 0) {
 						g.contextMenu("replayMenu",
-								new String[] { glue("KEY_VIEW_REPLAY", "View Replay"), s("replay_rename"),
-									glue("DELETE", "Delete") },
+								new String[] { glue("KEY_VIEW_REPLAY"), s("replay_rename"),
+									glue("DELETE") },
 								new boolean[] { playable, true, true }, choice -> {
 									if (choice == 0) {
 										startReplay(entry);
@@ -2443,14 +2464,14 @@ public final class LauncherScreen implements Screen, InputProcessor {
 			showPage(Page.HOME);
 		}
 		final float[] delete = b.actionSlot(1);
-		if (g.button("delete", glue("DELETE", "Delete"), delete[0], b.backY, delete[1], b.backH, size,
+		if (g.button("delete", glue("DELETE"), delete[0], b.backY, delete[1], b.backH, size,
 				chosen == null ? Gui.TONE_OFF : this.art.reforged ? Gui.TONE_DANGER : Gui.TONE_NORMAL)) {
 			this.dialog = Dialog.DELETE_REPLAY;
 		}
 		final float[] view = b.actionSlot(2);
 		final boolean playable = (chosen != null) && (chosen.playable() || chosen.canTryAnyway());
-		final String viewLabel = this.art.reforged ? glue("WATCH_REPLAY", "Watch")
-				: glue("KEY_VIEW_REPLAY", "View Replay");
+		final String viewLabel = this.art.reforged ? glue("WATCH_REPLAY")
+				: glue("KEY_VIEW_REPLAY");
 		if (g.button("view", viewLabel, view[0], b.backY, view[1], b.backH, size,
 				!playable ? Gui.TONE_OFF : this.art.reforged ? Gui.TONE_CONFIRM : Gui.TONE_DOWN)) {
 			startReplay(chosen);
@@ -2513,7 +2534,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 			final String why = chosen.warcraft ? s("replay_warcraft")
 					: chosen.otherVersion ? glue("REPLAY_CONFIRM_DESC", s("replay_other_version"))
 							: s("replay_unplayable").replace("%1$s", chosen.unplayable);
-			g.lines(glue("REPLAY_CONFIRM", "Incompatible Replay!") + "\n" + why, factsX, y + (step * 0.3f), factsW,
+			g.lines(glue("REPLAY_CONFIRM") + "\n" + why, factsX, y + (step * 0.3f), factsW,
 					step * 3, size, SkinArt.Palette.DANGER_TEXT, Align.left);
 			y += step * 3.3f;
 		}
@@ -2533,7 +2554,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 			g.fill(playersX, y + ((step - square) / 2), square, square,
 					CustomGame.PLAYER_COLORS[Math.abs(player.color) % CustomGame.PLAYER_COLORS.length]);
 			final String name = player.name != null ? player.name
-					: s("replay_computer") + " (" + glue("PLAYER", "Player") + " " + (player.slot + 1) + ")";
+					: s("replay_computer") + " (" + glue("PLAYER") + " " + (player.slot + 1) + ")";
 			final boolean symbol = player.raceIndex() > 0;
 			g.text(name, playersX + square + 14, y, (playersW * 0.6f) - (symbol ? size * 1.5f : 0), step, size,
 					g.palette.text, Align.left);
@@ -2590,7 +2611,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		final float buttonH = t ? 112 : 96;
 		final float by = (y + h) - edge - 20 - buttonH;
 		boolean close = false;
-		if (g.button("renameReplayCancel", glue("CANCEL", "Cancel"), (x + w) - edge - 20 - (2 * buttonW) - 32, by,
+		if (g.button("renameReplayCancel", glue("CANCEL"), (x + w) - edge - 20 - (2 * buttonW) - 32, by,
 				buttonW, buttonH, t ? 40 : 30, Gui.TONE_NORMAL)) {
 			close = true;
 		}
@@ -3287,8 +3308,8 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		final float raceW = Math.min(t ? 300 : 200, ((right - x0) - ((races.size() - 1) * 12)) / races.size());
 		this.keysRace = Math.max(0, Math.min(races.size() - 1, this.keysRace));
 		for (int i = 0; i < races.size(); i++) {
-			final String[] name = races.get(i).name;
-			if (g.button("race" + i, name == null ? s("controls_common") : glue(name[0], name[1]),
+			final String name = races.get(i).name;
+			if (g.button("race" + i, name == null ? s("controls_common") : glue(name),
 					x0 + (i * (raceW + 12)), raceY, raceW, raceH, t ? 30 : 21,
 					i == this.keysRace ? Gui.TONE_DOWN : Gui.TONE_NORMAL) && (i != this.keysRace)) {
 				playClick();
@@ -4059,6 +4080,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		this.ini = ini;
 		this.iniFile = file;
 		WarsmashConstants.loadConstants(ini.get("Emulator"), ini);
+		readStrings();
 		this.data = null;
 		this.hotkeys = null;
 		this.readingHotkeys = false;
@@ -4155,8 +4177,8 @@ public final class LauncherScreen implements Screen, InputProcessor {
 				}
 				else if ((state & Gui.RIGHT) != 0) {
 					g.contextMenu("profileMenu",
-							new String[] { glue("SELECT", "Select"), s("profile_change_portrait"), s("profile_rename"),
-								glue("DELETE", "Delete") },
+							new String[] { glue("SELECT"), s("profile_change_portrait"), s("profile_rename"),
+								glue("DELETE") },
 							new boolean[] { true, true, true, names.size() > 1 }, choice -> {
 								switch (choice) {
 								case 0:
@@ -4186,7 +4208,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		g.field("newName", this.nameField, lx, fy, fieldW, fieldH, Math.max(36 * k, 22), Profiles.MAX_NAME,
 				s("profile_name"));
 		final Profiles.NameProblem problem = this.profiles.check(this.nameField.toString(), null);
-		if (g.button("add", glue("ADD", "Add"), lx + fieldW + 16, fy, addW, fieldH, Math.max(34 * k, 22),
+		if (g.button("add", glue("ADD"), lx + fieldW + 16, fy, addW, fieldH, Math.max(34 * k, 22),
 				problem == Profiles.NameProblem.NONE ? Gui.TONE_NORMAL : Gui.TONE_OFF)
 				|| ((problem == Profiles.NameProblem.NONE) && "newName".equals(g.focus)
 						&& this.gui.keys.contains(Input.Keys.ENTER))) {
@@ -4228,12 +4250,12 @@ public final class LauncherScreen implements Screen, InputProcessor {
 			showPage(Page.HOME);
 		}
 		final float[] delete = b.actionSlot(1);
-		if (g.button("deleteProfile", glue("DELETE", "Delete"), delete[0], b.backY, delete[1], b.backH, size,
+		if (g.button("deleteProfile", glue("DELETE"), delete[0], b.backY, delete[1], b.backH, size,
 				names.size() < 2 ? Gui.TONE_OFF : this.art.reforged ? Gui.TONE_DANGER : Gui.TONE_NORMAL)) {
 			this.dialog = Dialog.DELETE_PROFILE;
 		}
 		final float[] select = b.actionSlot(2);
-		if (g.button("select", glue("SELECT", "Select"), select[0], b.backY, select[1], b.backH, size,
+		if (g.button("select", glue("SELECT"), select[0], b.backY, select[1], b.backH, size,
 				this.art.reforged ? Gui.TONE_CONFIRM : Gui.TONE_DOWN)) {
 			selectProfile(shown);
 		}
@@ -4338,10 +4360,8 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		}
 		final String[][] facts = { { s("profile_games_played"), Integer.toString(games) },
 			{ s("profile_wins"), wins + " (" + (games == 0 ? 0 : Math.round((wins * 100f) / games)) + " %)" },
-			{ s("profile_favourite"), favourite < 0 ? "\u2014" : glue(CustomGame.RACES[favourite][0],
-					CustomGame.RACES[favourite][1]) },
-			{ s("profile_most_wins"), mostWins < 0 ? "\u2014" : glue(CustomGame.RACES[mostWins][0],
-					CustomGame.RACES[mostWins][1]) } };
+			{ s("profile_favourite"), favourite < 0 ? "\u2014" : glue(CustomGame.RACES[favourite][0]) },
+			{ s("profile_most_wins"), mostWins < 0 ? "\u2014" : glue(CustomGame.RACES[mostWins][0]) } };
 		for (int i = 0; i < facts.length; i++) {
 			final float fy = top + (60 * k) + (i * step);
 			g.text(facts[i][0], sx + (14 * k), fy, 230 * k, step, rowSize, g.palette.text2, Align.left);
@@ -4449,7 +4469,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		case TRY_REPLAY: {
 			final GameCatalog.ReplayEntry entry = this.triedReplay;
 			// The original asks before it plays a replay of another version, ignoring the recorded checksums.
-			question(glue("REPLAY_CONFIRM", "Incompatible Replay!"),
+			question(glue("REPLAY_CONFIRM"),
 					glue("REPLAY_CONFIRM_DESC", s("replay_other_version")),
 					new String[] { s("game_no"), s("game_yes") }, choice -> {
 						if ((choice == 1) && (entry != null)) {
@@ -4579,7 +4599,7 @@ public final class LauncherScreen implements Screen, InputProcessor {
 		final float buttonH = t ? 112 : 96;
 		final float by = (y + h) - edge - 20 - buttonH;
 		boolean close = false;
-		if (g.button("renameCancel", glue("CANCEL", "Cancel"), (x + w) - edge - 20 - (2 * buttonW) - 32, by, buttonW,
+		if (g.button("renameCancel", glue("CANCEL"), (x + w) - edge - 20 - (2 * buttonW) - 32, by, buttonW,
 				buttonH, t ? 40 : 30, Gui.TONE_NORMAL)) {
 			close = true;
 		}

@@ -16,11 +16,13 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import android.animation.ValueAnimator;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.res.Resources;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.media.AudioAttributes;
@@ -46,6 +48,7 @@ import com.badlogic.gdx.backends.android.AndroidApplicationConfiguration;
 import com.badlogic.gdx.math.Rectangle;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.campaign.CCampaignProgress;
 import com.etheller.warsmash.GlueBackdropRenderer;
+import com.etheller.warsmash.datasources.GameLanguage;
 import com.etheller.warsmash.launcher.CampaignChoice;
 import com.etheller.warsmash.launcher.DataFolderCheck;
 import com.etheller.warsmash.launcher.CampaignResult;
@@ -73,10 +76,8 @@ public class LauncherActivity extends AndroidApplication {
 	private static final long PAGE_FADE_MILLIS = 150;
 
 	/** Home rail in its original order: the glue string and the text used when the game data lacks it. */
-	static final String[][] RAIL = { { "KEY_CAMPAIGN", "Campaign" },
-		{ "KEY_LOAD_SAVED_GAME", "Load Saved Game" }, { "KEY_VIEW_REPLAY", "View Replay" },
-		{ "KEY_CUSTOM_GAME", "Custom Games" }, { "KEY_LOCAL_AREA_NETWORK", "Local Area Network" },
-		{ "KEY_OPTIONS", "Options" }, { "KEY_HELP", "Help" } };
+	static final String[] RAIL = { "KEY_CAMPAIGN", "KEY_LOAD_SAVED_GAME", "KEY_VIEW_REPLAY", "KEY_CUSTOM_GAME",
+		"KEY_LOCAL_AREA_NETWORK", "KEY_OPTIONS", "KEY_HELP" };
 	static final int RAIL_CAMPAIGN = 0;
 	static final int RAIL_LOAD = 1;
 	static final int RAIL_REPLAY = 2;
@@ -226,12 +227,38 @@ public class LauncherActivity extends AndroidApplication {
 		}
 	}
 
+	private final LanguageResources languageResources = new LanguageResources();
+
+	/**
+	 * The launcher's own texts follow the game language the configuration chooses, where a translation of them exists
+	 * (values-xx), and the language of the system otherwise.
+	 */
+	@Override
+	public Resources getResources() {
+		final Resources plain = super.getResources();
+		if (getBaseContext() == null) {
+			return plain;
+		}
+		final Resources found = this.languageResources.get(this, plain,
+				this.ini == null ? "" : GameLanguage.configured(this.ini));
+		// The LAN texts, which any page and the game itself ask for, are told the same language.
+		WarsmashApplication.useLanguageResources(found == plain ? null : found);
+		return found;
+	}
+
+	/** The launcher's own text for a glue string the game data lacks, in the language of the game. */
+	String glueFallback(final String key) {
+		final int id = getResources().getIdentifier("glue_" + key.toLowerCase(Locale.ROOT), "string", getPackageName());
+		return id != 0 ? getString(id) : key;
+	}
+
 	@Override
 	protected void onCreate(final Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		if (GlesSupport.redirect(this)) {
 			return;
 		}
+		ExitLogs.recordPreviousExit(this);
 		DataFolderActivity.useFolderCache(this);
 		CCampaignProgress.setAllMissionsOpen(
 				(getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0);

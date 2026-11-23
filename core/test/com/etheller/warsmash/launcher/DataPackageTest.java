@@ -347,6 +347,34 @@ class DataPackageTest {
 	}
 
 	@Test
+	void anImportMakesTheListOfFilesOfTheFolderAnewForTheFirstGame() throws IOException {
+		final File kept = new File(this.temp, "kept");
+		com.etheller.warsmash.datasources.FolderIndexStore.use(kept);
+		com.etheller.warsmash.datasources.FolderSignature.settleMillis = 0;
+		try {
+			final File target = new File(this.temp, "Games/WC3i");
+			final Map<String, String> classic = gameFiles("", "1103");
+			for (int i = 0; i < 1100; i++) {
+				classic.put("units/fill/f" + i + ".txt", "x");
+			}
+			importZip(zip("classic.zip", classic), target);
+			assertTrue(listed(kept, "f1099.txt"));
+			importZip(zip("lang.zip", languageFiles("esES", "3")), target);
+			assertTrue(listed(kept, "eses.w3mod"));
+			assertTrue(listed(kept, "f1099.txt"));
+		}
+		finally {
+			com.etheller.warsmash.datasources.FolderSignature.settleMillis = 2500;
+			com.etheller.warsmash.datasources.FolderIndexStore.use(null);
+		}
+	}
+
+	private static boolean listed(final File kept, final String name) throws IOException {
+		final File[] lists = kept.listFiles((dir, file) -> file.endsWith(".txt"));
+		return (lists != null) && (lists.length == 1) && read(lists[0]).toLowerCase().contains(name.toLowerCase());
+	}
+
+	@Test
 	void aLanguagePackKeepsWhatWasCountedOfTheFolderAndAddsItsFiles() throws IOException {
 		final File target = new File(this.temp, "Games/WC3");
 		importZip(zip("classic.zip", gameFiles("", "3")), target);
@@ -372,8 +400,8 @@ class DataPackageTest {
 	void theCachedResultOfAFolderGrowsWithALanguagePackAndIsKeptForTheNextStart() throws IOException {
 		final File target = new File(this.temp, "Games/WC3c");
 		importZip(zip("classic.zip", gameFiles("", "3")), target);
-		FolderCheckCache.settleMillis = 0;
-		DataFolderCheck.useCache(new File(this.temp, "folder-check.txt"), "v1");
+		com.etheller.warsmash.datasources.FolderSignature.settleMillis = 0;
+		DataFolderCheck.useCache(new File(this.temp, "folder-check.txt"));
 		try {
 			FolderCheckCacheTest.age(target);
 			DataFolderCheck.readability(target, Integer.MAX_VALUE, 3);
@@ -393,8 +421,8 @@ class DataPackageTest {
 			assertEquals(walks + 1, DataFolderCheck.WALKS.get());
 		}
 		finally {
-			FolderCheckCache.settleMillis = 2500;
-			DataFolderCheck.useCache(null, "");
+			com.etheller.warsmash.datasources.FolderSignature.settleMillis = 2500;
+			DataFolderCheck.useCache(null);
 			DataFolderCheck.resetMemory();
 		}
 	}
@@ -403,8 +431,8 @@ class DataPackageTest {
 	void aFolderChangedFromOutsideBeforeAnImportIsWalkedAgainAfterIt() throws IOException {
 		final File target = new File(this.temp, "Games/WC3d");
 		importZip(zip("classic.zip", gameFiles("", "3")), target);
-		FolderCheckCache.settleMillis = 0;
-		DataFolderCheck.useCache(new File(this.temp, "folder-check2.txt"), "v1");
+		com.etheller.warsmash.datasources.FolderSignature.settleMillis = 0;
+		DataFolderCheck.useCache(new File(this.temp, "folder-check2.txt"));
 		try {
 			FolderCheckCacheTest.age(target);
 			DataFolderCheck.readability(target, Integer.MAX_VALUE, 3);
@@ -417,8 +445,8 @@ class DataPackageTest {
 			assertEquals(walks + 1, DataFolderCheck.WALKS.get());
 		}
 		finally {
-			FolderCheckCache.settleMillis = 2500;
-			DataFolderCheck.useCache(null, "");
+			com.etheller.warsmash.datasources.FolderSignature.settleMillis = 2500;
+			DataFolderCheck.useCache(null);
 			DataFolderCheck.resetMemory();
 		}
 	}

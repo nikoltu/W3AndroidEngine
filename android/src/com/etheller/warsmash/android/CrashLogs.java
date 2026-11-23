@@ -131,29 +131,32 @@ final class CrashLogs {
 			details.renderer = CrashReport.rendererFrom(details.log);
 			details.graphics = graphics(game);
 			details.map = map(game);
-			final long time = details.time;
-			final String name = CrashReport.fileName(time, ZoneId.systemDefault());
-			final byte[] text = CrashReport.text(details, ZoneId.systemDefault()).getBytes(StandardCharsets.UTF_8);
-			final File own = new File(privateFolder(game), name);
-			own.getParentFile().mkdirs();
-			try (OutputStream out = new java.io.FileOutputStream(own)) {
-				out.write(text);
-			}
-			try {
-				saveForPlayer(game, name, text);
-			}
-			catch (final IOException | RuntimeException e) {
-				Log.e(TAG, "Unable to save the crash log where the player finds it", e);
-			}
-			final String[] kept = privateFolder(game).list();
-			if (kept != null) {
-				for (final String old : CrashReport.expired(Arrays.asList(kept), CrashReport.KEEP)) {
-					new File(privateFolder(game), old).delete();
-				}
-			}
+			final String name = CrashReport.fileName(details.time, ZoneId.systemDefault());
+			store(game, name, CrashReport.text(details, ZoneId.systemDefault()).getBytes(StandardCharsets.UTF_8));
 		}
 		catch (final Throwable e) {
 			Log.e(TAG, "Unable to write the crash log", e);
+		}
+	}
+
+	/** Keeps a log in the private folder and where the player finds it, and drops the oldest ones. */
+	static void store(final Context context, final String name, final byte[] text) throws IOException {
+		final File own = new File(privateFolder(context), name);
+		own.getParentFile().mkdirs();
+		try (OutputStream out = new java.io.FileOutputStream(own)) {
+			out.write(text);
+		}
+		try {
+			saveForPlayer(context, name, text);
+		}
+		catch (final IOException | RuntimeException e) {
+			Log.e(TAG, "Unable to save the crash log where the player finds it", e);
+		}
+		final String[] kept = privateFolder(context).list();
+		if (kept != null) {
+			for (final String old : CrashReport.expired(Arrays.asList(kept), CrashReport.KEEP)) {
+				new File(privateFolder(context), old).delete();
+			}
 		}
 	}
 
@@ -348,6 +351,10 @@ final class CrashLogs {
 			request.facts.put("Simulation thread", simulationThread);
 		}
 		request.crashLog = latest(context);
+		final String exit = ExitLogs.lastSummary(context);
+		if (exit != null) {
+			request.facts.put("Last abnormal process exit", exit);
+		}
 		return request;
 	}
 

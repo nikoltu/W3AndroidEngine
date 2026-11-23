@@ -22,7 +22,7 @@ public abstract class Texture extends HandlerResource<ResourceHandler> implement
 
 	private boolean fallback;
 
-	/** Whether the texture shows the neutral grey stand-in for a file that could not be read. */
+	/** Whether the texture shows the neutral stand-in for a file that could not be read. */
 	public final boolean isFallback() {
 		return this.fallback;
 	}

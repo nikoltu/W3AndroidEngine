@@ -7,6 +7,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting
 
 public class CAbilityProjectile extends CProjectile {
 	private final CAbilityProjectileListener projectileListener;
+	private boolean spellMissile;
 
 	public CAbilityProjectile(final float x, final float y, final float speed, final AbilityTarget target,
 			boolean homingEnabled, final CUnit source, final CAbilityProjectileListener projectileListener) {
@@ -18,11 +19,26 @@ public class CAbilityProjectile extends CProjectile {
 		}
 	}
 
+	/** A missile of a spell (not of an attack): an enemy it lands on gets the spell's damaged event. */
+	public void setSpellMissile(final boolean spellMissile) {
+		this.spellMissile = spellMissile;
+	}
+
 	@Override
 	protected void onHitTarget(CSimulation game) {
-		projectileListener.onHit(game, this, getTarget());
+		final boolean targetGone = isTargetGone(game);
+		if (targetGone && !projectileListener.hitsGoneTarget()) {
+			return;
+		}
 		final CUnit targetUnit = (getTarget() == null) ? null : getTarget().visit(AbilityTargetVisitor.UNIT);
-		if (targetUnit != null) {
+		// No event once the caster is gone: a Storm Bolt in the air when its caster is removed hurts without it.
+		if (this.spellMissile && (targetUnit != null) && !targetGone && (getSource() != null)
+				&& !getSource().isRemovedFromGame() && !game.isRemovalPending(getSource())
+				&& (targetUnit.getPlayerIndex() != getSource().getPlayerIndex())) {
+			targetUnit.fireSpellHitEvent(game, getSource());
+		}
+		projectileListener.onHit(game, this, getTarget());
+		if ((targetUnit != null) && !targetGone) {
 			targetUnit.onTargetedBySpell(game, getSource());
 		}
 	}

@@ -48,7 +48,7 @@ public class RenderUnit implements RenderWidget {
 	public final float[] location = new float[3];
 	public float selectionScale;
 	public UnitSoundset soundset;
-	public MdxModel portraitModel;
+	private RenderUnitType portraitType;
 	public int playerIndex;
 	private final CUnit simulationUnit;
 	public static final int LANDMARK_NONE = 0;
@@ -105,12 +105,16 @@ public class RenderUnit implements RenderWidget {
 
 	}
 
+	public MdxModel getPortraitModel() {
+		return this.portraitType == null ? null : this.portraitType.getPortraitModel();
+	}
+
 	public void resetRenderUnit(final War3MapViewer map, final float x, final float y, final float z,
 			final int playerIndex, final CUnit simulationUnit, final RenderUnitType typeData, boolean updatePortrait,
 			final BuildingShadow buildingShadow, final float selectionCircleScaleFactor, final float animationWalkSpeed,
 			final float animationRunSpeed, final float scalingValue) {
 		if (updatePortrait) {
-			this.portraitModel = typeData.getPortraitModel();
+			this.portraitType = typeData;
 		}
 		this.typeData = typeData;
 		this.specialArtModel = typeData.getSpecialArtModel();

@@ -1,9 +1,12 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.rendersim;
 
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.Supplier;
 
 import com.badlogic.gdx.math.Vector3;
 import com.etheller.warsmash.datasources.AssetPathFallback;
@@ -15,6 +18,7 @@ import com.etheller.warsmash.units.ObjectData;
 import com.etheller.warsmash.util.ArgbImage;
 import com.etheller.warsmash.util.Log;
 import com.etheller.warsmash.util.War3ID;
+import com.etheller.warsmash.viewer5.ModelViewer;
 import com.etheller.warsmash.viewer5.handlers.mdx.MdxModel;
 import com.etheller.warsmash.viewer5.handlers.w3x.AnimationTokens.SecondaryTag;
 import com.etheller.warsmash.viewer5.handlers.w3x.MdxAssetLoader;
@@ -51,6 +55,15 @@ public class RenderUnitTypeData extends RenderWidgetTypeData<RenderUnitType> {
 	private static final String BLEND_TIME = "blend"; // replaced from 'uble'
 	private static final String UNIT_SELECT_HEIGHT = "selZ"; // replaced from 'uslz'
 
+	/** Set (-D or an automated run's extra) to keep every model, as before models were let go. */
+	public static final String KEEP_MODELS_PROPERTY = "warsmash.keepmodels";
+	/** How many types with an idle model keep it, and for how long a model must have been idle to be let go. */
+	private static final int KEEP_IDLE_TYPES = 24;
+	private static final long MIN_IDLE_NANOS = 45_000_000_000L;
+	private static final int TIGHT_KEEP_IDLE_TYPES = 4;
+	private static final long TIGHT_MIN_IDLE_NANOS = 10_000_000_000L;
+	private static final float TIGHT_HEAP_SHARE = 0.6f;
+
 	private final DataTable unitAckSoundsTable;
 	private final DataTable uberSplatTable;
 	private final Map<String, UnitSoundset> soundsetNameToSoundset = new HashMap<>();
@@ -62,21 +75,114 @@ public class RenderUnitTypeData extends RenderWidgetTypeData<RenderUnitType> {
 		this.uberSplatTable = uberSplatTable;
 	}
 
-	private String getUnitModelPath(final GameObject row) {
-		String path;
-		path = row.getFieldAsString(UNIT_FILE, 0);
+	/**
+	 * Asks the data for the models of every unit type on a helper thread, as the first unit of a type does when it
+	 * comes into play: the data keeps what it was asked, and a first unit of a type in the middle of a game, of which
+	 * a script may make a hundred at once, otherwise looked each model up through all of its sources and packages in
+	 * the frame it was made in. Only the data source is used there, never the types' own data.
+	 */
+	public void warmModelLookups() {
+		final List<String> basePaths = new ArrayList<>();
+		final List<Integer> versionFlags = new ArrayList<>();
+		for (final String id : this.objectData.keySet()) {
+			final GameObject row = this.objectData.get(id);
+			if (row != null) {
+				basePaths.add(modelBasePath(row));
+				versionFlags.add(row.readSLKTagInt("fileVerFlags"));
+			}
+		}
+		final Thread warmer = new Thread(() -> {
+			try {
+				for (int i = 0; i < basePaths.size(); i++) {
+					final String path = versionedModelPath(basePaths.get(i), versionFlags.get(i));
+					if (!hasModel(path)) {
+						AssetPathFallback.find(this.dataSource, path);
+					}
+					this.dataSource.has(path.substring(0, path.length() - 4) + "_portrait.mdx");
+				}
+			}
+			catch (final RuntimeException e) {
+				// The first unit of a type asks again and fails there as it would have anyway.
+				Log.error(e);
+			}
+		}, "Model lookups");
+		warmer.setDaemon(true);
+		warmer.setPriority(Thread.MIN_PRIORITY);
+		warmer.start();
+	}
 
+	/**
+	 * Lets go of the models of unit types that no unit or picture shows any more, the ones unused longest first, once
+	 * more of them are kept than {@link #KEEP_IDLE_TYPES} (fewer while the memory is short): a long game of many unit
+	 * types otherwise holds the animation data of all of them. A type's model is read again when a unit of it comes.
+	 *
+	 * @return the number of models let go
+	 */
+	public int evictIdleModels(final ModelViewer viewer, final long nowNanos) {
+		if (Boolean.getBoolean(KEEP_MODELS_PROPERTY)) {
+			return 0;
+		}
+		final boolean tight = isMemoryTight();
+		final long minIdle = tight ? TIGHT_MIN_IDLE_NANOS : MIN_IDLE_NANOS;
+		final int keep = tight ? TIGHT_KEEP_IDLE_TYPES : KEEP_IDLE_TYPES;
+		List<RenderUnitType> idle = null;
+		for (final RenderUnitType type : allTypes()) {
+			if (type.isModelIdle()) {
+				if (type.getModelIdleSinceNanos() == 0) {
+					type.setModelIdleSinceNanos(nowNanos);
+				}
+				else if ((nowNanos - type.getModelIdleSinceNanos()) >= minIdle) {
+					if (idle == null) {
+						idle = new ArrayList<>();
+					}
+					idle.add(type);
+				}
+			}
+			else {
+				type.setModelIdleSinceNanos(0);
+			}
+		}
+		if ((idle == null) || (idle.size() <= keep)) {
+			return 0;
+		}
+		// the idle types that stay are the ones idle for the shortest time
+		idle.sort((a, b) -> Long.compare(a.getModelIdleSinceNanos(), b.getModelIdleSinceNanos()));
+		int released = 0;
+		for (int i = 0; i < (idle.size() - keep); i++) {
+			final MdxModel model = idle.get(i).releaseModel();
+			if (model != null) {
+				viewer.evictModel(model);
+				released++;
+			}
+		}
+		return released;
+	}
+
+	private static boolean isMemoryTight() {
+		final Runtime runtime = Runtime.getRuntime();
+		return (runtime.totalMemory() - runtime.freeMemory()) > (runtime.maxMemory() * TIGHT_HEAP_SHARE);
+	}
+
+	private static String modelBasePath(final GameObject row) {
+		String path = row.getFieldAsString(UNIT_FILE, 0);
 		if (path.toLowerCase(Locale.ROOT).endsWith(".mdl") || path.toLowerCase(Locale.ROOT).endsWith(".mdx")) {
 			path = path.substring(0, path.length() - 4);
 		}
-		if ((row.readSLKTagInt("fileVerFlags") == 2) && this.dataSource.has(path + "_V1.mdx")) {
+		return path;
+	}
+
+	private String versionedModelPath(String path, final int fileVerFlags) {
+		if ((fileVerFlags == 2) && this.dataSource.has(path + "_V1.mdx")) {
 			path += "_V1";
 		}
-		else if ((row.readSLKTagInt("fileVerFlags") == 1) && this.dataSource.has(path + "_V0.mdx")) {
+		else if ((fileVerFlags == 1) && this.dataSource.has(path + "_V0.mdx")) {
 			path += "_V0";
 		}
+		return path + ".mdx";
+	}
 
-		path += ".mdx";
+	private String getUnitModelPath(final GameObject row) {
+		String path = versionedModelPath(modelBasePath(row), row.readSLKTagInt("fileVerFlags"));
 		if (!hasModel(path)) {
 			final String fallback = AssetPathFallback.find(this.dataSource, path);
 			if (fallback != null) {
@@ -154,6 +260,28 @@ public class RenderUnitTypeData extends RenderWidgetTypeData<RenderUnitType> {
 		}
 	}
 
+	private MdxModel loadPortraitModel(final String path, final Supplier<MdxModel> model) {
+		final boolean deferBefore = this.mapViewer.setDeferModelLoadsInGame(true);
+		try {
+			return getPortraitModel(path, model);
+		}
+		finally {
+			this.mapViewer.setDeferModelLoadsInGame(deferBefore);
+		}
+	}
+
+	/** The model of a type that was let go, read on a helper thread as the first unit of a type is. */
+	private MdxModel loadModelAgain(final String path) {
+		final boolean deferBefore = this.mapViewer.setDeferModelLoadsInGame(true);
+		try {
+			final MdxModel model = this.mapViewer.loadModelMdx(path);
+			return model != null ? model : this.mapViewer.emptyModel();
+		}
+		finally {
+			this.mapViewer.setDeferModelLoadsInGame(deferBefore);
+		}
+	}
+
 	private RenderUnitType createTypeDataNow(final GameObject row) {
 		final String path = getUnitModelPath(row);
 		final String unitSpecialArtPath = row.getFieldAsString(UNIT_SPECIAL, 0);
@@ -175,7 +303,6 @@ public class RenderUnitTypeData extends RenderWidgetTypeData<RenderUnitType> {
 			// A unit type without a model file (map dummies and casters) is a unit all the same, just not seen.
 			model = this.mapViewer.emptyModel();
 		}
-		final MdxModel portraitModel = getPortraitModel(path, model);
 
 		final ArgbImage buildingPathingPixelMap = getBuildingPathingPixelMap(row);
 
@@ -186,8 +313,8 @@ public class RenderUnitTypeData extends RenderWidgetTypeData<RenderUnitType> {
 			final float shadowY = row.getFieldAsFloat(UNIT_SHADOW_Y, 0);
 			final float shadowWidth = row.getFieldAsFloat(UNIT_SHADOW_W, 0);
 			final float shadowHeight = row.getFieldAsFloat(UNIT_SHADOW_H, 0);
-			final String shadowTexture = getShadowTexture(unitShadow);
-			if (this.dataSource.has(shadowTexture)) {
+			final String shadowTexture = findShadowTexture(unitShadow);
+			if (shadowTexture != null) {
 				renderShadowType = new RenderShadowType(shadowTexture, shadowX, shadowY, shadowWidth, shadowHeight);
 			}
 		}
@@ -225,14 +352,17 @@ public class RenderUnitTypeData extends RenderWidgetTypeData<RenderUnitType> {
 
 		final float blendTime = row.getFieldAsFloat(BLEND_TIME, 0);
 
-		return new RenderUnitType(model, portraitModel, specialArtModel, buildingPathingPixelMap,
-				row.getFieldAsFloat(MAX_PITCH, 0), row.getFieldAsFloat(MAX_ROLL, 0),
+		final RenderUnitType[] made = new RenderUnitType[1];
+		made[0] = new RenderUnitType(model, () -> loadModelAgain(path),
+				() -> loadPortraitModel(path, () -> made[0].getModel()), specialArtModel,
+				buildingPathingPixelMap, row.getFieldAsFloat(MAX_PITCH, 0), row.getFieldAsFloat(MAX_ROLL, 0),
 				row.getFieldAsFloat(ELEVATION_SAMPLE_RADIUS, 0), row.getFieldAsBoolean(ALLOW_CUSTOM_TEAM_COLOR, 0),
 				row.getFieldAsInteger(TEAM_COLOR, 0), row.getFieldAsFloat(ANIMATION_RUN_SPEED, 0),
 				row.getFieldAsFloat(ANIMATION_WALK_SPEED, 0), row.getFieldAsFloat(MODEL_SCALE, 0), buildingShadow,
 				uberSplatTexturePath, uberSplatScaleValue, requiredAnimationNamesForAttachments, requiredAnimationNames,
 				renderShadowType, soundset, new Vector3(red, green, blue), selectScale, selectHeight,
 				orientationInterpolation, blendTime);
+		return made[0];
 	}
 
 	private EnumSet<SecondaryTag> parseSecondaryTags(final String requiredAnimationNamesForAttachmentsString) {

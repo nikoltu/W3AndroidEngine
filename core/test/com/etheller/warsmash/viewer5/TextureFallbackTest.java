@@ -68,6 +68,27 @@ class TextureFallbackTest {
 	}
 
 	@Test
+	void kindIsTakenFromTheName() {
+		assertEquals(TextureFallback.Kind.NORMAL, TextureFallback.kindOf("Doodads/Terrain/X_Normal.dds"));
+		assertEquals(TextureFallback.Kind.ORM, TextureFallback.kindOf("TerrainArt\\Dungeon\\Cave_Cliff1_ORM.dds"));
+		assertEquals(TextureFallback.Kind.DIFFUSE, TextureFallback.kindOf("Textures/CaveCliffDoodad_Diffuse.dds"));
+		assertEquals(TextureFallback.Kind.DIFFUSE, TextureFallback.kindOf("Textures/Black32.blp"));
+		assertEquals(TextureFallback.Kind.DIFFUSE, TextureFallback.kindOf(null));
+	}
+
+	@Test
+	void neutralNormalIsFlatAndNeutralOrmHasNoTeamColour() {
+		final ByteBuffer normal = TextureFallback.neutral(TextureFallback.Kind.NORMAL);
+		assertEquals((byte) 0x80, normal.get(0));
+		assertEquals((byte) 0x80, normal.get(1));
+		assertEquals((byte) 0xFF, normal.get(2));
+		final ByteBuffer orm = TextureFallback.neutral(TextureFallback.Kind.ORM);
+		assertEquals((byte) 0xFF, orm.get(0));
+		assertEquals((byte) 0x00, orm.get(2));
+		assertEquals((byte) 0x00, orm.get(3));
+	}
+
+	@Test
 	void greyIsOpaque808080() {
 		final ByteBuffer pixel = TextureFallback.grey();
 		assertEquals(4, pixel.remaining());

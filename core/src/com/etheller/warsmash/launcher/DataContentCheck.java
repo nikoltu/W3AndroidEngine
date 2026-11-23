@@ -30,6 +30,7 @@ public final class DataContentCheck {
 	public enum Problem {
 		UNSUPPORTED_VERSION("data_content_old_version"),
 		SCRIPTS("data_content_scripts"),
+		REQUIRED_FILES("data_content_required"),
 		NO_CAMPAIGN_LIST("data_content_no_campaigns"),
 		NO_CAMPAIGN_MAPS("data_content_no_campaign_maps"),
 		NO_MELEE_MAPS("data_content_no_melee_maps");
@@ -42,6 +43,12 @@ public final class DataContentCheck {
 	}
 
 	private static final String[] SCRIPTS = { "Scripts\\common.j", "Scripts\\Blizzard.j" };
+	/**
+	 * Files the game and the launcher open without a fallback: the scripts, the skin list and its misc data, and the
+	 * command texts. Without one of them the launcher art step or the first map fails.
+	 */
+	private static final String[] REQUIRED = { "Scripts\\common.j", "Scripts\\Blizzard.j", "UI\\war3skins.txt",
+		"UI\\MiscData.txt", "Units\\CommandFunc.txt", "Units\\CommandStrings.txt" };
 	private static final String DEFAULT_CAMPAIGN_FILE = "UI\\CampaignInfo.txt";
 	/** The stock melee maps are named "(2)Name.w3x" by their player count. */
 	private static final Pattern MELEE_MAP = Pattern.compile("^maps\\\\(?:[^\\\\]+\\\\)*\\(\\d+\\)[^\\\\]*\\.w3[xm]$");
@@ -77,13 +84,7 @@ public final class DataContentCheck {
 			}
 		}
 		try {
-			final List<DataSource> sources = new ArrayList<>();
-			sources.add(new FolderDataSource(folder.toPath()));
-			final File layer = DataFolderCheck.localeLayerOf(kind, folder);
-			if (layer != null) {
-				sources.add(new FolderDataSource(layer.toPath()));
-			}
-			final List<Problem> problems = check(new CompoundDataSource(sources), (String) null);
+			final List<Problem> problems = check(folderSource(kind, folder), (String) null);
 			// Melee only data was prepared without campaign maps on purpose; that is not a fault of the data.
 			if (preparedMeleeOnly(folder)) {
 				problems.remove(Problem.NO_CAMPAIGN_MAPS);
@@ -99,6 +100,42 @@ public final class DataContentCheck {
 			Log.error(e);
 			return Collections.emptyList();
 		}
+	}
+
+	private static DataSource folderSource(final DataFolderCheck.Kind kind, final File folder) {
+		final List<DataSource> sources = new ArrayList<>();
+		sources.add(new FolderDataSource(folder.toPath()));
+		final File layer = DataFolderCheck.localeLayerOf(kind, folder);
+		if (layer != null) {
+			sources.add(new FolderDataSource(layer.toPath()));
+		}
+		return new CompoundDataSource(sources);
+	}
+
+	/**
+	 * The first file that the game and the launcher need and an extracted folder lacks, as the path inside the
+	 * game data ("UI\\war3skins.txt"); null when all are there and for an installed game, which is not opened here.
+	 */
+	public static String missingRequiredFile(final DataFolderCheck.Kind kind, final File folder) {
+		if ((kind != DataFolderCheck.Kind.FOLDER) && (kind != DataFolderCheck.Kind.LOCAL_FILES)) {
+			return null;
+		}
+		try {
+			return missingRequiredFile(folderSource(kind, folder));
+		}
+		catch (final RuntimeException e) {
+			Log.error(e);
+			return null;
+		}
+	}
+
+	public static String missingRequiredFile(final DataSource data) {
+		for (final String path : REQUIRED) {
+			if (!data.has(path)) {
+				return path;
+			}
+		}
+		return null;
 	}
 
 	private static boolean preparedMeleeOnly(final File folder) {
@@ -141,6 +178,12 @@ public final class DataContentCheck {
 				break;
 			}
 		}
+		for (final String path : REQUIRED) {
+			if (!data.has(path) && !isScript(path)) {
+				problems.add(Problem.REQUIRED_FILES);
+				break;
+			}
+		}
 		if ((catalog == null) || catalog.getEntries().isEmpty()) {
 			problems.add(Problem.NO_CAMPAIGN_LIST);
 		}
@@ -151,6 +194,15 @@ public final class DataContentCheck {
 			problems.add(Problem.NO_MELEE_MAPS);
 		}
 		return problems;
+	}
+
+	private static boolean isScript(final String path) {
+		for (final String script : SCRIPTS) {
+			if (script.equals(path)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private static String skinCampaignFile(final DataSource data) {

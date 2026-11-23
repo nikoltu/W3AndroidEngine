@@ -361,7 +361,7 @@ final class OptionsPage extends LauncherViews {
 			final EngineSettings engine = new EngineSettings(this.activity);
 			final String chosen = engine.language().isEmpty() ? locale : engine.language();
 			radioRow(rows, R.string.options_language, names, null, Math.max(0, languages.indexOf(chosen)),
-					choice -> engine.setLanguage(languages.get(choice)), null,
+					choice -> chooseLanguage(engine, languages.get(choice)), null,
 					getString(R.string.options_language_note));
 		}
 		else {
@@ -946,6 +946,28 @@ final class OptionsPage extends LauncherViews {
 		shown.setEllipsize(path ? TextUtils.TruncateAt.START : TextUtils.TruncateAt.END);
 		place(row, shown, controlX(0), 0, b.contentW - b.controlX - b.pageFrame - 24, b.rowH);
 		return shown;
+	}
+
+	/**
+	 * The launcher reads its texts and the campaign lists in the game language, so the choice is read again from the
+	 * configuration, with the glue strings made again when the language changed.
+	 */
+	private void chooseLanguage(final EngineSettings engine, final String language) {
+		if (language.equals(engine.language())) {
+			return;
+		}
+		engine.setLanguage(language);
+		this.activity.reloadContent();
+		this.activity.cache = SkinCache.forConfiguration(this.activity, this.activity.ini,
+				this.activity.cache.reforged() ? SkinArt.REFORGED_SKIN : SkinArt.CLASSIC_SKIN);
+		this.optionsTab = TAB_GAME_DATA;
+		if (this.activity.cache.isCurrent()) {
+			showOptions(TAB_GAME_DATA);
+		}
+		else {
+			this.activity.afterPrep = LauncherActivity.PAGE_OPTIONS;
+			this.activity.prepPage.showPrep();
+		}
 	}
 
 	private void chooseSkin(final boolean reforged) {

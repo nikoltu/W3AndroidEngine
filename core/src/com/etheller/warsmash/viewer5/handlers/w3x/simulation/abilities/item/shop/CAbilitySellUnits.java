@@ -164,12 +164,11 @@ public final class CAbilitySellUnits extends AbstractCAbility {
 	@Override
 	public void onAdd(final CSimulation game, final CUnit unit) {
 		for (final War3ID unitTypeId : this.unitsSold) {
-			final CUnitType unitType = game.getUnitData().getUnitType(unitTypeId);
-			if (unitType != null) {
+			// Only the stock fields are read: the type itself is made when something else asks for it.
+			final int[] stock = game.getUnitData().getStockData(unitTypeId);
+			if (stock != null) {
 				this.unitToSellState.put(unitTypeId,
-						SellStockState.fromData(game.getGameTurnTick(), unitType.getStockMax(),
-								unitType.getStockReplenishInterval(), unitType.getStockStartDelay(),
-								unitType.getStockInitial()));
+						SellStockState.fromData(game.getGameTurnTick(), stock[0], stock[1], stock[2], stock[3]));
 			}
 		}
 	}

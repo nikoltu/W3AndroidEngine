@@ -17,6 +17,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
+import android.content.res.Resources;
 import android.database.Cursor;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -52,6 +53,7 @@ import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
+import com.etheller.warsmash.datasources.FolderIndexStore;
 import com.etheller.warsmash.datasources.GameLanguage;
 import com.etheller.warsmash.launcher.DataContentCheck;
 import com.etheller.warsmash.launcher.DataFolderCheck;
@@ -249,6 +251,31 @@ public class DataFolderActivity extends Activity {
 	/** A copy of the data folder from before a reinstall lies in the shared storage, closed until access is allowed. */
 	private boolean restoreWaiting;
 
+	private final LanguageResources languageResources = new LanguageResources();
+	private String gameLanguage;
+
+	/** The texts follow the game language of the configuration, as the launcher's do. */
+	@Override
+	public Resources getResources() {
+		final Resources plain = super.getResources();
+		if (getBaseContext() == null) {
+			return plain;
+		}
+		if (this.gameLanguage == null) {
+			this.gameLanguage = "";
+			try {
+				final File iniFile = SkinCache.iniFile(this);
+				if (iniFile.isFile()) {
+					this.gameLanguage = GameLanguage.configured(AndroidLauncher.loadWarsmashIni(iniFile));
+				}
+			}
+			catch (final IOException | RuntimeException e) {
+				// the language of the system stays
+			}
+		}
+		return this.languageResources.get(this, plain, this.gameLanguage);
+	}
+
 	@Override
 	protected void onCreate(final Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
@@ -271,23 +298,14 @@ public class DataFolderActivity extends Activity {
 	}
 
 	/**
-	 * Keeps what the walks of the game data folder find in the app's own files, so that the first check after the app
-	 * starts does not walk a folder of tens of thousands of files over the shared storage again. A new version of the
-	 * app (or a reinstall) reads the folder anew.
+	 * Keeps what the walks of the game data folder find in the app's own files, so that neither the first check nor
+	 * the start of a game after the app starts walks a folder of tens of thousands of files over the shared storage
+	 * again. An update of the app keeps them: they are read again only when the checks themselves changed, or the
+	 * folder did.
 	 */
 	static void useFolderCache(final Context context) {
-		String stamp = "";
-		try {
-			final android.content.pm.PackageInfo info = context.getPackageManager()
-					.getPackageInfo(context.getPackageName(), 0);
-			stamp = info.versionName + "/" + info.lastUpdateTime;
-		}
-		catch (final PackageManager.NameNotFoundException e) {
-			// Without a version the cache is kept for this run only.
-			DataFolderCheck.useCache(null, "");
-			return;
-		}
-		DataFolderCheck.useCache(new File(context.getFilesDir(), "folder-check.txt"), stamp);
+		DataFolderCheck.useCache(new File(context.getFilesDir(), "folder-check.txt"));
+		FolderIndexStore.use(new File(context.getFilesDir(), "folder-index"));
 	}
 
 	private void proceed() {

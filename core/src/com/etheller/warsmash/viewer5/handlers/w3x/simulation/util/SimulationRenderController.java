@@ -60,6 +60,8 @@ public interface SimulationRenderController {
 
 	void removeDestructable(CDestructable dest);
 
+	void removeItem(CItem item);
+
 	void spawnUnitConstructionFinishSound(CUnit constructedStructure);
 
 	void spawnUnitUpgradeFinishSound(CUnit constructedStructure);

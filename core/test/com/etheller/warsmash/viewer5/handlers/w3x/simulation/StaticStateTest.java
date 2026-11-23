@@ -221,6 +221,9 @@ class StaticStateTest {
 			"core.BuildInfo#current", "core.datasources.CascDataSource$Mount#MOUNTS",
 			"core.datasources.CascDataSource$Mount#extractFolderCleared", "core.datasources.CascDataSource#PARSED_ALIASES",
 			"core.datasources.FolderDataSource#INDEXES",
+			// Where the lists of large data folders are kept, set from the files of the app, and the age a folder must have to be kept.
+			"core.datasources.FolderIndexStore#directory", "core.datasources.FolderSignature#settleMillis",
+			"core.datasources.FolderSignature#OPENED_FILES",
 			// Parse trees of interface files, kept while memory allows and checked against the file's bytes.
 			"core.parsers.fdf.DataSourceFDFParserBuilder#PARSED", "core.units.HashedGameObject#SHARED_KEYS",
 			"core.units.HashedGameObject#SHARED_VALUES", "core.units.HashedGameObject#SHARED_SINGLE_LISTS",
@@ -242,7 +245,8 @@ class StaticStateTest {
 			// Touch input of the one screen and the player's finger; owned by the input code, not by a game.
 			"core.input.touch.OnscreenKeyboard#coveredHeightPixels", "core.input.touch.TouchInputRouter#installed",
 			"core.input.touch.VirtualCursor#active", "core.input.touch.VirtualCursor#x", "core.input.touch.VirtualCursor#y",
-			"core.input.touch.VirtualCursor#fingerInput", "core.input.touch.VirtualCursor#touchDevice",
+			"core.input.touch.VirtualCursor#fingerInput", "core.input.touch.VirtualCursor#mouseOver",
+			"core.input.touch.VirtualCursor#mouseX", "core.input.touch.VirtualCursor#mouseY", "core.input.touch.VirtualCursor#touchDevice",
 			"core.input.touch.VirtualModifiers#shift", "core.input.touch.VirtualModifiers#penButtonShift",
 			"core.input.touch.VirtualModifiers#penButtonCtrl",
 			// The one LAN session of the process (it belongs to the player, not to a game), and the test program's
@@ -250,7 +254,9 @@ class StaticStateTest {
 			"core.lan.LanSessions#current", "core.lan.LanSessions#network", "core.lan.LanSessions#rejoinStore", "core.lan.LanProperties#applied",
 			"core.lan.LanHeadless#active", "core.lan.LanHeadless#desyncDone",
 			// Where the launcher's words come from, one for the process.
-			"core.launcher.lan.LanText#source",
+			"core.launcher.LauncherText#source",
+			// The glue strings the launcher words itself, a fixed list.
+			"core.launcher.GlueText#OWN_KEYS",
 			// The classic portraits' wire names, read from the skin's fixed item list once.
 			"core.launcher.lan.LanPortraitId#classicKeys", "core.launcher.lan.LanPortraitId#classicIndexes",
 			// Fixed classic/Reforged portrait pairs for LAN, built once.
@@ -268,17 +274,16 @@ class StaticStateTest {
 			"core.launcher.MapListCache#shared",
 			// Where the platform keeps the player's Save and Replay; set once at start, not a game's state.
 			"core.launcher.StorageRoot#root",
-			"core.launcher.DataFolderCheck#READABILITY", "core.launcher.DataFolderCheck#OPENED_FILES",
+			"core.launcher.DataFolderCheck#READABILITY",
 			// What the launcher kept of its walks of the game data folder; set from the files of the app, not a game's state.
 			"core.launcher.DataFolderCheck#FILE_COUNTS", "core.launcher.FolderCheckCache#SNAPSHOTS",
-			"core.launcher.FolderCheckCache#file", "core.launcher.FolderCheckCache#stamp",
-			"core.launcher.FolderCheckCache#loaded", "core.launcher.FolderCheckCache#settleMillis",
+			"core.launcher.FolderCheckCache#file", "core.launcher.FolderCheckCache#loaded",
 			"core.launcher.HotkeyCatalog#BUILD_COMMANDS",
 			// The GL memory accounting of a diagnostic switch; counts the platform GL objects, not a game's state.
 			"core.util.GlMemory#ON", "core.util.GlMemory#OWNERS", "core.util.GlMemory#unit", "core.util.GlMemory#vao", "core.util.GlMemory#renderbuffer", "core.util.GlMemory#textureBytes", "core.util.GlMemory#bufferBytes", "core.util.GlMemory#renderbufferBytes", "core.util.GlMemory#unknownFormats",
 			// Counters of the performance report; only counted when the switch is set, and not a game's state.
 			"core.util.PerfStats#ENABLED", "core.util.PerfStats#WINDOW_HISTOGRAM", "core.util.PerfStats#RUN_HISTOGRAM", "core.util.PerfStats#firstFrame", "core.util.PerfStats#frameLoads", "core.util.PerfStats#frameLoadNanos", "core.util.PerfStats#frameTextureNanos", "core.util.PerfStats#slowestLoadNanos", "core.util.PerfStats#slowestLoad", "core.util.PerfStats#checkedLocalFile", "core.util.PerfStats#TOTALS",
-			"core.util.PerfStats#STEP_TOTALS", "core.util.PerfStats#textureBytes", "core.util.PerfStats#evictedTextures", "core.util.PerfStats#FRAME_SECTIONS", "core.util.PerfStats#WORST_SECTIONS",
+			"core.util.PerfStats#STEP_TOTALS", "core.util.PerfStats#textureBytes", "core.util.PerfStats#evictedTextures", "core.util.PerfStats#evictedModels", "core.util.PerfStats#FRAME_SECTIONS", "core.util.PerfStats#WORST_SECTIONS",
 			"core.util.PerfStats#stepStart", "core.util.PerfStats#frameStart", "core.util.PerfStats#sectionStart",
 			"core.util.PerfStats#lastLoadingFrame", "core.util.PerfStats#worstLoadingFrame", "core.parsers.facefx.FaceFxLibrary#GAME_ANIMSETS", "core.viewer5.gl.ShaderFailure#LIMITS", "core.viewer5.gl.ShaderFailure#LIMIT_NAMES",
 			"core.util.PerfStats#frames", "core.util.PerfStats#frameTotal", "core.util.PerfStats#worstFrame",
@@ -321,7 +326,7 @@ class StaticStateTest {
 			"core.launcher.DataPackage#SET_FOLDERS", "core.launcher.CustomContent#FOLDERS", "core.launcher.EngineSettings#OWN_SECTIONS",
 			"core.launcher.HotkeyCatalog#HALLS", "core.launcher.HotkeyCatalog#RACE_NAMES", "core.launcher.HotkeyCatalog#BASE",
 			"core.launcher.LauncherKeys#DIFFICULTIES", "core.launcher.LauncherKeys#CAMPAIGN_MAPS",
-			"core.launcher.Profiles#FIELDS", "core.launcher.ProfileStorage#FOLDERS", "core.launcher.DataContentCheck#SCRIPTS",
+			"core.launcher.Profiles#FIELDS", "core.launcher.ProfileStorage#FOLDERS", "core.launcher.DataContentCheck#SCRIPTS", "core.launcher.DataContentCheck#REQUIRED",
 			"core.launcher.LauncherOptions#GRAPHICS", "core.launcher.LauncherOptions#GRAPHICS_SETS",
 			"core.launcher.LauncherOptions#TEXTURE_SIZES", "core.launcher.LauncherOptions#SOUND",
 			"core.launcher.LauncherOptions#GAMEPLAY", "core.launcher.SkinArt#RACE_SYMBOLS", "core.launcher.SkinArt#SCENES",

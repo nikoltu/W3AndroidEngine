@@ -84,7 +84,7 @@ public abstract class RawOpenGLTextureResource extends Texture {
 		showFallback();
 	}
 
-	/** The other format of the same texture, else grey, in place of the empty texture a failed decode leaves. */
+	/** The other format of the same texture, else the neutral value of its kind, in place of the empty texture a failed decode leaves. */
 	private void showFallback() {
 		if (this.disposed || isShadowTexture()) {
 			return;
@@ -96,7 +96,7 @@ public abstract class RawOpenGLTextureResource extends Texture {
 				update(other, false);
 			}
 			else {
-				update(1, 1, TextureFallback.grey(), false);
+				update(1, 1, TextureFallback.neutral(TextureFallback.kindOf(this.fetchUrl)), false);
 				setFallback(true);
 			}
 			this.ok = true;

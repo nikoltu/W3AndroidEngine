@@ -44,6 +44,7 @@ public abstract class ModelViewer {
 	public Map<String, Resource> fetchCache;
 	private final Map<String, String> foundSources = new HashMap<>();
 	private DataSource foundSourcesData;
+	private final MissingSources missingSources = new MissingSources();
 	public int frameTime;
 	public GL20 gl;
 	public WebGL webGL;
@@ -70,6 +71,7 @@ public abstract class ModelViewer {
 	/** Frame numbers at the budget checks with their times, the oldest first, to tell how long ago a frame was. */
 	private final ArrayDeque<long[]> budgetCheckFrames = new ArrayDeque<>();
 	private int evictedTextures;
+	private int evictedModels;
 	private boolean deferTextureLoads;
 	private boolean deferModelTextures;
 	private boolean deferModelLoads;
@@ -621,6 +623,7 @@ public abstract class ModelViewer {
 		}
 		this.resources.clear();
 		this.fetchCache.clear();
+		this.missingSources.clear();
 		for (final Scene scene : this.scenes) {
 			scene.dispose();
 		}
@@ -668,8 +671,14 @@ public abstract class ModelViewer {
 			this.foundSources.put(src, found);
 			return found;
 		}
+		final String missing = this.missingSources.get(this.dataSource, src);
+		if (missing != null) {
+			return missing;
+		}
 		DataErrors.report(DataErrors.MISSING_ASSET, src, "Attempting to load non-existant file: " + src);
-		return withDdsBeside(this.dataSource, src);
+		final String answer = withDdsBeside(this.dataSource, src);
+		this.missingSources.put(this.dataSource, src, answer);
+		return answer;
 	}
 
 	/**
@@ -754,8 +763,11 @@ public abstract class ModelViewer {
 				final Resource cached = this.fetchCache.get(cacheKey(finalSrc));
 
 				if (cached != null) {
-					if (!this.deferModelLoads && (cached instanceof Model)) {
-						((Model<?>) cached).finishPending();
+					if (cached instanceof Model) {
+						((Model<?>) cached).requested();
+						if (!this.deferModelLoads) {
+							((Model<?>) cached).finishPending();
+						}
 					}
 					return cached;
 				}
@@ -767,6 +779,9 @@ public abstract class ModelViewer {
 				this.resources.add(resource);
 
 				this.fetchCache.put(cacheKey(finalSrc), resource);
+				if (resource instanceof Model) {
+					((Model<?>) resource).requested();
+				}
 
 				// TODO this is a synchronous hack, skipped some Ghostwolf code
 				final long loadStart = PerfStats.ENABLED ? System.nanoTime() : 0;
@@ -876,7 +891,26 @@ public abstract class ModelViewer {
 	}
 
 	public Resource get(final String key) {
-		return this.fetchCache.get(cacheKey(key));
+		final Resource resource = this.fetchCache.get(cacheKey(key));
+		if (resource instanceof Model) {
+			((Model<?>) resource).requested();
+		}
+		return resource;
+	}
+
+	/**
+	 * Lets go of a model that nothing holds any more (see {@link Model#isReleasable}): its file is read and built again
+	 * when it is asked for next.
+	 */
+	public void evictModel(final Model<?> model) {
+		unload(model);
+		this.textureMappers.remove(model);
+		model.dispose();
+		this.evictedModels++;
+	}
+
+	public int getEvictedModels() {
+		return this.evictedModels;
 	}
 
 	public GenericResource loadGeneric(final String path, final FetchDataTypeName dataType,

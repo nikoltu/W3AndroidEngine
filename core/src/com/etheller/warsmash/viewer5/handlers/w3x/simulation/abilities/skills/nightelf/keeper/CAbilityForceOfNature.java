@@ -56,12 +56,21 @@ public class CAbilityForceOfNature extends CAbilityPointTargetSpellBase {
 			final AbilityPointTarget target, final AbilityTargetCheckReceiver<AbilityPointTarget> receiver) {
 		game.getWorldCollision().enumDestructablesInRange(target.getX(), target.getY(), this.areaOfEffect,
 				this.anyMatchingDestFinder.reset(game, unit));
-		if (!this.anyMatchingDestFinder.foundMatch) {
+		// Measured (1.29): a script order at a place with no tree around it is taken as well; the cast then ends
+		// as it starts.
+		if (!this.anyMatchingDestFinder.foundMatch && !game.isScriptTargetOrder() && !game.isScriptPointOrder()) {
 			receiver.targetCheckFailed(CommandStringErrorKeys.MUST_TARGET_A_TREE);
 		}
 		else {
 			super.innerCheckCanTarget(game, unit, orderId, target, receiver);
 		}
+	}
+
+	@Override
+	public boolean canBeginCast(final CSimulation game, final CUnit caster, final AbilityTarget target) {
+		game.getWorldCollision().enumDestructablesInRange(target.getX(), target.getY(), this.areaOfEffect,
+				this.anyMatchingDestFinder.reset(game, caster));
+		return this.anyMatchingDestFinder.foundMatch;
 	}
 
 	@Override

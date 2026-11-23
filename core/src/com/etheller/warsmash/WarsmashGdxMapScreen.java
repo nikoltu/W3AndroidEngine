@@ -497,9 +497,22 @@ public class WarsmashGdxMapScreen implements InputProcessor, Screen, TouchTarget
 	}
 
 	public static DataSource parseDataSources(final DataTable warsmashIni) {
+		return parseDataSources(warsmashIni, GameLanguage.configured(warsmashIni), true);
+	}
+
+	/**
+	 * The data sources in a language of the caller's choice, which leaves the language the running game and the skin
+	 * read in as it is: for text that is wanted in a language besides the chosen one.
+	 */
+	public static DataSource parseDataSources(final DataTable warsmashIni, final String language) {
+		return parseDataSources(warsmashIni, GameLanguage.canonical(language), false);
+	}
+
+	private static DataSource parseDataSources(final DataTable warsmashIni, final String language,
+			final boolean noteLanguage) {
 		final List<DataSourceDescriptor> dataSourcesList = new ArrayList<>();
 		final List<String> allCascPrefixes = new ArrayList<>();
-		parseDataSourceDescriptors(warsmashIni, dataSourcesList, allCascPrefixes);
+		parseDataSourceDescriptors(warsmashIni, dataSourcesList, allCascPrefixes, language, noteLanguage);
 		final DataSource baseCompoundDataSource = new CompoundDataSourceDescriptor(dataSourcesList).createDataSource();
 
 		final List<DataSource> subdirDataSourcesList = new ArrayList<>();
@@ -513,10 +526,18 @@ public class WarsmashGdxMapScreen implements InputProcessor, Screen, TouchTarget
 
 	public static void parseDataSourceDescriptors(final DataTable warsmashIni,
 			final List<DataSourceDescriptor> dataSourcesList, final List<String> allCascPrefixes) {
+		parseDataSourceDescriptors(warsmashIni, dataSourcesList, allCascPrefixes, GameLanguage.configured(warsmashIni),
+				true);
+	}
+
+	private static void parseDataSourceDescriptors(final DataTable warsmashIni,
+			final List<DataSourceDescriptor> dataSourcesList, final List<String> allCascPrefixes,
+			final String language, final boolean noteLanguage) {
 		final Element dataSourcesConfig = warsmashIni.get("DataSources");
-		final String language = GameLanguage.configured(warsmashIni);
-		GameLanguage.useForSkin(language);
-		GameLanguage.useInGame(warsmashIni);
+		if (noteLanguage) {
+			GameLanguage.useForSkin(language);
+			GameLanguage.useInGame(warsmashIni);
+		}
 		for (int i = 0; i < dataSourcesConfig.size(); i++) {
 			final String numberText = (i < 10 ? "0" : "") + i;
 			final String type = dataSourcesConfig.getField("Type" + numberText);

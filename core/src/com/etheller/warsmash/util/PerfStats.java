@@ -83,13 +83,15 @@ public final class PerfStats {
 	private static long frameTextureNanos;
 	private static long textureBytes;
 	private static int evictedTextures;
+	private static int evictedModels;
 	private static long slowestLoadNanos;
 	private static String slowestLoad;
 
 	/** The memory the game's model textures hold and how many were let go so far, for the next report. */
-	public static void textures(final long bytes, final int evicted) {
+	public static void textures(final long bytes, final int evicted, final int evictedModelCount) {
 		textureBytes = bytes;
 		evictedTextures = evicted;
+		evictedModels = evictedModelCount;
 	}
 
 	/**
@@ -158,6 +160,7 @@ public final class PerfStats {
 
 	/** {@link #setupPart} for what is worth a line only when it is slow. */
 	public static void slowSetupPart(final String what, final long startNanos) {
+		checkSwitchFile();
 		if (ENABLED && ((System.nanoTime() - startNanos) >= 20_000_000L)) {
 			setupPart(what, startNanos);
 		}
@@ -551,7 +554,8 @@ public final class PerfStats {
 			line.append(String.format(Locale.ROOT, " java_heap_mb=%.0f native_heap_mb=%.0f", Gdx.app.getJavaHeap() / 1048576.0,
 					Gdx.app.getNativeHeap() / 1048576.0));
 		}
-		line.append(String.format(Locale.ROOT, " texture_mb=%.0f evicted=%d", textureBytes / 1048576.0, evictedTextures));
+		line.append(String.format(Locale.ROOT, " texture_mb=%.0f evicted=%d models_evicted=%d", textureBytes / 1048576.0, evictedTextures,
+				evictedModels));
 		if (GlMemory.ON) {
 			line.append(' ').append(GlMemory.summary());
 			if (Gdx.app != null) {

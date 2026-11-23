@@ -45,9 +45,19 @@ public class CompoundDataSource implements DataSource {
 	 * pointed elsewhere) calls for this on the sources that hold it.
 	 */
 	public void sourcesChanged() {
+		this.revision++;
 		this.cache.clear();
 		this.sourceIndexCache.clear();
 		this.graphicsIndependent = null;
+	}
+
+	@Override
+	public int revision() {
+		int total = this.revision;
+		for (final DataSource source : this.mpqList) {
+			total += source.revision();
+		}
+		return total;
 	}
 
 	/** The sources without graphics packages, kept until the sources change; this when none has one. */
@@ -74,6 +84,7 @@ public class CompoundDataSource implements DataSource {
 	}
 
 	private volatile DataSource graphicsIndependent;
+	private volatile int revision;
 	// Lookups (has, findFirst) also come from the threads that prepare models for the game thread.
 	Map<String, File> cache = new ConcurrentHashMap<>();
 	// Index of the source that has each path, or MISSING. The sources do not change while this instance lives,
@@ -319,6 +330,7 @@ public class CompoundDataSource implements DataSource {
 				Log.error(e);
 			}
 		}
+		this.revision++;
 		this.cache.clear();
 		this.sourceIndexCache.clear();
 		this.mpqList.clear();

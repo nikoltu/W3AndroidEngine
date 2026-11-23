@@ -83,7 +83,8 @@ class DataContentCheckTest {
 
 	private static FakeData complete() {
 		return new FakeData().with("Scripts\\common.j", "x").with("Scripts\\Blizzard.j", "x")
-				.with("UI\\CampaignInfo.txt", LIST).with("Campaign\\Human01.w3m", "m")
+				.with("UI\\war3skins.txt", "x").with("UI\\MiscData.txt", "x").with("Units\\CommandFunc.txt", "x")
+				.with("Units\\CommandStrings.txt", "x").with("UI\\CampaignInfo.txt", LIST).with("Campaign\\Human01.w3m", "m")
 				.with("Maps\\Melee\\(2)Lost Temple.w3m", "m");
 	}
 
@@ -126,10 +127,41 @@ class DataContentCheckTest {
 	}
 
 	@Test
+	void missingUiFilesAreToldOnceAndNamed() {
+		final FakeData data = complete();
+		data.files.remove("ui\\war3skins.txt");
+		data.files.remove("units\\commandfunc.txt");
+		assertEquals(Arrays.asList(Problem.REQUIRED_FILES), DataContentCheck.check(data, "UI\\CampaignInfo.txt"));
+		assertEquals("UI\\war3skins.txt",DataContentCheck.missingRequiredFile(data));
+		assertEquals(null, DataContentCheck.missingRequiredFile(complete()));
+	}
+
+	@Test
+	void scriptsAreNamedFirstWhenTheyAreMissingToo() {
+		final FakeData data = complete();
+		data.files.remove("scripts\\common.j");
+		assertEquals("Scripts\\common.j", DataContentCheck.missingRequiredFile(data));
+		assertEquals(Arrays.asList(Problem.SCRIPTS), DataContentCheck.check(data, "UI\\CampaignInfo.txt"));
+	}
+
+	@Test
+	void anExtractedFolderWithoutItsUiAndScriptsFoldersIsNamed() throws IOException {
+		for (final String file : Arrays.asList("ui/WorldEditGameStrings.txt", "units/UnitData.slk")) {
+			final File target = new File(this.temp, file);
+			target.getParentFile().mkdirs();
+			Files.write(target.toPath(), new byte[] { 1 });
+		}
+		assertEquals(DataFolderCheck.Kind.FOLDER, DataFolderCheck.detect(this.temp));
+		assertEquals("Scripts\\common.j",
+				DataContentCheck.missingRequiredFile(DataFolderCheck.Kind.FOLDER, this.temp));
+		assertEquals(null, DataContentCheck.missingRequiredFile(DataFolderCheck.Kind.CASC, this.temp));
+	}
+
+	@Test
 	void dataWithoutMeleeMapsOrCampaignListIsTold() {
 		final FakeData data = new FakeData().with("Scripts\\common.j", "x").with("Scripts\\Blizzard.j", "x")
 				.with("Maps\\Custom\\Arena.w3x", "m");
-		assertEquals(Arrays.asList(Problem.NO_CAMPAIGN_LIST, Problem.NO_MELEE_MAPS),
+		assertEquals(Arrays.asList(Problem.REQUIRED_FILES, Problem.NO_CAMPAIGN_LIST, Problem.NO_MELEE_MAPS),
 				DataContentCheck.check(data, (String) null));
 	}
 
@@ -149,7 +181,8 @@ class DataContentCheckTest {
 	@Test
 	void anExtractedFolderIsCheckedByItsFiles() throws IOException {
 		final List<String> files = Arrays.asList("ui/WorldEditGameStrings.txt", "units/UnitData.slk",
-				"Scripts/common.j", "Scripts/Blizzard.j", "UI/CampaignInfo.txt", "Campaign/Human01.w3m",
+				"Scripts/common.j", "Scripts/Blizzard.j", "UI/war3skins.txt", "UI/MiscData.txt", "Units/CommandFunc.txt",
+				"Units/CommandStrings.txt", "UI/CampaignInfo.txt", "Campaign/Human01.w3m",
 				"Maps/Melee/(2)Lost Temple.w3m");
 		for (final String file : files) {
 			final File target = new File(this.temp, file);
@@ -167,7 +200,8 @@ class DataContentCheckTest {
 	@Test
 	void meleeOnlyDataNeedsNoCampaignMaps() throws IOException {
 		final List<String> files = Arrays.asList("ui/WorldEditGameStrings.txt", "units/UnitData.slk",
-				"Scripts/common.j", "Scripts/Blizzard.j", "UI/CampaignInfo.txt", "Maps/Melee/(2)Lost Temple.w3m");
+				"Scripts/common.j", "Scripts/Blizzard.j", "UI/war3skins.txt", "UI/MiscData.txt", "Units/CommandFunc.txt",
+				"Units/CommandStrings.txt", "UI/CampaignInfo.txt", "Maps/Melee/(2)Lost Temple.w3m");
 		for (final String file : files) {
 			final File target = new File(this.temp, file);
 			target.getParentFile().mkdirs();

@@ -36,12 +36,11 @@ public final class LauncherKeys {
 	public static final String KEY_LAUNCH_RACE = "launchRace";
 	/** Set while a game started from here runs; a launcher that finds it without a result knows the game died. */
 	public static final String KEY_LAUNCHED = "launched";
-	/** The difficulties the engine's campaign screen offers (1.29 measured: Normal and Hard). */
-	public static final String[][] DIFFICULTIES = { { "normal", "NORMAL", "Normal" }, { "hard", "HARD", "Hard" } };
+	/** The difficulties the engine's campaign screen offers (1.29 measured: Normal and Hard): the stored name and the glue string. */
+	public static final String[][] DIFFICULTIES = { { "normal", "NORMAL" }, { "hard", "HARD" } };
 	/** The campaign screen's choice of maps since 1.32; the first is the default, as there. */
-	public static final String[][] CAMPAIGN_MAPS = {
-		{ LaunchRequest.CAMPAIGN_MAPS_REFORGED, "CAMPAIGN_VERSION_REFORGED", "REFORGED" },
-		{ LaunchRequest.CAMPAIGN_MAPS_CLASSIC, "CAMPAIGN_VERSION_CLASSIC", "CLASSIC" } };
+	public static final String[][] CAMPAIGN_MAPS = { { LaunchRequest.CAMPAIGN_MAPS_REFORGED, "CAMPAIGN_VERSION_REFORGED" },
+		{ LaunchRequest.CAMPAIGN_MAPS_CLASSIC, "CAMPAIGN_VERSION_CLASSIC" } };
 
 	private LauncherKeys() {
 	}

@@ -23,6 +23,7 @@ import com.etheller.warsmash.launcher.LauncherBoard;
 import com.etheller.warsmash.launcher.MapSections;
 import com.etheller.warsmash.launcher.SkinArt;
 import com.etheller.warsmash.launcher.lan.LanLauncherModel;
+import com.etheller.warsmash.launcher.LauncherText;
 import com.etheller.warsmash.launcher.lan.LanText;
 
 import net.warsmash.lan.protocol.LanProtocol;
@@ -120,7 +121,7 @@ final class LanPage extends LauncherViews {
 		final float w = t ? 380 : 214;
 		final float gap = t ? 16 : 8;
 		final boolean net = this.activity.lan().networkAvailable();
-		final String[] labels = { "Join Game", "Create Game", LanText.joinByIp() };
+		final String[] labels = { LauncherText.get("lan_join_game"), LauncherText.get("lan_create_game"), LanText.joinByIp() };
 		for (int i = 0; i < 3; i++) {
 			final int tab = i;
 			final LauncherKit.GlueButton button = button(labels[i], 96, t ? 32 : 22, v -> {
@@ -170,8 +171,8 @@ final class LanPage extends LauncherViews {
 		}
 		this.summary = new FrameLayout(this.activity);
 		place(content, this.summary, listW + gap, top, b.contentW - listW - gap, h);
-		action(view, 0, glueLabel("BACK", "Back"), v -> this.activity.homePage.showHome());
-		this.joinButton = action(view, 2, "Join Game", v -> joinSelected());
+		action(view, 0, glueLabel("BACK"), v -> this.activity.homePage.showHome());
+		this.joinButton = action(view, 2, LauncherText.get("lan_join_game"), v -> joinSelected());
 		this.joinButton.setEnabled(false);
 		this.shownVersion = -1;
 		this.activity.setPage(view, LauncherActivity.PAGE_LAN);
@@ -225,7 +226,7 @@ final class LanPage extends LauncherViews {
 				}
 				fillSummary(row);
 				this.joinButton.setEnabled(row.joinable());
-				this.joinButton.setText(row.rejoin ? "Rejoin" : "Join Game");
+				this.joinButton.setText(row.rejoin ? LauncherText.get("lan_rejoin") : LauncherText.get("lan_join_game"));
 			});
 			views.add(view);
 			this.gameRows.addView(view, new LinearLayout.LayoutParams(MATCH, px(rowH)));
@@ -239,7 +240,7 @@ final class LanPage extends LauncherViews {
 		}
 		fillSummary(chosen);
 		this.joinButton.setEnabled((chosen != null) && chosen.joinable() && !model.isConnecting());
-		this.joinButton.setText(chosen != null && chosen.rejoin ? "Rejoin" : "Join Game");
+		this.joinButton.setText(chosen != null && chosen.rejoin ? LauncherText.get("lan_rejoin") : LauncherText.get("lan_join_game"));
 	}
 
 	static View colorSquare(final LauncherActivity activity, final int argb, final String name, final float size) {
@@ -327,8 +328,8 @@ final class LanPage extends LauncherViews {
 		final float fs = t ? 30 : 17;
 		final net.warsmash.lan.protocol.LanData.GameInfo info = row.found.info;
 		final boolean sized = (info.mapWidth > 0) && (info.mapHeight > 0);
-		final String[][] facts = { { "Host:", info.hostName }, { "Players:", info.players + " / " + info.maxPlayers },
-			{ "Game Speed:", LanText.speed(info.speed) },
+		final String[][] facts = { { LauncherText.get("lan_host"), info.hostName }, { LauncherText.get("lan_players"), info.players + " / " + info.maxPlayers },
+			{ LauncherText.get("lan_game_speed_colon"), LanText.speed(info.speed) },
 			{ LanText.mapSize(), sized ? info.mapWidth + " x " + info.mapHeight : "" } };
 		for (int i = 0; i < (sized ? facts.length : facts.length - 1); i++) {
 			fact(panel, facts[i][0], facts[i][1], ix, frame + (t ? 66 : 34) + (i * fs * 1.5f), iw, fs);
@@ -378,7 +379,7 @@ final class LanPage extends LauncherViews {
 				v -> changeMapTo(this.changeChosen));
 		ok.setEnabled(false);
 		fillChangeList(rows, ok, t ? 100 : 72);
-		place(box, button(glueLabel("CANCEL", "Cancel"), buttonH, t ? 36 : 26, v -> this.activity.dialogs.closeDialog()), inset,
+		place(box, button(glueLabel("CANCEL"), buttonH, t ? 36 : 26, v -> this.activity.dialogs.closeDialog()), inset,
 				h - buttonH - (t ? 40 : 26), t ? 420 : 300, buttonH);
 		place(box, ok, w - inset - (t ? 420 : 300), h - buttonH - (t ? 40 : 26), t ? 420 : 300, buttonH);
 	}
@@ -502,11 +503,11 @@ final class LanPage extends LauncherViews {
 		this.summary = new FrameLayout(this.activity);
 		place(content, this.summary, rx, top, rw, th);
 		settings(content, rx, top + th + gap, rw, h - th - gap);
-		action(view, 0, glueLabel("BACK", "Back"), v -> this.activity.homePage.showHome());
+		action(view, 0, glueLabel("BACK"), v -> this.activity.homePage.showHome());
 		if (!t) {
-			action(view, 1, "Advanced…", v -> showAdvancedSheet());
+			action(view, 1, LauncherText.get("lan_advanced"), v -> showAdvancedSheet());
 		}
-		this.createButton = action(view, 2, "Create Game", v -> create());
+		this.createButton = action(view, 2, LauncherText.get("lan_create_game"), v -> create());
 		this.createButton.setEnabled(false);
 		this.mapDetails = null;
 		this.activity.setPage(view, LauncherActivity.PAGE_LAN);
@@ -570,8 +571,8 @@ final class LanPage extends LauncherViews {
 		final float iw = rw - ix - frame;
 		place(panel, text(LauncherKit.glueText(details.name), t ? 40 : 22, this.activity.art.text()), ix, frame, iw, -1);
 		final float fs = t ? 28 : 16;
-		final String[][] facts = { { "Players:", LauncherKit.glueText(details.suggested).toString() },
-			{ "Map Size:", details.size }, { "Tileset:", details.tileset } };
+		final String[][] facts = { { LauncherText.get("lan_players"), LauncherKit.glueText(details.suggested).toString() },
+			{ LanText.mapSize(), details.size }, { LauncherText.get("lan_tileset"), details.tileset } };
 		for (int i = 0; i < facts.length; i++) {
 			fact(panel, facts[i][0], facts[i][1], ix, frame + (t ? 66 : 34) + (i * fs * 1.5f), iw, fs);
 		}
@@ -601,18 +602,18 @@ final class LanPage extends LauncherViews {
 		final String[] speeds = LanText.speeds();
 		final String[] observerModes = LanText.observerModes();
 		if (t) {
-			place(panel, text("Game Settings", 30, this.activity.art.gold()), frame + 8, frame - 4, 600, -1);
+			place(panel, text(LauncherText.get("lan_game_settings"), 30, this.activity.art.gold()), frame + 8, frame - 4, 600, -1);
 			final float fx = frame + 330;
 			final float fw = w - (2 * frame) - 340;
-			place(panel, text("Game Name", 28, this.activity.art.text()), frame + 8, frame + 66, 300, -1);
+			place(panel, text(LauncherText.get("lan_game_name"), 28, this.activity.art.text()), frame + 8, frame + 66, 300, -1);
 			place(panel, name, fx, frame + 48, fw, 80);
-			place(panel, text("Game Speed", 28, this.activity.art.text()), frame + 8, frame + 166, 300, -1);
+			place(panel, text(LauncherText.get("lan_game_speed"), 28, this.activity.art.text()), frame + 8, frame + 166, 300, -1);
 			place(panel, dropdown(speeds, this.speed, true, 80, 28, c -> this.speed = c), fx, frame + 146, 420, 80);
-			place(panel, text("Observers", 28, this.activity.art.text()), frame + 8, frame + 258, 300, -1);
+			place(panel, text(LauncherText.get("lan_observers"), 28, this.activity.art.text()), frame + 8, frame + 258, 300, -1);
 			place(panel, dropdown(observerModes, this.observers, true, 80, 28, c -> this.observers = c), fx,
 					frame + 238, 420, 80);
-			place(panel, text("Advanced Options", 28, this.activity.art.gold()), frame + 8, frame + 340, 600, -1);
-			final String[] labels = { "Lock Teams", "Teams Together", "Full Shared Unit Control", "Random Races" };
+			place(panel, text(glue("ADVANCED_OPTIONS"), 28, this.activity.art.gold()), frame + 8, frame + 340, 600, -1);
+			final String[] labels = { LauncherText.get("lan_option_lock_teams"), LauncherText.get("lan_option_teams_together"), LauncherText.get("lan_option_full_shared_control"), LauncherText.get("lan_option_random_races") };
 			final float colw = (w - (2 * frame) - 16) / 2;
 			for (int i = 0; i < labels.length; i++) {
 				final int option = i;
@@ -621,11 +622,11 @@ final class LanPage extends LauncherViews {
 			}
 		}
 		else {
-			place(panel, text("Game Name", 18, this.activity.art.gold()), frame + 6, frame + 4, 140, -1);
+			place(panel, text(LauncherText.get("lan_game_name"), 18, this.activity.art.gold()), frame + 6, frame + 4, 140, -1);
 			place(panel, name, frame + 150, frame - 8, w - (2 * frame) - 160, 56);
-			place(panel, text("Speed", 18, this.activity.art.gold()), frame + 6, frame + 72, 140, -1);
+			place(panel, text(LauncherText.get("lan_speed"), 18, this.activity.art.gold()), frame + 6, frame + 72, 140, -1);
 			place(panel, dropdown(speeds, this.speed, true, 56, 20, c -> this.speed = c), frame + 150, frame + 54, 200, 56);
-			place(panel, text("Observers", 18, this.activity.art.gold()), frame + 372, frame + 72, 110, -1);
+			place(panel, text(LauncherText.get("lan_observers"), 18, this.activity.art.gold()), frame + 372, frame + 72, 110, -1);
 			place(panel, dropdown(observerModes, this.observers, true, 56, 20, c -> this.observers = c), frame + 480,
 					frame + 54, w - (2 * frame) - 490, 56);
 		}
@@ -636,14 +637,14 @@ final class LanPage extends LauncherViews {
 		if (box == null) {
 			return;
 		}
-		place(box, text("Advanced Options", 32, this.activity.art.gold()), 40, 26, 1000, -1);
-		final String[] labels = { "Lock Teams", "Teams Together", "Full Shared Unit Control", "Random Races" };
+		place(box, text(glue("ADVANCED_OPTIONS"), 32, this.activity.art.gold()), 40, 26, 1000, -1);
+		final String[] labels = { LauncherText.get("lan_option_lock_teams"), LauncherText.get("lan_option_teams_together"), LauncherText.get("lan_option_full_shared_control"), LauncherText.get("lan_option_random_races") };
 		for (int i = 0; i < labels.length; i++) {
 			final int option = i;
 			place(box, checkLine(labels[i], this.options[i], 90, 28, on -> this.options[option] = on), 40, 90 + (i * 90),
 					1000, 90);
 		}
-		place(box, button(glueLabel("OK", "OK"), 96, 28, v -> this.activity.dialogs.closeDialog()), 1120 - 28 - 40 - 300,
+		place(box, button(glueLabel("OK"), 96, 28, v -> this.activity.dialogs.closeDialog()), 1120 - 28 - 40 - 300,
 				560 - 28 - 30 - 96, 300, 96);
 	}
 
@@ -658,7 +659,7 @@ final class LanPage extends LauncherViews {
 		this.activity.catalog.lanMap(details.path, LauncherActivity.lanIndex(this.activity), shared -> {
 			this.creating = false;
 			if (shared == null) {
-				this.activity.dialogs.showMessage("Create Game", getString(R.string.lan_map_cannot_be_shared));
+				this.activity.dialogs.showMessage(LauncherText.get("lan_create_game"), getString(R.string.lan_map_cannot_be_shared));
 				return;
 			}
 			final LanLauncherModel.CreateSettings settings = new LanLauncherModel.CreateSettings();
@@ -676,7 +677,7 @@ final class LanPage extends LauncherViews {
 			settings.randomRaces = this.options[3];
 			final String problem = model.create(settings);
 			if (problem != null) {
-				this.activity.dialogs.showMessage("Create Game", problem);
+				this.activity.dialogs.showMessage(LauncherText.get("lan_create_game"), problem);
 			}
 		});
 	}
@@ -710,9 +711,9 @@ final class LanPage extends LauncherViews {
 		final float buttonY = h - (t ? 28 : 14) - (t ? 128 : 96) - (t ? 40 : 14);
 		final float buttonW = t ? 420 : 300;
 		final float buttonH = t ? 128 : 96;
-		place(box, button(glueLabel("CANCEL", "Cancel"), buttonH, t ? 36 : 26,
+		place(box, button(glueLabel("CANCEL"), buttonH, t ? 36 : 26,
 				v -> this.activity.dialogs.closeDialog()), inset, buttonY, buttonW, buttonH);
-		final LauncherKit.GlueButton connect = button("Connect", buttonH, t ? 36 : 26, null);
+		final LauncherKit.GlueButton connect = button(LauncherText.get("lan_connect"), buttonH, t ? 36 : 26, null);
 		connect.setTone(LauncherKit.GlueButton.TONE_CONFIRM);
 		connect.setOnClickListener(v -> {
 			model.joinByIp(field.getText().toString());
@@ -763,7 +764,7 @@ final class LanPage extends LauncherViews {
 		}
 		final boolean hosting = blocked.hosting();
 		this.activity.dialogs.showQuestion(LanText.blockTitle(), LanText.blockText(hosting),
-				new CharSequence[] { glueLabel("CANCEL", "Cancel"), "Leave Lobby", "Back to Lobby" },
+				new CharSequence[] { glueLabel("CANCEL"), LauncherText.get("lan_leave_lobby"), LauncherText.get("lan_back_to_lobby") },
 				new Runnable[] { null, () -> this.activity.lobbyPage.leave(), () -> showLan() });
 	}
 }

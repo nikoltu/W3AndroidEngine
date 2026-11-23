@@ -109,6 +109,8 @@ final class MeleeUIMessages {
 	private static final float LEADERBOARD_VALUE_GAP = 0.004f;
 	private static final float LEADERBOARD_UNDER_BOARD_GAP = 0.0053f;
 	private float leaderboardWidth = Float.NaN;
+	/** The width follows the items until the first frame draws the board: a script fills it in several calls. */
+	private boolean leaderboardWidthOpen;
 	private float leaderboardRight = Float.NaN;
 	private float leaderboardTop = Float.NaN;
 	private static final float LEADERBOARD_FONT_HEIGHT = 0.011f;
@@ -541,6 +543,7 @@ final class MeleeUIMessages {
 	}
 
 	void updateMessages(final long currentMillis) {
+		this.leaderboardWidthOpen = false;
 		showPendingHeroDeaths();
 		followMessageProxies();
 		if (currentMillis > this.lastErrorMessageExpireTime) {
@@ -662,7 +665,8 @@ final class MeleeUIMessages {
 						leaderboardTextWidth(this.leaderboardValues, Integer.toString(item.value)) / unit);
 			}
 		}
-		if (Float.isNaN(this.leaderboardWidth)) {
+		if (Float.isNaN(this.leaderboardWidth) || this.leaderboardWidthOpen) {
+			this.leaderboardWidthOpen = true;
 			float width = board.getItemCount() > 0 ? labelsWidth + valuesWidth + LEADERBOARD_TEXT_SPACE : 0;
 			if (titled) {
 				width = Math.max(width, (2 * LEADERBOARD_TITLE_LEFT)

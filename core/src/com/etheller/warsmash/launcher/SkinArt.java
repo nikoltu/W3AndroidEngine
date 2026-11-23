@@ -124,26 +124,26 @@ public final class SkinArt {
 		"UI\\FrameDef\\SmashUI\\SmashStrings.fdf" };
 
 	/**
-	 * The classic profile portraits, command buttons of the heroes and units by race: the glue name of the race, the
-	 * text when the data lacks it, then the buttons. The first twelve were the only ones before; profiles keep their
+	 * The classic profile portraits, command buttons of the heroes and units by race: the glue name of the race, then the
+	 * buttons. The first twelve were the only ones before; profiles keep their
 	 * portrait by its place in {@link #CLASSIC_PORTRAITS}, so those come first there.
 	 */
 	private static final String[][] CLASSIC_PORTRAIT_RACES = {
-		{ "HUMAN", "Human", "BTNHeroPaladin", "BTNHeroArchMage", "BTNHeroMountainKing", "BTNHeroBloodElfPrince",
+		{ "HUMAN", "BTNHeroPaladin", "BTNHeroArchMage", "BTNHeroMountainKing", "BTNHeroBloodElfPrince",
 			"BTNArthas", "BTNJaina", "BTNGarithos", "BTNFootman", "BTNKnight", "BTNRifleman", "BTNPriest",
 			"BTNSorceress", "BTNSpellBreaker", "BTNGryphonRider", "BTNDragonHawk", "BTNMortarTeam", "BTNSteamTank",
 			"BTNPeasant" },
-		{ "ORC", "Orc", "BTNHeroBlademaster", "BTNHeroFarSeer", "BTNHeroTaurenChieftain", "BTNShadowHunter",
+		{ "ORC", "BTNHeroBlademaster", "BTNHeroFarSeer", "BTNHeroTaurenChieftain", "BTNShadowHunter",
 			"BTNThrall", "BTNRexxar", "BTNChaosGrom", "BTNGrunt", "BTNHeadhunter", "BTNRaider", "BTNShaman",
 			"BTNWitchDoctor", "BTNSpiritWalker", "BTNTauren", "BTNWyvernRider", "BTNTrollBatRider", "BTNPeon" },
-		{ "UNDEAD", "Undead", "BTNHeroDeathKnight", "BTNHeroLich", "BTNHeroDreadlord", "BTNHeroCryptLord",
+		{ "UNDEAD", "BTNHeroDeathKnight", "BTNHeroLich", "BTNHeroDreadlord", "BTNHeroCryptLord",
 			"BTNKelThuzad", "BTNTichondrius", "BTNBansheeRanger", "BTNGhoul", "BTNCryptFiend", "BTNAbomination",
 			"BTNNecromancer", "BTNBanshee", "BTNGargoyle", "BTNFrostWyrm", "BTNDestroyer", "BTNAcolyte" },
-		{ "NIGHT_ELF", "Night Elf", "BTNHeroDemonHunter", "BTNKeeperOfTheGrove", "BTNHeroMoonPriestess",
+		{ "NIGHT_ELF", "BTNHeroDemonHunter", "BTNKeeperOfTheGrove", "BTNHeroMoonPriestess",
 			"BTNHeroWarden", "BTNFurion", "BTNPriestessOfTheMoon", "BTNEvilIllidan", "BTNWarden2", "BTNArcher",
 			"BTNHuntress", "BTNDryad", "BTNDruidOfTheClaw", "BTNDruidOfTheTalon", "BTNMountainGiant",
 			"BTNHippogriffRider", "BTNChimaera", "BTNFaerieDragon", "BTNWisp" },
-		{ "KEY_NEUTRAL", "Neutral", "BTNHeroTinker", "BTNHeroAlchemist", "BTNHeroAvatarOfFlame", "BTNPandarenBrewmaster",
+		{ "KEY_NEUTRAL", "BTNHeroTinker", "BTNHeroAlchemist", "BTNHeroAvatarOfFlame", "BTNPandarenBrewmaster",
 			"BTNBeastmaster", "BTNPitLord", "BTNNagaSeaWitch", "BTNArchimonde", "BTNMannoroth", "BTNAkama",
 			"BTNMedivh", "BTNNagaMyrmidon", "BTNMurloc", "BTNSatyr", "BTNFurbolg", "BTNOgreMagi", "BTNCentaurKhan",
 			"BTNHarpyQueen", "BTNGnollKing", "BTNInfernal", "BTNDoomGuard", "BTNFelguard", "BTNBanditLord",
@@ -160,7 +160,7 @@ public final class SkinArt {
 				"BTNJaina", "BTNFurion", "BTNHeroArchMage", "BTNHeroBlademaster", "BTNHeroDeathKnight",
 				"BTNHeroMountainKing", "BTNKeeperOfTheGrove", "BTNKelThuzad", "BTNRexxar"));
 		for (final String[] race : CLASSIC_PORTRAIT_RACES) {
-			for (int i = 2; i < race.length; i++) {
+			for (int i = 1; i < race.length; i++) {
 				if (!names.contains(race[i])) {
 					names.add(race[i]);
 				}
@@ -169,15 +169,13 @@ public final class SkinArt {
 		return names.toArray(new String[0]);
 	}
 
-	/** A group of portraits shown together: the race's glue name and text, and the portraits' numbers. */
+	/** A group of portraits shown together: the race's glue name and the portraits' numbers. */
 	public static final class PortraitGroup {
 		public final String key;
-		public final String fallback;
 		public final int[] portraits;
 
-		PortraitGroup(final String key, final String fallback, final int[] portraits) {
+		PortraitGroup(final String key, final int[] portraits) {
 			this.key = key;
-			this.fallback = fallback;
 			this.portraits = portraits;
 		}
 	}
@@ -190,16 +188,16 @@ public final class SkinArt {
 			for (int i = 0; i < all.length; i++) {
 				all[i] = i;
 			}
-			groups.add(new PortraitGroup(null, null, all));
+			groups.add(new PortraitGroup(null, all));
 			return groups;
 		}
 		final List<String> names = Arrays.asList(CLASSIC_PORTRAITS);
 		for (final String[] race : CLASSIC_PORTRAIT_RACES) {
-			final int[] portraits = new int[race.length - 2];
-			for (int i = 2; i < race.length; i++) {
-				portraits[i - 2] = names.indexOf(race[i]);
+			final int[] portraits = new int[race.length - 1];
+			for (int i = 1; i < race.length; i++) {
+				portraits[i - 1] = names.indexOf(race[i]);
 			}
-			groups.add(new PortraitGroup(race[0], race[1], portraits));
+			groups.add(new PortraitGroup(race[0], portraits));
 		}
 		return groups;
 	}

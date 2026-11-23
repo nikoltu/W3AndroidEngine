@@ -19,7 +19,7 @@ public class ABConditionDoesDestructableHaveBuffMatchingCondition extends ABCond
 	@Override
 	public Boolean callback(CSimulation game, CUnit caster, Map<String, Object> localStore, final int castId) {
 		CDestructable theDestructable = dest.callback(game, caster, localStore, castId);
-		if (theDestructable != null) {
+		if ((theDestructable != null) && (theDestructable.getBuffs() != null)) {
 			for (CDestructableBuff ability : theDestructable.getBuffs()) {
 				localStore.put(ABLocalStoreKeys.MATCHINGDESTBUFF, ability);
 				if (condition.callback(game, caster, localStore, castId)) {

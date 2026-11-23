@@ -6,6 +6,7 @@ import android.view.MotionEvent;
 import com.etheller.warsmash.input.touch.ControlScheme;
 import com.etheller.warsmash.input.touch.PointerEvent;
 import com.etheller.warsmash.input.touch.TouchInputRouter;
+import com.etheller.warsmash.input.touch.VirtualCursor;
 
 /**
  * Turns finger and pen motion events into pointer events for the touch router. Mouse events are left to libGDX, so
@@ -64,8 +65,10 @@ final class AndroidPointerSource {
 		final int tool = event.getToolType(event.getActionIndex());
 		if (tool == MotionEvent.TOOL_TYPE_MOUSE) {
 			TouchInputRouter.mouseUsed();
+			VirtualCursor.mouseAt(Math.round(event.getX()), Math.round(event.getY()));
 			return false;
 		}
+		VirtualCursor.mouseGone();
 		if ((tool == MotionEvent.TOOL_TYPE_FINGER) && (this.router.scheme() != ControlScheme.TOUCH)) {
 			return false;
 		}
@@ -105,6 +108,12 @@ final class AndroidPointerSource {
 		}
 		if (event.getToolType(0) == MotionEvent.TOOL_TYPE_MOUSE) {
 			TouchInputRouter.mouseUsed();
+			if (event.getActionMasked() == MotionEvent.ACTION_HOVER_EXIT) {
+				VirtualCursor.mouseGone();
+			}
+			else {
+				VirtualCursor.mouseAt(Math.round(event.getX()), Math.round(event.getY()));
+			}
 			return false;
 		}
 		switch (event.getActionMasked()) {

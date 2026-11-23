@@ -26,6 +26,15 @@ public final class LauncherStrings {
 		}
 	}
 
+	/** The texts of a translation over these; a name it leaves out keeps its text. */
+	public void overlay(final InputStream translation) throws IOException {
+		final String xml = new String(LauncherImages.bytes(translation), StandardCharsets.UTF_8);
+		final Matcher matcher = STRING.matcher(xml);
+		while (matcher.find()) {
+			this.strings.put(matcher.group(1), unescape(matcher.group(2)));
+		}
+	}
+
 	private static String unescape(final String value) {
 		final StringBuilder text = new StringBuilder();
 		for (int i = 0; i < value.length(); i++) {

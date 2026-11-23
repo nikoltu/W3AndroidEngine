@@ -220,9 +220,9 @@ class GameResultTest {
 	@Test
 	void theTitleSaysVictoryOrDefeat() {
 		final GameResult result = won();
-		assertEquals("VICTORY", CampaignResult.title(result)[0]);
+		assertEquals("VICTORY", CampaignResult.title(result));
 		result.result = "defeat";
-		assertEquals("DEFEAT", CampaignResult.title(result)[0]);
+		assertEquals("DEFEAT", CampaignResult.title(result));
 	}
 
 	@Test
@@ -271,8 +271,8 @@ class GameResultTest {
 	@Test
 	void resultButtonIsContinueAfterVictoryAndRestartAfterLoss() {
 		final GameResult result = won();
-		assertArrayEquals(new String[] { "CONTINUE", "Continue" }, CampaignResult.buttonLabel(result));
+		assertEquals("CONTINUE", CampaignResult.buttonLabel(result));
 		result.result = "defeat";
-		assertArrayEquals(new String[] { "RESTART", "Restart" }, CampaignResult.buttonLabel(result));
+		assertEquals("RESTART", CampaignResult.buttonLabel(result));
 	}
 }

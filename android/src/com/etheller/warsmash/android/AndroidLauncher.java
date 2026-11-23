@@ -34,6 +34,7 @@ import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowInsets;
+import android.view.WindowInsetsController;
 import android.view.WindowManager;
 
 import com.badlogic.gdx.Gdx;
@@ -49,6 +50,7 @@ import com.badlogic.gdx.files.FileHandle;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.utils.BufferUtils;
 import com.badlogic.gdx.utils.GdxRuntimeException;
+import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.RenderUnitTypeData;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.campaign.CCampaignProgress;
 import com.etheller.warsmash.WarsmashGdxMapScreen;
 import com.etheller.warsmash.WarsmashGdxMenuScreen;
@@ -134,6 +136,8 @@ public class AndroidLauncher extends AndroidApplication {
 	private Movies.Player moviePlayer;
 	private WarsmashGdxMultiScreenGame game;
 	private final Handler loadWatch = new Handler(Looper.getMainLooper());
+	private final Handler barsWatch = new Handler(Looper.getMainLooper());
+	private final Runnable hideBars = this::hideSystemBars;
 	private final Runnable loadWatcher = this::keepScreenOnWhileLoading;
 	private boolean screenKeptOn;
 	private boolean replayScreenOn;
@@ -200,6 +204,7 @@ public class AndroidLauncher extends AndroidApplication {
 		// Every start path, also a map started from outside the launcher, leaves a crash log.
 		crashSource = this;
 		leaveCrashResult();
+		ExitLogs.recordPreviousExit(this);
 		final File iniFile = new File(EngineResources.appFolder(this), INI_FILE_NAME);
 		if (!iniFile.isFile()) {
 			final Intent intent = new Intent(this, DataFolderActivity.class);
@@ -301,6 +306,13 @@ public class AndroidLauncher extends AndroidApplication {
 		// A map started from outside the launcher (automated runs) may name its own profile, as the desktop
 		// -Dwarsmash.profile does, so its saves and caches stay out of the player's. The process outlives the run, so
 		// a later game must not inherit it.
+		// Automated runs may keep the models of unit types that are no longer shown, to measure what letting them go saves.
+		if (getIntent().getBooleanExtra("keepmodels", false)) {
+			System.setProperty(RenderUnitTypeData.KEEP_MODELS_PROPERTY, "true");
+		}
+		else {
+			System.clearProperty(RenderUnitTypeData.KEEP_MODELS_PROPERTY);
+		}
 		final String testProfile = this.fromLauncher ? null : getIntent().getStringExtra(EXTRA_TEST_PROFILE);
 		if ((fileToLoad != null) && (testProfile != null) && !testProfile.isEmpty()) {
 			System.setProperty("warsmash.profile", testProfile);
@@ -310,6 +322,7 @@ public class AndroidLauncher extends AndroidApplication {
 		}
 		final WarsmashGdxMultiScreenGame game = new WarsmashGdxMultiScreenGame();
 		initialize(GlContextWatch.watch(game, () -> contextLost(game, warsmashIni, fileToLoad)), config);
+		keepSystemBarsHidden();
 		this.initialized = true;
 		if (getIntent().getStringExtra(LaunchContract.EXTRA_REPLAY_FILE) != null) {
 			// A replay is watched without touching the screen, which must not go dark under it.
@@ -670,6 +683,7 @@ public class AndroidLauncher extends AndroidApplication {
 		if (!this.initialized) {
 			skipKeyboardHeightClose(this);
 		}
+		this.barsWatch.removeCallbacks(this.hideBars);
 		super.onDestroy();
 		// libGDX keeps the application object in Gdx.app until the next game starts; it must not keep the game.
 		this.game = null;
@@ -744,6 +758,43 @@ public class AndroidLauncher extends AndroidApplication {
 			covered = decor.getRootView().getHeight() - visible.bottom;
 		}
 		OnscreenKeyboard.setCoveredHeightPixels(covered);
+	}
+
+	@Override
+	public void onWindowFocusChanged(final boolean hasFocus) {
+		super.onWindowFocusChanged(hasFocus);
+		if (hasFocus) {
+			hideSystemBars();
+		}
+	}
+
+	/**
+	 * A mouse pushed against a screen edge asks the system for its bars like a swipe does, and some devices then keep
+	 * them out; they are hidden again shortly after they appear, which leaves the system's own handling alone.
+	 */
+	private void keepSystemBarsHidden() {
+		getWindow().getDecorView().setOnApplyWindowInsetsListener((view, insets) -> {
+			final WindowInsets applied = view.onApplyWindowInsets(insets);
+			this.barsWatch.removeCallbacks(this.hideBars);
+			this.barsWatch.postDelayed(this.hideBars, 1500);
+			return applied;
+		});
+	}
+
+	@SuppressWarnings("deprecation")
+	private void hideSystemBars() {
+		final View decor = getWindow().getDecorView();
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+			final WindowInsetsController controller = decor.getWindowInsetsController();
+			if (controller != null) {
+				controller.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+				controller.hide(WindowInsets.Type.systemBars());
+				return;
+			}
+		}
+		decor.setSystemUiVisibility(View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_FULLSCREEN
+				| View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+				| View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
 	}
 
 	@Override

@@ -103,7 +103,9 @@ public class Cryption {
 	public static int HashString(final byte[] in, final int HashType) {
 		int seed1 = 0x7FED7FED;
 		int seed2 = 0xEEEEEEEE;
-		for (final byte ch : in) {
+		for (final byte raw : in) {
+			// A name with a letter outside ASCII has bytes above 127: they index the table as unsigned values.
+			final int ch = raw & 0xFF;
 			seed1 = CRYPT_TABLE[(HashType * 0x100) + ch] ^ (seed1 + seed2);
 			seed2 = ch + seed1 + seed2 + (seed2 << 5) + 3;
 		}

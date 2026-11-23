@@ -360,6 +360,11 @@ public interface RenderWidget {
 						playAnimation(true, nextAnimation.animationName, nextAnimation.secondaryAnimationTags, 1.0f,
 								nextAnimation.allowRarityVariations);
 					}
+					else if ((this.instance.sequence != -1) && (this.currentAnimation == null)) {
+						// A one-shot a script asked for by a name with no primary tag (Reforged's "Cinematic Agree
+						// One") would otherwise hold its last frame for good; the unit goes back to standing.
+						playAnimation(true, PrimaryTag.STAND, SequenceUtils.EMPTY, 1.0f, true);
+					}
 				}
 			}
 			applyLock(this.turretBone, this.turretFacingLock);

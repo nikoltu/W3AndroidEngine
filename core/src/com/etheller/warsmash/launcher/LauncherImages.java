@@ -50,12 +50,12 @@ public final class LauncherImages {
 				// The editor saves the map picture as TGA; Reforged-era maps carry a BLP2 that decode reads.
 				if (archive.has(name + ".tga")) {
 					try (InputStream stream = archive.getResourceAsStream(name + ".tga")) {
-						return TgaFile.readTGAPixels(name + ".tga", stream);
+						return opaqueIfBlank(TgaFile.readTGAPixels(name + ".tga", stream));
 					}
 				}
 				final ArgbImage image = decode(archive, name);
 				if (image != null) {
-					return image;
+					return opaqueIfBlank(image);
 				}
 			}
 			catch (final IOException | RuntimeException e) {
@@ -63,6 +63,20 @@ public final class LauncherImages {
 			}
 		}
 		return null;
+	}
+
+	/** Editor map pictures often carry an all-zero alpha channel that only the picture's colours are meant to override. */
+	private static ArgbImage opaqueIfBlank(final ArgbImage image) {
+		final int[] pixels = pixels(image);
+		for (final int colour : pixels) {
+			if ((colour >>> 24) != 0) {
+				return image;
+			}
+		}
+		for (int i = 0; i < pixels.length; i++) {
+			pixels[i] |= 0xFF000000;
+		}
+		return new ArgbImage(image.getWidth(), image.getHeight(), pixels);
 	}
 
 	/** The pixels of an image row by row, as int ARGB. */

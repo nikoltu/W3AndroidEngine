@@ -53,6 +53,9 @@ public class TerrainDoodad {
 					textureWidthTerrainCells, textureHeightTerrainCells));
 			if (cliffTexture != null) {
 				instance.setReplaceableTexture(CLIFF_REPLACEABLE_ID, cliffTexture + ".blp");
+				if (model.hd) {
+					instance.setReplaceableTextureHD(CLIFF_REPLACEABLE_ID, cliffTexture);
+				}
 			}
 		}
 		instance.groundShading = map.terrain;

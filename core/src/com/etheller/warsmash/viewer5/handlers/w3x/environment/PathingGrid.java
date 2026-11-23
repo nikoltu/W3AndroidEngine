@@ -525,9 +525,14 @@ public class PathingGrid {
 				|| ((firstY + cells) > this.pathingGridSizes[1])) {
 			return false;
 		}
+		// The footprint is inside the map, as checked above.
+		final short[] terrain = this.pathingGrid;
+		final short[] overlay = this.dynamicPathingOverlay;
+		final int width = this.pathingGridSizes[0];
 		for (int cellY = firstY; cellY < (firstY + cells); cellY++) {
-			for (int cellX = firstX; cellX < (firstX + cells); cellX++) {
-				if (!pathingType.isPathable(getCellPathing(cellX, cellY))) {
+			int index = (cellY * width) + firstX;
+			for (int cellX = 0; cellX < cells; cellX++, index++) {
+				if (!pathingType.isPathable((short) (terrain[index] | overlay[index]))) {
 					return false;
 				}
 			}
@@ -674,65 +679,35 @@ public class PathingGrid {
 	}
 
 	public static enum MovementType {
-		FOOT("foot") {
-			@Override
-			public boolean isPathable(final short pathingValue) {
-				return !PathingFlags.isPathingFlag(pathingValue, PathingFlags.UNWALKABLE);
-			}
-		},
-		FOOT_NO_COLLISION("") {
-			@Override
-			public boolean isPathable(final short pathingValue) {
-				return !PathingFlags.isPathingFlag(pathingValue, PathingFlags.UNWALKABLE);
-			}
-		},
-		HORSE("horse") {
-			@Override
-			public boolean isPathable(final short pathingValue) {
-				return !PathingFlags.isPathingFlag(pathingValue, PathingFlags.UNWALKABLE);
-			}
-		},
-		FLY("fly") {
-			@Override
-			public boolean isPathable(final short pathingValue) {
-				return !PathingFlags.isPathingFlag(pathingValue, PathingFlags.UNFLYABLE);
-			}
-		},
-		HOVER("hover") {
-			@Override
-			public boolean isPathable(final short pathingValue) {
-				return !PathingFlags.isPathingFlag(pathingValue, PathingFlags.UNWALKABLE);
-			}
-		},
-		FLOAT("float") {
-			@Override
-			public boolean isPathable(final short pathingValue) {
-				return !PathingFlags.isPathingFlag(pathingValue, PathingFlags.UNSWIMABLE);
-			}
-		},
-		AMPHIBIOUS("amph") {
-			@Override
-			public boolean isPathable(final short pathingValue) {
-				return !PathingFlags.isPathingFlag(pathingValue, PathingFlags.UNWALKABLE)
-						|| !PathingFlags.isPathingFlag(pathingValue, PathingFlags.UNSWIMABLE);
-			}
-		},
-		DISABLED("") {
-			@Override
-			public boolean isPathable(final short pathingValue) {
-				return true;
-			}
-		};
+		FOOT("foot", PathingFlags.UNWALKABLE, false),
+		FOOT_NO_COLLISION("", PathingFlags.UNWALKABLE, false),
+		HORSE("horse", PathingFlags.UNWALKABLE, false),
+		FLY("fly", PathingFlags.UNFLYABLE, false),
+		HOVER("hover", PathingFlags.UNWALKABLE, false),
+		FLOAT("float", PathingFlags.UNSWIMABLE, false),
+		AMPHIBIOUS("amph", PathingFlags.UNWALKABLE | PathingFlags.UNSWIMABLE, true),
+		DISABLED("", 0, false);
 
 		private final String typeKey;
+		private final int blockingFlags;
+		private final boolean blockedOnlyByAll;
 
 		// TODO windwalk pathing type can walk through units but not through items
 
-		private MovementType(final String typeKey) {
+		/**
+		 * @param blockedOnlyByAll whether the type is blocked only where every one of the flags is set, rather than
+		 *                         where any is
+		 */
+		private MovementType(final String typeKey, final int blockingFlags, final boolean blockedOnlyByAll) {
 			this.typeKey = typeKey;
+			this.blockingFlags = blockingFlags;
+			this.blockedOnlyByAll = blockedOnlyByAll;
 		}
 
-		public abstract boolean isPathable(short pathingValue);
+		public boolean isPathable(final short pathingValue) {
+			final int blocking = pathingValue & this.blockingFlags;
+			return this.blockedOnlyByAll ? (blocking != this.blockingFlags) : (blocking == 0);
+		}
 	}
 
 	public static enum PathingType {

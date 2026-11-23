@@ -18,5 +18,11 @@ class MeleeUISelectionVoiceTest {
 		assertFalse(MeleeUIInput.isSelectionVoiced(1, 0, 28));
 		assertFalse(MeleeUIInput.isSelectionVoiced(24, 0, 28));
 		assertFalse(MeleeUIInput.isSelectionVoiced(15, 0, 28));
+		assertFalse(MeleeUIInput.isSelectionVoiced(15, 0, 28, false));
+	}
+
+	@Test
+	void unitsOfAPlayerSharingControlAnswerTheirSelection() {
+		assertTrue(MeleeUIInput.isSelectionVoiced(15, 0, 28, true));
 	}
 }

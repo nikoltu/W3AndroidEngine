@@ -177,6 +177,11 @@ abstract class LauncherViews {
 		return this.activity.art.string(key, fallback);
 	}
 
+	/** The game data's text for the key; when it has none, the launcher's own text in the game language. */
+	String glue(final String key) {
+		return glue(key, this.activity.glueFallback(key));
+	}
+
 	/** A vertical or horizontal gradient with stops, which GradientDrawable cannot place. */
 	static Drawable gradient(final boolean vertical, final int[] colors, final float[] stops) {
 		final PaintDrawable drawable = new PaintDrawable();
@@ -339,10 +344,14 @@ abstract class LauncherViews {
 		return LauncherKit.glueText(glue(key, fallback));
 	}
 
+	CharSequence glueLabel(final String key) {
+		return LauncherKit.glueText(glue(key));
+	}
+
 	String[] glueList(final String[][] table, final int keyColumn) {
 		final String[] labels = new String[table.length];
 		for (int i = 0; i < table.length; i++) {
-			labels[i] = glue(table[i][keyColumn], table[i][keyColumn + 1]);
+			labels[i] = glue(table[i][keyColumn]);
 		}
 		return labels;
 	}
@@ -402,6 +411,8 @@ abstract class LauncherViews {
 		}
 		box.setEnabled(enabled);
 		box.setContentDescription(LauncherKit.glueText(items[selected]).toString());
+		// A long item that the button had to shrink is read in full on a long press.
+		box.setTooltipText(LauncherKit.glueText(items[selected]));
 		if (enabled && (chosen != null)) {
 			final int[] current = { selected };
 			onTap(box, false,
@@ -412,6 +423,7 @@ abstract class LauncherViews {
 							swatch.setBackgroundColor(colors[choice]);
 						}
 						box.setContentDescription(LauncherKit.glueText(items[choice]).toString());
+						box.setTooltipText(LauncherKit.glueText(items[choice]));
 						chosen.accept(choice);
 					}));
 		}

@@ -539,8 +539,8 @@ final class CampaignPage extends LauncherViews {
 		float mx = t ? tx : left;
 		if (result != null) {
 			final float continueW = t ? 340 : 190;
-			final String[] label = CampaignResult.buttonLabel(result);
-			place(content, button(upper(glueLabel(label[0], label[1])), menuH, textSize,
+			final String label = CampaignResult.buttonLabel(result);
+			place(content, button(upper(glueLabel(label)), menuH, textSize,
 					v -> continueAfter(entry, result)), mx, menuY, continueW, menuH);
 			mx += continueW + gap;
 		}
@@ -572,7 +572,7 @@ final class CampaignPage extends LauncherViews {
 			final float folderW = t ? 120 : 84;
 			final LauncherKit.GlueButton saves = button("", menuH, textSize,
 					v -> this.activity.showPage(LauncherActivity.PAGE_LOAD));
-			saves.setContentDescription(glueLabel("KEY_LOAD_SAVED_GAME", "Load Saved Game"));
+			saves.setContentDescription(glueLabel("KEY_LOAD_SAVED_GAME"));
 			place(content, saves, mx, menuY, folderW, menuH);
 			final float icon = menuH * 0.5f;
 			place(content, image(SkinArt.ICON_FOLDER_GOLD, ImageView.ScaleType.FIT_CENTER),
@@ -611,8 +611,8 @@ final class CampaignPage extends LauncherViews {
 		final List<View> fading = new ArrayList<>();
 		final ImageView banner = image(CampaignResult.banner(entry.getSection()), ImageView.ScaleType.FIT_XY);
 		place(view, banner, l.x, l.bannerY, l.w, l.h);
-		final String[] title = CampaignResult.title(result);
-		final TextView titleView = bold(centred(view, smallCaps(glueLabel(title[0], title[1])), l.titleSize, Color.WHITE,
+		final String title = CampaignResult.title(result);
+		final TextView titleView = bold(centred(view, smallCaps(glueLabel(title)), l.titleSize, Color.WHITE,
 				l.contentX, l.titleY, l.contentW, l.titleH));
 		for (final float dividerY : l.dividerY) {
 			final ImageView divider = image(SkinArt.RESULT_DIVIDER, ImageView.ScaleType.FIT_XY);
@@ -626,9 +626,9 @@ final class CampaignPage extends LauncherViews {
 			final ImageView icon = image(row[0], ImageView.ScaleType.FIT_CENTER);
 			place(view, icon, l.iconX, y, l.icon, l.icon);
 			fading.add(icon);
-			fading.add(bold(line(view, upper(glueLabel(row[1], row[2])), l.headingSize, CampaignResult.HEADING_GOLD,
+			fading.add(bold(line(view, upper(glueLabel(row[1])), l.headingSize, CampaignResult.HEADING_GOLD,
 					l.detailsX, y + l.headingY, l.columnW * 2, l.headingH)));
-			final CharSequence[] labels = { glueLabel("SCORE", "Score"), glueLabel(row[3], row[4]) };
+			final CharSequence[] labels = { glueLabel("SCORE"), glueLabel(row[2]) };
 			for (int c = 0; c < 2; c++) {
 				final float x = l.detailsX + (c * l.columnW);
 				fading.add(line(view, smallCaps(labels[c]), l.labelSize, CampaignResult.LABEL_GREY, x, y + l.labelY,
@@ -645,7 +645,7 @@ final class CampaignPage extends LauncherViews {
 				l.durationY, l.contentW, l.durationH));
 		final String[] difficulty = CampaignResult.difficulty(result.difficulty);
 		if (difficulty != null) {
-			fading.add(bold(centred(view, smallCaps(glueLabel(difficulty[1], difficulty[2])), l.difficultySize,
+			fading.add(bold(centred(view, smallCaps(glueLabel(difficulty[1])), l.difficultySize,
 					CampaignResult.LABEL_GREY, l.contentX, l.difficultyY, l.contentW, l.difficultyH)));
 			final ImageView mark = image(difficulty[0], ImageView.ScaleType.FIT_CENTER);
 			place(view, mark, l.difficultyIconX, l.difficultyIconY, l.difficultyIcon, l.difficultyIcon);
@@ -675,8 +675,8 @@ final class CampaignPage extends LauncherViews {
 		final int gold = this.activity.art.gold();
 		final int text = this.activity.art.text();
 		final int text2 = this.activity.art.text2();
-		final String[] title = CampaignResult.title(result);
-		centred(content, glueLabel(title[0], title[1]), l.titleSize, gold, l.contentX, l.titleY, l.contentW,
+		final String title = CampaignResult.title(result);
+		centred(content, glueLabel(title), l.titleSize, gold, l.contentX, l.titleY, l.contentW,
 				l.titleH);
 		for (final float lineY : l.lineY) {
 			classicLine(content, l.contentX, lineY, l.contentW, l.lineH);
@@ -685,9 +685,9 @@ final class CampaignPage extends LauncherViews {
 			final String[] row = CampaignResult.ROWS[i];
 			final int[] numbers = CampaignResult.numbers(result.score, i);
 			final float y = l.rowY[i];
-			fitted(line(content, glueLabel(row[1], row[2]), l.headingSize, gold, l.contentX, y, l.headingW, l.rowH),
+			fitted(line(content, glueLabel(row[1]), l.headingSize, gold, l.contentX, y, l.headingW, l.rowH),
 					l.headingSize, l.headingW);
-			final CharSequence[] labels = { glueLabel("SCORE", "Score"), glueLabel(row[3], row[4]) };
+			final CharSequence[] labels = { glueLabel("SCORE"), glueLabel(row[2]) };
 			for (int c = 0; c < 2; c++) {
 				line(content, labels[c], l.labelSize, text2, l.columnX[c], y + l.labelY, l.columnW, l.labelH);
 				line(content, Integer.toString(numbers[c]), l.valueSize, text, l.columnX[c], y + l.valueY, l.columnW,
@@ -699,11 +699,11 @@ final class CampaignPage extends LauncherViews {
 		centred(content, result.playTime(), l.durationSize, gold, l.contentX, l.durationY, l.contentW, l.durationH);
 		final String[] difficulty = CampaignResult.difficulty(result.difficulty);
 		if (difficulty != null) {
-			centred(content, glueLabel(difficulty[1], difficulty[2]), l.difficultySize, text2, l.contentX,
+			centred(content, glueLabel(difficulty[1]), l.difficultySize, text2, l.contentX,
 					l.difficultyY, l.contentW, l.difficultyH);
 		}
-		final String[] label = CampaignResult.buttonLabel(result);
-		place(content, button(glueLabel(label[0], label[1]), l.buttonH, b.buttonText,
+		final String label = CampaignResult.buttonLabel(result);
+		place(content, button(glueLabel(label), l.buttonH, b.buttonText,
 				v -> continueAfter(entry, result)), l.buttonX, l.buttonY, l.buttonW, l.buttonH);
 		action(view, 0, glueLabel("BACK", getString(R.string.launcher_back)), v -> {
 			this.activity.campaignResult = null;

@@ -38,6 +38,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.UnsupportedEncodingException;
 import java.nio.channels.SeekableByteChannel;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -157,6 +158,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CItem;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CDoodadTable;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnitType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.campaign.CGameExit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.campaign.CImage;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.campaign.CTrackable;
@@ -208,7 +210,13 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 	private static final int FIRST_FRAME_SOUNDS = 2;
 	private static final int FIRST_FRAME_FINISH = 3;
 	private static final int FIRST_FRAME_DONE = 4;
+	private static final int FIRST_FRAME_PATHING = 5;
 	private int firstFrameStage = FIRST_FRAME_SHADOWS;
+	/** The unit types whose parts of the map are found once the opening steps have played, and the stage after. */
+	private final ArrayDeque<CUnitType> pathingPartsPending = new ArrayDeque<>();
+	private int firstFrameAfterPathing;
+	/** The unit types the map's games made, kept for the next loading; null where there is nowhere to keep them. */
+	MapTypeUsage typeUsage;
 	private int openingStepsDone;
 	private long openingStepsNanos;
 	/** A scene update with no time passing skips the animation work the first real one has to do. */
@@ -599,6 +607,9 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 		if (this.simulation != null) {
 			SimulationChecksum.gameClosed(this.simulation);
 		}
+		if (this.typeUsage != null) {
+			this.typeUsage.flush();
+		}
 		if (this.terrain != null) {
 			this.terrain.dispose();
 		}
@@ -840,6 +851,19 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 	@Override
 	public ArgbImage loadPathingTexture(final String pathingTexture) {
 		return this.pathingTextures.get(pathingTexture);
+	}
+
+	private static final long IDLE_MODEL_CHECK_NANOS = 2_000_000_000L;
+	private long nextIdleModelCheckNanos;
+
+	/** Lets go of the models of unit types that have not been shown for a while, see {@link RenderUnitTypeData#evictIdleModels}. */
+	private void evictIdleUnitModels() {
+		final long now = System.nanoTime();
+		if ((now - this.nextIdleModelCheckNanos) < 0) {
+			return;
+		}
+		this.nextIdleModelCheckNanos = now + IDLE_MODEL_CHECK_NANOS;
+		this.renderUnitTypeData.evictIdleModels(this, now);
 	}
 
 	public RenderUnitType getUnitTypeData(final War3ID key) {
@@ -1350,7 +1374,7 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 			final float rawDeltaTime = paused ? 0 : Gdx.graphics.getRawDeltaTime() * this.replaySpeed;
 			super.update(rawDeltaTime);
 			if (PerfStats.ENABLED) {
-				PerfStats.textures(getTextureBytes(), getEvictedTextures());
+				PerfStats.textures(getTextureBytes(), getEvictedTextures(), getEvictedModels());
 			}
 			releaseFinishedSounds();
 			PerfStats.end(PerfStats.Section.SCENE_UPDATE);
@@ -1449,6 +1473,7 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 			}
 			if (!this.gameEnded && (this.renderUnitTypeData != null)) {
 				this.typePrewarm.update(this);
+				evictIdleUnitModels();
 			}
 			else if (this.gameEnded) {
 				// The score screen's models queue their textures after the game ended; nothing else uploads them.
@@ -1495,6 +1520,9 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 	 */
 	@Override
 	public void updateAndRender() {
+		if (this.typeUsage != null) {
+			this.typeUsage.flushIfDue();
+		}
 		if ((this.fastForwardTarget >= 0) && this.anyReady && !isGamePaused()) {
 			MapViewerUpdate.fastForwardSteps(this);
 		}
@@ -1520,6 +1548,20 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 	 * sounds of the units they make. Every step is the same step the frames would play; only when they are played
 	 * changes.
 	 */
+	/**
+	 * Whether the loading screen plays the game's first steps (see {@link #prepareFirstFrameNext}), after which the
+	 * map's script has made its first changes to the pathing.
+	 */
+	boolean playsOpeningSteps() {
+		return !NO_RENDER && (this.fastForwardTarget < 0) && !isReplayPlayback() && (this.savedGameToLoad == null);
+	}
+
+	/** Queues the types whose parts of the map are found after the opening steps instead of while loading. */
+	void deferPathingParts(final Collection<CUnitType> types) {
+		this.simulation.deferPathingParts();
+		this.pathingPartsPending.addAll(types);
+	}
+
 	public void prepareFirstFrame() {
 		while (!prepareFirstFrameNext()) {
 		}
@@ -1541,15 +1583,26 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 		case FIRST_FRAME_STEPS: {
 			final long start = System.nanoTime();
 			if (MapViewerUpdate.playOpeningSteps(this, 1) == 0) {
-				this.firstFrameStage = this.openingStepsDone == 0 ? FIRST_FRAME_DONE : FIRST_FRAME_SOUNDS;
+				afterOpeningSteps(this.openingStepsDone == 0 ? FIRST_FRAME_DONE : FIRST_FRAME_SOUNDS);
 			}
 			else if (++this.openingStepsDone >= OPENING_STEPS) {
-				this.firstFrameStage = FIRST_FRAME_SOUNDS;
+				afterOpeningSteps(FIRST_FRAME_SOUNDS);
 			}
 			else if ((this.openingStepsDone == 1) && (this.soundsToPreload != null)) {
 				// The units the script made in the first step are known now; the steps that follow play while their
 				// sounds are decoded.
 				MapViewerLoading.queueSounds(this, this.soundsToPreload, false);
+			}
+			this.openingStepsNanos += System.nanoTime() - start;
+			break;
+		}
+		case FIRST_FRAME_PATHING: {
+			// One unit size a slice: the steps the script made its first changes in are played by now.
+			final long start = System.nanoTime();
+			this.simulation.prewarmPathingParts(this.pathingPartsPending.poll());
+			PerfStats.setupPart("pathing parts", start);
+			if (this.pathingPartsPending.isEmpty()) {
+				this.firstFrameStage = this.firstFrameAfterPathing;
 			}
 			this.openingStepsNanos += System.nanoTime() - start;
 			break;
@@ -1600,6 +1653,11 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 		}
 		}
 		return this.firstFrameStage == FIRST_FRAME_DONE;
+	}
+
+	private void afterOpeningSteps(final int next) {
+		this.firstFrameAfterPathing = next;
+		this.firstFrameStage = this.pathingPartsPending.isEmpty() ? next : FIRST_FRAME_PATHING;
 	}
 
 	public void fastForwardTo(final int tick, final FastForwardListener whenReached) {
@@ -2968,7 +3026,13 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 		 */
 		public <T> void addSlices(final Iterator<T> items, final Consumer<T> each, final LoadMapTask after)
 				throws IOException {
-			if (!items.hasNext()) {
+			addSlices(items, each, () -> true, after);
+		}
+
+		/** {@link #addSlices(Iterator, Consumer, LoadMapTask)} that stops taking items once keepGoing says no. */
+		public <T> void addSlices(final Iterator<T> items, final Consumer<T> each, final BooleanSupplier keepGoing,
+				final LoadMapTask after) throws IOException {
+			if (!items.hasNext() || !keepGoing.getAsBoolean()) {
 				after.run();
 				return;
 			}
@@ -2977,8 +3041,9 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 				do {
 					each.accept(items.next());
 				}
-				while (items.hasNext() && (System.nanoTime() < end) && (pendingModelCount() < MODEL_BACKLOG));
-				addSlices(items, each, after);
+				while (items.hasNext() && keepGoing.getAsBoolean() && (System.nanoTime() < end)
+						&& (pendingModelCount() < MODEL_BACKLOG));
+				addSlices(items, each, keepGoing, after);
 			}));
 		}
 

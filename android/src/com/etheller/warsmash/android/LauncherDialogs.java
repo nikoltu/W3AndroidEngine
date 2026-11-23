@@ -78,7 +78,7 @@ final class LauncherDialogs extends LauncherViews {
 		final LinearLayout list = new LinearLayout(this.activity);
 		list.setOrientation(LinearLayout.VERTICAL);
 		list.setBackground(new LauncherKit.FrameDrawable(this.activity.art.bitmap(SkinArt.EDIT_BORDER), px(edge))
-				.filled(Color.argb(0xF2, 0, 0, 0)).fillInset(px(edge * 0.4f)).fallback(Color.argb(0xF2, 0x03, 0x04, 0x0A))
+				.filled(Color.BLACK).fillInset(px(edge * 0.4f)).fallback(Color.rgb(0x03, 0x04, 0x0A))
 				.line(this.activity.art.line()));
 		list.setPadding(px(edge), px(edge), px(edge), px(edge));
 		list.setClickable(true);

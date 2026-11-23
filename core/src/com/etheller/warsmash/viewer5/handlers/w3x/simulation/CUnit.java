@@ -589,6 +589,9 @@ public class CUnit extends CWidget {
 	}
 
 	public void add(final CSimulation simulation, final CBuff ability) {
+		if (this.removedFromGame) {
+			return;
+		}
 		int index = this.abilities.indexOf(ability);
 		if (index >= 0 && (ability instanceof ABGenericTimedBuff)) {
 			((ABGenericTimedBuff) this.abilities.get(index)).updateExpiration(simulation, this);
@@ -721,6 +724,16 @@ public class CUnit extends CWidget {
 
 	public int getMaximumLife() {
 		return this.stats.maximumLife;
+	}
+
+	/** The maximum life before the max life buffs, which setMaximumLife changes. */
+	public int getBaseMaximumLife() {
+		return this.stats.baseMaximumLife;
+	}
+
+	/** The maximum mana before the max mana buffs, which setMaximumMana changes. */
+	public int getBaseMaximumMana() {
+		return this.stats.baseMaximumMana;
 	}
 
 	public void setTypeId(final CSimulation game, final War3ID typeId, final boolean keepRatios) {
@@ -1378,12 +1391,16 @@ public class CUnit extends CWidget {
 		CUnitAggro.onTargetedBySpell(this, simulation, caster);
 	}
 
+	public void fireSpellHitEvent(final CSimulation simulation, final CUnit caster) {
+		CUnitDamage.fireSpellHitEvent(this, simulation, caster);
+	}
+
 	public void onSpellMissileLaunched(final CUnit caster) {
 		CUnitAggro.onSpellMissileLaunched(this, caster);
 	}
 
-	void onSpellEffect(final CSimulation simulation, final CUnit caster) {
-		CUnitAggro.onSpellEffect(this, simulation, caster);
+	void onSpellEffect(final CSimulation simulation, final CUnit caster, final CAbility ability) {
+		CUnitAggro.onSpellEffect(this, simulation, caster, ability);
 	}
 
 	void alertCreeps(final CSimulation simulation, final CUnit target) {
@@ -1443,6 +1460,12 @@ public class CUnit extends CWidget {
 	public boolean canReachToPathing(final float range, final float rotationForPathing,
 			final ArgbImage buildingPathingPixelMap, final float targetX, final float targetY) {
 		return CUnitPlacement.canReachToPathing(this, range, rotationForPathing, buildingPathingPixelMap, targetX, targetY);
+	}
+
+	public boolean canReachToPathingTouching(final float rotationForPathing, final ArgbImage buildingPathingPixelMap,
+			final float targetX, final float targetY) {
+		return CUnitPlacement.canReachToPathingTouching(this, rotationForPathing, buildingPathingPixelMap, targetX,
+				targetY);
 	}
 
 	public void addStateListener(final CUnitStateListener listener) {
@@ -1728,6 +1751,15 @@ public class CUnit extends CWidget {
 
 	public void setConstructingPaused(final boolean constructingPaused) {
 		this.production.constructingPaused = constructingPaused;
+	}
+
+	/** The time the running construction or upgrade takes, which the progress bar counts against. */
+	public float getConstructionDuration(final CSimulation game) {
+		if (this.production.upgradeIdType != null) {
+			return game.getUnitData().getUnitType(this.production.upgradeIdType).getBuildTime();
+		}
+		return this.production.buildTimeOverride > 0 ? this.production.buildTimeOverride
+				: this.unitType.getBuildTime();
 	}
 
 	public void setBuildTimeOverride(final float buildTimeOverride) {

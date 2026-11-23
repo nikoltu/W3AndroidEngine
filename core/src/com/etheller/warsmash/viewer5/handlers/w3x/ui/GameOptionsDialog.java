@@ -227,7 +227,7 @@ final class GameOptionsDialog {
 		this.healthBars = (CheckBoxFrame) frame("HealthBarsCheckBox");
 		// A finger scrolls by dragging, so this slider sets that speed; only the edge scrolling can be turned off.
 		enable(this.mouseScroll, this.catchCursor || TouchInputRouter.isActive());
-		enable(this.mouseScrollDisable, this.catchCursor);
+		enable(this.mouseScrollDisable, this.catchCursor || TouchInputRouter.isActive());
 		enable(this.keyScroll,
 				!TouchInputRouter.isActive() || Gdx.input.isPeripheralAvailable(Input.Peripheral.HardwareKeyboard));
 		disableCheckBox("SubgroupCheckBox");
@@ -235,7 +235,8 @@ final class GameOptionsDialog {
 		hide("CustomKeysLabel", "CustomKeysValue", "DifficultyLabel", "DifficultyValue");
 		// Reforged has this choice in its own options screen; the panel gets it in the place of the hidden lines.
 		this.cinematicPortraits = addCheckBox("CinematicPortraitsCheckBox", "HealthBarsCheckBox",
-				"OPTIONS_SHOW_CINE_PORTRAITS", "Show Portraits in Cinematics");
+				"OPTIONS_SHOW_CINE_PORTRAITS",
+				this.rootFrame.smashString("SMASH_SHOW_CINE_PORTRAITS", "Show Portraits in Cinematics"));
 		addCustomFolderRow();
 	}
 
@@ -263,7 +264,8 @@ final class GameOptionsDialog {
 		button.addSetPoint(new SetPoint(FramePoint.TOPLEFT, above, FramePoint.BOTTOMLEFT, 0,
 				GameUI.convertY(this.uiViewport, -0.004f)));
 		if (button.getButtonText() instanceof StringFrame) {
-			this.rootFrame.setText((StringFrame) button.getButtonText(), "Custom Content Folder...");
+			this.rootFrame.setText((StringFrame) button.getButtonText(),
+					this.rootFrame.smashString("SMASH_CUSTOM_CONTENT_FOLDER", "Custom Content Folder..."));
 		}
 		panel.add(button);
 
@@ -285,8 +287,8 @@ final class GameOptionsDialog {
 		}));
 	}
 
-	private static String customFolderText(final File folder) {
-		return folder == null ? "None chosen" : folder.getPath();
+	private String customFolderText(final File folder) {
+		return folder == null ? this.rootFrame.smashString("SMASH_NONE_CHOSEN", "None chosen") : folder.getPath();
 	}
 
 	/**
@@ -351,7 +353,8 @@ final class GameOptionsDialog {
 			scales.add(percent + "%");
 		}
 		if (RenderScaleStore.Holder.get() != null) {
-			this.renderScaleMenu = reuseLine("EscOptionsLightsMenu", "LightsLabel", "Render scale:", scales,
+			this.renderScaleMenu = reuseLine("EscOptionsLightsMenu", "LightsLabel",
+					this.rootFrame.smashString("SMASH_RENDER_SCALE", "Render scale:"), scales,
 					index -> this.renderScale = index);
 		}
 		else {
@@ -359,9 +362,10 @@ final class GameOptionsDialog {
 		}
 		final List<String> caps = new ArrayList<>();
 		for (final int fps : LauncherOptions.FRAME_CAPS) {
-			caps.add(fps == 0 ? "No limit" : fps + " FPS");
+			caps.add(fps == 0 ? this.rootFrame.smashString("SMASH_NO_LIMIT", "No limit") : fps + " FPS");
 		}
-		this.frameCapMenu = reuseLine("EscOptionsOcclusionMenu", "OcclusionLabel", "Frame rate limit:", caps,
+		this.frameCapMenu = reuseLine("EscOptionsOcclusionMenu", "OcclusionLabel",
+				this.rootFrame.smashString("SMASH_FRAME_RATE_LIMIT", "Frame rate limit:"), caps,
 				index -> this.frameCap = index);
 		hide("ModelDetailLabel", "ModelDetailValue", "AnimQualityLabel", "AnimQualityValue", "TextureQualityLabel",
 				"TextureQualityValue", "ResolutionLabel", "ResolutionValue", "SpellFilterLabel", "SpellFilterValue",

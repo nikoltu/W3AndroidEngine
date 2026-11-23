@@ -121,4 +121,24 @@ class CrashReportTest {
 		assertTrue(text.contains("Latest saved crash log\nWarsmash crash log"));
 		assertFalse(CrashReport.snapshotText(details, null, UTC).contains("Latest saved crash log"));
 	}
+
+	@Test
+	void processExitHasItsOwnSections() {
+		final CrashReport.Details details = new CrashReport.Details();
+		details.time = 1762650000000L;
+		details.exit = "Reason: LOW_MEMORY\nStatus or signal: 9";
+		details.exitTrace = "backtrace";
+		final String text = CrashReport.text(details, UTC);
+		assertTrue(text.contains("Reason: LOW_MEMORY"));
+		assertTrue(text.contains("backtrace"));
+		assertFalse(text.contains("\nError\n"));
+	}
+
+	@Test
+	void binaryTraceKeepsReadableRuns() {
+		final byte[] bytes = { 0, 1, 'a', 'b', 'c', 'd', 'e', 0, 'x', 'y', 0 };
+		assertEquals("abcde\n", CrashReport.traceText(bytes, bytes.length));
+		final byte[] plain = "hello".getBytes();
+		assertEquals("hello", CrashReport.traceText(plain, plain.length));
+	}
 }

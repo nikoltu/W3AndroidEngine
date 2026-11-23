@@ -420,6 +420,10 @@ final class MapViewerEffects {
 				attachPointNames = War3MapViewer.ORIGIN_STRING_LIST;
 			}
 			final RenderUnit renderUnit = viewer.unitToRenderPeer.get(targetWidget);
+			if ((renderUnit == null) && ((CUnit) targetWidget).isRemovedFromGame()) {
+				// A unit that left the game has no model to put an effect on.
+				return null;
+			}
 			if (renderUnit == null) {
 				final NullPointerException nullPointerException = new NullPointerException(
 						"renderUnit is null! targetWidget is \"" + ((CUnit) targetWidget).getUnitType().getName()
@@ -478,6 +482,9 @@ final class MapViewerEffects {
 			}
 			final RenderDestructable renderDest = viewer.destructableToRenderPeer.get(targetWidget);
 
+			if ((renderDest == null) && ((CDestructable) targetWidget).isRemovedFromGame()) {
+				return null;
+			}
 			if (renderDest == null) {
 				final NullPointerException nullPointerException = new NullPointerException(
 						"renderDest is null! targetWidget is \""

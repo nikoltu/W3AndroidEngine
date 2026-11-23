@@ -102,13 +102,16 @@ public class CAbilityManaBurn extends CAbilityTargetSpellBase {
 		@Override
 		public boolean update(final CSimulation game) {
 			final int gameTurnTick = game.getGameTurnTick();
-			if (gameTurnTick >= boltDelayEndTick) {
+			if ((gameTurnTick >= boltDelayEndTick) && !targetUnit.isRemovedFromGame()
+					&& !game.isRemovalPending(targetUnit)) {
 				final float targetMana = targetUnit.getMana();
 				final float manaDamage = StrictMath.min(targetMana, this.maxManaDrained);
 				targetUnit.setMana(targetMana - manaDamage);
 				targetUnit.damage(game, caster, DAMAGE_FLAGS, CAttackType.SPELLS, CDamageType.FIRE,
 						CWeaponSoundTypeJass.WHOKNOWS.name(), manaDamage);
 				game.spawnTextTag(targetUnit, caster.getPlayerIndex(), TextTagConfigType.MANA_BURN, (int) manaDamage);
+			}
+			if (gameTurnTick >= boltDelayEndTick) {
 				this.boltDelayEndTick = Integer.MAX_VALUE;
 			}
 			final boolean done = gameTurnTick >= boltLifetimeEndTick;

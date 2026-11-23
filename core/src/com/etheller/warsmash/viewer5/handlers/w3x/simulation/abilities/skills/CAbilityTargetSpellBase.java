@@ -18,6 +18,11 @@ public abstract class CAbilityTargetSpellBase extends CAbilitySpellBase {
 	}
 
 	@Override
+	public boolean isTargetOrder(final int orderId) {
+		return (orderId != 0) && (orderId == getBaseOrderId());
+	}
+
+	@Override
 	public void onAdd(final CSimulation game, final CUnit unit) {
 		this.behavior = new CBehaviorTargetSpellBase(unit, this);
 	}

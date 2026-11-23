@@ -52,8 +52,10 @@ class NoRenderControllerTest {
 		controller.createDestructableZ(War3ID.fromString("LTlt"), 0, 0, 0, 0, 1, 0);
 		controller.createTextTag();
 		controller.removeUnit(null);
+		controller.removeItem(null);
 		controller.setTerrainDeformation(0, 0, 1, 1, new float[1]);
-		assertEquals(List.of("createUnit", "createDestructableZ", "createTextTag", "removeUnit", "setTerrainDeformation"),
+		assertEquals(List.of("createUnit", "createDestructableZ", "createTextTag", "removeUnit", "removeItem",
+				"setTerrainDeformation"),
 				this.calls);
 	}
 

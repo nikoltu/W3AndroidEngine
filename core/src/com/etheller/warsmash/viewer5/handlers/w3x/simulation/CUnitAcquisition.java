@@ -633,15 +633,13 @@ final class CUnitAcquisition {
 				StrictMath.floor((b - TIE_CELL_OFFSET) / TIE_CELL_SIZE));
 	}
 
-	// Measured (1.29): an idle unit takes a Neutral Hostile unit that is not paused (a creep, at its camp or alone) only within
-	// half its acquisition range, or the creep's own acquisition range when that is larger (an idle Trapper is taken out to
-	// 600), counted between the centers; any other enemy, and a paused creep, within the whole range.
-	static final float CREEP_ACQUIRE_FRACTION = 0.5f;
-
+	// Measured (1.29): an idle unit takes a Neutral Hostile unit that is not paused (a creep, at its camp or alone) only
+	// within the creep's own acquisition range, counted between the edges of the two units as the creep counts it for
+	// its own targets, whatever the acquisition range of the unit (an Archer 300 away from a creep with 200 is left alone);
+	// any other enemy, and a paused creep, within the whole range.
 	static boolean isTooFarForCreep(final CSimulation game, final CUnit source, final CUnit target) {
 		return game.isNeutralAggressive(target.getPlayerIndex()) && !target.isPaused()
-				&& (StrictMath.sqrt(source.distanceSquaredNoCollision(target.getX(), target.getY())) > Math
-						.max(source.acquisitionRange * CREEP_ACQUIRE_FRACTION, target.acquisitionRange));
+				&& (source.distance(target) > target.acquisitionRange);
 	}
 
 	/**

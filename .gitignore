@@ -151,3 +151,5 @@ Thumbs.db
 ## Map data custom maps store while they run
 /core/assets/CustomMapData/
 /core/assets/CustomKeys.txt
+## Texture list the game screen records for the next start
+/core/assets/ui-textures.lst

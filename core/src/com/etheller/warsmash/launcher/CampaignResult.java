@@ -30,10 +30,10 @@ public final class CampaignResult {
 	public static final int HEADING_GOLD = 0xFFFFD428;
 	public static final int LABEL_GREY = 0xFFD8D8D8;
 
-	/** The three rows of numbers: their icon, the heading's glue name and the two columns' glue names. */
-	public static final String[][] ROWS = { { SkinArt.RESULT_HEROES, "SCORE_TAB_HEROES", "Heroes", "KILLED", "Killed" },
-		{ SkinArt.RESULT_UNITS, "SCORE_TAB_UNITS", "Units", "KILLED", "Killed" },
-		{ SkinArt.RESULT_STRUCTURES, "SCORE_TAB_STRUCTURES", "Structures", "RAZED", "Razed" } };
+	/** The three rows of numbers: their icon, the heading's glue name and the second column's glue name. */
+	public static final String[][] ROWS = { { SkinArt.RESULT_HEROES, "SCORE_TAB_HEROES", "KILLED" },
+		{ SkinArt.RESULT_UNITS, "SCORE_TAB_UNITS", "KILLED" },
+		{ SkinArt.RESULT_STRUCTURES, "SCORE_TAB_STRUCTURES", "RAZED" } };
 
 	private CampaignResult() {
 	}
@@ -292,16 +292,14 @@ public final class CampaignResult {
 		return lines;
 	}
 
-	/** The result's title: its glue name and the text when the strings lack it. */
-	public static String[] title(final GameResult result) {
-		return "victory".equals(result.result) ? new String[] { "VICTORY", "Victory" }
-				: new String[] { "DEFEAT", "Defeat" };
+	/** The result's title: its glue name. */
+	public static String title(final GameResult result) {
+		return "victory".equals(result.result) ? "VICTORY" : "DEFEAT";
 	}
 
-	/** The result's button: Continue after a victory, Restart (the mission again) after a loss; its glue key and text. */
-	public static String[] buttonLabel(final GameResult result) {
-		return "victory".equals(result.result) ? new String[] { "CONTINUE", "Continue" }
-				: new String[] { "RESTART", "Restart" };
+	/** The result's button: Continue after a victory, Restart (the mission again) after a loss; its glue key. */
+	public static String buttonLabel(final GameResult result) {
+		return "victory".equals(result.result) ? "CONTINUE" : "RESTART";
 	}
 
 	/** Whether a game's end brings the result: a campaign mission won, lost or left, with its score. */
@@ -347,16 +345,16 @@ public final class CampaignResult {
 		}
 	}
 
-	/** The difficulty's icon and its glue name with the text when the strings lack it; null when not told. */
+	/** The difficulty's icon and its glue name; null when not told. */
 	public static String[] difficulty(final String difficulty) {
 		switch (difficulty == null ? "" : difficulty) {
 		case "easy":
-			return new String[] { SkinArt.DIFFICULTY_EASY, "EASY", "Story" };
+			return new String[] { SkinArt.DIFFICULTY_EASY, "EASY" };
 		case "normal":
-			return new String[] { SkinArt.DIFFICULTY_NORMAL, "NORMAL", "Normal" };
+			return new String[] { SkinArt.DIFFICULTY_NORMAL, "NORMAL" };
 		case "hard":
 		case "insane":
-			return new String[] { SkinArt.DIFFICULTY_HARD, "HARD", "Hard" };
+			return new String[] { SkinArt.DIFFICULTY_HARD, "HARD" };
 		default:
 			return null;
 		}

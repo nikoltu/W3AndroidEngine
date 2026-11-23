@@ -4,8 +4,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -194,6 +196,7 @@ public class MdxModel extends com.etheller.warsmash.viewer5.Model<MdxHandler> {
 		}
 
 		static TextureSources lookUp(final MdlxModel parser, final DataSource dataSource, final boolean lookUpFiles) {
+			nameCliffTextures(parser);
 			final List<MdlxTexture> textures = parser.getTextures();
 			final boolean[] shaderTextures = shaderTextures(parser);
 			final boolean reforged = parser.getVersion() > 800;
@@ -227,12 +230,86 @@ public class MdxModel extends com.etheller.warsmash.viewer5.Model<MdxHandler> {
 		return marked;
 	}
 
+	/** The replaceable texture the cliff doodads take from the cliffs they stand in. */
+	private static final int CLIFF_REPLACEABLE_ID = 11;
+	/** The slots of an HD material that hold the maps of the surface: colour, normal and ORM. */
+	private static final int HD_MAP_SLOTS = 3;
+
+	/**
+	 * The cliff texture of a material of the HD data, drawn when the instance assigns none, named for the slot of the
+	 * material it is bound to (colour, normal or ORM map) and so of the kind of map that suits it.
+	 */
+	private static String cliffTexturePath(final int number, final int slot) {
+		return "ReplaceableTextures\\Cliff\\Cliff" + number + "Legacy_" + (slot == 0 ? "diffuse" : slot == 1 ? "normal" : "orm") + ".dds";
+	}
+
+	/** The cliff number a placeholder texture of the HD cliff doodads names, or -1 for any other texture. */
+	private static int cliffPlaceholderNumber(final String path) {
+		if (path == null) {
+			return -1;
+		}
+		final String name = path.replace('\\', '/').toLowerCase(Locale.ROOT);
+		final int slash = name.lastIndexOf('/');
+		final String folder = name.substring(0, slash + 1);
+		final String file = name.substring(slash + 1);
+		if (!(folder.endsWith("doodads/terrain/#ignore_cliffs/") || folder.endsWith("replaceabletextures/cliff/"))
+				|| !file.startsWith("cliff")) {
+			return -1;
+		}
+		int end = "cliff".length();
+		while ((end < file.length()) && Character.isDigit(file.charAt(end))) {
+			end++;
+		}
+		return end == "cliff".length() ? -1 : Integer.parseInt(file.substring("cliff".length(), end));
+	}
+
+	/**
+	 * Makes the cliff textures of the HD materials replaceable textures bound by their slot. The HD cliff doodads name
+	 * the cliff texture either as a replaceable texture in each of the colour, normal and ORM slots, with the same
+	 * default file for all of them, or, in one model, by placeholder files that exist in no data and are named for a
+	 * slot other than the one they are in. The slot decides what the texture is, as it does for any other HD texture.
+	 */
+	private static void nameCliffTextures(final MdlxModel parser) {
+		final List<MdlxTexture> textures = parser.getTextures();
+		final int[] slots = new int[textures.size()];
+		Arrays.fill(slots, -1);
+		for (final MdlxMaterial material : parser.getMaterials()) {
+			if ((material.shader == null) || (material.shader.length() <= 1)) {
+				continue;
+			}
+			for (int i = 0; i < material.layers.size(); i++) {
+				final int textureId = material.layers.get(i).textureId;
+				if ((textureId >= 0) && (textureId < slots.length)) {
+					// a texture bound to two slots keeps its own file: it cannot be both kinds of map
+					slots[textureId] = (slots[textureId] == -1) && (i < HD_MAP_SLOTS) ? i : -2;
+				}
+			}
+		}
+		for (int i = 0; i < slots.length; i++) {
+			if (slots[i] < 0) {
+				continue;
+			}
+			final MdlxTexture texture = textures.get(i);
+			int number = cliffPlaceholderNumber(texture.getPath());
+			if ((number == -1) && (texture.getReplaceableId() == CLIFF_REPLACEABLE_ID) && texture.getPath().isEmpty()) {
+				number = 0;
+			}
+			if (number != -1) {
+				texture.setReplaceableId(CLIFF_REPLACEABLE_ID);
+				texture.setPath(cliffTexturePath(number, slots[i]));
+			}
+		}
+	}
+
 	/** The path a texture of the file is loaded by. */
 	private static String texturePath(final MdlxTexture texture, final boolean reforged, final DataSource dataSource) {
 		String path = texture.getPath();
 		final int replaceableId = texture.getReplaceableId();
 
-		if (replaceableId != 0) {
+		if ((replaceableId == CLIFF_REPLACEABLE_ID) && reforged && !path.isEmpty()) {
+			// the cliff texture of an HD material, named by nameCliffTextures
+		}
+		else if (replaceableId != 0) {
 			// TODO This uses dumb, stupid, terrible, no-good hardcoded replaceable IDs
 			// instead of the real system, because currently MdxSimpleInstance is not
 			// supporting it correctly.
@@ -474,6 +551,7 @@ public class MdxModel extends com.etheller.warsmash.viewer5.Model<MdxHandler> {
 
 		Build(final MdlxModel parser, final SetupGeosets.Prepared geometry, final TextureSources textureSources,
 				final boolean stepped) {
+			nameCliffTextures(parser);
 			this.parser = parser;
 			this.original = parser;
 			this.geometry = geometry;
@@ -862,7 +940,7 @@ public class MdxModel extends com.etheller.warsmash.viewer5.Model<MdxHandler> {
 
 					model.nodeIndexByObjectId = new int[Math.max(model.genericObjects.size(),
 							maxObjectId(model.genericObjects) + 1)];
-					java.util.Arrays.fill(model.nodeIndexByObjectId, -1);
+					Arrays.fill(model.nodeIndexByObjectId, -1);
 					for (int i = 0, l = model.genericObjects.size(); i < l; i++) {
 						model.nodeIndexByObjectId[model.genericObjects.get(i).objectId] = i;
 					}

@@ -45,6 +45,7 @@ import android.widget.TextView;
 
 import com.etheller.warsmash.BuildInfo;
 import com.etheller.warsmash.launcher.LauncherKeys;
+import com.etheller.warsmash.launcher.LauncherText;
 import com.etheller.warsmash.launcher.ProjectInfo;
 import com.etheller.warsmash.launcher.SkinArt;
 import com.etheller.warsmash.launcher.UpdateCheck;
@@ -668,7 +669,7 @@ final class UpdatePrompt {
 		}
 		catch (final RuntimeException | PackageManager.NameNotFoundException e) {
 			Log.w(TAG, "Unable to read the signatures of the update", e);
-			problem = "The downloaded file is not a usable APK.";
+			problem = LauncherText.get("update_error_not_apk");
 			file.delete();
 			return State.FAILED;
 		}

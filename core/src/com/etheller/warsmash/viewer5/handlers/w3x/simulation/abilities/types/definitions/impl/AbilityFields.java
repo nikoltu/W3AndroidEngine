@@ -35,6 +35,7 @@ public interface AbilityFields {
 	public static final String REQUIRED_LEVEL_SKIP = "levelSkip"; // replaced from 'alsk'
 
 	public static final String CHECK_DEPENDENCIES = "checkDep";
+	public static final String ITEM_ABILITY = "item";
 	public static final String REQUIREMENTS = "Requires";
 	public static final String REQUIREMENT_LEVELS = "Requiresamount";
 

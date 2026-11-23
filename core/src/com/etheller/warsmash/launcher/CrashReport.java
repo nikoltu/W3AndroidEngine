@@ -43,6 +43,10 @@ public final class CrashReport {
 		public String graphics;
 		public String map;
 		public List<String> log;
+		/** Set when the system ended the process without an exception: what Android recorded about that exit. */
+		public String exit;
+		/** The system's trace of that exit (a native crash or an application-not-responding), if it kept one. */
+		public String exitTrace;
 	}
 
 	private CrashReport() {
@@ -155,6 +159,14 @@ public final class CrashReport {
 		line(out, "Graphics", details.graphics);
 		line(out, "Map", details.map);
 		line(out, "Thread", details.thread);
+		if (details.exit != null) {
+			out.append("\nProcess exit (no exception was caught; the system ended the process)\n");
+			out.append(details.exit).append('\n');
+			if ((details.exitTrace != null) && !details.exitTrace.isEmpty()) {
+				out.append("\nSystem trace of the exit\n").append(details.exitTrace).append('\n');
+			}
+			return out.toString();
+		}
 		out.append("\nError\n");
 		out.append(trace(details.error)).append('\n');
 		if ((details.lastLogged != null) || (details.lastLoggedMessage != null)) {
@@ -171,6 +183,41 @@ public final class CrashReport {
 			final int from = Math.max(0, details.log.size() - LOG_LINES);
 			for (int i = from; i < details.log.size(); i++) {
 				out.append(details.log.get(i)).append('\n');
+			}
+		}
+		return out.toString();
+	}
+
+	/**
+	 * The text of a system trace: plain text as it is, a binary one (a native crash from Android 12 on is a protocol
+	 * buffer) as the runs of readable characters in it.
+	 */
+	public static String traceText(final byte[] bytes, final int length) {
+		boolean binary = false;
+		for (int i = 0; i < Math.min(length, 512); i++) {
+			if (bytes[i] == 0) {
+				binary = true;
+				break;
+			}
+		}
+		if (!binary) {
+			return new String(bytes, 0, length, java.nio.charset.StandardCharsets.UTF_8);
+		}
+		final StringBuilder out = new StringBuilder();
+		int start = -1;
+		for (int i = 0; i <= length; i++) {
+			final boolean readable = (i < length) && (((bytes[i] >= 32) && (bytes[i] < 127)) || (bytes[i] == '\t'));
+			if (readable) {
+				if (start < 0) {
+					start = i;
+				}
+			}
+			else if (start >= 0) {
+				if ((i - start) >= 4) {
+					out.append(new String(bytes, start, i - start, java.nio.charset.StandardCharsets.US_ASCII))
+							.append('\n');
+				}
+				start = -1;
 			}
 		}
 		return out.toString();

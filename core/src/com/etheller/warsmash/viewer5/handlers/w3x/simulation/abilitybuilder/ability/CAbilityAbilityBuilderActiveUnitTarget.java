@@ -29,6 +29,11 @@ public class CAbilityAbilityBuilderActiveUnitTarget extends CAbilityAbilityBuild
 	}
 
 	@Override
+	public boolean isTargetOrder(final int orderId) {
+		return (orderId != 0) && (orderId == getBaseOrderId());
+	}
+
+	@Override
 	public void onAdd(CSimulation game, CUnit unit) {
 		this.behavior = this.createRangedBehavior(unit);
 		super.onAdd(game, unit);
