@@ -3,6 +3,7 @@ package com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.beh
 import java.util.Map;
 
 import com.etheller.warsmash.parsers.jass.JassTextGenerator;
+import com.etheller.warsmash.util.Log;
 import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
@@ -47,6 +48,10 @@ public class ABActionCreateUnit implements ABSingleAction {
 		final AbilityPointTarget location = this.loc.callback(game, caster, localStore, castId);
 		final CUnit createdUnit = game.createUnitSimple(theId, thePlayer.getId(),
 				location.getX(), location.getY(), theFacing);
+		if (createdUnit == null) {
+			Log.warn("Ability could not create unit " + theId + " for player " + thePlayer.getId());
+			return;
+		}
 		
 		if (addSummonedTag == null || addSummonedTag.callback(game, caster, localStore, castId)) {
 			createdUnit.addClassification(CUnitClassification.SUMMONED);

@@ -18,6 +18,9 @@ public class ABActionAddStateModBuff implements ABAction {
 	public void runAction(final CSimulation game, final CUnit caster, final Map<String, Object> localStore, final int castId) {
 		CUnit target = targetUnit.callback(game, caster, localStore, castId);
 		StateModBuff theBuff = buff.callback(game, caster, localStore, castId);
+		if ((target == null) || (theBuff == null)) {
+			return;
+		}
 		
 		target.addStateModBuff(theBuff);
 		target.computeUnitState(game, theBuff.getBuffType());

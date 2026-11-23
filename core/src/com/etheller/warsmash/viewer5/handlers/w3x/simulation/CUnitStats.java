@@ -855,6 +855,10 @@ final class CUnitStats {
 	}
 
 	static void removeNonStackingDisplayBuff(final CUnit self, final CSimulation game, final String stackingKey, final CBuff buff) {
+		if (buff == null) {
+			// A channel that ends before its buff was made has nothing to take off.
+			return;
+		}
 		final List<CBuff> existingBuffs = self.nonStackingDisplayBuffs.get(stackingKey);
 		if (existingBuffs != null) {
 			existingBuffs.remove(buff);
