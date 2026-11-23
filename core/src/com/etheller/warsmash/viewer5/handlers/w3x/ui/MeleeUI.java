@@ -2067,12 +2067,17 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 		final boolean recorded = session instanceof ReplayRecording;
 		final FileHandle file = recorded ? ((ReplayRecording) session).marksFile() : GameMarks.unrecorded();
 		final List<GameMarks.Unit> units = new ArrayList<>();
-		for (final RenderUnit renderUnit : this.selectedUnits) {
-			final CUnit unit = renderUnit.getSimulationUnit();
-			units.add(new GameMarks.Unit(unit.getHandleId(), unit.getTypeId().asStringValue(), unit.getPlayerIndex(),
-					unit.getX(), unit.getY(), unit.getLife(), unit.getMaximumLife()));
-		}
-		final int tick = this.war3MapViewer.simulation.getGameTurnTick();
+		final int[] tickRead = new int[1];
+		// the units and the step are read between two steps: with the simulation on its own thread they change meanwhile
+		this.war3MapViewer.whileSimulationHeld(() -> {
+			for (final RenderUnit renderUnit : this.selectedUnits) {
+				final CUnit unit = renderUnit.getSimulationUnit();
+				units.add(new GameMarks.Unit(unit.getHandleId(), unit.getTypeId().asStringValue(),
+						unit.getPlayerIndex(), unit.getX(), unit.getY(), unit.getLife(), unit.getMaximumLife()));
+			}
+			tickRead[0] = this.war3MapViewer.simulation.getGameTurnTick();
+		});
+		final int tick = tickRead[0];
 		final int number = this.markedMoments + 1;
 		try {
 			GameMarks.write(file, number == 1, GameMarks.head(this.war3MapViewer.getMapFileName(), recorded),
