@@ -204,8 +204,14 @@ public class CRegionManager {
 		}
 		this.enterTriggerDepth++;
 		try {
-			for (final CRegionTriggerEnter enterTrigger : region.getEnterTriggers()) {
-				enterTrigger.fire(unit, region);
+			// Measured on 1.29: events registered by a running trigger wait for the next unit, destroyed ones stop firing.
+			final List<CRegionTriggerEnter> triggers = region.getEnterTriggers();
+			if (!triggers.isEmpty()) {
+				for (final CRegionTriggerEnter enterTrigger : new ArrayList<>(triggers)) {
+					if (triggers.contains(enterTrigger)) {
+						enterTrigger.fire(unit, region);
+					}
+				}
 			}
 		}
 		finally {
@@ -226,8 +232,13 @@ public class CRegionManager {
 	}
 
 	public void onUnitLeaveRegion(final CUnit unit, final CRegion region) {
-		for (final CRegionTriggerLeave leaveTrigger : region.getLeaveTriggers()) {
-			leaveTrigger.fire(unit, region);
+		final List<CRegionTriggerLeave> triggers = region.getLeaveTriggers();
+		if (!triggers.isEmpty()) {
+			for (final CRegionTriggerLeave leaveTrigger : new ArrayList<>(triggers)) {
+				if (triggers.contains(leaveTrigger)) {
+					leaveTrigger.fire(unit, region);
+				}
+			}
 		}
 	}
 

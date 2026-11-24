@@ -11,7 +11,8 @@ public class ArchivedFileStream implements SeekableByteChannel{
 	private SeekableByteChannel from;
 	private ByteBuffer buffer;
 	/** The bytes of a sector, which is more than the buffer holds for a file smaller than one sector. */
-	private final int blockSize;
+	private int blockSize;
+	private boolean layoutChecked;
 	private ArchivedFile file;
 	private ArchivedFileExtractor extractor;
 	private long position;
@@ -21,11 +22,7 @@ public class ArchivedFileStream implements SeekableByteChannel{
 		from = in;
 		this.extractor = extractor;
 		this.file = file;
-		if( file.hasFlag(BlockTable.FLAG_SINGLE_UNIT) ){
-			blockSize = file.fileSize;
-		}else{
-			blockSize = 512 << file.blockShift;
-		}
+		blockSize = file.sectorSize();
 		// Map protectors set sectors of up to 16 MB, and a buffer that big for every small file filled the heap.
 		buffer = ByteBuffer.allocate(Math.max(0, Math.min(blockSize, file.fileSize)));
 		position = 0;
@@ -76,6 +73,13 @@ public class ArchivedFileStream implements SeekableByteChannel{
 		if( !open ) throw new ClosedChannelException();
 		// end of stream
 		if( position >= file.fileSize ) return -1;
+		
+		// a file marked as one unit may be stored in sectors; the first read finds out
+		if( !layoutChecked ){
+			layoutChecked = true;
+			file.resolveLayout(from);
+			blockSize = file.sectorSize();
+		}
 		
 		// load current block if no block is currently loaded
 		if( currentBlock == -1 ){

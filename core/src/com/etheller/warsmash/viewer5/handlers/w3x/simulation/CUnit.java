@@ -2407,6 +2407,9 @@ public class CUnit extends CWidget {
 			// setting hidden to let things that refer to this before it gets garbage
 			// collected see it as basically worthless
 		}
+		// Marked before its auras are emptied: they take buffs off this unit one by one and must not put the next one's
+		// effect on a unit whose model is already gone.
+		this.removedFromGame = true;
 		// Its auras no longer tick, so nothing else would take their bonuses off the units around it.
 		for (final CAbility ability : new ArrayList<>(this.abilities)) {
 			if (!wasDead && (ability instanceof final CAbilityOverlayedMine overlayedMine)) {
@@ -2418,7 +2421,6 @@ public class CUnit extends CWidget {
 		}
 		killPathingInstance();
 		simulation.getWorldCollision().removeUnit(this);
-		this.removedFromGame = true;
 		this.unitAnimationListener = CUnitAnimationListener.NONE;
 		// Its listeners (the selection and info panel on the render side) must not keep it, nor it them.
 		this.stateListenersUpdates.clear();

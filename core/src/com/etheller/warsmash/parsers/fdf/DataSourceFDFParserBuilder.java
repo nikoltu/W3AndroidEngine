@@ -29,6 +29,11 @@ public class DataSourceFDFParserBuilder implements FDFParserBuilder {
 	 */
 	private static final Map<String, SoftReference<ParsedFile>> PARSED = new ConcurrentHashMap<>();
 
+	/** Lets go of the parse trees, which are parsed again from the files when an interface asks for them. */
+	public static void releaseParsed() {
+		PARSED.clear();
+	}
+
 	private final DataSource dataSource;
 
 	private static final class ParsedFile {

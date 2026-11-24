@@ -271,9 +271,6 @@ public class CSimulation implements CPlayerAPI, CSightWorld, HandleIdSource {
 				pathingTextures, mapGameVersion, gameData.getGameVersion());
 		this.unitData.setTechEquivalents(this.itemData.getTechEquivalents());
 		this.unitData.setItemData(this.itemData);
-		final long unitTypesStart = System.nanoTime();
-		this.unitData.getAllUnitTypesLightweight(); // Quick hack to avoid lag on first cast of Mech Critter
-		PerfStats.slowSetupPart("unit type scan", unitTypesStart);
 		this.destructableData = new CDestructableData(parsedDestructableData, pathingTextures);
 		this.units = new ArrayList<>();
 		this.newUnits = new ArrayList<>();
@@ -2378,7 +2375,7 @@ public class CSimulation implements CPlayerAPI, CSightWorld, HandleIdSource {
 	public void removeDestructable(final CDestructable dest) {
 		// A removed destructable is gone for enumerations too; a script that removes it again (a campaign cleanup
 		// enumerating a rect it already cleared) must not remove its model twice.
-		if (dest.isRemovedFromGame() || this.removedDestructables.contains(dest)) {
+		if (dest.isRemovedFromGame() || dest.isRemovalQueued()) {
 			return;
 		}
 		if (dest.isDead()) {
@@ -2388,6 +2385,7 @@ public class CSimulation implements CPlayerAPI, CSightWorld, HandleIdSource {
 		else {
 			dest.setLife(this, 0);
 		}
+		dest.queueRemoval();
 		this.removedDestructables.add(dest);
 	}
 

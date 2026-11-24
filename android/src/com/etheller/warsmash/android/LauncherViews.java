@@ -3,6 +3,7 @@ package com.etheller.warsmash.android;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
+import java.util.function.Supplier;
 
 import android.graphics.Bitmap;
 import android.graphics.Color;
@@ -365,6 +366,15 @@ abstract class LauncherViews {
 	/** @param colors with them the menu shows a colour (a player colour menu), its items named in their colour */
 	View dropdown(final String[] items, final int selected, final boolean enabled, final float height,
 			final float textSize, final IntConsumer chosen, final int[] colors) {
+		return dropdown(items, selected, enabled, height, textSize, chosen, colors, null);
+	}
+
+	/**
+	 * @param taken the colours the other slots have, read each time the palette opens (they change while it is
+	 *            closed), or null when every colour is free
+	 */
+	View dropdown(final String[] items, final int selected, final boolean enabled, final float height,
+			final float textSize, final IntConsumer chosen, final int[] colors, final Supplier<boolean[]> taken) {
 		final FrameLayout box = new FrameLayout(this.activity);
 		box.setBackground(LauncherKit.GlueButton.backdrop(this.activity.art, px(height),
 				LauncherKit.GlueButton.TONE_PLAIN));
@@ -375,7 +385,9 @@ abstract class LauncherViews {
 		final TextView label = text(LauncherKit.glueText(items[selected]), textSize,
 				enabled ? LauncherKit.GlueButton.restText(this.activity.art) : LauncherKit.DISABLED);
 		label.setGravity(Gravity.CENTER_VERTICAL);
-		// A longer item shrinks to the button rather than being cut.
+		// A longer item shrinks to the button rather than being cut; auto-sizing treats a horizontally scrolling
+		// (single line) text as unbounded, so that is switched off.
+		label.setHorizontallyScrolling(false);
 		final int fullSize = Math.round(textSize * this.activity.scale);
 		label.setAutoSizeTextTypeUniformWithConfiguration(Math.max(1, Math.round(fullSize * 0.55f)), fullSize, 1,
 				TypedValue.COMPLEX_UNIT_PX);
@@ -389,12 +401,10 @@ abstract class LauncherViews {
 			label.setVisibility(View.GONE);
 			swatch.setBackgroundColor(colors[selected]);
 			swatch.setAlpha(enabled ? 1f : 0.5f);
-			// Sized from the button, not its height: a narrow column (the LAN lobby's) keeps the colour inside the rim.
-			final FrameLayout.LayoutParams swatchParams = new FrameLayout.LayoutParams(MATCH,
-					px(Math.max(8, (height - (2 * rim)) * 0.55f)), Gravity.CENTER);
-			final float inset = Math.max(4, rim * 0.6f);
-			swatchParams.leftMargin = px(inset);
-			swatchParams.rightMargin = px(inset);
+			// A square of the button's height less an inset, so the button stays square wherever it is placed.
+			final float inset = Math.max(6, rim * 0.7f);
+			final int side = px(Math.max(8, height - (2 * inset)));
+			final FrameLayout.LayoutParams swatchParams = new FrameLayout.LayoutParams(side, side, Gravity.CENTER);
 			box.addView(swatch, swatchParams);
 		}
 		else {
@@ -416,7 +426,8 @@ abstract class LauncherViews {
 		if (enabled && (chosen != null)) {
 			final int[] current = { selected };
 			onTap(box, false,
-					v -> this.activity.dialogs.showChoices(box, items, current[0], textSize, colors, choice -> {
+					v -> this.activity.dialogs.showChoices(box, items, current[0], textSize, colors,
+							taken == null ? null : taken.get(), choice -> {
 						current[0] = choice;
 						label.setText(LauncherKit.glueText(items[choice]));
 						if (swatch != null) {

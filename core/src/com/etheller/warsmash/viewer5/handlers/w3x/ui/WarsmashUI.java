@@ -42,6 +42,10 @@ public interface WarsmashUI extends CommandErrorListener, WarsmashBaseUI {
 	default void setFrameEventSink(final FrameEventSink sink) {
 	}
 
+	/** BlzFrameSetFocus: a text box takes the typed keys, or gives them back to the game. */
+	default void setScriptFocus(final UIFrame frame, final boolean focus) {
+	}
+
 	CScriptDialog createScriptDialog(GlobalScope globalScope);
 
 	void clearDialog(CScriptDialog dialog);

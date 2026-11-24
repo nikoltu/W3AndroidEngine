@@ -6,6 +6,7 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
@@ -278,6 +279,35 @@ public final class CustomContent {
 			partial.delete();
 			throw new ImportException(Problem.IO, e);
 		}
+	}
+
+	/** The maps put into the content folder's Maps/Custom by importing, the files directly in it named like maps. */
+	public static List<File> importedMaps(final File root) {
+		final List<File> maps = new ArrayList<>();
+		final File[] files = root == null ? null : new File(root, IMPORT_FOLDER).listFiles();
+		if (files != null) {
+			for (final File file : files) {
+				if (file.isFile() && (mapFileName(file.getName()) != null)) {
+					maps.add(file);
+				}
+			}
+		}
+		return maps;
+	}
+
+	/**
+	 * Deletes the imported maps of the content folder; nothing else in it is touched.
+	 *
+	 * @return how many maps were deleted
+	 */
+	public static int deleteImportedMaps(final File root) {
+		int deleted = 0;
+		for (final File map : importedMaps(root)) {
+			if (map.delete()) {
+				deleted++;
+			}
+		}
+		return deleted;
 	}
 
 	/** Opens the file as the custom game list would and reads its information. */

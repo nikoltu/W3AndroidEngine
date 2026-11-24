@@ -328,9 +328,8 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 	final Vector3 stackedSoundsForward = new Vector3();
 	final List<com.etheller.warsmash.viewer5.handlers.w3x.rendersim.RenderUbersplat> scriptUbersplats = new ArrayList<>();
 	final Map<CImage, RenderImage> scriptImages = new IdentityHashMap<>();
-	/** Not among the effects: a trackable's model is made again from the trackable after a load. */
-	final List<RenderSpellEffect> trackableModels = new ArrayList<>();
-	final List<CTrackable> trackableOwners = new ArrayList<>();
+	/** Not among the effects: the models are made again from the trackables after a load. */
+	final MapTrackables trackables = new MapTrackables();
 	Map<War3ID, WeatherType> weatherTypes;
 	public boolean unitsReady;
 	public War3Map mapMpq;
@@ -1390,6 +1389,13 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 			return true;
 		}
 
+		/** Takes the destructables the viewer let go of ({@link RenderDestructable#release}) out of every list at once. */
+		void removeReleasedDestructables() {
+			removeIf(widget -> (widget instanceof RenderDestructable) && ((RenderDestructable) widget).isReleased());
+			this.destructables.removeIf(RenderDestructable::isReleased);
+			this.active.removeIf(RenderDestructable::isReleased);
+		}
+
 		public void wakeAllDestructables() {
 			for (int i = 0, n = this.destructables.size(); i < n; i++) {
 				this.destructables.get(i).wake();
@@ -1414,7 +1420,32 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 		}
 	}
 
+	/**
+	 * A script may remove tens of thousands of destructables in one go; they are taken out of the lists in one pass
+	 * every so many, not one list search for each.
+	 */
+	private static final int RELEASED_DESTRUCTABLE_BATCH = 2048;
+	private int releasedDestructables;
+
+	void releaseDestructable(final RenderDestructable peer) {
+		peer.release(this);
+		if (++this.releasedDestructables >= RELEASED_DESTRUCTABLE_BATCH) {
+			dropReleasedDestructables();
+		}
+	}
+
+	private void dropReleasedDestructables() {
+		if (this.releasedDestructables == 0) {
+			return;
+		}
+		this.releasedDestructables = 0;
+		this.widgets.removeReleasedDestructables();
+		this.decals.removeIf(
+				decal -> (decal instanceof RenderDestructable) && ((RenderDestructable) decal).isReleased());
+	}
+
 	private void updateDestructableAnimations() {
+		dropReleasedDestructables();
 		// Changes the game reports wake a destructable at once; this only catches a state written without a report
 		// (a loaded game).
 		this.widgets.recheckSome();
@@ -1484,9 +1515,7 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 			MapViewerUpdate.updateStackedSounds(this);
 			MapViewerUpdate.updateUnitIndicators(this, deltaTime);
 			this.scriptUbersplats.removeIf(splat -> !splat.update());
-			for (int i = 0, n = this.trackableModels.size(); i < n; i++) {
-				this.trackableModels.get(i).updateAnimations(this, deltaTime);
-			}
+			this.trackables.update(this, deltaTime);
 			final Iterator<RenderEffect> projectileIterator = this.projectiles.iterator();
 			while (projectileIterator.hasNext()) {
 				final RenderEffect projectile = projectileIterator.next();
@@ -1829,6 +1858,11 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 		else {
 			this.simThread.attachAnimationListener(unit, listener);
 		}
+	}
+
+	/** Whether the game runs on a simulation thread object (threaded or stepped in turn). */
+	public boolean hasSimulationThread() {
+		return this.simThread != null;
 	}
 
 	/** A destructable's peer exists: the events that name its handle can find the object. */
@@ -3186,7 +3220,7 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 		/** The longest a step of the loading runs before it hands the frame back, so that a paused app can stop. */
 		private static final long SLICE_NANOS = 20_000_000L;
 		/** The time the tasks of one frame of the loading screen may take together. */
-		public static final long FRAME_NANOS = 100_000_000L;
+		public static final long FRAME_NANOS = 33_000_000L;
 		/** The models read ahead that wait to be built at most; the loader waits for the helper beyond that. */
 		private static final int MODEL_BACKLOG = 6;
 		/** The textures that may wait for their decoding while the loader goes on with other tasks. */
@@ -3371,6 +3405,16 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 				}
 			});
 
+			// Makes every unit type ahead, which the first cast of some abilities would otherwise do in a frame.
+			this.loadMapTasks.add(new LoadMapTask() {
+				@Override
+				public void run() {
+					if (!War3MapViewer.this.simulation.getUnitData().scanUnitTypesLightweightFor(SLICE_NANOS)) {
+						retryLater(this);
+					}
+				}
+			});
+
 			this.loadMapTasks.add(() -> {
 				War3MapViewer.this.walkableObjectsTree = new Quadtree<>(War3MapViewer.this.terrain.getEntireMap());
 				if (War3MapViewer.this.doodadsAndDestructiblesLoaded) {
@@ -3542,6 +3586,12 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 		public void addNextTask(final LoadMapTask task) {
 			this.loadMapTasks.addFirst(task);
 			this.startingTaskCount++;
+		}
+
+		/** Puts a task that is not ready to run back behind the others, without counting it as a new one. */
+		public void retryLater(final LoadMapTask task) {
+			this.loadMapTasks.add(task);
+			LockSupport.parkNanos(500_000L);
 		}
 
 		public void addLoadTask(final LoadMapTask task) {

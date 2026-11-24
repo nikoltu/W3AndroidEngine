@@ -301,7 +301,7 @@ class StaticStateTest {
 			"core.util.PerfStats#ENABLED", "core.util.PerfStats#WINDOW_HISTOGRAM", "core.util.PerfStats#RUN_HISTOGRAM", "core.util.PerfStats#firstFrame", "core.util.PerfStats#frameLoads", "core.util.PerfStats#frameLoadNanos", "core.util.PerfStats#frameTextureNanos", "core.util.PerfStats#slowestLoadNanos", "core.util.PerfStats#slowestLoad", "core.util.PerfStats#checkedLocalFile", "core.util.PerfStats#TOTALS",
 			"core.util.PerfStats#STEP_TOTALS", "core.util.PerfStats#textureBytes", "core.util.PerfStats#evictedTextures", "core.util.PerfStats#evictedModels", "core.util.PerfStats#FRAME_SECTIONS", "core.util.PerfStats#WORST_SECTIONS",
 			"core.util.PerfStats#stepStart", "core.util.PerfStats#frameStart", "core.util.PerfStats#sectionStart",
-			"core.util.PerfStats#lastLoadingFrame", "core.util.PerfStats#worstLoadingFrame", "core.parsers.facefx.FaceFxLibrary#GAME_ANIMSETS", "core.viewer5.gl.ShaderFailure#LIMITS", "core.viewer5.gl.ShaderFailure#LIMIT_NAMES",
+			"core.util.PerfStats#lastLoadingFrame", "core.util.PerfStats#worstLoadingFrame", "core.util.PerfStats#loadingFrames", "core.util.PerfStats#slowLoadingFrames", "core.units.DataTable#ACCUMULATED_LIST_FIELDS", "core.parsers.facefx.FaceFxLibrary#GAME_ANIMSETS", "core.viewer5.gl.ShaderFailure#LIMITS", "core.viewer5.gl.ShaderFailure#LIMIT_NAMES",
 			"core.util.PerfStats#frames", "core.util.PerfStats#frameTotal", "core.util.PerfStats#worstFrame",
 			"core.util.PerfStats#reportStart", "core.util.PerfStats#simulationSteps", "core.util.PerfStats#pathJobs",
 			"core.util.PerfStats#pathIterations", "core.util.PerfStats#pathDiscarded",

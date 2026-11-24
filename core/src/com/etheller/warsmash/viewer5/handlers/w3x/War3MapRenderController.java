@@ -416,6 +416,7 @@ public class War3MapRenderController implements SimulationRenderController, Rend
 			this.viewer.walkableObjectsTree.remove(
 					(MdxComplexInstance) renderPeer.instance, renderPeer.walkableBounds);
 		}
+		this.viewer.releaseDestructable(renderPeer);
 	}
 
 	@Override

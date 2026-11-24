@@ -1216,7 +1216,7 @@ public class MdxComplexInstance extends ModelInstance implements SceneUpdateWork
 				if ((this.blendTime > 0) && (lastSequence != -1)) {
 					if ((this.blendTimeRemaining <= 0) && (this.counter > 0)) {
 						this.blendTimeRemaining = this.blendTime;
-						for (int i = 0, l = this.sortedNodes.length; i < l; i++) {
+						for (int i = 0, l = this.sortedNodes == null ? 0 : this.sortedNodes.length; i < l; i++) {
 							final SkeletalNode node = this.sortedNodes[i];
 							node.beginBlending();
 						}
@@ -1259,6 +1259,7 @@ public class MdxComplexInstance extends ModelInstance implements SceneUpdateWork
 	 * Get an attachment node.
 	 */
 	public MdxNode getAttachment(final int id) {
+		loadNow();
 		final MdxModel model = (MdxModel) this.model;
 		final Attachment attachment = model.attachments.get(id);
 
@@ -1311,6 +1312,16 @@ public class MdxComplexInstance extends ModelInstance implements SceneUpdateWork
 	}
 
 	/**
+	 * An instance that was never in view is loaded and put in its place before a ray is tried on it, as one that has
+	 * been seen would be.
+	 */
+	private void loadForIntersection() {
+		if (loadNow() && (this.scene != null)) {
+			update(0f, this.scene);
+		}
+	}
+
+	/**
 	 * Intersects a world ray with the model's CollisionShapes. Only ever call this
 	 * function on the Gdx thread because it uses static variables to hold state
 	 * while processing.
@@ -1318,6 +1329,7 @@ public class MdxComplexInstance extends ModelInstance implements SceneUpdateWork
 	 * @param ray
 	 */
 	public boolean intersectRayWithCollisionSimple(final Ray ray, final Vector3 intersection) {
+		loadForIntersection();
 		// A model that finishes loading late loads its instances afterwards; until then they have no nodes.
 		if (this.nodes == null) {
 			return false;
@@ -1376,8 +1388,18 @@ public class MdxComplexInstance extends ModelInstance implements SceneUpdateWork
 	 */
 	public boolean intersectRayWithCollision(final Ray ray, final Vector3 intersection, final boolean alwaysUseMesh,
 			final boolean onlyUseMesh) {
-		if (this.nodes == null) {
-			return false;
+		if (onlyUseMesh && isLazyLoad() && this.model.ok && ((MdxModel) this.model).isMeshAlphaStatic()) {
+			// The triangles are tried in the instance's own space and none of them depends on the animation: one that
+			// was never in view needs its place, not its nodes.
+			if (this.dirty) {
+				recalculateTransformation();
+			}
+		}
+		else {
+			loadForIntersection();
+			if (this.nodes == null) {
+				return false;
+			}
 		}
 		final MdxModel mdxModel = (MdxModel) this.model;
 		final List<CollisionShape> collisionShapes = mdxModel.collisionShapes;
@@ -1467,7 +1489,7 @@ public class MdxComplexInstance extends ModelInstance implements SceneUpdateWork
 	}
 
 	public MdxNode inefficientlyGetNodeByNameSearch(final String name) {
-		if (this.model.ok) {
+		if (this.model.ok && (this.nodes != null)) {
 			for (final MdxNode node : this.nodes) {
 				if ((node.name != null) && node.name.equalsIgnoreCase(name)) {
 					return node;

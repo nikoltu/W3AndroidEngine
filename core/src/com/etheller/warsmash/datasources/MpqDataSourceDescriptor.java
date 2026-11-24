@@ -1,11 +1,10 @@
 package com.etheller.warsmash.datasources;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.channels.SeekableByteChannel;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
-import java.util.EnumSet;
+
+import com.etheller.warsmash.util.FileReadChannel;
 
 import mpq.MPQArchive;
 import mpq.MPQException;
@@ -25,7 +24,7 @@ public class MpqDataSourceDescriptor implements DataSourceDescriptor {
 	public DataSource createDataSource() {
 		try {
 			SeekableByteChannel sbc;
-			sbc = Files.newByteChannel(Paths.get(this.mpqFilePath), EnumSet.of(StandardOpenOption.READ));
+			sbc = new FileReadChannel(new File(this.mpqFilePath));
 			return new MpqDataSource(new MPQArchive(sbc), sbc);
 		}
 		catch (final IOException e) {

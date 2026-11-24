@@ -5,6 +5,7 @@ import static net.warsmash.lan.LanTestSupport.command;
 import static net.warsmash.lan.LanTestSupport.waitFor;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -331,6 +332,28 @@ class LanSessionTest {
 		waitFor("second setup", () -> a.rec.lobby.slots.get(3).race == 1);
 		assertEquals(6, a.rec.lobby.slots.get(3).color);
 		assertEquals(1, b.rec.lobby.slots.get(1).color);
+	}
+
+	@Test
+	void twoPlayersAskingForOneColorGetOneEach() throws Exception {
+		this.env.startHost();
+		final Node a = this.env.joinAndWait("A");
+		final Node b = this.env.joinAndWait("B");
+		a.client.slotRequest(0, 0, 0, 9, 100);
+		b.client.slotRequest(1, 0, 1, 9, 100);
+		waitFor("one got it", () -> (a.rec.lobby.slots.get(0).color == 9) != (a.rec.lobby.slots.get(1).color == 9));
+		a.client.hostSlot(3, LanProtocol.ACTION_COMPUTER, 1);
+		a.client.hostSetup(3, 0, 3, 9, 100);
+		waitFor("computer", () -> a.rec.lobby.slots.get(3).kind == LanProtocol.SLOT_COMPUTER);
+		for (int i = 0; i < 4; i++) {
+			for (int j = i + 1; j < 4; j++) {
+				final LanData.SlotInfo x = a.rec.lobby.slots.get(i);
+				final LanData.SlotInfo y = a.rec.lobby.slots.get(j);
+				if (x.kind != LanProtocol.SLOT_OPEN && y.kind != LanProtocol.SLOT_OPEN) {
+					assertNotEquals(x.color, y.color);
+				}
+			}
+		}
 	}
 
 	@Test

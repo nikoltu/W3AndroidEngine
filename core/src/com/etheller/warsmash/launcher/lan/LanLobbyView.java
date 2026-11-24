@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import com.etheller.warsmash.launcher.CustomGame;
+
 import net.warsmash.lan.protocol.LanData;
 import net.warsmash.lan.protocol.LanMessages;
 import net.warsmash.lan.protocol.LanProtocol;
@@ -205,9 +207,25 @@ public final class LanLobbyView {
 		return this.map.title.isEmpty() ? this.map.name : this.map.title;
 	}
 
+	/** The colours the players and computers of the other rows have, by colour number. */
+	public boolean[] takenColors(final int slot) {
+		final boolean[] taken = new boolean[CustomGame.PLAYER_COLORS.length];
+		for (final Row r : this.rows) {
+			if ((r.slot != slot) && ((r.kind == PLAYER) || (r.kind == COMPUTER))) {
+				taken[Math.floorMod(r.color, taken.length)] = true;
+			}
+		}
+		return taken;
+	}
+
 	/** The player's choices on a row go to the host as a request; the host's on a computer's row as its setup. */
 	public void choose(final LanLauncherModel model, final Row row, final int race, final int team, final int color,
 			final int handicap) {
+		// A taken colour is not sent: the host would keep the old one anyway, and two requests for one colour race.
+		if ((color != row.color) && takenColors(row.slot)[Math.floorMod(color, CustomGame.PLAYER_COLORS.length)]) {
+			choose(model, row, race, team, row.color, handicap);
+			return;
+		}
 		if (row.you) {
 			model.slotRequest(row.slot, race, team, color, handicap);
 		}

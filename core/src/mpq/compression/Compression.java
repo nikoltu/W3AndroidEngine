@@ -1,8 +1,12 @@
 package mpq.compression;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.zip.DataFormatException;
 import java.util.zip.Inflater;
+
+import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream;
 
 import mpq.compression.adpcm.ADPCM;
 import mpq.compression.huffman.Huffman;
@@ -74,8 +78,8 @@ public class Compression {
 			sectorExplode(in, out);
 			break;
 		case FLAG_BZIP2:
-			// TODO add support
-			throw new DecompressionException(in, "unsupported compression type: BZIP2");
+			sectorBzip2(in, out);
+			break;
 		case FLAG_SPARSE:
 			// TODO add support
 			throw new DecompressionException(in, "unsupported compression type: SPARSE");
@@ -124,8 +128,9 @@ public class Compression {
 		
 		// apply decompression flag at a time
 		if( (mask & FLAG_BZIP2) != 0 ){
-			// TODO add support
-			throw new DecompressionException(in, "unsupported compression type: BZIP2");
+			sectorBzip2(flip ? out : in, flip ? in : out);
+			(flip ? out : in).clear();
+			flip = !flip;
 		}
 		if( (mask & FLAG_IMPLODE) != 0 ){
 			sectorExplode(flip ? out : in, flip ? in : out);
@@ -185,6 +190,27 @@ public class Compression {
 			throw new DecompressionException(in, "sector explode exception", e);
 		}
 		
+		out.flip();
+	}
+	
+	private void bzip2Into(ByteBuffer in, ByteBuffer out) throws DecompressionException{
+		try (BZip2CompressorInputStream stream = new BZip2CompressorInputStream(
+				new ByteArrayInputStream(in.array(), in.position(), in.remaining()))) {
+			final byte[] target = out.array();
+			int length = 0;
+			while( length < target.length ){
+				final int read = stream.read(target, length, target.length - length);
+				if( read < 0 ) break;
+				length+= read;
+			}
+			out.position(length);
+		} catch ( IOException e ) {
+			throw new DecompressionException(in, "failed BZIP2 decompression", e);
+		}
+	}
+	
+	private void sectorBzip2(ByteBuffer in, ByteBuffer out) throws DecompressionException{
+		bzip2Into(in, out);
 		out.flip();
 	}
 	
@@ -279,8 +305,16 @@ public class Compression {
 		
 		// BZIP2
 		if( (mask & 0x10) > 0 ){
-			// TODO add support
-			throw new DecompressionException(block, "unsupported compression type: BZIP2");
+			bzip2Into(block, extra);
+			block.rewind();
+			block.limit(extra.limit());
+			extra.flip();
+			
+			ByteBuffer temp = extra;
+			extra = block;
+			block = temp;
+			
+			swap = !swap;
 		}
 		
 		// PKWARE

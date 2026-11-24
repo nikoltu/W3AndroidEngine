@@ -3,6 +3,7 @@ package com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.beh
 import java.util.Map;
 
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CTerrainDeformations;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityPointTarget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.behavior.callback.booleancallbacks.ABBooleanCallback;
@@ -12,7 +13,6 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.beha
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.core.ABAction;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.core.ABLocalStoreKeys;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.effects.ABTerrainEffect;
-import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.effects.ABTerrainRippleEffect;
 
 public class ABActionCreateTerrainRippleAtLocation implements ABAction {
 
@@ -32,6 +32,7 @@ public class ABActionCreateTerrainRippleAtLocation implements ABAction {
 	private ABIntegerCallback spaceWaves;
 	private ABIntegerCallback timeWaves;
 	private ABBooleanCallback onlyNegative;
+	private ABIntegerCallback startDelay;
 
 	@Override
 	public void runAction(final CSimulation game, final CUnit caster, final Map<String, Object> localStore,
@@ -61,9 +62,11 @@ public class ABActionCreateTerrainRippleAtLocation implements ABAction {
 			intervals = ((int) dur) * 2;
 		}
 
-		ABTerrainEffect fx = new ABTerrainRippleEffect(game, loc, startRad, endRad, theDepth, thePeriod, intervals,
-				swaves, twaves, onlyNeg);
-		game.registerTimer(fx);
+		final float startPct = endRad > 0 ? startRad / endRad : 1;
+		final CTerrainDeformations.Deformation deformation = game.getTerrainDeformations().ripple(game, loc.x, loc.y,
+				Math.max(startRad, endRad), theDepth, Math.round(thePeriod), intervals, swaves, twaves, startPct,
+				onlyNeg, startDelay == null ? 0 : startDelay.callback(game, caster, localStore, castId));
+		final ABTerrainEffect fx = new ABTerrainEffect(game, deformation, 0);
 		localStore.put(ABLocalStoreKeys.LASTCREATEDFX, fx);
 	}
 }

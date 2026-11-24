@@ -320,6 +320,8 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 	boolean menuFocusFromTouch;
 	Runnable openMenuAction;
 	FocusableFrame menuFocus;
+	/** The text box of a map's own interface that holds the typed keys while the game menu is not up. */
+	FocusableFrame scriptFocus;
 	private UIFrame[] modalFrames;
 	private boolean[] modalFramesShown;
 	RenderWidget mouseOverUnit;
@@ -1700,6 +1702,31 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 	@Override
 	public void setFrameEventSink(final FrameEventSink sink) {
 		this.frameEvents = sink;
+	}
+
+	@Override
+	public void setScriptFocus(final UIFrame frame, final boolean focus) {
+		if (focus) {
+			if ((frame instanceof FocusableFrame) && ((FocusableFrame) frame).isFocusable()) {
+				takeScriptFocus((FocusableFrame) frame);
+			}
+		}
+		else if (frame == this.scriptFocus) {
+			takeScriptFocus(null);
+		}
+	}
+
+	void takeScriptFocus(final FocusableFrame frame) {
+		if (frame == this.scriptFocus) {
+			return;
+		}
+		if (this.scriptFocus != null) {
+			this.scriptFocus.onFocusLost();
+		}
+		this.scriptFocus = frame;
+		if (frame != null) {
+			frame.onFocusGained();
+		}
 	}
 
 	@Override

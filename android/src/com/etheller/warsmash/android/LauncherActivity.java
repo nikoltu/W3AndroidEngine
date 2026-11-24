@@ -258,6 +258,7 @@ public class LauncherActivity extends AndroidApplication {
 		if (GlesSupport.redirect(this)) {
 			return;
 		}
+		MemoryState.noteAsync(this, "launcher created");
 		ExitLogs.recordPreviousExit(this);
 		DataFolderActivity.useFolderCache(this);
 		CCampaignProgress.setAllMissionsOpen(

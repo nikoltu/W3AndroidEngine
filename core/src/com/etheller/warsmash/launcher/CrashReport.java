@@ -42,6 +42,8 @@ public final class CrashReport {
 		public String renderer;
 		public String graphics;
 		public String map;
+		/** What the system and the process held at the last moments before, one line each; see the Android app's memory notes. */
+		public String memory;
 		public List<String> log;
 		/** Set when the system ended the process without an exception: what Android recorded about that exit. */
 		public String exit;
@@ -159,6 +161,9 @@ public final class CrashReport {
 		line(out, "Graphics", details.graphics);
 		line(out, "Map", details.map);
 		line(out, "Thread", details.thread);
+		if ((details.memory != null) && !details.memory.isEmpty()) {
+			out.append("\nMemory (newest last)\n").append(details.memory).append('\n');
+		}
 		if (details.exit != null) {
 			out.append("\nProcess exit (no exception was caught; the system ended the process)\n");
 			out.append(details.exit).append('\n');

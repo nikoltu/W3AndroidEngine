@@ -33,7 +33,8 @@ public class RenderDestructable extends RenderDoodad implements RenderWidget {
 	private final CDestructable simulationDestructable;
 	private SplatMover selectionCircle;
 	private SplatMover selectionPreviewHighlight;
-	private final UnitAnimationListenerImpl unitAnimationListenerImpl;
+	/** Made when the instance loads, or when the game first asks for it, so what stays out of sight has none. */
+	private UnitAnimationListenerImpl unitAnimationListenerImpl;
 	private boolean dead;
 	private BuildingShadow destructableShadow;
 	private final boolean selectable;
@@ -50,6 +51,7 @@ public class RenderDestructable extends RenderDoodad implements RenderWidget {
 	private boolean frameDead;
 	private boolean frameBlighted;
 	private float frameLife;
+	private boolean released;
 	/** The shadow image to lay once the model says whether it casts a shadow of its own, see {@link #modelBuilt}. */
 	private final String shadowFile;
 	/** What a script asked of the animation while the model was not built, replayed when it is. */
@@ -74,8 +76,22 @@ public class RenderDestructable extends RenderDoodad implements RenderWidget {
 			final float selectionScale, final float maxPitch, final float maxRoll, final float life,
 			final BuildingShadow destructableShadow, final String shadowFile, final boolean waitForModel,
 			final CDestructable simulationDestructable, final int doodadVariation) {
+		this(map, model, portraitModel, row, location3D, scale3D, facingRadians, selectionScale, maxPitch, maxRoll,
+				life, destructableShadow, shadowFile, waitForModel, false, simulationDestructable, doodadVariation);
+	}
+
+	/**
+	 * @param lazy whether the model instance is only loaded once it is first in view or asked for, so that thousands
+	 *             of destructables out of sight (the platforms of a map's scripted terrain) cost little more than their
+	 *             place
+	 */
+	public RenderDestructable(final War3MapViewer map, final MdxModel model, MdxModel portraitModel,
+			final GameObject row, final float[] location3D, final float[] scale3D, final float facingRadians,
+			final float selectionScale, final float maxPitch, final float maxRoll, final float life,
+			final BuildingShadow destructableShadow, final String shadowFile, final boolean waitForModel,
+			final boolean lazy, final CDestructable simulationDestructable, final int doodadVariation) {
 		super(map, model, row, location3D, scale3D, facingRadians, maxPitch, maxRoll, selectionScale, doodadVariation,
-				waitForModel);
+				waitForModel, lazy);
 		this.map = map;
 		this.shadowFile = shadowFile;
 		this.portraitModel = portraitModel;
@@ -101,14 +117,20 @@ public class RenderDestructable extends RenderDoodad implements RenderWidget {
 			modelBuilt(false);
 		}
 		this.selectionScale *= row.getFieldAsFloat(SEL_CIRCLE_SIZE, 0);
-		this.unitAnimationListenerImpl = new UnitAnimationListenerImpl((MdxComplexInstance) this.instance, 0, 0);
-		simulationDestructable.setUnitAnimationListener(this.unitAnimationListenerImpl);
-		map.destructablePeerCreated(simulationDestructable);
-		this.unitAnimationListenerImpl.playAnimation(true, getAnimation(), SequenceUtils.EMPTY, 1.0f, true);
+		final boolean deferred = getInstance().isLazyLoad();
 		this.selectable = row.readSLKTagBoolean("selectable");
-		this.unitAnimationListenerImpl.setActivityObserver(this::wake);
 		((MdxComplexInstance) this.instance).sequenceEndObserver = this::wake;
-		if (waiting) {
+		if (deferred && !map.hasSimulationThread()) {
+			// with a simulation thread its events find the listener by the handle, so it is made at once
+			simulationDestructable.setUnitAnimationListenerSource(this::animationListener);
+		}
+		else {
+			animationListener();
+		}
+		if (deferred) {
+			getInstance().modelLoadedObserver = this::lazyLoaded;
+		}
+		else if (waiting) {
 			// the animation the listener keeps is started by its own observer, after the model's part is done here
 			final Runnable animationStart = getInstance().modelLoadedObserver;
 			getInstance().modelLoadedObserver = () -> {
@@ -117,8 +139,49 @@ public class RenderDestructable extends RenderDoodad implements RenderWidget {
 					animationStart.run();
 				}
 				replayWaitingScript();
+				if (hasPendingChange()) {
+					// what happened while it was not loaded was not seen: it shows how it ended
+					this.changedOutOfSight = true;
+				}
+				wake();
 			};
 		}
+	}
+
+	private void lazyLoaded() {
+		final boolean made = this.unitAnimationListenerImpl != null;
+		modelBuilt(true);
+		if (made) {
+			// it kept what the game asked for while the model was not loaded
+			this.unitAnimationListenerImpl.modelLoaded();
+		}
+		else {
+			animationListener();
+		}
+		replayWaitingScript();
+		if (hasPendingChange()) {
+			// what happened while it was not loaded was not seen: it shows how it ended
+			this.changedOutOfSight = true;
+		}
+		wake();
+	}
+
+	/** The animation listener of the game's destructable, made now if the destructable has none yet. */
+	private UnitAnimationListenerImpl animationListener() {
+		if (this.unitAnimationListenerImpl == null) {
+			final Runnable loadObserver = getInstance().modelLoadedObserver;
+			final UnitAnimationListenerImpl listener = new UnitAnimationListenerImpl(getInstance(), 0, 0);
+			if (this.instance.isWaiting() && (loadObserver != null)) {
+				// the listener took the observer of a waiting instance; the destructable's own is the one that runs
+				getInstance().modelLoadedObserver = loadObserver;
+			}
+			this.unitAnimationListenerImpl = listener;
+			this.simulationDestructable.setUnitAnimationListener(listener);
+			this.map.destructablePeerCreated(this.simulationDestructable);
+			listener.playAnimation(true, getAnimation(), SequenceUtils.EMPTY, 1.0f, true);
+			listener.setActivityObserver(this::wake);
+		}
+		return this.unitAnimationListenerImpl;
 	}
 
 	/**
@@ -167,7 +230,7 @@ public class RenderDestructable extends RenderDoodad implements RenderWidget {
 	 * or the animation ended. Everything else is a tree standing in its loop.
 	 */
 	public void wake() {
-		if (!this.active) {
+		if (!this.active && !this.released) {
 			this.active = true;
 			this.map.widgets.active.add(this);
 		}
@@ -175,6 +238,38 @@ public class RenderDestructable extends RenderDoodad implements RenderWidget {
 
 	public void sleep() {
 		this.active = false;
+	}
+
+	/** Whether the game removed the destructable and the world let go of it (see {@link #release}). */
+	public boolean isReleased() {
+		return this.released;
+	}
+
+	/**
+	 * Lets go of what a removed destructable holds in the world: its shadow, selection marks and the game's link to it,
+	 * so that nothing keeps its model instance alive once the lists of the viewer have dropped it.
+	 */
+	public void release(final War3MapViewer viewer) {
+		this.released = true;
+		this.active = false;
+		if (this.destructableShadow != null) {
+			this.destructableShadow.remove();
+			this.destructableShadow = null;
+		}
+		if (this.selectionCircle != null) {
+			this.selectionCircle.destroy(Gdx.gl30, viewer.terrain.centerOffset);
+			this.selectionCircle = null;
+		}
+		if (this.selectionPreviewHighlight != null) {
+			this.selectionPreviewHighlight.destroy(Gdx.gl30, viewer.terrain.centerOffset);
+			this.selectionPreviewHighlight = null;
+		}
+		this.simulationDestructable.setUnitAnimationListener(null);
+		this.simulationDestructable.setUnitAnimationListenerSource(null);
+		getInstance().sequenceEndObserver = null;
+		if (this.unitAnimationListenerImpl != null) {
+			this.unitAnimationListenerImpl.setActivityObserver(null);
+		}
 	}
 
 	public boolean canSleep() {
@@ -255,7 +350,7 @@ public class RenderDestructable extends RenderDoodad implements RenderWidget {
 		final float simulationLife;
 		if (clock != null) {
 			if (!readFrame(clock)) {
-				this.unitAnimationListenerImpl.update();
+				animationListener().update();
 				return;
 			}
 			dead = this.frameDead;
@@ -273,13 +368,13 @@ public class RenderDestructable extends RenderDoodad implements RenderWidget {
 			// Measured on 1.29: the fog keeps a tree as it was last seen; one cut or grown back out of sight
 			// shows its new state, without the fall or the growth, once the place is seen again.
 			this.changedOutOfSight = true;
-			this.unitAnimationListenerImpl.update();
+			animationListener().update();
 			return;
 		}
 		final boolean changedOutOfSight = this.changedOutOfSight;
 		this.changedOutOfSight = false;
 		if (dead && !this.dead) {
-			this.unitAnimationListenerImpl.playAnimation(true, PrimaryTag.DEATH, SequenceUtils.EMPTY, 1.0f, true);
+			animationListener().playAnimation(true, PrimaryTag.DEATH, SequenceUtils.EMPTY, 1.0f, true);
 			if (changedOutOfSight) {
 				getInstance().setFrame(getInstance().clampFrame(Integer.MAX_VALUE));
 			}
@@ -299,13 +394,13 @@ public class RenderDestructable extends RenderDoodad implements RenderWidget {
 		else if (!dead) {
 			if (this.dead) {
 				if (changedOutOfSight) {
-					this.unitAnimationListenerImpl.playAnimation(true, PrimaryTag.STAND, SequenceUtils.EMPTY, 1.0f,
+					animationListener().playAnimation(true, PrimaryTag.STAND, SequenceUtils.EMPTY, 1.0f,
 							true);
 				}
 				else {
-					this.unitAnimationListenerImpl.playAnimation(true, PrimaryTag.BIRTH, SequenceUtils.EMPTY, 1.0f,
+					animationListener().playAnimation(true, PrimaryTag.BIRTH, SequenceUtils.EMPTY, 1.0f,
 							true);
-					this.unitAnimationListenerImpl.queueAnimation(PrimaryTag.STAND, SequenceUtils.EMPTY, true);
+					animationListener().queueAnimation(PrimaryTag.STAND, SequenceUtils.EMPTY, true);
 				}
 				this.life = simulationLife;
 				// TODO add back shadow here
@@ -314,7 +409,7 @@ public class RenderDestructable extends RenderDoodad implements RenderWidget {
 			else {
 				if (Math.abs(this.life - simulationLife) > 0.003f) {
 					if (!changedOutOfSight && (this.life > simulationLife)) {
-						this.unitAnimationListenerImpl.playAnimation(true, PrimaryTag.STAND, SequenceUtils.HIT, 1.0f,
+						animationListener().playAnimation(true, PrimaryTag.STAND, SequenceUtils.HIT, 1.0f,
 								true);
 					}
 					this.life = simulationLife;
@@ -332,7 +427,7 @@ public class RenderDestructable extends RenderDoodad implements RenderWidget {
 				}
 			}
 		}
-		this.unitAnimationListenerImpl.update();
+		animationListener().update();
 	}
 
 	@Override
@@ -400,7 +495,7 @@ public class RenderDestructable extends RenderDoodad implements RenderWidget {
 	}
 
 	public UnitAnimationListenerImpl getUnitAnimationListenerImpl() {
-		return this.unitAnimationListenerImpl;
+		return animationListener();
 	}
 
 	public void setAnimation(final String sequence) {
@@ -430,7 +525,7 @@ public class RenderDestructable extends RenderDoodad implements RenderWidget {
 		}
 		this.dead = this.simulationDestructable.isDead();
 		this.life = this.simulationDestructable.getLife();
-		this.unitAnimationListenerImpl.playAnimation(true, bestPrimaryTag, secondaryTags, 1.0f, true);
+		animationListener().playAnimation(true, bestPrimaryTag, secondaryTags, 1.0f, true);
 	}
 
 	public void setHidden(final boolean hidden) {
@@ -464,7 +559,11 @@ public class RenderDestructable extends RenderDoodad implements RenderWidget {
 	public void notifyLifeRestored() {
 		this.dead = this.simulationDestructable.isDead();
 		this.life = this.simulationDestructable.getLife();
-		this.unitAnimationListenerImpl.playAnimation(true, getAnimation(), SequenceUtils.EMPTY, 1.0f, true);
+		if ((this.unitAnimationListenerImpl == null) && this.instance.isLazyLoad()) {
+			// the listener plays what it shows now when it is made
+			return;
+		}
+		animationListener().playAnimation(true, getAnimation(), SequenceUtils.EMPTY, 1.0f, true);
 	}
 
 	@Override

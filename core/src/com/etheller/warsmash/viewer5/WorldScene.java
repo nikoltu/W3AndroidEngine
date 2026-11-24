@@ -203,7 +203,11 @@ public class WorldScene extends Scene {
 //			final ModelInstance instance = cell.instances.get(i);
 			if (instance.isWaiting()) {
 				// a child (an effect on a unit's attachment point) whose model is not built yet, or not loaded for it
-				return;
+				if (!instance.lazyLoad || !instance.rendered || !instance.isVisible(camera)) {
+					return;
+				}
+				// made empty to cost nothing while out of view; it is loaded where the camera first sees it
+				instance.loadNow();
 			}
 			if (instance.rendered && (instance.cullFrame < frame) && instance.isVisible(camera)) {
 				instance.cullFrame = frame;

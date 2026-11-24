@@ -1,3 +1,3 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The launcher looks its option, LAN, hotkey editor and map problem labels up by name, from the table it shares with the desktop. -->
-<resources xmlns:tools="http://schemas.android.com/tools" tools:keep="@string/options_*,@string/launcher_*,@string/lan_*,@string/controls_*,@string/map_issue_*,@string/map_tag_*" />
+<!-- The launcher looks its glue fallback, option, LAN, hotkey editor and map problem labels up by name, from the table it shares with the desktop. -->
+<resources xmlns:tools="http://schemas.android.com/tools" tools:keep="@string/glue_*,@string/options_*,@string/launcher_*,@string/lan_*,@string/controls_*,@string/map_issue_*,@string/map_tag_*,@string/build_*,@string/map_folder_*,@string/update_error_*" />

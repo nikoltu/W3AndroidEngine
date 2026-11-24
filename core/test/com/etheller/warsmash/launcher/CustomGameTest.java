@@ -148,4 +148,63 @@ class CustomGameTest {
 			assertEquals(LauncherSlot.MAP_VALUE, slot.color);
 		}
 	}
+
+	@Test
+	void anOccupiedSlotsColorIsTakenForTheOthersAndItsOwnStaysFree() {
+		final GameCatalog.MapDetails details = map(false, 1, 1, 1);
+		final CustomGame lobby = new CustomGame();
+		lobby.chooseSlots(details);
+		lobby.setType(details, 1, CustomGame.SLOT_COMPUTER_NORMAL);
+		lobby.slotTypes[2] = CustomGame.SLOT_OPEN;
+		final boolean[] taken = lobby.takenColors(details, 0);
+		assertTrue(taken[lobby.colorOf(details, 1)]);
+		assertFalse(taken[lobby.colorOf(details, 0)]);
+		assertFalse(taken[lobby.colorOf(details, 2)]);
+	}
+
+	@Test
+	void aSlotThatBecomesAComputerNeverSharesAColor() {
+		final GameCatalog.MapDetails details = map(false, 1, 1, 1);
+		final CustomGame lobby = new CustomGame();
+		lobby.chooseSlots(details);
+		lobby.slotColors[1] = lobby.colorOf(details, 0);
+		assertTrue(lobby.setType(details, 1, CustomGame.SLOT_COMPUTER_NORMAL));
+		assertTrue(lobby.colorOf(details, 1) != lobby.colorOf(details, 0));
+		// A closed slot takes no colour from the others and keeps its own.
+		lobby.slotColors[2] = lobby.colorOf(details, 0);
+		assertFalse(lobby.setType(details, 2, 1));
+		assertEquals(lobby.colorOf(details, 0), lobby.colorOf(details, 2));
+	}
+
+	@Test
+	void movingThePlayerToASlotWhoseColorIsTakenGivesAFreeColor() {
+		final GameCatalog.MapDetails details = map(false, 1, 1, 1);
+		final CustomGame lobby = new CustomGame();
+		lobby.chooseSlots(details);
+		lobby.setType(details, 1, CustomGame.SLOT_COMPUTER_NORMAL);
+		lobby.slotTypes[2] = CustomGame.SLOT_OPEN;
+		lobby.slotColors[2] = lobby.colorOf(details, 1);
+		lobby.take(details, 2);
+		assertTrue(lobby.colorOf(details, 2) != lobby.colorOf(details, 1));
+	}
+
+	@Test
+	void aFixedMapKeepsItsColors() {
+		final GameCatalog.MapDetails details = map(true, 1, 1, 2);
+		final CustomGame lobby = new CustomGame();
+		lobby.chooseSlots(details);
+		lobby.slotColors[1] = lobby.colorOf(details, 0);
+		assertFalse(lobby.resolveColor(details, 1));
+	}
+
+	@Test
+	void freeColorKeepsTheWantedOneOrTakesTheLowestFree() {
+		final boolean[] taken = new boolean[24];
+		taken[5] = true;
+		taken[0] = true;
+		assertEquals(3, CustomGame.freeColor(taken, 3));
+		assertEquals(1, CustomGame.freeColor(taken, 5));
+		java.util.Arrays.fill(taken, true);
+		assertEquals(5, CustomGame.freeColor(taken, 5));
+	}
 }

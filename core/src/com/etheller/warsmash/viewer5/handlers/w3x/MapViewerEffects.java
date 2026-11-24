@@ -432,6 +432,7 @@ final class MapViewerEffects {
 					throw nullPointerException;
 				} else {
 					Log.error(nullPointerException);
+					return null;
 				}
 			}
 			final MdxModel spawnedEffectModel = loadWaitingModelMdx(viewer, modelName);
@@ -545,6 +546,11 @@ final class MapViewerEffects {
 	}
 
 	static RenderSpellEffect addSpecialEffect(final War3MapViewer viewer, final String modelName, final float x, final float y, final float yaw) {
+		return createSpecialEffect(viewer, modelName, x, y, yaw, true);
+	}
+
+	static RenderSpellEffect createSpecialEffect(final War3MapViewer viewer, final String modelName, final float x,
+			final float y, final float yaw, final boolean register) {
 		final MdxModel spawnedEffectModel = loadWaitingModelMdx(viewer, modelName);
 		if (spawnedEffectModel != null) {
 			final MdxComplexInstance modelInstance = (MdxComplexInstance) spawnedEffectModel.addWaitingInstance();
@@ -556,7 +562,9 @@ final class MapViewerEffects {
 			final RenderSpellEffect renderAttackInstant = new RenderSpellEffect(modelInstance, viewer, yaw,
 					RenderSpellEffect.DEFAULT_ANIMATION_QUEUE, SequenceUtils.EMPTY);
 			renderAttackInstant.setOrigin(modelName, null, null, x, y, yaw);
-			viewer.projectiles.add(renderAttackInstant);
+			if (register) {
+				viewer.projectiles.add(renderAttackInstant);
+			}
 			return renderAttackInstant;
 		}
 		return null;

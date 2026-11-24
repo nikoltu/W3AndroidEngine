@@ -216,6 +216,22 @@ public class CompoundDataSource implements DataSource {
 		return buffer;
 	}
 
+	/** The file of the source that {@link #read} takes it from, when that is a file of a data folder. */
+	@Override
+	public File fileOnDisk(final String filepath) {
+		for (int i = this.mpqList.size() - 1; i >= 0; i--) {
+			final DataSource source = this.mpqList.get(i);
+			final File file = source.fileOnDisk(filepath);
+			if (file != null) {
+				return file;
+			}
+			if (source.has(filepath)) {
+				return null;
+			}
+		}
+		return null;
+	}
+
 	private ByteBuffer readFromSources(final String path) {
 		try {
 			for (int i = this.mpqList.size() - 1; i >= 0; i--) {

@@ -190,6 +190,7 @@ final class ExitLogs {
 		details.device = Build.MANUFACTURER + " " + Build.MODEL;
 		details.androidVersion = Build.VERSION.RELEASE + " (API " + Build.VERSION.SDK_INT + ")";
 		details.graphics = CrashLogs.graphics(context);
+		details.memory = MemoryState.previous(context);
 		details.exit = text.toString().trim();
 		details.exitTrace = trace(exit);
 		final String name = CrashReport.fileName(details.time, ZoneId.systemDefault());

@@ -898,10 +898,15 @@ final class FrameNatives implements FrameEventSink {
 			}
 			return null;
 		});
-		// No focus or mouse capture in the game's frames: a frame takes input where it is clicked, nothing else
-		// holds it.
-		for (final String name : new String[] { "BlzFrameSetFocus", "BlzFrameCageMouse",
-				"BlzTextAreaFrameSetAutoScroll" }) {
+		add("BlzFrameSetFocus", (arguments, globalScope, triggerScope) -> {
+			final UIFrame frame = object(arguments, 0);
+			if ((frame != null) && (this.ui != null)) {
+				this.ui.setScriptFocus(frame, bool(arguments, 1));
+			}
+			return null;
+		});
+		// No mouse capture in the game's frames: a frame takes input where it is clicked, nothing else holds it.
+		for (final String name : new String[] { "BlzFrameCageMouse", "BlzTextAreaFrameSetAutoScroll" }) {
 			add(name, (arguments, globalScope, triggerScope) -> null);
 		}
 	}
@@ -958,6 +963,7 @@ final class FrameNatives implements FrameEventSink {
 		}
 		else if (frame instanceof EditBoxFrame) {
 			final EditBoxFrame box = (EditBoxFrame) frame;
+			box.setFilterAllowAny();
 			box.setOnChange(() -> send(frameId, EVENT_EDITBOX_TEXT_CHANGED, 0, box.getText()));
 			box.setOnEnter(() -> send(frameId, EVENT_EDITBOX_ENTER, 0, box.getText()));
 		}

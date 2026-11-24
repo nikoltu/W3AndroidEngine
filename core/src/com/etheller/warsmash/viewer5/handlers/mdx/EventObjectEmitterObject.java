@@ -170,7 +170,7 @@ public class EventObjectEmitterObject extends GenericObject implements EmitterOb
 		this.keyFrames = eventObject.getKeyFrames();
 
 		final int globalSequenceId = eventObject.getGlobalSequenceId();
-		if (globalSequenceId != -1) {
+		if ((globalSequenceId >= 0) && (globalSequenceId < model.getGlobalSequences().size())) {
 			this.globalSequence = model.getGlobalSequences().get(globalSequenceId);
 		}
 

@@ -29,8 +29,8 @@ android {
         applicationId = "com.etheller.warsmash.android"
         minSdk = 26
         targetSdk = 36
-        versionCode = 5000
-        versionName = "0.5.0"
+        versionCode = 5038
+        versionName = "0.5.38"
         // Kept apart from the main build on a device: its own package, name and icon.
         applicationIdSuffix = ".multithread"
         versionNameSuffix = "-mt"

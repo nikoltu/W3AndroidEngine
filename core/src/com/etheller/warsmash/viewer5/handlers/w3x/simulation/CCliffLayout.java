@@ -81,6 +81,7 @@ public final class CCliffLayout {
 		for (int i = (int) area.getX(); i < (int) (area.getX() + area.getWidth()); i++) {
 			for (int j = (int) area.getY(); j < (int) (area.getY() + area.getHeight()); j++) {
 				corners[i][j].romp = false;
+				corners[i][j].openCliff = false;
 			}
 		}
 
@@ -211,6 +212,11 @@ public final class CCliffLayout {
 						continue;
 					}
 
+					if (touchesRampSlope(corners, columns, rows, i, j)) {
+						bottomLeft.openCliff = true;
+						continue;
+					}
+
 					listener.cliff(i, j, base, bottomLeftCliffTex);
 				}
 			}
@@ -224,6 +230,13 @@ public final class CCliffLayout {
 				}
 			}
 		}
+	}
+
+	private static boolean touchesRampSlope(final CTerrainCorner[][] corners, final int columns, final int rows,
+			final int x, final int y) {
+		return (rampHeight(corners, columns, rows, x, y) != 0f) || (rampHeight(corners, columns, rows, x + 1, y) != 0f)
+				|| (rampHeight(corners, columns, rows, x, y + 1) != 0f)
+				|| (rampHeight(corners, columns, rows, x + 1, y + 1) != 0f);
 	}
 
 	/** Whether the cell is the slope of a ramp: all four corners flagged ramp, not split diagonally. */

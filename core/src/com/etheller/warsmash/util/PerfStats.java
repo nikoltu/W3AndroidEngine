@@ -88,6 +88,8 @@ public final class PerfStats {
 	/** The last frame the loading screen drew, and the longest time between two of them, while a game loads. */
 	private static long lastLoadingFrame;
 	private static long worstLoadingFrame;
+	private static int loadingFrames;
+	private static int slowLoadingFrames;
 	private static int frameLoads;
 	private static long frameLoadNanos;
 	private static long frameTextureNanos;
@@ -145,6 +147,8 @@ public final class PerfStats {
 			if (lastLoadingFrame != 0) {
 				worstLoadingFrame = Math.max(worstLoadingFrame, end - lastLoadingFrame);
 			}
+			System.err.println("Loading screen: " + loadingFrames + " frames, " + slowLoadingFrames
+					+ " of them over 100 ms, longest " + (worstLoadingFrame / 1_000_000) + " ms");
 			if (frameStart != 0) {
 				final long lastFrameEnd = lastRenderEnd != 0 ? lastRenderEnd : frameStart;
 				final long between = end - lastFrameEnd;
@@ -160,6 +164,8 @@ public final class PerfStats {
 		}
 		lastLoadingFrame = 0;
 		worstLoadingFrame = 0;
+		loadingFrames = 0;
+		slowLoadingFrames = 0;
 	}
 
 	/** A frame of the menu's loading screen, drawn while a game loads. */
@@ -168,8 +174,12 @@ public final class PerfStats {
 			final long now = System.nanoTime();
 			if (lastLoadingFrame != 0) {
 				worstLoadingFrame = Math.max(worstLoadingFrame, now - lastLoadingFrame);
+				if ((now - lastLoadingFrame) > 100_000_000L) {
+					slowLoadingFrames++;
+				}
 			}
 			lastLoadingFrame = now;
+			loadingFrames++;
 		}
 	}
 

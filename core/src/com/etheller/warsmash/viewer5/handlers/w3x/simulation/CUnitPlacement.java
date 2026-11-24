@@ -356,9 +356,11 @@ final class CUnitPlacement {
 			final float targetX = target.getX();
 			final float targetY = target.getY();
 			// Measured on 1.29: a unit attacks a destructable from up to range / 32 cells off its pathing (a footman
-			// 2 cells off a gate), one cell less than the building check allows; a zero range (a Wisp on a tree) keeps one cell.
+			// 2 cells off a gate), one cell less than the building check allows; a zero range (a Wisp on a tree) is
+			// met by the footprint touching the tree from any side, where the footprint reaches either way off the
+			// unit's own cell.
 			if ((pathingPixelMap != null) && canReachToPathing(self, range, targetDest.getPathingRotation(), pathingPixelMap,
-					targetX, targetY, Math.max(1f, (range * range) / (32f * 32f)))) {
+					targetX, targetY, Math.max(1f, (range * range) / (32f * 32f)), range <= 0f)) {
 				return true;
 			}
 		}

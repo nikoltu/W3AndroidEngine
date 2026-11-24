@@ -143,7 +143,7 @@ public abstract class Scene {
 
 			// Only allow instances that are actually ok to be added the scene. One made before its model was built
 			// may still be waiting for its turn to load after the model is ok; it is placed when it loads.
-			if (instance.model.ok && !instance.isWaiting()) {
+			if (instance.model.ok && (!instance.isWaiting() || instance.lazyLoad)) {
 				place(instance);
 				return true;
 			}

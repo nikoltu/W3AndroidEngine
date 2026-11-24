@@ -304,7 +304,7 @@ final class CustomGamePage extends LauncherViews {
 		final float rowW = slotsW - (2 * frame);
 		final float headerH = t ? 56 : 0;
 		if (t) {
-			final float[] columns = slotColumns(rowW);
+			final float[] columns = slotColumns(rowW, details);
 			final String[] headers = { glue("PLAYER"), glue("COLON_RACE"), glue("TEAM"),
 				glue("COLOR") };
 			for (int i = 0; i < headers.length; i++) {
@@ -338,13 +338,31 @@ final class CustomGamePage extends LauncherViews {
 	}
 
 	/** Where the slot columns start and how wide they are: player, race, team and colour; a force name needs the room. */
-	private float[] slotColumns(final float w) {
+	private float[] slotColumns(final float w, final GameCatalog.MapDetails details) {
 		final boolean t = this.activity.board.tablet;
 		final float gap = t ? 16 : 6;
-		final float player = w * (t ? 0.34f : 0.34f);
-		final float race = w * (t ? 0.22f : 0.26f);
-		final float team = w * (t ? 0.24f : 0.21f);
-		final float color = w - player - race - team - (3 * gap);
+		float player = w * (t ? 0.34f : 0.34f);
+		float race = w * (t ? 0.22f : 0.26f);
+		final float baseTeam = w * (t ? 0.24f : 0.21f);
+		float team = baseTeam;
+		int longest = 0;
+		for (final String name : teamNames(details)) {
+			longest = Math.max(longest, name.length());
+		}
+		// The team's box keeps its name whole at a readable size; the other two columns give up the room it needs.
+		final float menuH = t ? 130 : 88;
+		final float rim = this.activity.art.reforged() ? Math.max(8, menuH * 0.3f) : Math.max(4, menuH * 0.22f);
+		final float room = (rim + 4) + Math.max(rim + 4, Math.min(menuH, 72) * 0.8f);
+		final float needed = room + (longest * 0.42f * (t ? 38 : 22));
+		team = Math.min(Math.max(team, needed), w * 0.36f);
+		player -= (team - baseTeam) / 2;
+		race -= (team - baseTeam) / 2;
+		// The colour is a square button as high as the menus; what that frees goes to the name, race and team.
+		final float color = menuH;
+		final float spare = w - player - race - team - (3 * gap) - color;
+		player += spare * 0.45f;
+		race += spare * 0.3f;
+		team += spare * 0.25f;
 		return new float[] { 0, player, player + gap, race, player + race + (2 * gap), team,
 			player + race + team + (3 * gap), color };
 	}
@@ -356,7 +374,7 @@ final class CustomGamePage extends LauncherViews {
 		final float rowH = slotRowH();
 		final float menuH = t ? 130 : 88;
 		final float textSize = t ? 38 : 22;
-		final float[] columns = slotColumns(w);
+		final float[] columns = slotColumns(w, details);
 		final FrameLayout row = new FrameLayout(this.activity);
 		final float menuY = t ? 0 : (rowH - menuH) / 2;
 		final boolean editable = !CustomGame.fixedSlots(details);
@@ -367,9 +385,26 @@ final class CustomGamePage extends LauncherViews {
 					columns[0], menuY, columns[1], menuH);
 		}
 		else {
-			place(row, dropdown(glueList(SLOT_TYPES, 1), this.lobby.slotTypes[index],
-					CustomGame.typeEditable(details, index), menuH, textSize,
-					choice -> this.lobby.slotTypes[index] = choice), columns[0], menuY, columns[1], menuH);
+			// A user slot also offers the player's own name: choosing it moves the player to this slot (and its team).
+			final boolean take = this.lobby.canTake(details, index);
+			final String[] types = glueList(SLOT_TYPES, 1);
+			final String[] items = take ? java.util.Arrays.copyOf(types, types.length + 1) : types;
+			if (take) {
+				items[types.length] = GameCatalog.currentProfile(this.activity);
+			}
+			place(row, dropdown(items, this.lobby.slotTypes[index], CustomGame.typeEditable(details, index), menuH,
+					textSize, choice -> {
+						if (choice >= types.length) {
+							this.lobby.take(details, index);
+							this.customRight.removeAllViews();
+							fillMapDetails(details);
+						}
+						else if (this.lobby.setType(details, index, choice)) {
+							// The slot's colour was another slot's: it shows the free one it got.
+							this.customRight.removeAllViews();
+							fillMapDetails(details);
+						}
+					}), columns[0], menuY, columns[1], menuH);
 		}
 		place(row, dropdown(glueList(RACES, 0), this.lobby.slotRaces[index],
 				CustomGame.raceEditable(details, index), menuH, textSize,
@@ -377,12 +412,12 @@ final class CustomGamePage extends LauncherViews {
 		final String[] teams = teamNames(details);
 		final int team = this.lobby.slotTeams[index] >= 0 ? this.lobby.slotTeams[index]
 				: CustomGame.defaultTeam(details, index);
-		place(row, dropdown(teams, Math.min(team, teams.length - 1), editable && !details.fixedSettings, menuH,
+		place(row, dropdown(teams, Math.min(team, teams.length - 1), editable, menuH,
 				textSize, choice -> this.lobby.slotTeams[index] = choice), columns[4], menuY, columns[5], menuH);
 		final String[] colors = glueList(COLOR_NAMES, 0);
 		final int color = this.lobby.colorOf(details, index);
 		place(row, dropdown(colors, color, editable, menuH, textSize, choice -> this.lobby.slotColors[index] = choice,
-				PLAYER_COLORS), columns[6], menuY, columns[7], menuH);
+				PLAYER_COLORS, () -> this.lobby.takenColors(details, index)), columns[6], menuY, columns[7], menuH);
 		return row;
 	}
 

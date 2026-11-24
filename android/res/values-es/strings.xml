@@ -422,6 +422,11 @@
     <string name="game_cannot_load">No se puede cargar esta partida</string>
     <string name="game_delete_save">¿Eliminar la partida guardada \'%1$s\'?</string>
     <string name="game_import_map">Importar mapa…</string>
+    <string name="options_delete_imported">Mapas importados</string>
+    <string name="options_delete_imported_button">Eliminar todos</string>
+    <string name="game_delete_imported_none">No se importó ningún mapa.</string>
+    <string name="game_delete_imported_question">¿Eliminar los %1$d mapas importados? No se puede deshacer.</string>
+    <string name="game_delete_imported_done">Se eliminaron %1$d mapas importados.</string>
     <string name="game_import_title">Importar mapa</string>
     <string name="game_import_done">%1$s se añadió a los mapas personalizados.</string>
     <string name="game_import_not_map">%1$s no es un archivo de mapa. Elige un archivo que termine en .w3x o .w3m.</string>

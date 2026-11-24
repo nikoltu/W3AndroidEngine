@@ -746,7 +746,7 @@ public class Terrain implements GroundShading {
 				getTextureVariations(i, j, this.groundTextureList, ((j * (this.columns - 1)) + i) * 4);
 
 				if (this.corners[i][j].cliff || this.corners[i][j].romp) {
-					if (isCornerRampEntrance(i, j)) {
+					if (isCornerRampEntrance(i, j) || this.corners[i][j].openCliff) {
 						continue;
 					}
 					this.groundTextureList[(((j * (this.columns - 1)) + i) * 4) + 3] |= 0b1000000000000000;

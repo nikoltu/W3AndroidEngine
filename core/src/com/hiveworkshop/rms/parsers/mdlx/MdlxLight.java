@@ -21,7 +21,8 @@ public class MdlxLight extends MdlxGenericObject {
 		private static final Type[] VALUES = values();
 
 		public static Type fromId(final int id) {
-			return VALUES[id];
+			// Some editors write garbage here; treat anything unknown as the default omni light.
+			return id >= 0 && id < VALUES.length ? VALUES[id] : OMNIDIRECTIONAL;
 		}
 
 		@Override

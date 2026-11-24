@@ -63,7 +63,8 @@ public class Layer extends AnimatedObject {
 			this.blendDst = result[1];
 		}
 
-		if (textureAnimationId != -1) {
+		// An id past the model's texture animations means none, as a missing one does.
+		if ((textureAnimationId >= 0) && (textureAnimationId < model.getTextureAnimations().size())) {
 			final TextureAnimation textureAnimation = model.getTextureAnimations().get(textureAnimationId);
 
 			if (textureAnimation != null) {

@@ -4,7 +4,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.Map;
 
 import com.badlogic.gdx.math.Rectangle;
@@ -31,7 +33,12 @@ public class PathingGrid {
 	private final short[] dynamicPathingOverlay; // for buildings and trees
 	private final int[] pathingGridSizes;
 	private final float[] centerOffset;
-	private final List<RemovablePathingMapInstance> dynamicPathingInstances;
+	private final Set<RemovablePathingMapInstance> dynamicPathingInstances;
+	/**
+	 * Set when instances were taken out: the overlay is laid down again from the remaining ones the next time it is read,
+	 * so a script that removes tens of thousands of trees in one go lays it down once.
+	 */
+	private boolean overlayStale;
 	private int overlayVersion;
 	/**
 	 * The pathing cells each recent change of the overlay touched, newest last in a ring, each with the version the
@@ -56,7 +63,7 @@ public class PathingGrid {
 		this.pathingGrid = terrainPathing.getPathing();
 		this.pathingGridSizes = terrainPathing.getSize();
 		this.dynamicPathingOverlay = new short[this.pathingGrid.length];
-		this.dynamicPathingInstances = new ArrayList<>();
+		this.dynamicPathingInstances = new LinkedHashSet<>();
 	}
 
 	// this blit function is basically copied from HiveWE, maybe remember to mention
@@ -111,6 +118,26 @@ public class PathingGrid {
 				}
 				this.dynamicPathingOverlay[(yy * this.pathingGridSizes[0]) + xx] |= data;
 			}
+		}
+	}
+
+	private void refreshOverlay() {
+		if (!this.overlayStale) {
+			return;
+		}
+		this.overlayStale = false;
+		Arrays.fill(this.dynamicPathingOverlay, (short) 0);
+		final int version = this.overlayVersion;
+		// The others are laid down again as they were; the cells that differ were logged when the instance was taken out.
+		this.changesSuppressed = true;
+		try {
+			for (final RemovablePathingMapInstance instance : this.dynamicPathingInstances) {
+				instance.blit();
+			}
+		}
+		finally {
+			this.changesSuppressed = false;
+			this.overlayVersion = version;
 		}
 	}
 
@@ -359,6 +386,7 @@ public class PathingGrid {
 		if (!isCellInside(cellX, cellY)) {
 			return OUTSIDE_PATHING;
 		}
+		refreshOverlay();
 		final int index = (cellY * this.pathingGridSizes[0]) + cellX;
 		return (short) (this.pathingGrid[index] | this.dynamicPathingOverlay[index]);
 	}
@@ -533,6 +561,7 @@ public class PathingGrid {
 		}
 		// The footprint is inside the map, as checked above.
 		final short[] terrain = this.pathingGrid;
+		refreshOverlay();
 		final short[] overlay = this.dynamicPathingOverlay;
 		final int width = this.pathingGridSizes[0];
 		for (int cellY = firstY; cellY < (firstY + cells); cellY++) {
@@ -637,6 +666,7 @@ public class PathingGrid {
 		if (!isCellInside(cellX, cellY)) {
 			return true;
 		}
+		refreshOverlay();
 		final int index = (cellY * this.pathingGridSizes[0]) + cellX;
 		return PathingFlags.isPathingFlag(this.dynamicPathingOverlay[index], PathingFlags.BLOCKVISION);
 	}
@@ -756,18 +786,8 @@ public class PathingGrid {
 			}
 			this.added = false;
 			PathingGrid.this.dynamicPathingInstances.remove(this);
-			Arrays.fill(PathingGrid.this.dynamicPathingOverlay, (short) 0);
+			PathingGrid.this.overlayStale = true;
 			PathingGrid.this.overlayVersion++;
-			// The others are laid down again as they were; only the cells of this one can differ afterwards.
-			PathingGrid.this.changesSuppressed = true;
-			try {
-				for (final RemovablePathingMapInstance instance : PathingGrid.this.dynamicPathingInstances) {
-					instance.blit();
-				}
-			}
-			finally {
-				PathingGrid.this.changesSuppressed = false;
-			}
 			final boolean turned = (((this.rotationInput + 450) % 360) % 180) != 0;
 			PathingGrid.this.logTextureChange(this.positionX, this.positionY,
 					turned ? this.pathingTextureTga.getHeight() : this.pathingTextureTga.getWidth(),

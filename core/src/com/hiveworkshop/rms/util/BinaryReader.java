@@ -31,11 +31,17 @@ public class BinaryReader {
 
 	public String read(final int count) {
 		final StringBuilder value = new StringBuilder();
+		boolean terminated = false;
 
 		for (int i = 0; i < count; i++) {
 			final byte b = this.buffer.get();
 
-			if (b != 0) {
+			// Like a C string, as the game reads these fixed size fields: models exported with leftover bytes behind
+			// the terminator would otherwise get them appended to the name.
+			if (b == 0) {
+				terminated = true;
+			}
+			else if (!terminated) {
 				value.append((char) (b & 0xFF));
 			}
 		}

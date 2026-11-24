@@ -90,4 +90,21 @@ class LanLobbyViewTest {
 		s.slots.get(2).team = 9;
 		assertEquals(3, LanLobbyView.of(s, 0, null, -1).rows.get(2).team);
 	}
+
+	@Test
+	void theColorsOfTheOtherPlayersAndComputersAreTaken() {
+		final LanMessages.LobbyState s = lobby(4);
+		human(s, 0, 0, "Host");
+		human(s, 1, 5, "Guest");
+		s.slots.get(2).kind = LanProtocol.SLOT_COMPUTER;
+		s.slots.get(0).color = 3;
+		s.slots.get(1).color = 7;
+		s.slots.get(2).color = 9;
+		s.slots.get(3).color = 11;
+		final boolean[] taken = LanLobbyView.of(s, 0, null, -1).takenColors(0);
+		assertFalse(taken[3]);
+		assertTrue(taken[7]);
+		assertTrue(taken[9]);
+		assertFalse(taken[11]);
+	}
 }

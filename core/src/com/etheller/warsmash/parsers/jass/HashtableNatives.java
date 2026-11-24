@@ -249,7 +249,7 @@ final class HashtableNatives extends CommonNatives {
 				(arguments, globalScope, triggerScope) -> {
 					final CHashtable table = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
 					if (table != null) {
-						table.flushChild(arguments.get(1).visit(IntegerJassValueVisitor.getInstance()));
+						table.flushChild(intArgument(arguments, 1));
 					}
 					return null;
 				});
@@ -261,6 +261,12 @@ final class HashtableNatives extends CommonNatives {
 					}
 					return null;
 				});
+	}
+
+	private static int intArgument(final List<JassValue> arguments, final int index) {
+		final JassValue value = arguments.get(index);
+		return value instanceof IntegerJassValue ? ((IntegerJassValue) value).getValue()
+				: value.visit(IntegerJassValueVisitor.getInstance());
 	}
 
 	private static boolean isNullValue(final JassValue value) {
@@ -298,8 +304,8 @@ final class HashtableNatives extends CommonNatives {
 		public JassValue call(final List<JassValue> arguments, final GlobalScope globalScope,
 				final TriggerExecutionScope triggerScope) {
 			final CHashtable table = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
-			final Integer parentKey = arguments.get(1).visit(IntegerJassValueVisitor.getInstance());
-			final Integer childKey = arguments.get(2).visit(IntegerJassValueVisitor.getInstance());
+			final int parentKey = intArgument(arguments, 1);
+			final int childKey = intArgument(arguments, 2);
 			if (table == null) {
 				return BooleanJassValue.FALSE;
 			}
@@ -329,16 +335,15 @@ final class HashtableNatives extends CommonNatives {
 		public JassValue call(final List<JassValue> arguments, final GlobalScope globalScope,
 				final TriggerExecutionScope triggerScope) {
 			final CHashtable table = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
-			final Integer parentKey = arguments.get(1).visit(IntegerJassValueVisitor.getInstance());
-			final Integer childKey = arguments.get(2).visit(IntegerJassValueVisitor.getInstance());
+			final int parentKey = intArgument(arguments, 1);
+			final int childKey = intArgument(arguments, 2);
 			if (table == null) {
 				return this.nullValue;
 			}
-			final Object loadedValue = table.load(this.slot, parentKey, childKey);
-			if (loadedValue == null) {
+			final JassValue loadedJassValue = table.load(this.slot, parentKey, childKey);
+			if (loadedJassValue == null) {
 				return this.nullValue;
 			}
-			final JassValue loadedJassValue = (JassValue) loadedValue;
 			if ((this.slot == CHashtable.HANDLE) && !this.type
 					.isAssignableFrom(loadedJassValue.visit(JassTypeGettingValueVisitor.getInstance()))) {
 				return this.nullValue;
@@ -361,9 +366,9 @@ final class HashtableNatives extends CommonNatives {
 			if (table == null) {
 				return BooleanJassValue.FALSE;
 			}
-			final Integer parentKey = arguments.get(1).visit(IntegerJassValueVisitor.getInstance());
-			final Integer childKey = arguments.get(2).visit(IntegerJassValueVisitor.getInstance());
-			return BooleanJassValue.of(table.load(this.slot, parentKey, childKey) != null);
+			final int parentKey = intArgument(arguments, 1);
+			final int childKey = intArgument(arguments, 2);
+			return BooleanJassValue.of(table.has(this.slot, parentKey, childKey));
 		}
 	}
 
@@ -379,8 +384,7 @@ final class HashtableNatives extends CommonNatives {
 				final TriggerExecutionScope triggerScope) {
 			final CHashtable table = nullable(arguments, 0, ObjectJassValueVisitor.getInstance());
 			if (table != null) {
-				table.remove(this.slot, arguments.get(1).visit(IntegerJassValueVisitor.getInstance()),
-						arguments.get(2).visit(IntegerJassValueVisitor.getInstance()));
+				table.remove(this.slot, intArgument(arguments, 1), intArgument(arguments, 2));
 			}
 			return null;
 		}

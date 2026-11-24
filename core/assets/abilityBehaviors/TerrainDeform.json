@@ -316,7 +316,7 @@
 						},
 						"depth": {
 							"type": "rawFloat",
-							"value": 140
+							"value": 70
 						},
 						"duration": {
 							"type": "getAbilityDuration"
@@ -1190,7 +1190,7 @@
 						},
 						"value2": {
 							"type": "rawFloat",
-							"value": 2
+							"value": 0.5
 						}
 					}
 				},
@@ -1799,7 +1799,7 @@
 				},
 				"depth": {
 					"type": "rawFloat",
-					"value": 100
+					"value": 50
 				},
 				"distance": {
 					"type": "getAbilityDataAsFloat",
@@ -2178,7 +2178,7 @@
 				},
 				"depth": {
 					"type": "rawFloat",
-					"value": 100
+					"value": 25
 				},
 				"rippleCount": {
 					"type": "rawInteger",
@@ -2186,7 +2186,7 @@
 				},
 				"period": {
 					"type": "rawFloat",
-					"value": 300
+					"value": 150
 				},
 				"spaceWaves": {
 					"type": "rawInteger",
@@ -2194,11 +2194,15 @@
 				},
 				"timeWaves": {
 					"type": "rawInteger",
-					"value": 2
+					"value": 1
 				},
 				"onlyNegative": {
 					"type": "rawBoolean",
 					"value": "true"
+				},
+				"startDelay": {
+					"type": "rawInteger",
+					"value": 150
 				}
 			},{
 				"type": "createTemporarySpellEffectAtLocation",

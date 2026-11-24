@@ -467,10 +467,21 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 			return null;
 		}
 		final UIFrame inflatedFrame = inflate(frameDefinition, owner, null, frameDefinition.has("DecorateFileNames"));
-		if (owner == this) {
-			add(inflatedFrame);
-		}
+		attachToOwner(inflatedFrame, owner);
 		return inflatedFrame;
+	}
+
+	/** A frame the script makes under an owner is drawn with it; an owner that holds no children leaves it at the root. */
+	private void attachToOwner(final UIFrame frame, final UIFrame owner) {
+		if (frame == null) {
+			return;
+		}
+		if (owner instanceof AbstractUIFrame) {
+			((AbstractUIFrame) owner).add(frame);
+		}
+		else {
+			add(frame);
+		}
 	}
 
 	public UIFrame createSimpleFrame(final String name, final UIFrame owner, final int createContext) {
@@ -628,6 +639,8 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 								&& parentDefinitionIfAvailable.has("DecorateFileNames"));
 				final SimpleStatusBarFrame simpleStatusBarFrame = new SimpleStatusBarFrame(frameDefinition.getName(),
 						parent, decorateFileNames, false, 0.0f);
+				// Its parts pin to the bar by name, so the bar is known before they are made.
+				this.nameToFrame.put(frameDefinition.getName(), simpleStatusBarFrame);
 				for (final FrameDefinition childDefinition : frameDefinition.getInnerFrames()) {
 					simpleStatusBarFrame.add(inflate(childDefinition, simpleStatusBarFrame, frameDefinition,
 							inDecorateFileNames || childDefinition.has("DecorateFileNames")));
@@ -1323,7 +1336,8 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 				inflatedFrame = glueButtonFrame;
 			}
 			else if ("EDITBOX".equals(frameDefinition.getFrameType())) {
-				final float editBorderSize = convertX(viewport2, frameDefinition.getFloat("EditBorderSize"));
+				final Float editBorder = frameDefinition.getFloat("EditBorderSize");
+				final float editBorderSize = editBorder == null ? 0 : convertX(viewport2, editBorder);
 				final Vector4Definition editCursorColorDefinition = frameDefinition.getVector4("EditCursorColor");
 				Color editCursorColor;
 				if (editCursorColorDefinition == null) {
@@ -1357,10 +1371,26 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 						setText(editTextFrame, "");
 					}
 				}
+				if (!editBoxFrame.hasEditTextFrame()) {
+					// A text box made from the game's own template has no text child of its own: the game
+					// draws the typed text itself, in the font of its other text boxes.
+					final FrameDefinition textTemplate = this.templates.getFrame("BattleNetEditBoxTextTemplate");
+					if (textTemplate != null) {
+						final FrameDefinition textDefinition = new FrameDefinition(FrameClass.Frame, "TEXT",
+								frameDefinition.getName() + "Text");
+						textDefinition.inheritFrom(textTemplate, false);
+						final UIFrame inflatedChild = inflate(textDefinition, editBoxFrame, frameDefinition,
+								inDecorateFileNames || textTemplate.has("DecorateFileNames"));
+						inflatedChild.setSetAllPoints(true, editBorderSize);
+						editBoxFrame.setEditTextFrame((StringFrame) inflatedChild);
+						setText((StringFrame) inflatedChild, "");
+					}
+				}
 				inflatedFrame = editBoxFrame;
 			}
 			else if ("SLASHCHATBOX".equals(frameDefinition.getFrameType())) {
-				final float editBorderSize = convertX(viewport2, frameDefinition.getFloat("EditBorderSize"));
+				final Float editBorder = frameDefinition.getFloat("EditBorderSize");
+				final float editBorderSize = editBorder == null ? 0 : convertX(viewport2, editBorder);
 				final Vector4Definition editCursorColorDefinition = frameDefinition.getVector4("EditCursorColor");
 				Color editCursorColor;
 				if (editCursorColorDefinition == null) {
@@ -1621,7 +1651,19 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 				else if ("BLEND".equals(highlightAlphaMode)) {
 					textureFrame.setFilterMode(FilterMode.BLEND);
 				}
-				return textureFrame;
+				if (frameDefinition.getInnerFrames().isEmpty()) {
+					return textureFrame;
+				}
+				// Frames inside a highlight (a script swaps the hover picture of a button through one) are drawn with it.
+				final SimpleFrame highlightFrame = new SimpleFrame(frameDefinition.getName(), parent);
+				this.nameToFrame.put(frameDefinition.getName(), highlightFrame);
+				textureFrame.setSetAllPoints(true);
+				highlightFrame.add(textureFrame);
+				for (final FrameDefinition childDefinition : frameDefinition.getInnerFrames()) {
+					highlightFrame.add(inflate(childDefinition, highlightFrame, frameDefinition,
+							inDecorateFileNames || childDefinition.has("DecorateFileNames")));
+				}
+				return highlightFrame;
 			}
 			else if ("BACKDROP".equals(frameDefinition.getFrameType())) {
 				final boolean tileBackground = frameDefinition.has("BackdropTileBackground");
@@ -1817,15 +1859,17 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 			final String inherits, final int createContext) {
 		// TODO idk what inherits is doing yet, and I didn't implement createContext yet
 		// even though it looked like just mapping/indexing on int
-		final FrameDefinition baseTemplateDef = this.templates.getFrame(name);
+		// The template to copy is the one the script names in "inherits"; a frame without one takes the fields of a
+		// template of its own name.
+		final boolean withChildren = "WITHCHILDREN".equals(inherits);
+		final boolean namesTemplate = (inherits != null) && !inherits.isEmpty() && !withChildren;
+		final FrameDefinition baseTemplateDef = this.templates.getFrame(namesTemplate ? inherits : name);
 		final FrameDefinition frameDefinition = new FrameDefinition(FrameClass.Frame, typeName, name);
 		if (baseTemplateDef != null) {
-			frameDefinition.inheritFrom(baseTemplateDef, "WITHCHILDREN".equals(inherits));
+			frameDefinition.inheritFrom(baseTemplateDef, withChildren || namesTemplate);
 		}
 		final UIFrame inflatedFrame = inflate(frameDefinition, owner, null, frameDefinition.has("DecorateFileNames"));
-		if (this == owner) {
-			add(inflatedFrame);
-		}
+		attachToOwner(inflatedFrame, owner);
 		return inflatedFrame;
 	}
 

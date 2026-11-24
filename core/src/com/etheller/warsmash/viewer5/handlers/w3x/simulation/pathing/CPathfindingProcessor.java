@@ -184,7 +184,8 @@ public class CPathfindingProcessor {
 		private SearchGrid searchGrid(final PathingGrid pathingGrid, final boolean corner) {
 			SearchGrid grid = corner ? this.corners : this.cells;
 			if (grid == null) {
-				grid = new SearchGrid(pathingGrid, corner);
+				final SearchGrid other = corner ? this.cells : this.corners;
+				grid = new SearchGrid(pathingGrid, corner, other);
 				if (corner) {
 					this.corners = grid;
 				}
@@ -283,15 +284,42 @@ public class CPathfindingProcessor {
 				return;
 			}
 			final boolean corner = isCollisionSizeBetterSuitedForCorners(collisionSize);
-			final SearchGrid grid = searchGrid(pathingGrid, corner);
-			if (!this.searchWarmed && (this.owner == null)) {
+			if (!this.searchWarmed && (this.owner == null) && searchArraysFit(pathingGrid)) {
 				this.searchWarmed = true;
+				final SearchGrid grid = searchGrid(pathingGrid, corner);
 				new CPathfindingProcessor(pathingGrid, worldCollision, this).warmSearch(grid, movementType,
 						collisionSize, corner);
 			}
 			if (!this.partsDeferred) {
 				prewarmParts(pathingGrid, movementType, collisionSize);
 			}
+		}
+
+		/** Maps with more points than this make arrays big enough to ask the heap before the game needs them. */
+		private static final int HEAP_CHECK_POINTS = 400_000;
+		private static final int SEARCH_BYTES_PER_POINT = 32;
+		private static final int REACH_BYTES_PER_POINT = 5;
+
+		/**
+		 * Whether the heap has room for what a prewarm makes ahead of need, with an eighth of it left over. What a
+		 * prewarm skips is made by the first search that wants it, when the loading's own memory is gone, so the paths
+		 * found are the same; only that search takes longer. Small maps always have the room.
+		 */
+		private static boolean heapFits(final long points, final long bytesPerPoint) {
+			if (points < HEAP_CHECK_POINTS) {
+				return true;
+			}
+			final Runtime runtime = Runtime.getRuntime();
+			final long max = runtime.maxMemory();
+			final long free = max - (runtime.totalMemory() - runtime.freeMemory());
+			return free > ((points * bytesPerPoint) + (max / 8));
+		}
+
+		private boolean searchArraysFit(final PathingGrid pathingGrid) {
+			if ((this.cells != null) || (this.corners != null)) {
+				return true;
+			}
+			return heapFits((long) (pathingGrid.getWidth() + 1) * (pathingGrid.getHeight() + 1), SEARCH_BYTES_PER_POINT);
 		}
 
 		/**
@@ -310,8 +338,12 @@ public class CPathfindingProcessor {
 				return;
 			}
 			final boolean corner = isCollisionSizeBetterSuitedForCorners(collisionSize);
+			final long points = (long) (pathingGrid.getWidth() + 1) * (pathingGrid.getHeight() + 1);
+			if (!heapFits(points, REACH_BYTES_PER_POINT)) {
+				return;
+			}
 			findAllParts(pathingGrid, reachability(pathingGrid, movementType, collisionSize, corner));
-			if (corner && (reachabilities() < (REACHABILITY_CACHE - 2))) {
+			if (corner && (reachabilities() < (REACHABILITY_CACHE - 2)) && heapFits(points, REACH_BYTES_PER_POINT)) {
 				// canReach asks about the cell points of every size; room is left for what the first orders ask
 				findAllParts(pathingGrid, reachability(pathingGrid, movementType, collisionSize, false));
 			}
@@ -338,6 +370,7 @@ public class CPathfindingProcessor {
 		private Reachability reachability(final PathingGrid pathingGrid, final MovementType movementType,
 				final float collisionSize, final boolean corners) {
 			final MovementType ground = Reachability.ground(movementType);
+			final int footprintCells = PathingGrid.getFootprintCells(collisionSize);
 			int slot = 0;
 			for (int i = 0; i < this.reachability.length; i++) {
 				final Reachability entry = this.reachability[i];
@@ -345,7 +378,7 @@ public class CPathfindingProcessor {
 					slot = i;
 					break;
 				}
-				if ((entry.movementType == ground) && (entry.collisionSize == collisionSize)
+				if ((entry.movementType == ground) && (entry.footprintCells == footprintCells)
 						&& (entry.corners == corners)) {
 					entry.lastUse = this.lastJobId;
 					if (PathingProfile.ENABLED) {
@@ -1423,7 +1456,12 @@ public class CPathfindingProcessor {
 			return rows;
 		}
 
-		private SearchGrid(final PathingGrid pathingGrid, final boolean corner) {
+		/**
+		 * The arrays are sized for the larger kind of point and shared by both kinds: only one search holds the graph
+		 * at a time, and a point is reset by the first touch of a search, so a search of the other kind leaves nothing
+		 * a later one reads. A map of a million points then holds one set of arrays, not two.
+		 */
+		private SearchGrid(final PathingGrid pathingGrid, final boolean corner, final SearchGrid shared) {
 			this.width = pathingGrid.getWidth() + (corner ? 1 : 0);
 			this.height = pathingGrid.getHeight() + (corner ? 1 : 0);
 			this.xs = new float[this.width];
@@ -1434,9 +1472,15 @@ public class CPathfindingProcessor {
 			for (int y = 0; y < this.height; y++) {
 				this.ys[y] = corner ? pathingGrid.getWorldYFromCorner(y) : pathingGrid.getWorldY(y);
 			}
-			final int count = this.width * this.height;
-			this.scores = new double[count * 2];
-			this.state = new int[count * 4];
+			if (shared != null) {
+				this.scores = shared.scores;
+				this.state = shared.state;
+			}
+			else {
+				final int count = (pathingGrid.getWidth() + 1) * (pathingGrid.getHeight() + 1);
+				this.scores = new double[count * 2];
+				this.state = new int[count * 4];
+			}
 			final GridMapping mapping = corner ? GridMapping.CORNERS : GridMapping.CELLS;
 			boolean regular = true;
 			this.insideX = new boolean[this.width + 2];

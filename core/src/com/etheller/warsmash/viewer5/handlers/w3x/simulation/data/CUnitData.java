@@ -8,6 +8,7 @@ import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -20,6 +21,7 @@ import com.etheller.warsmash.util.Log;
 import com.etheller.warsmash.util.SafeParse;
 import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.util.WarsmashConstants;
+import com.etheller.warsmash.viewer5.handlers.w3x.save.SavedTransient;
 import com.etheller.warsmash.viewer5.handlers.w3x.AnimationTokens.SecondaryTag;
 import com.etheller.warsmash.viewer5.handlers.w3x.SequenceUtils;
 import com.etheller.warsmash.viewer5.handlers.w3x.environment.PathingGrid;
@@ -261,6 +263,8 @@ public class CUnitData {
 	private final Map<War3ID, List<War3ID>> unitIdToTechEquivalents = new HashMap<>();
 	private Map<War3ID, List<War3ID>> unitIdToUpgradedFrom;
 	private int lightweightScannedKeyCount = -1;
+	@SavedTransient
+	private transient Iterator<String> lightweightScan;
 	private final CAbilityData abilityData;
 	private final CUpgradeData upgradeData;
 	private CItemData itemData;
@@ -1288,6 +1292,34 @@ public class CUnitData {
 			}
 		}
 		return choices.isEmpty() ? null : choices.get(random.nextInt(choices.size()));
+	}
+
+	/**
+	 * {@link #getAllUnitTypesLightweight()} for the types it has not made yet, a slice of time at a time, so that the
+	 * loading screen keeps being drawn; the types are made in the same order.
+	 *
+	 * @return whether every type is made
+	 */
+	public boolean scanUnitTypesLightweightFor(final long nanos) {
+		final Set<String> keys = this.unitData.keySet();
+		if ((this.lightweightScannedKeyCount == keys.size()) || (this.unitIdToUnitTypeLightweight.size() >= keys.size())) {
+			this.lightweightScan = null;
+			this.lightweightScannedKeyCount = keys.size();
+			return true;
+		}
+		if (this.lightweightScan == null) {
+			this.lightweightScan = keys.iterator();
+		}
+		final long end = System.nanoTime() + nanos;
+		while (this.lightweightScan.hasNext()) {
+			getUnitTypeLightweight(War3ID.fromString(this.lightweightScan.next()));
+			if (System.nanoTime() >= end) {
+				return false;
+			}
+		}
+		this.lightweightScan = null;
+		this.lightweightScannedKeyCount = keys.size();
+		return true;
 	}
 
 	public Collection<CUnitType> getAllUnitTypesLightweight() {

@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.Set;
 import java.util.List;
+import java.util.function.Supplier;
 
 import com.badlogic.gdx.math.Rectangle;
 import com.etheller.warsmash.util.ArgbImage;
@@ -33,7 +34,11 @@ public class CDestructable extends CWidget {
 	private CUnitAnimationListener peerAnimationListener;
 	@SavedTransient
 	private boolean simulationListenerSet;
+	@SavedTransient
+	private Supplier<? extends CUnitAnimationListener> unitAnimationListenerSource;
 	private boolean removedFromGame;
+	@SavedTransient
+	private boolean removalQueued;
 	private boolean invulnerable;
 	private boolean blighted;
 	private Rectangle registeredEnumRectangle;
@@ -237,7 +242,15 @@ public class CDestructable extends CWidget {
 		return this.peerAnimationListener;
 	}
 
+	/** For a destructable whose listener is only made when it is first needed. */
+	public void setUnitAnimationListenerSource(final Supplier<? extends CUnitAnimationListener> source) {
+		this.unitAnimationListenerSource = source;
+	}
+
 	public CUnitAnimationListener getUnitAnimationListener() {
+		if ((this.unitAnimationListener == null) && (this.unitAnimationListenerSource != null)) {
+			return this.unitAnimationListenerSource.get();
+		}
 		return this.unitAnimationListener;
 	}
 
@@ -326,6 +339,15 @@ public class CDestructable extends CWidget {
 			this.pathingInstanceDeath.remove();
 		}
 		this.removedFromGame = true;
+	}
+
+	/** Whether the game was asked to remove it and does so at the end of the step it is in. */
+	public boolean isRemovalQueued() {
+		return this.removalQueued;
+	}
+
+	void queueRemoval() {
+		this.removalQueued = true;
 	}
 
 	/** Measured (1.29): a removed destructable's handle reads position 0 and type 0. */

@@ -333,8 +333,43 @@ public abstract class ModelInstance extends Node {
 		this.waiting = waiting;
 	}
 
+	/** Whether this instance of a built model is loaded by the scene when it is first in view, see {@link Model#addLazyInstance()}. */
+	boolean lazyLoad;
+
+	/** Whether it is made and placed but not loaded yet. */
+	public boolean isLazyLoad() {
+		return this.lazyLoad;
+	}
+
+	void setLazyLoad() {
+		this.waiting = true;
+		this.lazyLoad = true;
+	}
+
+	/**
+	 * Loads an instance made with {@link Model#addLazyInstance()} now; the scene does it when the instance is first in
+	 * view, and whoever needs the nodes of one that was never seen does it first.
+	 */
+	public boolean loadNow() {
+		if (this.lazyLoad && this.model.ok) {
+			this.lazyLoad = false;
+			this.waiting = false;
+			load();
+			modelLoaded();
+			return true;
+		}
+		return false;
+	}
+
 	/** Loads this instance, made while its model's file was still being read, now that the model is built. */
 	void loadWaiting() {
+		if (this.lazyLoad) {
+			// it loads when the scene first has it in view
+			if (this.scene != null) {
+				this.scene.instanceLoaded(this);
+			}
+			return;
+		}
 		this.waiting = false;
 		load();
 		if (this.scene != null) {
