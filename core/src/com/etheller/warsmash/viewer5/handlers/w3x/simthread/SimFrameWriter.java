@@ -1,5 +1,6 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simthread;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.function.BiConsumer;
@@ -27,6 +28,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.mine.CAbi
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.timers.CTimer;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CAllianceType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayer;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.CPlayerSlotState;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.vision.CPlayerFogOfWar;
 import com.etheller.warsmash.viewer5.handlers.w3x.ui.AllyColorFilter;
 
@@ -51,10 +53,22 @@ public final class SimFrameWriter implements CSimulation.StepEndListener {
 	/** Player the debug writer takes as the local one; 0 without it. */
 	public static final String PLAYER_PROPERTY = "warsmash.simthread.player";
 
+	/** {@link #setVision}: the sight of every replay player together. */
+	public static final int VISION_ALL_PLAYERS = -1;
+	/** {@link #setVision}: no replay vision, the picture shows the local player's sight. */
+	public static final int VISION_NONE = -2;
+
 	private static final int REPORT_STEPS = 1000;
 
 	private final SimFrameRing ring;
 	private int localPlayerIndex;
+	/** Whose sight the frames show (a replay's Replay Vision); changed only between steps, on the stepping thread. */
+	private int visionPlayer = VISION_NONE;
+	private boolean visionFogShown = true;
+	private boolean visionPending;
+	private CPlayerFogOfWar visionFog;
+	private CPlayerFogOfWar visionRevealed;
+	private final List<CPlayerFogOfWar> visionSources = new ArrayList<>();
 	private boolean autoRelease;
 	private FrameVerifier verifier;
 	private BiConsumer<CSimulation, SimFrame> uiPart;
@@ -118,6 +132,21 @@ public final class SimFrameWriter implements CSimulation.StepEndListener {
 
 	public int getLocalPlayerIndex() {
 		return this.localPlayerIndex;
+	}
+
+	/**
+	 * Replay Vision: from the next frame on, the fog and the units' visibility are those of a replay player, of every
+	 * replay player together, or of nobody's fog (the whole map). Called on the stepping thread, between steps.
+	 */
+	public void setVision(final int player, final boolean fogShown) {
+		this.visionPlayer = player;
+		this.visionFogShown = fogShown;
+		this.visionPending = true;
+	}
+
+	/** Whether a vision change waits for a frame to show it (none is written while the game is paused). */
+	public boolean hasPendingVision() {
+		return this.visionPending;
 	}
 
 	/** Releases every frame at once after publishing it: for runs without a reader. */
@@ -232,8 +261,9 @@ public final class SimFrameWriter implements CSimulation.StepEndListener {
 		final CPlayer local = (this.localPlayerIndex >= 0) && (this.localPlayerIndex < game.getPlayers().size())
 				? game.getPlayer(this.localPlayerIndex)
 				: null;
-		final CPlayerFogOfWar fog = local == null ? null : local.getFogOfWar();
+		this.visionPending = false;
 		final PathingGrid grid = game.getPathingGrid();
+		final CPlayerFogOfWar fog = viewedFog(game, local, grid);
 		writeUnits(game, frame.units, local, fog, grid);
 		writeProjectiles(game, frame.projectiles);
 		writeItems(game, frame.items, fog, grid);
@@ -295,7 +325,7 @@ public final class SimFrameWriter implements CSimulation.StepEndListener {
 		if (local == null) {
 			flags |= UnitFrameState.VISIBLE_TO_LOCAL;
 		}
-		else if (dead ? fog.isVisible(game, grid, x, y) : unit.isVisible(game, this.localPlayerIndex)) {
+		else if (isVisibleToViewer(game, unit, dead, x, y, fog, grid)) {
 			flags |= UnitFrameState.VISIBLE_TO_LOCAL;
 		}
 		if (unit.isBuilding()) {
@@ -663,6 +693,70 @@ public final class SimFrameWriter implements CSimulation.StepEndListener {
 							? WorldObjectFrameState.TREE : 0);
 		}
 		Arrays.fill(this.destructableRows, 0, total, null);
+	}
+
+	private CPlayerFogOfWar viewedFog(final CSimulation game, final CPlayer local, final PathingGrid grid) {
+		if (this.visionPlayer == VISION_NONE) {
+			return local == null ? null : local.getFogOfWar();
+		}
+		if (!this.visionFogShown) {
+			return revealedFog(grid);
+		}
+		if (this.visionPlayer == VISION_ALL_PLAYERS) {
+			final CPlayerFogOfWar merged = scratchFog(grid);
+			this.visionSources.clear();
+			for (int i = 0, n = game.getGameData().getMaxPlayers(); i < n; i++) {
+				if (isReplayVisionPlayer(game, game.getPlayer(i))) {
+					this.visionSources.add(game.getPlayer(i).getFogOfWar());
+				}
+			}
+			merged.showMostVisibleOf(this.visionSources);
+			return merged;
+		}
+		return (this.visionPlayer < game.getPlayers().size()) ? game.getPlayer(this.visionPlayer).getFogOfWar() : null;
+	}
+
+	private CPlayerFogOfWar scratchFog(final PathingGrid grid) {
+		if (this.visionFog == null) {
+			this.visionFog = new CPlayerFogOfWar(grid);
+		}
+		return this.visionFog;
+	}
+
+	private CPlayerFogOfWar revealedFog(final PathingGrid grid) {
+		if (this.visionRevealed == null) {
+			this.visionRevealed = new CPlayerFogOfWar(grid);
+			this.visionRevealed.revealAll();
+		}
+		return this.visionRevealed;
+	}
+
+	/** As the viewer's own rule for the players Replay Vision offers: those who played, not the neutral ones. */
+	private static boolean isReplayVisionPlayer(final CSimulation game, final CPlayer player) {
+		return (player != null) && (player.getId() < (game.getGameData().getMaxPlayers() - 4))
+				&& (player.getSlotState() == CPlayerSlotState.PLAYING);
+	}
+
+	private boolean isVisibleToViewer(final CSimulation game, final CUnit unit, final boolean dead, final float x,
+			final float y, final CPlayerFogOfWar fog, final PathingGrid grid) {
+		if (dead) {
+			return (fog == null) || fog.isVisible(game, grid, x, y);
+		}
+		if (this.visionPlayer == VISION_NONE) {
+			return unit.isVisible(game, this.localPlayerIndex);
+		}
+		if (!this.visionFogShown) {
+			return true;
+		}
+		if (this.visionPlayer == VISION_ALL_PLAYERS) {
+			for (int i = 0, n = game.getGameData().getMaxPlayers(); i < n; i++) {
+				if (isReplayVisionPlayer(game, game.getPlayer(i)) && unit.isVisible(game, i)) {
+					return true;
+				}
+			}
+			return false;
+		}
+		return unit.isVisible(game, this.visionPlayer);
 	}
 
 	/** The fog goes into the frame only when it differs from what the last frame that had it carried. */

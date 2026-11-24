@@ -255,7 +255,10 @@ final class MeleeUICommands {
 		if (changed) {
 			source.inputsChanged();
 		}
-		source.refresh(viewer.simulation, force);
+		if (!viewer.isSimulationThreaded()) {
+			// with the thread on, the simulation's own thread writes the state, also before its first frame is shown
+			source.refresh(viewer.simulation, force);
+		}
 		return source.current();
 	}
 

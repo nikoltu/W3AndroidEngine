@@ -18,6 +18,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simthread.BufferingRenderContr
 import com.etheller.warsmash.viewer5.handlers.w3x.simthread.FrameEventSink;
 import com.etheller.warsmash.viewer5.handlers.w3x.simthread.LocalUiLink;
 import com.etheller.warsmash.viewer5.handlers.w3x.simthread.OrderInbox;
+import com.etheller.warsmash.viewer5.handlers.w3x.simthread.OrderMessage;
 import com.etheller.warsmash.viewer5.handlers.w3x.simthread.PresentationClockImpl;
 import com.etheller.warsmash.viewer5.handlers.w3x.simthread.RenderCallCodes;
 import com.etheller.warsmash.viewer5.handlers.w3x.simthread.RenderEvent;
@@ -331,21 +332,51 @@ final class MapViewerSimThread {
 	}
 
 	void drainOrders() {
-		if (this.orders != null) {
+		if ((this.orders != null) || (this.inbox.pendingCount() > 0)) {
 			this.thread.run(this::drainOrdersNow);
 		}
 		playFrames();
 	}
 
 	private void drainOrdersNow() {
-		if (this.orders != null) {
-			this.orders.drain(this.simulation.getGameTurnTick(), this.orderTarget);
+		if ((this.orders != null) || ((this.simulation != null) && (this.inbox.pendingCount() > 0))) {
+			final int tick = this.simulation.getGameTurnTick();
+			if (this.orders != null) {
+				this.orders.drain(tick, this.orderTarget, this::applyMessage);
+			}
+			else {
+				this.inbox.drain(tick, this::applyMessage);
+			}
 		}
+	}
+
+	private void applyMessage(final OrderMessage message) {
+		if (message.kind == OrderMessage.VISION) {
+			if (this.writer != null) {
+				this.writer.setVision(message.playerIndex, message.payload[0] != 0);
+			}
+		}
+		else {
+			throw new IllegalStateException("No handler for order message kind " + message.kind);
+		}
+	}
+
+	/**
+	 * Render thread: a replay's Replay Vision changed; the simulation thread takes it between steps and the frames
+	 * from then on carry that player's fog and sight.
+	 */
+	void requestVision(final int player, final boolean fogShown) {
+		final OrderMessage message = this.inbox.obtain();
+		message.kind = OrderMessage.VISION;
+		message.playerIndex = player;
+		message.payload[0] = (byte) (fogShown ? 1 : 0);
+		message.payloadLength = 1;
+		this.inbox.submit(message);
 	}
 
 	/** Plays what the simulation recorded since the last time and gives the frames back. */
 	void playFrames() {
-		if ((this.free == null) && this.sink.hasPending()) {
+		if ((this.free == null) && (this.sink.hasPending() || ((this.writer != null) && this.writer.hasPendingVision()))) {
 			// events of a command or a script outside a step would otherwise wait for the next step
 			this.writer.onStepEnd(this.simulation);
 		}
@@ -664,7 +695,7 @@ final class MapViewerSimThread {
 
 	/** Simulation thread: events made outside a step (a command, a pause's work) go out in a frame of their own. */
 	private void publishPending() {
-		if ((this.writer != null) && this.sink.hasPending()) {
+		if ((this.writer != null) && (this.sink.hasPending() || this.writer.hasPendingVision())) {
 			this.writer.onStepEnd(this.simulation);
 		}
 	}

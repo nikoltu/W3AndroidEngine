@@ -58,6 +58,11 @@ final class MapViewerVision {
 		viewer.replayVisionPlayer = playerIndex;
 		viewer.viewedReplayPlayer = playerIndex;
 		viewer.replayFogShown = fogShown;
+		if (viewer.hasFrames()) {
+			// the frames' writer works the shown fog out on the simulation's side; nothing live is read here
+			viewer.requestVision(playerIndex, fogShown);
+			return;
+		}
 		if (viewer.replayFogOfWar == null) {
 			viewer.replayFogOfWar = new CPlayerFogOfWar(viewer.simulation.getPathingGrid());
 		}
@@ -80,6 +85,9 @@ final class MapViewerVision {
 	}
 
 	static void updateReplayVision(final War3MapViewer viewer) {
+		if (viewer.hasFrames()) {
+			return;
+		}
 		if ((viewer.replayVisionPlayer == War3MapViewer.REPLAY_VISION_ALL_PLAYERS) && viewer.replayFogShown) {
 			viewer.replayFogOfWar.showMostVisibleOf(viewer.replayVisionSources);
 		}

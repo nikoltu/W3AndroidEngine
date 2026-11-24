@@ -155,6 +155,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.RenderWidget.UnitAni
 import com.etheller.warsmash.viewer5.handlers.w3x.simthread.LocalUiLink;
 import com.etheller.warsmash.viewer5.handlers.w3x.simthread.PresentationClock;
 import com.etheller.warsmash.viewer5.handlers.w3x.simthread.SimFrame;
+import com.etheller.warsmash.viewer5.handlers.w3x.simthread.SimFrameWriter;
 import com.etheller.warsmash.viewer5.handlers.w3x.simthread.ui.UiFrameSource;
 import com.etheller.warsmash.viewer5.handlers.w3x.simthread.ui.UiFrameWriter;
 import com.etheller.warsmash.viewer5.handlers.w3x.simthread.SimThreadGuard;
@@ -436,8 +437,8 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 	final List<CPlayerFogOfWar> replayVisionSources = new ArrayList<>();
 	/** A replay's speed: game and animation time both run this many times faster. */
 	private float replaySpeed = 1;
-	public static final int REPLAY_VISION_ALL_PLAYERS = -1;
-	static final int REPLAY_VISION_NONE = -2;
+	public static final int REPLAY_VISION_ALL_PLAYERS = SimFrameWriter.VISION_ALL_PLAYERS;
+	static final int REPLAY_VISION_NONE = SimFrameWriter.VISION_NONE;
 
 	volatile GameTurnManager gameTurnManager;
 
@@ -2989,7 +2990,7 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 		if (this.observerFogOfWar != null) {
 			return this.observerFogOfWar;
 		}
-		if (this.replayVisionPlayer != REPLAY_VISION_NONE) {
+		if ((this.replayVisionPlayer != REPLAY_VISION_NONE) && !hasFrames()) {
 			if (!this.replayFogShown || (this.replayVisionPlayer == REPLAY_VISION_ALL_PLAYERS)) {
 				return this.replayFogOfWar;
 			}
@@ -3036,6 +3037,19 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 
 	public void setReplayVision(final int playerIndex, final boolean fogShown) {
 		MapViewerVision.setReplayVision(this, playerIndex, fogShown);
+	}
+
+	/**
+	 * Whether the picture is made from published frames, which carry the shown player's fog and sight (a replay's
+	 * Replay Vision included), rather than from the live simulation.
+	 */
+	boolean hasFrames() {
+		return this.simThread != null;
+	}
+
+	/** Render thread: tells the frames' writer whose sight a replay's picture shows. */
+	void requestVision(final int playerIndex, final boolean fogShown) {
+		this.simThread.requestVision(playerIndex, fogShown);
 	}
 
 	/** The players Replay Vision offers: those who played, not the neutral ones. */

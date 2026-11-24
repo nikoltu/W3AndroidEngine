@@ -17,6 +17,8 @@ public final class OrderMessage {
 	public static final int SAVE = 2;
 	/** Speed change or fast-forward target. */
 	public static final int SPEED = 3;
+	/** A replay's vision (playerIndex: the player, or one of the writer's vision constants; payload: one byte, 1 = fog shown). */
+	public static final int VISION = 4;
 
 	public int kind;
 	public int playerIndex;

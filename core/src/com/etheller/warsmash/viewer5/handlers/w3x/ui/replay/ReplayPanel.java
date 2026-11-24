@@ -615,7 +615,7 @@ public final class ReplayPanel implements CommandCardCommandListener {
 	 */
 	public void seekTo(final int requestedTick) {
 		final int tick = Math.max(0, Math.min(requestedTick, this.playback.getLastTick() - SEEK_END_MARGIN));
-		final int now = this.viewer.simulation.getGameTurnTick();
+		final int now = shownTick();
 		if (this.seeking || this.viewer.isFastForwarding() || (tick == now)) {
 			return;
 		}
@@ -635,6 +635,15 @@ public final class ReplayPanel implements CommandCardCommandListener {
 				this.viewer.setGamePaused(War3MapViewer.PauseSource.REPLAY, true);
 			}
 		});
+	}
+
+	/**
+	 * The step the picture shows. A seek runs the steps on the render thread while the simulation thread waits (no
+	 * frames are shown meanwhile), so the bar follows the simulation itself then.
+	 */
+	private int shownTick() {
+		return this.viewer.isFastForwarding() ? this.viewer.simulation.getGameTurnTick()
+				: this.viewer.getPresentedTick();
 	}
 
 	private void showSpeed() {
@@ -686,7 +695,7 @@ public final class ReplayPanel implements CommandCardCommandListener {
 		if (this.phone && (this.laidOutWidth != uiWidth())) {
 			anchorPhone();
 		}
-		final int tick = this.viewer.simulation.getGameTurnTick();
+		final int tick = shownTick();
 		final int second = (int) (tick * WarsmashConstants.SIMULATION_STEP_TIME);
 		if (second != this.shownSecond) {
 			this.shownSecond = second;

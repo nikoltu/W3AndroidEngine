@@ -109,6 +109,7 @@ public class RenderUnit implements RenderWidget {
 	private final Extrapolator.UnitPose pose = new Extrapolator.UnitPose();
 	private float poseX;
 	private float poseY;
+	private float poseFacing;
 	private boolean poseDead;
 	private int frameLandmark = LANDMARK_NONE;
 	private boolean frameMinimapIconHidden;
@@ -256,6 +257,7 @@ public class RenderUnit implements RenderWidget {
 			frameFlags = frameState.flags[frameRow];
 			this.poseX = this.pose.x;
 			this.poseY = this.pose.y;
+			this.poseFacing = this.pose.facing;
 			this.poseDead = (frameFlags & UnitFrameState.DEAD) != 0;
 			this.frameTeamPlayer = frameState.teamPlayer[frameRow];
 			this.frameTeamRelation = frameState.relation[frameRow];
@@ -674,6 +676,23 @@ public class RenderUnit implements RenderWidget {
 
 	private float simulationY() {
 		return this.frameMode ? (this.havePose ? this.poseY : this.location[1]) : this.simulationUnit.getY();
+	}
+
+	/**
+	 * Where the game has the unit at the step the picture shows (the frame's, never the live simulation's, which with
+	 * a simulation thread is steps ahead and not for this thread to read).
+	 */
+	public float getPresentedX() {
+		return simulationX();
+	}
+
+	public float getPresentedY() {
+		return simulationY();
+	}
+
+	/** The facing the game has for the unit at the step the picture shows, in degrees. */
+	public float getPresentedFacing() {
+		return this.frameMode ? (this.havePose ? this.poseFacing : this.facing) : this.simulationUnit.getFacing();
 	}
 
 	private boolean simulationDead() {

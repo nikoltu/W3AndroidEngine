@@ -288,16 +288,16 @@ public final class GameCameraManager extends CameraManager {
 		}
 		final boolean drawn = this.renderState.saved;
 		// The game follows the unit where the game has it; a frame follows the unit where it is drawn.
-		this.target.x = (drawn ? this.targetControllerUnit.getX()
-				: this.targetControllerUnit.getSimulationUnit().getX()) + this.targetControllerXOffset;
-		this.target.y = (drawn ? this.targetControllerUnit.getY()
-				: this.targetControllerUnit.getSimulationUnit().getY()) + this.targetControllerYOffset;
+		this.target.x = (drawn ? this.targetControllerUnit.getX() : this.targetControllerUnit.getPresentedX())
+				+ this.targetControllerXOffset;
+		this.target.y = (drawn ? this.targetControllerUnit.getY() : this.targetControllerUnit.getPresentedY())
+				+ this.targetControllerYOffset;
 	}
 
 	private void moveFields(final CameraSetup cameraPreset, final CameraRates cameraRate, final float deltaTime) {
 		final float newHorizontalAngle;
 		if (this.targetControllerInheritOrientation && (this.targetControllerUnit != null)) {
-			newHorizontalAngle = (float) Math.toRadians(this.targetControllerUnit.getSimulationUnit().getFacing() - 90);
+			newHorizontalAngle = (float) Math.toRadians(this.targetControllerUnit.getPresentedFacing() - 90);
 		}
 		else {
 			newHorizontalAngle = (float) Math.toRadians(cameraPreset.getRotation() - 90);
@@ -440,9 +440,9 @@ public final class GameCameraManager extends CameraManager {
 	/** The eye on the unit, looking the way the unit faces, with the game camera's angle of attack. */
 	private void orientView(final Vector3 eye, final Vector3 lookAt) {
 		final boolean drawn = this.renderState.saved;
-		final float unitX = drawn ? this.orientUnit.getX() : this.orientUnit.getSimulationUnit().getX();
-		final float unitY = drawn ? this.orientUnit.getY() : this.orientUnit.getSimulationUnit().getY();
-		final double facing = Math.toRadians(this.orientUnit.getSimulationUnit().getFacing());
+		final float unitX = drawn ? this.orientUnit.getX() : this.orientUnit.getPresentedX();
+		final float unitY = drawn ? this.orientUnit.getY() : this.orientUnit.getPresentedY();
+		final double facing = Math.toRadians(this.orientUnit.getPresentedFacing());
 		final double cosFacing = StrictMath.cos(facing);
 		final double sinFacing = StrictMath.sin(facing);
 		final float x = unitX + (float) ((this.orientXOffset * cosFacing) - (this.orientYOffset * sinFacing));
