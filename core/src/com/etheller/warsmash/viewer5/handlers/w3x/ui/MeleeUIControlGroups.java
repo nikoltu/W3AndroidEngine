@@ -612,27 +612,37 @@ final class MeleeUIControlGroups {
 	 * were built. It selects nothing.
 	 */
 	boolean jumpToNextTownHall() {
-		CUnit first = null;
-		CUnit next = null;
-		for (final CUnit unit : this.ui.war3MapViewer.simulation.getUnits()) {
-			if ((unit.getPlayerIndex() != this.ui.war3MapViewer.getLocalPlayerIndex()) || unit.isDead()
-					|| unit.isHidden() || unit.isConstructing() || !unit.isUnitType(CUnitTypeJass.TOWNHALL)) {
-				continue;
+		// a key press: the units are read between two steps, as the frame does not carry the town hall class
+		final int[] handle = new int[1];
+		final float[] position = new float[2];
+		this.ui.war3MapViewer.whileSimulationHeld(() -> {
+			CUnit first = null;
+			CUnit next = null;
+			for (final CUnit unit : this.ui.war3MapViewer.simulation.getUnits()) {
+				if ((unit.getPlayerIndex() != this.ui.war3MapViewer.getLocalPlayerIndex()) || unit.isDead()
+						|| unit.isHidden() || unit.isConstructing() || !unit.isUnitType(CUnitTypeJass.TOWNHALL)) {
+					continue;
+				}
+				if ((first == null) || (unit.getHandleId() < first.getHandleId())) {
+					first = unit;
+				}
+				if ((unit.getHandleId() > this.lastTownHallHandleId)
+						&& ((next == null) || (unit.getHandleId() < next.getHandleId()))) {
+					next = unit;
+				}
 			}
-			if ((first == null) || (unit.getHandleId() < first.getHandleId())) {
-				first = unit;
+			final CUnit townHall = next != null ? next : first;
+			if (townHall != null) {
+				handle[0] = townHall.getHandleId();
+				position[0] = townHall.getX();
+				position[1] = townHall.getY();
 			}
-			if ((unit.getHandleId() > this.lastTownHallHandleId)
-					&& ((next == null) || (unit.getHandleId() < next.getHandleId()))) {
-				next = unit;
-			}
-		}
-		final CUnit townHall = next != null ? next : first;
-		if (townHall == null) {
+		});
+		if (handle[0] == 0) {
 			return false;
 		}
-		this.lastTownHallHandleId = townHall.getHandleId();
-		this.ui.cameraManager.jumpTo(townHall.getX(), townHall.getY());
+		this.lastTownHallHandleId = handle[0];
+		this.ui.cameraManager.jumpTo(position[0], position[1]);
 		return true;
 	}
 

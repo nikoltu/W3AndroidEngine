@@ -431,6 +431,7 @@ public final class SimFrameWriter implements CSimulation.StepEndListener {
 		state.invisLevels[row] = unit.getInvisLevels();
 		state.targetClass[row] = (byte) targetClass(game, unit, owner, local);
 		state.hpFraction[row] = maxLife > 0 ? unit.getLife() / maxLife : 0f;
+		state.life[row] = unit.getLife();
 		state.manaFraction[row] = maxMana > 0 ? unit.getMana() / maxMana : 0f;
 		state.playerColor[row] = ownerPlayer == null ? owner : ownerPlayer.getColor();
 		state.vertexColor[row] = packColor(unit.getVertexColor());

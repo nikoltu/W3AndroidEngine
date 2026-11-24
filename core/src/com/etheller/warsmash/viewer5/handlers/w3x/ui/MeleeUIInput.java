@@ -524,8 +524,7 @@ final class MeleeUIInput {
 			return;
 		}
 		final int localPlayerIndex = this.ui.war3MapViewer.getLocalPlayerIndex();
-		if ((localPlayerIndex < 0) || !this.ui.war3MapViewer.simulation.getPlayer(localPlayerIndex)
-				.hasPlayerEvents(eventType)) {
+		if ((localPlayerIndex < 0) || !this.ui.localPlayerListens(eventType)) {
 			return;
 		}
 		if ((screenX < 0) || (screenY < 0) || (screenX >= Gdx.graphics.getWidth())
@@ -1475,18 +1474,29 @@ final class MeleeUIInput {
 
 	private void processSelectNearbyUnits(final List<RenderWidget> unitList, final boolean shiftDown,
 			final RenderUnit mouseOverUnit) {
-		this.ui.war3MapViewer.simulation.getWorldCollision().enumUnitsInRect(
-				new Rectangle(this.ui.mouseOverUnit.getX() - 1024, this.ui.mouseOverUnit.getY() - 1024, 2048, 2048),
-				new CUnitEnumFunction() {
-					@Override
-					public boolean call(final CUnit unit) {
-						if (unit.getUnitType() == mouseOverUnit.getSimulationUnit().getUnitType()) {
-							final RenderUnit renderPeer = MeleeUIInput.this.ui.war3MapViewer.getRenderPeer(unit);
-							processClickSelect(unitList, shiftDown, renderPeer);
-						}
-						return false;
-					}
-				});
+		final Rectangle area = new Rectangle(this.ui.mouseOverUnit.getX() - 1024, this.ui.mouseOverUnit.getY() - 1024,
+				2048, 2048);
+		final SimFrame frame = this.ui.unitView.presentedFrame();
+		if (frame != null) {
+			// the type is compared on the frame on screen, as the units found are
+			final int clickedRow = frame.units.indexOf(mouseOverUnit.getSimulationUnit().getHandleId());
+			if (clickedRow < 0) {
+				return;
+			}
+			final int typeId = frame.units.typeId[clickedRow];
+			this.ui.war3MapViewer.enumPresentedUnitsInRect(area, (peer) -> {
+				final int row = frame.units.indexOf(peer.getSimulationUnit().getHandleId());
+				if ((row >= 0) && (frame.units.typeId[row] == typeId)) {
+					processClickSelect(unitList, shiftDown, peer);
+				}
+			});
+			return;
+		}
+		this.ui.war3MapViewer.enumPresentedUnitsInRect(area, (peer) -> {
+			if (peer.getSimulationUnit().getUnitType() == mouseOverUnit.getSimulationUnit().getUnitType()) {
+				processClickSelect(unitList, shiftDown, peer);
+			}
+		});
 	}
 
 	private void processClickSelect(final List<RenderWidget> unitList, final boolean shiftDown,

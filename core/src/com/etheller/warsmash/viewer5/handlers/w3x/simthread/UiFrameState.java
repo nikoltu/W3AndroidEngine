@@ -31,6 +31,16 @@ public final class UiFrameState {
 	public final int[] allianceSharedControl = new int[PLAYER_SLOTS];
 	/** Bit i is set for a player that is a human controlled, playing slot. */
 	public int userPlayingMask;
+	/** Bit i is set for a player Replay Vision offers: one who played, not a neutral one. */
+	public int replayPlayerMask;
+	/** Bits of {@link #localPlayerEvents}: the local player has a script trigger for the input event. */
+	public static final int EVENT_KEY_DOWN = 1;
+	public static final int EVENT_KEY_UP = 1 << 1;
+	public static final int EVENT_MOUSE_DOWN = 1 << 2;
+	public static final int EVENT_MOUSE_UP = 1 << 3;
+	public static final int EVENT_MOUSE_MOVE = 1 << 4;
+	/** The input events the local player's triggers listen for, so the interface sends only those to the script. */
+	public int localPlayerEvents;
 	/** Bit i is set for a neutral aggressive player (the creeps' owner). */
 	public int neutralAggressiveMask;
 	/** Player colour index of each player, -1 for no such player. */
@@ -119,6 +129,8 @@ public final class UiFrameState {
 		System.arraycopy(other.playerColor, 0, playerColor, 0, PLAYER_SLOTS);
 		System.arraycopy(other.playerName, 0, playerName, 0, PLAYER_SLOTS);
 		userPlayingMask = other.userPlayingMask;
+		replayPlayerMask = other.replayPlayerMask;
+		localPlayerEvents = other.localPlayerEvents;
 		neutralAggressiveMask = other.neutralAggressiveMask;
 		selectedCount = other.selectedCount;
 		System.arraycopy(other.selected, 0, selected, 0, MAX_SELECTED);

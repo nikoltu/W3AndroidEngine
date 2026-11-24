@@ -110,6 +110,7 @@ public final class FrameVerifier {
 			final int maxLife = unit.getMaximumLife();
 			final int maxMana = unit.getMaximumMana();
 			same(name + "hpFraction", state.hpFraction[row], maxLife > 0 ? unit.getLife() / maxLife : 0f);
+			same(name + "life", state.life[row], unit.getLife());
 			same(name + "manaFraction", state.manaFraction[row], maxMana > 0 ? unit.getMana() / maxMana : 0f);
 			final CPlayer owner = game.getPlayer(unit.getPlayerIndex());
 			same(name + "playerColor", state.playerColor[row],

@@ -155,6 +155,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.RenderWidget.UnitAni
 import com.etheller.warsmash.viewer5.handlers.w3x.simthread.LocalUiLink;
 import com.etheller.warsmash.viewer5.handlers.w3x.simthread.PresentationClock;
 import com.etheller.warsmash.viewer5.handlers.w3x.simthread.SimFrame;
+import com.etheller.warsmash.viewer5.handlers.w3x.simthread.UnitFrameState;
 import com.etheller.warsmash.viewer5.handlers.w3x.simthread.SimFrameWriter;
 import com.etheller.warsmash.viewer5.handlers.w3x.simthread.ui.UiFrameSource;
 import com.etheller.warsmash.viewer5.handlers.w3x.simthread.ui.UiFrameWriter;
@@ -1528,6 +1529,13 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 					this.updateTime = 0;
 					break;
 				}
+				if ((this.simThread != null) && !this.simThread.hasFrameRoom()) {
+					// the presentation still holds the frames of the steps made: the game runs slower for a moment
+					// instead of overrunning the ring (the threaded simulation waits the same way)
+					this.updateTime = Math.min(this.updateTime, WarsmashConstants.SIMULATION_STEP_TIME
+							* MAX_STEPS_PER_FRAME * this.timeScale * this.replaySpeed);
+					break;
+				}
 				stepsThisFrame++;
 				PerfStats.stepMark();
 				final int latestTurn = this.gameTurnManager.getLatestCompletedTurn();
@@ -2705,6 +2713,42 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 			}
 		}
 		return source;
+	}
+
+	/**
+	 * Render thread: the unit peers whose collision box meets the rectangle. Where the game is shown from frames these
+	 * are the units of the frame on screen, not the simulation's own collision data.
+	 */
+	public void enumPresentedUnitsInRect(final Rectangle rect, final Consumer<RenderUnit> callback) {
+		final SimFrame frame = this.presentation == null ? null : this.presentation.frameBefore();
+		if (this.presentation == null) {
+			this.simulation.getWorldCollision().enumUnitsInRect(rect, (unit) -> {
+				final RenderUnit peer = getRenderPeer(unit);
+				if (peer != null) {
+					callback.accept(peer);
+				}
+				return false;
+			});
+			return;
+		}
+		if (frame == null) {
+			return;
+		}
+		final UnitFrameState units = frame.units;
+		for (int row = 0; row < units.count; row++) {
+			if ((units.flags[row] & (UnitFrameState.HIDDEN | UnitFrameState.DEAD)) != 0) {
+				continue;
+			}
+			final float size = units.collisionSize[row];
+			if (((units.x[row] - size) < (rect.x + rect.width)) && ((units.x[row] + size) > rect.x)
+					&& ((units.y[row] - size) < (rect.y + rect.height)) && ((units.y[row] + size) > rect.y)) {
+				final CUnit unit = this.simThread.unitOf(units.handle[row]);
+				final RenderUnit peer = unit == null ? null : this.unitToRenderPeer.get(unit);
+				if (peer != null) {
+					callback.accept(peer);
+				}
+			}
+		}
 	}
 
 	public RenderUnit getRenderPeer(final CUnit unit) {

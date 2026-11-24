@@ -902,8 +902,10 @@ final class MeleeUICommands {
 				final MdxModel model = viewer.getUnitTypeData(buildingTypeId).getModel();
 				MeleeUICommands.this.ui.cursorModelInstance = (MdxComplexInstance) model.addInstance();
 //				MeleeUI.this.cursorModelInstance.setVertexColor(new float[] { 1, 1, 1, 0.5f });
-				final int playerColorIndex = viewer.simulation.getPlayer(
-						MeleeUICommands.this.ui.activeCommandUnit.getSimulationUnit().getPlayerIndex()).getColor();
+				final int[] playerColor = new int[1];
+				viewer.whileSimulationHeld(() -> playerColor[0] = viewer.simulation.getPlayer(
+						MeleeUICommands.this.ui.activeCommandUnit.getSimulationUnit().getPlayerIndex()).getColor());
+				final int playerColorIndex = playerColor[0];
 				MeleeUICommands.this.ui.cursorModelInstance.setTeamColor(playerColorIndex);
 				MeleeUICommands.this.ui.cursorModelInstance.rotate(
 						RenderUnit.tempQuat.setFromAxis(RenderMathUtils.VEC3_UNIT_Z,
@@ -952,87 +954,90 @@ final class MeleeUICommands {
 				final int cursorHeightCells = MeleeUICommands.this.cursorModelPathing.getHeight();
 				final int halfCursorHeightCells = cursorHeightCells / 2;
 				final float halfRenderHeight = cursorHeightCells * 16;
-				final PathingGrid pathingGrid = viewer.simulation.getPathingGrid();
-				boolean blockAll = false;
-				final int cellX = pathingGrid.getCellX(MeleeUI.clickLocationTemp.x);
-				final int cellY = pathingGrid.getCellY(MeleeUI.clickLocationTemp.y);
-				if ((cellX < halfCursorWidthCells) || (cellX > (pathingGrid.getWidth() - halfCursorWidthCells))
-						|| (cellY < halfCursorHeightCells)
-						|| (cellY > (pathingGrid.getHeight() - halfCursorHeightCells))) {
-					blockAll = true;
-				}
-				final boolean canBeBuiltOnThem = MeleeUICommands.this.cursorBuildingUnitType.isCanBeBuiltOnThem();
-				if (canBeBuiltOnThem) {
-					viewer.simulation.getWorldCollision().enumBuildingsAtPoint(MeleeUI.clickLocationTemp.x,
-							MeleeUI.clickLocationTemp.y,
-							MeleeUICommands.this.buildOnBuildingIntersector.reset(MeleeUI.clickLocationTemp.x,
-							MeleeUI.clickLocationTemp.y));
-					blockAll = MeleeUICommands.this.buildOnBuildingIntersector.getUnitToBuildOn() == null;
-				}
-				if (blockAll) {
-					for (int i = 0; i < MeleeUICommands.this.ui.cursorModelUnderneathPathingRedGreenPixmap
-							.getWidth(); i++) {
-						for (int j = 0; j < MeleeUICommands.this.ui.cursorModelUnderneathPathingRedGreenPixmap
-								.getHeight(); j++) {
-							MeleeUICommands.this.ui.cursorModelUnderneathPathingRedGreenPixmap.drawPixel(i,
-									MeleeUICommands.this.ui.cursorModelUnderneathPathingRedGreenPixmap
-											.getHeight() - 1 - j, GHOST_CELL_BLOCKED);
+				// the footprint is read from the grid and the unit collision, which the simulation thread changes between steps
+				viewer.whileSimulationHeld(() -> {
+					final PathingGrid pathingGrid = viewer.simulation.getPathingGrid();
+					boolean blockAll = false;
+					final int cellX = pathingGrid.getCellX(MeleeUI.clickLocationTemp.x);
+					final int cellY = pathingGrid.getCellY(MeleeUI.clickLocationTemp.y);
+					if ((cellX < halfCursorWidthCells) || (cellX > (pathingGrid.getWidth() - halfCursorWidthCells))
+							|| (cellY < halfCursorHeightCells)
+							|| (cellY > (pathingGrid.getHeight() - halfCursorHeightCells))) {
+						blockAll = true;
+					}
+					final boolean canBeBuiltOnThem = MeleeUICommands.this.cursorBuildingUnitType.isCanBeBuiltOnThem();
+					if (canBeBuiltOnThem) {
+						viewer.simulation.getWorldCollision().enumBuildingsAtPoint(MeleeUI.clickLocationTemp.x,
+								MeleeUI.clickLocationTemp.y,
+								MeleeUICommands.this.buildOnBuildingIntersector.reset(MeleeUI.clickLocationTemp.x,
+								MeleeUI.clickLocationTemp.y));
+						blockAll = MeleeUICommands.this.buildOnBuildingIntersector.getUnitToBuildOn() == null;
+					}
+					if (blockAll) {
+						for (int i = 0; i < MeleeUICommands.this.ui.cursorModelUnderneathPathingRedGreenPixmap
+								.getWidth(); i++) {
+							for (int j = 0; j < MeleeUICommands.this.ui.cursorModelUnderneathPathingRedGreenPixmap
+									.getHeight(); j++) {
+								MeleeUICommands.this.ui.cursorModelUnderneathPathingRedGreenPixmap.drawPixel(i,
+										MeleeUICommands.this.ui.cursorModelUnderneathPathingRedGreenPixmap
+												.getHeight() - 1 - j, GHOST_CELL_BLOCKED);
+							}
 						}
 					}
-				}
-				else if (!canBeBuiltOnThem) {
-					// The units that keep the building off the ground are looked up per cell only when one stands
-					// in the footprint, with the same rules as the build order's check.
-					final CUnit worker = MeleeUICommands.this.ui.activeCommandUnit.getSimulationUnit();
-					final CSimulation simulation = viewer.simulation;
-					MeleeUICommands.this.ghostCellArea.set(MeleeUI.clickLocationTemp.x - halfRenderWidth,
-							MeleeUI.clickLocationTemp.y - halfRenderHeight, halfRenderWidth * 2, halfRenderHeight * 2);
-					final boolean unitsInFootprint = PathingGrid.unitPlacementPathing(
-							MeleeUICommands.this.ghostCellArea, simulation.getWorldCollision(), worker, simulation,
-							worker.getPlayerIndex()) != 0;
-					for (int i = 0; i < MeleeUICommands.this.ui.cursorModelUnderneathPathingRedGreenPixmap
-							.getWidth(); i++) {
-						for (int j = 0; j < MeleeUICommands.this.ui.cursorModelUnderneathPathingRedGreenPixmap
-								.getHeight(); j++) {
-							boolean blocked = false;
-							final float cellMinX = (MeleeUI.clickLocationTemp.x + (i * 32)) - halfRenderWidth;
-							final float cellMinY = (MeleeUI.clickLocationTemp.y + (j * 32)) - halfRenderHeight;
-							short pathing = pathingGrid.getPathing(cellMinX, cellMinY);
-							if (unitsInFootprint) {
-								MeleeUICommands.this.ghostCellArea.set(cellMinX, cellMinY, 32, 32);
-								pathing |= PathingGrid.unitPlacementPathing(MeleeUICommands.this.ghostCellArea,
-										simulation.getWorldCollision(), worker, simulation, worker.getPlayerIndex());
-							}
-							for (final CBuildingPathingType preventedType : MeleeUICommands.this.cursorBuildingUnitType
-									.getPreventedPathingTypes()) {
-								if (PathingFlags.isPathingFlag(pathing, preventedType)) {
-									blocked = true;
+					else if (!canBeBuiltOnThem) {
+						// The units that keep the building off the ground are looked up per cell only when one stands
+						// in the footprint, with the same rules as the build order's check.
+						final CUnit worker = MeleeUICommands.this.ui.activeCommandUnit.getSimulationUnit();
+						final CSimulation simulation = viewer.simulation;
+						MeleeUICommands.this.ghostCellArea.set(MeleeUI.clickLocationTemp.x - halfRenderWidth,
+								MeleeUI.clickLocationTemp.y - halfRenderHeight, halfRenderWidth * 2, halfRenderHeight * 2);
+						final boolean unitsInFootprint = PathingGrid.unitPlacementPathing(
+								MeleeUICommands.this.ghostCellArea, simulation.getWorldCollision(), worker, simulation,
+								worker.getPlayerIndex()) != 0;
+						for (int i = 0; i < MeleeUICommands.this.ui.cursorModelUnderneathPathingRedGreenPixmap
+								.getWidth(); i++) {
+							for (int j = 0; j < MeleeUICommands.this.ui.cursorModelUnderneathPathingRedGreenPixmap
+									.getHeight(); j++) {
+								boolean blocked = false;
+								final float cellMinX = (MeleeUI.clickLocationTemp.x + (i * 32)) - halfRenderWidth;
+								final float cellMinY = (MeleeUI.clickLocationTemp.y + (j * 32)) - halfRenderHeight;
+								short pathing = pathingGrid.getPathing(cellMinX, cellMinY);
+								if (unitsInFootprint) {
+									MeleeUICommands.this.ghostCellArea.set(cellMinX, cellMinY, 32, 32);
+									pathing |= PathingGrid.unitPlacementPathing(MeleeUICommands.this.ghostCellArea,
+											simulation.getWorldCollision(), worker, simulation, worker.getPlayerIndex());
 								}
-							}
-							for (final CBuildingPathingType requiredType : MeleeUICommands.this.cursorBuildingUnitType
-									.getRequiredPathingTypes()) {
-								if (!PathingFlags.isPathingFlag(pathing, requiredType)) {
-									blocked = true;
+								for (final CBuildingPathingType preventedType : MeleeUICommands.this.cursorBuildingUnitType
+										.getPreventedPathingTypes()) {
+									if (PathingFlags.isPathingFlag(pathing, preventedType)) {
+										blocked = true;
+									}
 								}
+								for (final CBuildingPathingType requiredType : MeleeUICommands.this.cursorBuildingUnitType
+										.getRequiredPathingTypes()) {
+									if (!PathingFlags.isPathingFlag(pathing, requiredType)) {
+										blocked = true;
+									}
+								}
+								final int color = blocked ? GHOST_CELL_BLOCKED : GHOST_CELL_FREE;
+								MeleeUICommands.this.ui.cursorModelUnderneathPathingRedGreenPixmap.drawPixel(i,
+										MeleeUICommands.this.ui.cursorModelUnderneathPathingRedGreenPixmap
+												.getHeight() - 1 - j, color);
 							}
-							final int color = blocked ? GHOST_CELL_BLOCKED : GHOST_CELL_FREE;
-							MeleeUICommands.this.ui.cursorModelUnderneathPathingRedGreenPixmap.drawPixel(i,
-									MeleeUICommands.this.ui.cursorModelUnderneathPathingRedGreenPixmap
-											.getHeight() - 1 - j, color);
 						}
 					}
-				}
-				else {
-					for (int i = 0; i < MeleeUICommands.this.ui.cursorModelUnderneathPathingRedGreenPixmap
-							.getWidth(); i++) {
-						for (int j = 0; j < MeleeUICommands.this.ui.cursorModelUnderneathPathingRedGreenPixmap
-								.getHeight(); j++) {
-							MeleeUICommands.this.ui.cursorModelUnderneathPathingRedGreenPixmap.drawPixel(i,
-									MeleeUICommands.this.ui.cursorModelUnderneathPathingRedGreenPixmap
-											.getHeight() - 1 - j, GHOST_CELL_FREE);
+					else {
+						for (int i = 0; i < MeleeUICommands.this.ui.cursorModelUnderneathPathingRedGreenPixmap
+								.getWidth(); i++) {
+							for (int j = 0; j < MeleeUICommands.this.ui.cursorModelUnderneathPathingRedGreenPixmap
+									.getHeight(); j++) {
+								MeleeUICommands.this.ui.cursorModelUnderneathPathingRedGreenPixmap.drawPixel(i,
+										MeleeUICommands.this.ui.cursorModelUnderneathPathingRedGreenPixmap
+												.getHeight() - 1 - j, GHOST_CELL_FREE);
+							}
 						}
 					}
-				}
+				});
 				MeleeUICommands.this.ui.cursorModelUnderneathPathingRedGreenPixmapTexture
 						.load(MeleeUICommands.this.cursorModelUnderneathPathingRedGreenPixmapTextureData);
 

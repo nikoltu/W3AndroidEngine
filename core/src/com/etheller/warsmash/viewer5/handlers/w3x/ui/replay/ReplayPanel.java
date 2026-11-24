@@ -1,7 +1,7 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.ui.replay;
 
 import java.util.ArrayList;
-import java.util.IdentityHashMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -38,6 +38,10 @@ import com.etheller.warsmash.viewer5.handlers.w3x.War3MapViewer;
 import com.etheller.warsmash.viewer5.handlers.w3x.camera.GameCameraManager;
 import com.etheller.warsmash.viewer5.handlers.w3x.replay.ReplayPlayback;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
+import com.etheller.warsmash.viewer5.handlers.w3x.simthread.PresentationClock;
+import com.etheller.warsmash.viewer5.handlers.w3x.simthread.SimFrame;
+import com.etheller.warsmash.viewer5.handlers.w3x.simthread.UiFrameState;
+import com.etheller.warsmash.viewer5.handlers.w3x.simthread.UnitFrameState;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CMapControl;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayer;
@@ -125,7 +129,7 @@ public final class ReplayPanel implements CommandCardCommandListener {
 	private boolean seeking;
 	private int shownSecond = -1;
 	private float autoCameraTime;
-	private final Map<CUnit, Float> lastLife = new IdentityHashMap<>();
+	private final Map<Integer, Float> lastLife = new HashMap<>();
 
 	/**
 	 * @param commandCard   the command card's buttons: the panel covers the card, its buttons take the bottom row's
@@ -719,27 +723,65 @@ public final class ReplayPanel implements CommandCardCommandListener {
 		}
 		this.autoCameraTime = 0;
 		final int vision = this.viewer.getReplayVisionPlayer();
-		float sumX = 0;
-		float sumY = 0;
-		float lost = 0;
-		for (final CUnit unit : this.viewer.simulation.getUnits()) {
-			final float life = unit.isDead() ? 0 : unit.getLife();
-			final Float before = this.lastLife.put(unit, life);
-			if ((before == null) || (life >= before) || unit.isHidden()) {
-				continue;
-			}
-			final boolean watched = (vision == War3MapViewer.REPLAY_VISION_ALL_PLAYERS)
-					? this.viewer.isReplayVisionPlayer(this.viewer.simulation.getPlayer(unit.getPlayerIndex()))
-					: (unit.getPlayerIndex() == vision);
-			if (!watched || !this.viewer.isShownToViewer(unit)) {
-				continue;
-			}
-			final float damage = before - life;
-			sumX += unit.getX() * damage;
-			sumY += unit.getY() * damage;
-			lost += damage;
+		final PresentationClock clock = this.viewer.getPresentation();
+		final SimFrame frame = clock == null ? null : clock.frameBefore();
+		if ((clock != null) && (frame == null)) {
+			return;
 		}
-		this.lastLife.keySet().removeIf(CUnit::isDead);
+		final float[] loss = new float[3];
+		if (frame != null) {
+			// the units of the frame on screen: the simulation thread may be changing the live ones
+			final UnitFrameState units = frame.units;
+			for (int row = 0; row < units.count; row++) {
+				final int flags = units.flags[row];
+				final float life = (flags & UnitFrameState.DEAD) != 0 ? 0 : units.life[row];
+				final Float before = this.lastLife.put(units.handle[row], life);
+				if ((before == null) || (life >= before) || ((flags & UnitFrameState.HIDDEN) != 0)) {
+					continue;
+				}
+				final int owner = units.owner[row];
+				final boolean watched = (vision == War3MapViewer.REPLAY_VISION_ALL_PLAYERS)
+						? ((owner < UiFrameState.PLAYER_SLOTS) && (((frame.ui.replayPlayerMask >>> owner) & 1) != 0))
+						: (owner == vision);
+				if (!watched || ((flags & UnitFrameState.VISIBLE_TO_LOCAL) == 0)) {
+					continue;
+				}
+				final float damage = before - life;
+				loss[0] += units.x[row] * damage;
+				loss[1] += units.y[row] * damage;
+				loss[2] += damage;
+			}
+			this.lastLife.keySet().removeIf((handle) -> {
+				final int row = units.indexOf(handle);
+				return (row < 0) || ((units.flags[row] & UnitFrameState.DEAD) != 0);
+			});
+		}
+		else {
+			for (final CUnit unit : this.viewer.simulation.getUnits()) {
+				final float life = unit.isDead() ? 0 : unit.getLife();
+				final Float before = this.lastLife.put(unit.getHandleId(), life);
+				if ((before == null) || (life >= before) || unit.isHidden()) {
+					continue;
+				}
+				final boolean watched = (vision == War3MapViewer.REPLAY_VISION_ALL_PLAYERS)
+						? this.viewer.isReplayVisionPlayer(this.viewer.simulation.getPlayer(unit.getPlayerIndex()))
+						: (unit.getPlayerIndex() == vision);
+				if (!watched || !this.viewer.isShownToViewer(unit)) {
+					continue;
+				}
+				final float damage = before - life;
+				loss[0] += unit.getX() * damage;
+				loss[1] += unit.getY() * damage;
+				loss[2] += damage;
+			}
+			this.lastLife.keySet().removeIf((handle) -> {
+				final CUnit unit = this.viewer.simulation.getUnit(handle);
+				return (unit == null) || unit.isDead();
+			});
+		}
+		final float sumX = loss[0];
+		final float sumY = loss[1];
+		final float lost = loss[2];
 		if (lost <= 0) {
 			return;
 		}

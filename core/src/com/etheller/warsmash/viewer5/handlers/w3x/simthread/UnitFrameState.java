@@ -81,6 +81,8 @@ public final class UnitFrameState {
 	public byte[] invisLevels = new byte[0];
 	public byte[] targetClass = new byte[0];
 	public float[] hpFraction = new float[0];
+	/** Absolute life points, for what compares losses between units (the replay's auto camera). */
+	public float[] life = new float[0];
 	public float[] manaFraction = new float[0];
 	public int[] playerColor = new int[0];
 	public int[] vertexColor = new int[0];
@@ -143,6 +145,7 @@ public final class UnitFrameState {
 		System.arraycopy(other.invisLevels, 0, invisLevels, 0, n);
 		System.arraycopy(other.targetClass, 0, targetClass, 0, n);
 		System.arraycopy(other.hpFraction, 0, hpFraction, 0, n);
+		System.arraycopy(other.life, 0, life, 0, n);
 		System.arraycopy(other.manaFraction, 0, manaFraction, 0, n);
 		System.arraycopy(other.playerColor, 0, playerColor, 0, n);
 		System.arraycopy(other.vertexColor, 0, vertexColor, 0, n);
@@ -186,6 +189,7 @@ public final class UnitFrameState {
 		invisLevels = Arrays.copyOf(invisLevels, capacity);
 		targetClass = Arrays.copyOf(targetClass, capacity);
 		hpFraction = Arrays.copyOf(hpFraction, capacity);
+		life = Arrays.copyOf(life, capacity);
 		manaFraction = Arrays.copyOf(manaFraction, capacity);
 		playerColor = Arrays.copyOf(playerColor, capacity);
 		vertexColor = Arrays.copyOf(vertexColor, capacity);

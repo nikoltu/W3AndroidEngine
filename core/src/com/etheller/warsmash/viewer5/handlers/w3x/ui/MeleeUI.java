@@ -12,6 +12,7 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.function.Consumer;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -97,7 +98,9 @@ import com.etheller.warsmash.viewer5.handlers.w3x.save.SavedInterfaceState;
 import com.etheller.warsmash.viewer5.handlers.w3x.simthread.LocalUiLink;
 import com.etheller.warsmash.viewer5.handlers.w3x.simthread.OncePerStep;
 import com.etheller.warsmash.viewer5.handlers.w3x.simthread.RenderEvent;
+import com.etheller.warsmash.viewer5.handlers.w3x.simthread.PresentationClock;
 import com.etheller.warsmash.viewer5.handlers.w3x.simthread.SimFrame;
+import com.etheller.warsmash.viewer5.handlers.w3x.simthread.UiFrameState;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CItem;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CPlayerStateListener;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
@@ -281,10 +284,9 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 	final List<List<RenderUnit>> controlGroups = new ArrayList<>();
 	Set<RenderUnit> dragSelectPreviewUnits = new HashSet<>();
 	private Set<RenderUnit> dragSelectPreviewUnitsUpcoming = new HashSet<>();
-	private final CUnitEnumFunction dragSelectPreviewEnum = new CUnitEnumFunction() {
+	private final Consumer<RenderUnit> dragSelectPreviewEnum = new Consumer<RenderUnit>() {
 		@Override
-		public boolean call(final CUnit unit) {
-			final RenderUnit renderUnit = MeleeUI.this.war3MapViewer.getRenderPeer(unit);
+		public void accept(final RenderUnit renderUnit) {
 			final UnitFrameView view = MeleeUI.this.unitView;
 			if (view.unit(renderUnit) && !view.isDead() && view.isSelectableByLocal()
 					&& MeleeUI.this.dragSelectPreviewUnitsUpcoming.add(renderUnit)) {
@@ -296,7 +298,6 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 					MeleeUI.this.war3MapViewer.showUnitMouseOverHighlight(renderUnit);
 				}
 			}
-			return false;
 		}
 	};
 	private final int[] controlGroupBarSizes = new int[ControlGroupBar.SLOT_COUNT];
@@ -1022,8 +1023,7 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 			final float maxDragY = Math.max(this.lastMouseClickLocation.y, this.lastMouseDragStart.y);
 			this.tempRect.set(minDragX, minDragY, maxDragX - minDragX, maxDragY - minDragY);
 			this.dragSelectPreviewUnitsUpcoming.clear();
-			this.war3MapViewer.simulation.getWorldCollision().enumUnitsInRect(this.tempRect,
-					this.dragSelectPreviewEnum);
+			this.war3MapViewer.enumPresentedUnitsInRect(this.tempRect, this.dragSelectPreviewEnum);
 			for (final RenderUnit unit : this.dragSelectPreviewUnits) {
 				if (!this.dragSelectPreviewUnitsUpcoming.contains(unit)) {
 					this.war3MapViewer.clearUnitMouseOverHighlight(unit);
@@ -1177,8 +1177,13 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 				: this.teamResources.update((scriptBoard != null) && scriptBoard.isDisplayed() ? scriptBoard : null));
 		if (!this.scoreScreen.isVisible()) {
 			this.messages.layoutTimerDialogs();
-			for (final CTimerDialog timerDialog : this.timerDialogs) {
-				timerDialog.update(this.rootFrame, this.war3MapViewer.simulation);
+			if (!this.timerDialogs.isEmpty()) {
+				// a timer is read at the simulation's time, which the simulation thread moves on
+				this.war3MapViewer.whileSimulationHeld(() -> {
+					for (final CTimerDialog timerDialog : this.timerDialogs) {
+						timerDialog.update(this.rootFrame, this.war3MapViewer.simulation);
+					}
+				});
 			}
 		}
 		this.groups.updateHeroBar();
@@ -1714,12 +1719,47 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 			return;
 		}
 		final int virtualKey = OsKeys.toVirtual(keycode);
-		final CPlayer player = this.war3MapViewer.simulation.getPlayer(localPlayerIndex);
-		if ((virtualKey >= 0) && (player != null)
-				&& player.hasPlayerEvents(down ? JassGameEventsWar3.EVENT_PLAYER_KEY_DOWN
-						: JassGameEventsWar3.EVENT_PLAYER_KEY_UP)) {
+		if ((virtualKey >= 0) && localPlayerListens(
+				down ? JassGameEventsWar3.EVENT_PLAYER_KEY_DOWN : JassGameEventsWar3.EVENT_PLAYER_KEY_UP)) {
 			this.unitOrderListener.keyEvent(virtualKey, OsKeys.heldMetaKeys(Gdx.input), down);
 		}
+	}
+
+	/**
+	 * Whether a trigger of the local player listens for the input event. With frames it is what the frame on screen
+	 * says, since the player's trigger lists are changed by the simulation thread.
+	 */
+	boolean localPlayerListens(final JassGameEventsWar3 eventType) {
+		final PresentationClock clock = this.war3MapViewer.getPresentation();
+		if (clock == null) {
+			final CPlayer player = this.war3MapViewer.simulation.getPlayer(this.war3MapViewer.getLocalPlayerIndex());
+			return (player != null) && player.hasPlayerEvents(eventType);
+		}
+		final SimFrame frame = clock.frameBefore();
+		if ((frame == null) || !frame.ui.playersWritten) {
+			return false;
+		}
+		final int bit;
+		switch (eventType) {
+		case EVENT_PLAYER_KEY_DOWN:
+			bit = UiFrameState.EVENT_KEY_DOWN;
+			break;
+		case EVENT_PLAYER_KEY_UP:
+			bit = UiFrameState.EVENT_KEY_UP;
+			break;
+		case EVENT_PLAYER_MOUSE_DOWN:
+			bit = UiFrameState.EVENT_MOUSE_DOWN;
+			break;
+		case EVENT_PLAYER_MOUSE_UP:
+			bit = UiFrameState.EVENT_MOUSE_UP;
+			break;
+		case EVENT_PLAYER_MOUSE_MOVE:
+			bit = UiFrameState.EVENT_MOUSE_MOVE;
+			break;
+		default:
+			return false;
+		}
+		return (frame.ui.localPlayerEvents & bit) != 0;
 	}
 
 	public boolean keyTyped(final char character) {

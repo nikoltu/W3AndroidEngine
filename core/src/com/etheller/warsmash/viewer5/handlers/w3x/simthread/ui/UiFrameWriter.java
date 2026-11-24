@@ -34,6 +34,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.orders.OrderIds;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CAllianceType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CMapControl;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayer;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.JassGameEventsWar3;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.CPlayerSlotState;
 
 /**
@@ -192,7 +193,7 @@ public final class UiFrameWriter {
 		final UiFrameState ui = frame.ui;
 		final int[] selected = this.selection;
 		if (localPlayer != null) {
-			writePlayers(game, ui);
+			writePlayers(game, ui, local);
 			this.itemPreview.setup(game.getUnitData(), game.getUpgradeData(), this.templates);
 			writeSelection(game, ui, selected, local);
 			writeHeroes(game, ui, local);
@@ -214,9 +215,11 @@ public final class UiFrameWriter {
 	}
 
 	/** How the players relate to each other and their colours: what the world UI needs of the other players. */
-	private static void writePlayers(final CSimulation game, final UiFrameState ui) {
+	private static void writePlayers(final CSimulation game, final UiFrameState ui, final int local) {
 		final int count = Math.min(UiFrameState.PLAYER_SLOTS, game.getPlayers().size());
 		ui.userPlayingMask = 0;
+		ui.replayPlayerMask = 0;
+		ui.localPlayerEvents = 0;
 		ui.neutralAggressiveMask = 0;
 		for (int i = 0; i < UiFrameState.PLAYER_SLOTS; i++) {
 			ui.alliancePassive[i] = 0;
@@ -230,9 +233,23 @@ public final class UiFrameWriter {
 				continue;
 			}
 			ui.playerColor[i] = player.getColor();
+			if (i == local) {
+				ui.localPlayerEvents = (player.hasPlayerEvents(JassGameEventsWar3.EVENT_PLAYER_KEY_DOWN)
+						? UiFrameState.EVENT_KEY_DOWN : 0)
+						| (player.hasPlayerEvents(JassGameEventsWar3.EVENT_PLAYER_KEY_UP) ? UiFrameState.EVENT_KEY_UP : 0)
+						| (player.hasPlayerEvents(JassGameEventsWar3.EVENT_PLAYER_MOUSE_DOWN)
+								? UiFrameState.EVENT_MOUSE_DOWN : 0)
+						| (player.hasPlayerEvents(JassGameEventsWar3.EVENT_PLAYER_MOUSE_UP)
+								? UiFrameState.EVENT_MOUSE_UP : 0)
+						| (player.hasPlayerEvents(JassGameEventsWar3.EVENT_PLAYER_MOUSE_MOVE)
+								? UiFrameState.EVENT_MOUSE_MOVE : 0);
+			}
 			ui.playerName[i] = player.getName();
 			if ((player.getController() == CMapControl.USER) && (player.getSlotState() == CPlayerSlotState.PLAYING)) {
 				ui.userPlayingMask |= 1 << i;
+			}
+			if ((i < (game.getGameData().getMaxPlayers() - 4)) && (player.getSlotState() == CPlayerSlotState.PLAYING)) {
+				ui.replayPlayerMask |= 1 << i;
 			}
 			if (game.isNeutralAggressive(i)) {
 				ui.neutralAggressiveMask |= 1 << i;

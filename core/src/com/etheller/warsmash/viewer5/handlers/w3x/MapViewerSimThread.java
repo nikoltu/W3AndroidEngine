@@ -571,6 +571,16 @@ final class MapViewerSimThread {
 		return newest == null ? 0 : newest.tick;
 	}
 
+	/** Render thread: the unit with this handle, as the frames name it, or null before its peer exists. */
+	CUnit unitOf(final int handle) {
+		return this.units.get(handle);
+	}
+
+	/** Render thread: true when the ring has room for the frames of one more step (and what is said outside steps). */
+	boolean hasFrameRoom() {
+		return (this.ring.capacity() - (this.ring.publishedCount() - this.ring.oldestHeld())) >= 4;
+	}
+
 	/** Render thread: drops the steps not yet made (a skip ahead makes its own). */
 	void dropGrantedSteps() {
 		this.free.dropGranted();
