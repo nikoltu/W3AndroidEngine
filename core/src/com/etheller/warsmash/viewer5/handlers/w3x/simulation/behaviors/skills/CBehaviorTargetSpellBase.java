@@ -222,7 +222,7 @@ public class CBehaviorTargetSpellBase extends CAbstractRangedBehavior {
 						CommandStringErrorKeys.NOT_ENOUGH_MANA);
 				return this.unit.pollNextOrderBehavior(simulation);
 			}
-			this.unit.beginCooldown(simulation, this.ability.getCode(), this.ability.getCooldown());
+			this.unit.beginCooldown(simulation, this.ability.getCooldownKey(), this.ability.getCooldown());
 			// 1.29: the effect event still sees the mana from before the cast; the cost is paid after it.
 			this.unit.fireSpellEvents(simulation, JassGameEventsWar3.EVENT_UNIT_SPELL_EFFECT, this.ability, this.target);
 			this.unit.setMana(Math.max(0, this.unit.getMana() - manaCost));

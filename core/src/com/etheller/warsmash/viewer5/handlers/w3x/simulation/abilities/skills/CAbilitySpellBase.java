@@ -200,7 +200,7 @@ public abstract class CAbilitySpellBase extends AbstractGenericSingleIconNoSmart
 		}
 		final float cooldownRemaining = getCooldownRemaining(game, unit);
 		if (cooldownRemaining > 0) {
-			final float cooldownLengthDisplay = unit.getCooldownLengthDisplayTicks(game, getCode())
+			final float cooldownLengthDisplay = unit.getCooldownLengthDisplayTicks(game, getCooldownKey())
 					* WarsmashConstants.SIMULATION_STEP_TIME;
 			receiver.cooldownNotYetReady(cooldownRemaining, cooldownLengthDisplay);
 		}
@@ -243,7 +243,15 @@ public abstract class CAbilitySpellBase extends AbstractGenericSingleIconNoSmart
 	}
 
 	public float getCooldownRemaining(final CSimulation game, final CUnit caster) {
-		return getCooldownRemaining(game, caster, getCode());
+		return getCooldownRemaining(game, caster, getCooldownKey());
+	}
+
+	/**
+	 * What the cooldown of the ability runs under: its own id, so abilities made from the same code each keep their own
+	 * (measured on 1.29); an item's ability runs under the code it is made from, which the items of a kind share.
+	 */
+	public War3ID getCooldownKey() {
+		return (this.item != null) ? getCode() : getAlias();
 	}
 
 	public static float getCooldownRemaining(final CSimulation game, final CUnit caster, final War3ID code) {

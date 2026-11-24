@@ -2978,6 +2978,9 @@ public class CUnit extends CWidget {
 	}
 
 	public void beginCooldown(final CSimulation game, final War3ID abilityId, final float cooldownDuration) {
+		if (abilityId == null) {
+			return;
+		}
 		final int gameTurnTick = game.getGameTurnTick();
 		final boolean noCooldowns = game.getPlayer(this.playerIndex).hasCheat(CReleaseCheats.NO_COOLDOWNS);
 		this.rawcodeToCooldownExpireTime.put(abilityId.getValue(),
@@ -2986,7 +2989,11 @@ public class CUnit extends CWidget {
 		fireCooldownsChangedEvent();
 	}
 
+	/** A buff without an id (an ability whose data names no buff) has no cooldown. */
 	public int getCooldownRemainingTicks(final CSimulation game, final War3ID abilityId) {
+		if (abilityId == null) {
+			return 0;
+		}
 		final int expireTime = this.rawcodeToCooldownExpireTime.get(abilityId.getValue(), -1);
 		final int gameTurnTick = game.getGameTurnTick();
 		if ((expireTime == -1) || (expireTime <= gameTurnTick)) {
@@ -2996,6 +3003,9 @@ public class CUnit extends CWidget {
 	}
 
 	public int getCooldownLengthDisplayTicks(final CSimulation game, final War3ID abilityId) {
+		if (abilityId == null) {
+			return 0;
+		}
 		final int startTime = this.rawcodeToCooldownStartTime.get(abilityId.getValue(), -1);
 		final int expireTime = this.rawcodeToCooldownExpireTime.get(abilityId.getValue(), -1);
 		if ((startTime == -1) || (expireTime == -1)) {

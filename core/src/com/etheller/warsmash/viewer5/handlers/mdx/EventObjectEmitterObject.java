@@ -451,7 +451,10 @@ public class EventObjectEmitterObject extends GenericObject implements EmitterOb
 				Log.warn("Unknown event object type: " + this.type + this.id);
 			}
 		}
-		else if (!("SPN".equals(this.type) && (isSplatCode(tables) || this.model.reforged))) {
+		else if (!("SPN".equals(this.type) && (isSplatCode(tables) || this.model.reforged))
+				&& !"SND".equals(this.type)) {
+			// A sound event with no row in the sound tables plays nothing in the original either (models name codes
+			// that neither the 1.29 nor the 2.0 table has), so it is no warning.
 			Log.warn("Unknown event object ID: " + this.type + this.id);
 		}
 	}

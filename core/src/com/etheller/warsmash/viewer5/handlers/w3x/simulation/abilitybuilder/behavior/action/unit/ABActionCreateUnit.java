@@ -50,6 +50,8 @@ public class ABActionCreateUnit implements ABSingleAction {
 				location.getX(), location.getY(), theFacing);
 		if (createdUnit == null) {
 			Log.warn("Ability could not create unit " + theId + " for player " + thePlayer.getId());
+			// Later actions of the cast act on no unit, not on the one an earlier cast made.
+			localStore.remove(ABLocalStoreKeys.LASTCREATEDUNIT);
 			return;
 		}
 		

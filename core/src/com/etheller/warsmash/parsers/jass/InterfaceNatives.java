@@ -329,6 +329,12 @@ final class InterfaceNatives extends CommonNatives {
 				});
 	}
 
+	/** A null message is shown as an empty line (1.29), not a failed native. */
+	private String displayedText(final List<JassValue> arguments, final int index) {
+		final String text = this.gameUI.getTrigStr(nullable(arguments, index, StringJassValueVisitor.getInstance()));
+		return text == null ? "" : text;
+	}
+
 	private void registerMessagesAndInterface() {
 		jassProgramVisitor.getJassNativeManager().createNative("EnableUserUI",
 				(arguments, globalScope, triggerScope) -> {
@@ -342,8 +348,7 @@ final class InterfaceNatives extends CommonNatives {
 					final float x = arguments.get(1).visit(RealJassValueVisitor.getInstance()).floatValue();
 					final float y = arguments.get(2).visit(RealJassValueVisitor.getInstance()).floatValue();
 					final float duration = arguments.get(3).visit(RealJassValueVisitor.getInstance()).floatValue();
-					final String message = this.gameUI
-							.getTrigStr(arguments.get(4).visit(StringJassValueVisitor.getInstance()));
+					final String message = displayedText(arguments, 4);
 					Log.warn("DisplayTimedTextToPlayer: " + message.replace("\\n", "\n"));
 					if (whichPlayer != null) {
 						final int playerIndex = whichPlayer.getId();
@@ -362,8 +367,7 @@ final class InterfaceNatives extends CommonNatives {
 					final float x = arguments.get(1).visit(RealJassValueVisitor.getInstance()).floatValue();
 					final float y = arguments.get(2).visit(RealJassValueVisitor.getInstance()).floatValue();
 					final float duration = arguments.get(3).visit(RealJassValueVisitor.getInstance()).floatValue();
-					final String format = this.gameUI
-							.getTrigStr(arguments.get(4).visit(StringJassValueVisitor.getInstance()));
+					final String format = displayedText(arguments, 4);
 					final String message = format.replace("%s",
 							fromPlayer == null ? "" : fromPlayer.getName());
 					Log.warn("DisplayTimedTextFromPlayer: " + message.replace("\\n", "\n"));
@@ -375,8 +379,7 @@ final class InterfaceNatives extends CommonNatives {
 					final CPlayer whichPlayer = arguments.get(0).visit(ObjectJassValueVisitor.getInstance());
 					final float x = arguments.get(1).visit(RealJassValueVisitor.getInstance()).floatValue();
 					final float y = arguments.get(2).visit(RealJassValueVisitor.getInstance()).floatValue();
-					final String message = this.gameUI
-							.getTrigStr(arguments.get(3).visit(StringJassValueVisitor.getInstance()));
+					final String message = displayedText(arguments, 3);
 					if (whichPlayer == this.simulation
 							.getPlayer(war3MapViewer.getLocalPlayerIndex())) {
 						// Measured on 1.29: longer texts stay longer, up to about 10.7 s.

@@ -204,8 +204,9 @@ public class CAbilityAbilityBuilderNoIcon extends AbstractGenericNoIconAbility i
 					return item.getItemType().getCooldownGroup();
 				}
 			}
+			return getCode();
 		}
-		return getCode();
+		return getAlias();
 	}
 
 	@Override

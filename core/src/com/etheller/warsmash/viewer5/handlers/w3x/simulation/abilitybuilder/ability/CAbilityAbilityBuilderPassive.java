@@ -210,8 +210,9 @@ public class CAbilityAbilityBuilderPassive extends AbilityGenericSingleIconPassi
 					return item.getItemType().getCooldownGroup();
 				}
 			}
+			return getCode();
 		}
-		return getCode();
+		return getAlias();
 	}
 
 	@Override

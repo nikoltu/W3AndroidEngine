@@ -96,7 +96,7 @@ public class CAbilityPhaseShift extends CAbilityNoTargetSpellBase
 			}
 		}
 		caster.chargeMana(manaCost);
-		caster.beginCooldown(game, getCode(), getCooldown());
+		caster.beginCooldown(game, getCooldownKey(), getCooldown());
 		game.createTemporarySpellEffectOnUnit(caster, getAlias(), CEffectType.SPECIAL);
 		game.unitSoundEffectEvent(caster, getAlias());
 		caster.add(game, new CBuffPhaseShift(game.getHandleIdAllocator().createId(), this.buffId,
