@@ -1597,8 +1597,7 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 
 			if (this.skyInstance != null) {
 				// The sky's animation is its day: the sun light's colour follows the time of day like the day and night light.
-				this.skyInstance.setFrameByRatio(
-						this.simulation.getGameTimeOfDay() / this.simulation.getGameplayConstants().getGameDayHours());
+				this.skyInstance.setFrameByRatio(timeOfDay / this.simulation.getGameplayConstants().getGameDayHours());
 				this.skyInstance.update(rawDeltaTime, null);
 			}
 
