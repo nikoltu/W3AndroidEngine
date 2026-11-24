@@ -44,6 +44,9 @@ public class CAbilitySummonWaterElemental extends CAbilityNoTargetSpellBase {
 		final float y = unit.getY() + ((float) StrictMath.sin(facingRad) * areaOfEffect);
 		for (int i = 0; i < summonUnitCount; i++) {
 			final CUnit summonedUnit = simulation.createUnitSimple(summonUnitId, unit.getPlayerIndex(), x, y, facing);
+			if (summonedUnit == null) {
+				continue;
+			}
 			summonedUnit.addClassification(CUnitClassification.SUMMONED);
 			simulation.unitSummoned(unit, summonedUnit);
 			summonedUnit.add(simulation,

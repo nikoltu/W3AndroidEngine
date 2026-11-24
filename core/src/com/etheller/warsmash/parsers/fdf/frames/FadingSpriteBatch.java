@@ -16,6 +16,7 @@ import com.badlogic.gdx.math.Affine2;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.BufferUtils;
 import com.badlogic.gdx.utils.NumberUtils;
+import com.etheller.warsmash.util.Log;
 
 /**
  * A sprite batch whose output can be faded as a whole, so a frame and everything drawn inside it (textures, text,
@@ -173,6 +174,16 @@ public class FadingSpriteBatch extends SpriteBatch {
 		this.multiShader.dispose();
 	}
 
+	private boolean missingTextureReported;
+
+	/** A frame without its picture draws nothing; a null stored in a batch slot would fail the whole flush. */
+	private void missingTexture() {
+		if (!this.missingTextureReported) {
+			this.missingTextureReported = true;
+			Log.warn("FadingSpriteBatch: skipping a draw without a texture");
+		}
+	}
+
 	/** The texture unit the next sprite of the texture is sampled from; flushes first when the batch has no room. */
 	private int room(final Texture texture) {
 		if (!isDrawing()) {
@@ -196,6 +207,10 @@ public class FadingSpriteBatch extends SpriteBatch {
 	private void quad(final Texture texture, final float x1, final float y1, final float u1, final float v1,
 			final float x2, final float y2, final float u2, final float v2, final float x3, final float y3,
 			final float u3, final float v3, final float x4, final float y4, final float u4, final float v4) {
+		if (texture == null) {
+			missingTexture();
+			return;
+		}
 		final float unit = room(texture);
 		final float color = super.getPackedColor();
 		final float[] v = this.vertices;
@@ -303,6 +318,10 @@ public class FadingSpriteBatch extends SpriteBatch {
 			final float width, final float height, final float scaleX, final float scaleY, final float rotation,
 			final int srcX, final int srcY, final int srcWidth, final int srcHeight, final boolean flipX,
 			final boolean flipY) {
+		if (texture == null) {
+			missingTexture();
+			return;
+		}
 		final float invTexWidth = 1.0f / texture.getWidth();
 		final float invTexHeight = 1.0f / texture.getHeight();
 		float u = srcX * invTexWidth;
@@ -326,6 +345,10 @@ public class FadingSpriteBatch extends SpriteBatch {
 	public void draw(final Texture texture, final float x, final float y, final float width, final float height,
 			final int srcX, final int srcY, final int srcWidth, final int srcHeight, final boolean flipX,
 			final boolean flipY) {
+		if (texture == null) {
+			missingTexture();
+			return;
+		}
 		final float invTexWidth = 1.0f / texture.getWidth();
 		final float invTexHeight = 1.0f / texture.getHeight();
 		float u = srcX * invTexWidth;
@@ -348,6 +371,10 @@ public class FadingSpriteBatch extends SpriteBatch {
 	@Override
 	public void draw(final Texture texture, final float x, final float y, final int srcX, final int srcY,
 			final int srcWidth, final int srcHeight) {
+		if (texture == null) {
+			missingTexture();
+			return;
+		}
 		final float invTexWidth = 1.0f / texture.getWidth();
 		final float invTexHeight = 1.0f / texture.getHeight();
 		rect(texture, x, y, srcWidth, srcHeight, srcX * invTexWidth, (srcY + srcHeight) * invTexHeight,
@@ -362,6 +389,10 @@ public class FadingSpriteBatch extends SpriteBatch {
 
 	@Override
 	public void draw(final Texture texture, final float x, final float y) {
+		if (texture == null) {
+			missingTexture();
+			return;
+		}
 		rect(texture, x, y, texture.getWidth(), texture.getHeight(), 0, 1, 1, 0);
 	}
 

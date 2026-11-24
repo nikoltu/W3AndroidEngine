@@ -204,8 +204,10 @@ public class MeleeUIMinimap {
 		if (!this.visible || !this.scriptVisible) {
 			return;
 		}
-		if (this.terrainVisible) {
-			batch.draw(terrainTexture(), this.minimap.x, this.minimap.y, this.minimap.width, this.minimap.height);
+		// A map without a minimap picture has no terrain texture either; it shows black like the terrain-off view.
+		final Texture terrain = this.terrainVisible ? terrainTexture() : null;
+		if (terrain != null) {
+			batch.draw(terrain, this.minimap.x, this.minimap.y, this.minimap.width, this.minimap.height);
 		}
 		else {
 			batch.setColor(0, 0, 0, 1);

@@ -295,7 +295,7 @@ public class CAbilityHero extends AbstractCAbility {
 			return ((AbilityBuilderAbility) ability).getCooldownRemainingTicks(game, unit) <= 0;
 		}
 		return !(ability instanceof CAbilitySpellBase)
-				|| (unit.getCooldownRemainingTicks(game, ((CAbilitySpellBase) ability).getCode()) <= 0);
+				|| (unit.getCooldownRemainingTicks(game, ((CAbilitySpellBase) ability).getCooldownKey()) <= 0);
 	}
 
 	/**

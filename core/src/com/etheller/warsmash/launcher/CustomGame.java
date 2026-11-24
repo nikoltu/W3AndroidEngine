@@ -12,6 +12,7 @@ public final class CustomGame {
 	public static final int SLOT_YOU = -1;
 	public static final int SLOT_HIDDEN = -2;
 	public static final int SLOT_OPEN = 0;
+	public static final int SLOT_COMPUTER_NEWBIE = 2;
 	public static final int SLOT_COMPUTER_NORMAL = 3;
 	/** Race item indexes as the lobby and the map information count them: 0 is random. */
 	public static final String[][] RACES = { { "RANDOM" }, { "HUMAN" }, { "ORC" }, { "UNDEAD" }, { "NIGHT_ELF" } };
@@ -122,6 +123,94 @@ public final class CustomGame {
 				}
 			}
 		}
+		// A slot's own colour is its map number, which the map keeps apart; the first setup still never shares one.
+		for (int i = 0; i < count; i++) {
+			resolveColor(details, i);
+		}
+	}
+
+	/** Whether a slot is played by somebody: the player or a computer; open, closed and hidden slots hold no colour. */
+	public boolean occupied(final int index) {
+		return (this.slotTypes[index] == SLOT_YOU) || (this.slotTypes[index] >= SLOT_COMPUTER_NEWBIE);
+	}
+
+	/** The colours the other occupied slots have, by colour number; a slot's own colour is never in its own set. */
+	public boolean[] takenColors(final GameCatalog.MapDetails details, final int index) {
+		final boolean[] taken = new boolean[PLAYER_COLORS.length];
+		for (int i = 0; i < this.slotTypes.length; i++) {
+			if ((i != index) && occupied(i)) {
+				taken[colorOf(details, i)] = true;
+			}
+		}
+		return taken;
+	}
+
+	/** The wanted colour when it is free, else the lowest free one; the wanted one when every colour is taken. */
+	public static int freeColor(final boolean[] taken, final int wanted) {
+		if (!taken[wanted]) {
+			return wanted;
+		}
+		for (int c = 0; c < taken.length; c++) {
+			if (!taken[c]) {
+				return c;
+			}
+		}
+		return wanted;
+	}
+
+	/**
+	 * Gives a slot another colour when the one it shows is held by another occupied slot (an open slot became a
+	 * computer or the player moved in); fixed settings keep the map's own colours.
+	 *
+	 * @return whether the colour changed
+	 */
+	public boolean resolveColor(final GameCatalog.MapDetails details, final int index) {
+		if (fixedSlots(details) || !occupied(index)) {
+			return false;
+		}
+		final int color = colorOf(details, index);
+		final int free = freeColor(takenColors(details, index), color);
+		if (free == color) {
+			return false;
+		}
+		this.slotColors[index] = free;
+		return true;
+	}
+
+	/** Gives a slot a type, and its colour a free one when it is now played. */
+	public boolean setType(final GameCatalog.MapDetails details, final int index, final int type) {
+		this.slotTypes[index] = type;
+		return resolveColor(details, index);
+	}
+
+	/** Whether the player can move to this slot: a user slot of the map that is not the player's own. */
+	public boolean canTake(final GameCatalog.MapDetails details, final int index) {
+		return (details.slots.get(index).type == 1) && (this.slotTypes[index] != SLOT_YOU)
+				&& (this.slotTypes[index] != SLOT_HIDDEN);
+	}
+
+	/** Moves the player to another user slot, which frees the slot the player had; its team and colour are the new slot's. */
+	public void take(final GameCatalog.MapDetails details, final int index) {
+		for (int i = 0; i < this.slotTypes.length; i++) {
+			if (this.slotTypes[i] == SLOT_YOU) {
+				if (raceEditable(details, i) && raceEditable(details, index)) {
+					this.slotRaces[index] = this.slotRaces[i];
+				}
+				this.slotTypes[i] = SLOT_OPEN;
+			}
+		}
+		this.slotTypes[index] = SLOT_YOU;
+		resolveColor(details, index);
+	}
+
+	/** The first user slot of the map: the one a fixed lobby gives the player when nothing says otherwise. */
+	private int firstUserSlot(final GameCatalog.MapDetails details) {
+		for (int i = 0; i < details.slots.size(); i++) {
+			if (details.slots.get(i).type == 1) {
+				return i;
+			}
+		}
+		return -1;
 	}
 
 	/** The team a slot starts in: its force when the map sets forces, else a team of its own. */
@@ -154,6 +243,7 @@ public final class CustomGame {
 	public LaunchRequest request(final GameCatalog.MapDetails details) {
 		final StringBuilder slots = new StringBuilder();
 		final boolean fixed = fixedSlots(details);
+		final int firstUser = firstUserSlot(details);
 		for (int i = 0; i < details.slots.size(); i++) {
 			if (this.slotTypes[i] == SLOT_HIDDEN) {
 				continue;
@@ -163,10 +253,15 @@ public final class CustomGame {
 				final int race = raceEditable(details, i) && (this.slotRaces[i] > 0) ? this.slotRaces[i]
 						: LauncherSlot.MAP_VALUE;
 				if (this.slotTypes[i] == SLOT_YOU) {
-					if (race != LauncherSlot.MAP_VALUE) {
+					if ((race != LauncherSlot.MAP_VALUE) || (i != firstUser)) {
 						new LauncherSlot(details.slots.get(i).id, "USER", race, LauncherSlot.MAP_VALUE,
 								LauncherSlot.MAP_VALUE).appendTo(slots);
 					}
+				}
+				else if ((i == firstUser) && (this.slotTypes[i] == SLOT_OPEN)) {
+					// The player moved away from the slot the map would give the player.
+					new LauncherSlot(details.slots.get(i).id, SLOT_TYPES[SLOT_OPEN][0], LauncherSlot.MAP_VALUE,
+							LauncherSlot.MAP_VALUE, LauncherSlot.MAP_VALUE).appendTo(slots);
 				}
 				else if (typeEditable(details, i) && (this.slotTypes[i] != SLOT_OPEN)) {
 					new LauncherSlot(details.slots.get(i).id, SLOT_TYPES[this.slotTypes[i]][0], race,

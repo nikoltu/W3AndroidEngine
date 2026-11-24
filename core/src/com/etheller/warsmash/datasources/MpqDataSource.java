@@ -13,6 +13,10 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
 
+import org.apache.commons.compress.utils.SeekableInMemoryByteChannel;
+
+import com.etheller.warsmash.util.FileReadChannel;
+
 import mpq.ArchivedFile;
 import mpq.ArchivedFileExtractor;
 import mpq.ArchivedFileStream;
@@ -56,6 +60,33 @@ public class MpqDataSource implements DataSource {
 		final ArchivedFileStream stream = new ArchivedFileStream(this.inputChannel, this.extractor, file);
 		final InputStream newInputStream = Channels.newInputStream(stream);
 		return newInputStream;
+	}
+
+	/**
+	 * An archive read through a {@link FileReadChannel} can be read by a helper thread while the game thread reads it:
+	 * that channel keeps its position per thread. One held in memory gives each stream a channel of its own over the
+	 * same bytes. Each opened stream has an extractor of its own.
+	 */
+	@Override
+	public IndependentStream.Opener opener(final String filepath) {
+		final boolean inMemory = this.inputChannel instanceof SeekableInMemoryByteChannel;
+		if (!inMemory && !(this.inputChannel instanceof FileReadChannel)) {
+			return null;
+		}
+		final ArchivedFile file;
+		try {
+			file = this.archive.lookupHash2(new HashLookup(archivePath(filepath)));
+		}
+		catch (final MPQException exc) {
+			return null;
+		}
+		return () -> {
+			final SeekableByteChannel channel = inMemory
+					? new SeekableInMemoryByteChannel(((SeekableInMemoryByteChannel) this.inputChannel).array())
+					: this.inputChannel;
+			return new IndependentStream.Buffered(
+					Channels.newInputStream(new ArchivedFileStream(channel, new ArchivedFileExtractor(), file)), 65536);
+		};
 	}
 
 	@Override

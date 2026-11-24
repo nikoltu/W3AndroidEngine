@@ -135,6 +135,20 @@ class CrashReportTest {
 	}
 
 	@Test
+	void memoryNotesAreInBothKindsOfLog() {
+		final CrashReport.Details details = new CrashReport.Details();
+		details.time = 1762650000000L;
+		details.memory = "10:00:00.000 load start | avail=900MB threshold=200MB low=false";
+		details.exit = "Reason: LOW_MEMORY";
+		assertTrue(CrashReport.text(details, UTC).contains("Memory (newest last)\n10:00:00.000 load start"));
+		details.exit = null;
+		details.error = new IllegalStateException("x");
+		assertTrue(CrashReport.text(details, UTC).contains("threshold=200MB"));
+		details.memory = null;
+		assertFalse(CrashReport.text(details, UTC).contains("Memory (newest last)"));
+	}
+
+	@Test
 	void binaryTraceKeepsReadableRuns() {
 		final byte[] bytes = { 0, 1, 'a', 'b', 'c', 'd', 'e', 0, 'x', 'y', 0 };
 		assertEquals("abcde\n", CrashReport.traceText(bytes, bytes.length));

@@ -63,6 +63,9 @@ public class CAbilityPocketFactory extends CAbilityPointTargetSpellBase {
 						final CUnit factoryUnit = simulation.createUnitSimple(CAbilityPocketFactory.this.factoryUnitId,
 								caster.getPlayerIndex(), target.getX(), target.getY(),
 								game.getGameplayConstants().getBuildingAngle());
+						if (factoryUnit == null) {
+							return;
+						}
 						factoryUnit.addClassification(CUnitClassification.SUMMONED);
 						simulation.unitSummoned(caster, factoryUnit);
 						factoryUnit.add(game, new CBuffTimedLife(game.getHandleIdAllocator().createId(),

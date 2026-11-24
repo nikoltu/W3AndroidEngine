@@ -72,9 +72,12 @@ public class COrderTargetWidget implements COrder {
 			}
 			final ExternStringMsgTargetCheckReceiver<CWidget> targetReceiver = (ExternStringMsgTargetCheckReceiver<CWidget>) targetCheckReceiver;
 			ability.checkCanTarget(game, caster, this.playerIndex, this.orderId, this.autoOrder, target, targetReceiver.reset());
-			if (targetReceiver.getTarget() != null) {
+			// The receiver is shared by every order, and an order event a script answers with an order of its own
+			// uses it again before this one begins.
+			final CWidget checkedTarget = targetReceiver.getTarget();
+			if (checkedTarget != null) {
 				caster.fireOrderEvents(game, this);
-				return ability.begin(game, caster, this.playerIndex, this.orderId, this.autoOrder, targetReceiver.getTarget());
+				return ability.begin(game, caster, this.playerIndex, this.orderId, this.autoOrder, checkedTarget);
 			}
 			else {
 				game.getCommandErrorListener().showInterfaceError(caster.getPlayerIndex(),

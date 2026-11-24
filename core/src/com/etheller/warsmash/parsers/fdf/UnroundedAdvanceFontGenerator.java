@@ -18,6 +18,9 @@ import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
  * font's unhinted one, rounded to the nearest pixel, so the widths of a line add up to the font's. Digits are the
  * exception: the original does not use their equal font advance (a "1" is narrow there), so they are as wide as their
  * outline plus a gap.
+ *
+ * A letter the face lacks (Korean or Chinese text of a map next to the Latin interface font) is drawn from a font of
+ * the device that has it, found once when the first such letter comes.
  */
 public class UnroundedAdvanceFontGenerator extends FreeTypeFontGenerator {
 	/** The original spaces digits by their own width plus this much, not by the font's equal digit advance. */
@@ -25,9 +28,16 @@ public class UnroundedAdvanceFontGenerator extends FreeTypeFontGenerator {
 	private final Library metricsLibrary;
 	private final Face metricsFace;
 	private int metricsSize;
+	private final boolean fallbackAllowed;
 
 	public UnroundedAdvanceFontGenerator(final FileHandle fontFile) {
+		this(fontFile, true);
+	}
+
+	/** @param fallbackAllowed false for the font the others fall back to */
+	UnroundedAdvanceFontGenerator(final FileHandle fontFile, final boolean fallbackAllowed) {
 		super(fontFile);
+		this.fallbackAllowed = fallbackAllowed;
 		final byte[] bytes = fontFile.readBytes();
 		final ByteBuffer buffer = ByteBuffer.allocateDirect(bytes.length);
 		buffer.put(bytes);
@@ -40,6 +50,9 @@ public class UnroundedAdvanceFontGenerator extends FreeTypeFontGenerator {
 	protected Glyph createGlyph(final char c, final FreeTypeBitmapFontData data, final FreeTypeFontParameter parameter,
 			final Stroker stroker, final float baseLine, final PixmapPacker packer) {
 		final Glyph glyph = super.createGlyph(c, data, parameter, stroker, baseLine, packer);
+		if ((glyph == null) && this.fallbackAllowed && (c > 0x7F) && !Character.isISOControl(c)) {
+			return GlyphFallbackFont.createGlyph(c, data, parameter, stroker, baseLine, packer);
+		}
 		if ((glyph != null) && (parameter.size > 0) && !parameter.mono) {
 			if (this.metricsSize != parameter.size) {
 				this.metricsFace.setPixelSizes(0, parameter.size);

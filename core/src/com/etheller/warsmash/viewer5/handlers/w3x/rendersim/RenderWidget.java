@@ -109,7 +109,7 @@ public interface RenderWidget {
 			this.currentlyAllowingRarityVariations = allowRarityVariations;
 		}
 
-		private void modelLoaded() {
+		void modelLoaded() {
 			this.turretBone = this.instance.inefficientlyGetNodeByNameSearch("bone_turret");
 			this.headBone = this.instance.inefficientlyGetNodeByNameSearch("bone_head");
 			final List<QueuedAnimation> queued = new ArrayList<>(this.animationQueue);

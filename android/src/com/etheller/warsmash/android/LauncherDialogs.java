@@ -7,6 +7,7 @@ import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.view.Gravity;
 import android.view.View;
@@ -30,6 +31,8 @@ import com.etheller.warsmash.launcher.SkinArt;
  */
 final class LauncherDialogs extends LauncherViews {
 	private static final long DIALOG_MILLIS = 120;
+	/** A colour another slot has. */
+	private static final float TAKEN_ALPHA = 0.28f;
 
 	View dialog;
 	/** The box of the open dialog and its name field, which the on-screen keyboard must not cover. */
@@ -46,10 +49,14 @@ final class LauncherDialogs extends LauncherViews {
 		super(activity);
 	}
 
-	/** The open menu of a drop-down, under it or, near the bottom, over it. */
+	/** The open menu of a drop-down, under it or, near the bottom, over it; a player colour menu is a palette. */
 	void showChoices(final View anchor, final String[] items, final int selected, final float textSize,
-			final int[] colors, final IntConsumer chosen) {
+			final int[] colors, final boolean[] taken, final IntConsumer chosen) {
 		if (this.dialog != null) {
+			return;
+		}
+		if (colors != null) {
+			showPalette(items, selected, colors, taken, chosen);
 			return;
 		}
 		final LauncherBoard b = this.activity.board;
@@ -57,13 +64,13 @@ final class LauncherDialogs extends LauncherViews {
 		anchor.getLocationInWindow(at);
 		final int[] origin = new int[2];
 		this.activity.root.getLocationInWindow(origin);
-		final float x = (at[0] - origin[0]) / this.activity.scale;
 		final float top = (at[1] - origin[1]) / this.activity.scale;
 		final float w = anchor.getWidth() / this.activity.scale;
+		final float x = Math.max(8, Math.min((at[0] - origin[0]) / this.activity.scale, b.width - 8 - w));
 		final float anchorH = anchor.getHeight() / this.activity.scale;
 		final float itemH = b.tablet ? Math.max(88, anchorH * 0.8f) : 96;
 		final float edge = b.tablet ? 14 : 8;
-		// A long menu (the player colours on the phone) scrolls within the screen.
+		// A long menu scrolls within the screen.
 		final float h = Math.min((items.length * itemH) + (2 * edge), b.height - 16);
 		float y = top + anchorH;
 		if ((y + h) > b.height) {
@@ -103,6 +110,52 @@ final class LauncherDialogs extends LauncherViews {
 		this.dialog = scrim;
 		if (selected > 0) {
 			scroll.post(() -> scroll.scrollTo(0, px(selected * itemH) - ((scroll.getHeight() - px(itemH)) / 2)));
+		}
+	}
+
+	/**
+	 * The player colours as a grid of swatches in a box of their own, the chosen one ringed in gold. A colour another
+	 * slot has is dimmed and cannot be chosen, but its name still shows on a long press.
+	 *
+	 * @param taken the colours of the other slots, or null when every colour is free
+	 */
+	private void showPalette(final String[] names, final int selected, final int[] colors, final boolean[] taken,
+			final IntConsumer chosen) {
+		final LauncherBoard b = this.activity.board;
+		final boolean t = b.tablet;
+		final float gap = t ? 20 : 14;
+		final float pad = t ? 90 : 60;
+		final int columns = Math.min(8, colors.length);
+		final int rows = (colors.length + columns - 1) / columns;
+		// Swatches stay at least a finger wide; a narrow window shrinks them before the box touches the screen edge.
+		final float cell = Math.min(t ? 150 : 104, (b.width - 32 - (2 * pad) - ((columns - 1) * gap)) / columns);
+		final float w = (columns * cell) + ((columns - 1) * gap) + (2 * pad);
+		final float h = (rows * cell) + ((rows - 1) * gap) + (2 * pad);
+		final FrameLayout box = dialogBox(w, Math.min(h, b.height - 32));
+		if (box == null) {
+			return;
+		}
+		for (int i = 0; i < colors.length; i++) {
+			final int choice = i;
+			final GradientDrawable fill = new GradientDrawable();
+			fill.setColor(colors[i]);
+			fill.setStroke(px(i == selected ? 7 : 2), i == selected ? this.activity.art.gold() : Color.argb(0xB0, 0, 0, 0));
+			final View swatch = new View(this.activity);
+			swatch.setBackground(fill);
+			final CharSequence name = LauncherKit.glueText(names[i]);
+			swatch.setContentDescription(name);
+			swatch.setTooltipText(name);
+			if ((taken != null) && taken[i] && (i != selected)) {
+				swatch.setAlpha(TAKEN_ALPHA);
+				swatch.setLongClickable(true);
+			}
+			else {
+				onTap(swatch, false, v -> {
+					closeDialog();
+					chosen.accept(choice);
+				});
+			}
+			place(box, swatch, pad + ((i % columns) * (cell + gap)), pad + ((i / columns) * (cell + gap)), cell, cell);
 		}
 	}
 
@@ -160,25 +213,25 @@ final class LauncherDialogs extends LauncherViews {
 		return box;
 	}
 
-	void showMessage(final String title, final String line) {
+	void showMessage(final CharSequence title, final String line) {
 		showQuestion(title, line, new CharSequence[] { glueLabel("OK", getString(R.string.game_ok)) },
 				new Runnable[] { null });
 	}
 
 	/** A question or a message with its buttons side by side; every button closes the dialog. */
-	void showQuestion(final String title, final String line, final CharSequence[] labels,
+	void showQuestion(final CharSequence title, final String line, final CharSequence[] labels,
 			final Runnable[] actions) {
 		showQuestion(title, line, labels, actions, null);
 	}
 
 	/** With an icon, the question stands beside it, as the glue dialogs that ask about a profile have it. */
-	void showQuestion(final String title, final String line, final CharSequence[] labels,
+	void showQuestion(final CharSequence title, final String line, final CharSequence[] labels,
 			final Runnable[] actions, final Bitmap icon) {
 		showQuestion(title, line, labels, actions, icon, 3, false);
 	}
 
 	/** A question with a long explanation: the box is taller and the lines of the explanation are not cut at three. */
-	void showQuestion(final String title, final String line, final CharSequence[] labels,
+	void showQuestion(final CharSequence title, final String line, final CharSequence[] labels,
 			final Runnable[] actions, final Bitmap icon, final int detailLines, final boolean tall) {
 		if (this.dialog != null) {
 			// Dropped silently, its buttons would never run; it opens when the open dialog closes.

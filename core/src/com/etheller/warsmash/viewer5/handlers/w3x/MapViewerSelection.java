@@ -41,13 +41,7 @@ final class MapViewerSelection {
 	}
 
 	static void showTrackable(final War3MapViewer viewer, final CTrackable trackable) {
-		final RenderSpellEffect model = viewer.addSpecialEffect(trackable.getModelPath(), trackable.getX(), trackable.getY(),
-				(float) Math.toRadians(trackable.getFacing()));
-		if (model != null) {
-			viewer.projectiles.remove(model);
-			viewer.trackableModels.add(model);
-			viewer.trackableOwners.add(trackable);
-		}
+		viewer.trackables.add(trackable);
 	}
 
 	/**
@@ -55,7 +49,7 @@ final class MapViewerSelection {
 	 * by their model's mesh, as the game does; a model without one is pointed at by its bounds.
 	 */
 	static CTrackable rayPickTrackable(final War3MapViewer viewer, final float x, final float y) {
-		if (viewer.trackableModels.isEmpty()) {
+		if (viewer.trackables.activeCount() == 0) {
 			return null;
 		}
 		final float[] ray = War3MapViewer.rayHeap;
@@ -63,25 +57,8 @@ final class MapViewerSelection {
 		viewer.worldScene.camera.screenToWorldRay(ray, War3MapViewer.mousePosHeap);
 		War3MapViewer.gdxRayHeap.set(ray[0], ray[1], ray[2], ray[3] - ray[0], ray[4] - ray[1], ray[5] - ray[2]);
 		War3MapViewer.gdxRayHeap.direction.nor();
-		CTrackable picked = null;
-		float pickedDistance = Float.MAX_VALUE;
-		for (int i = 0, n = viewer.trackableModels.size(); i < n; i++) {
-			final MdxComplexInstance instance = viewer.trackableModels.get(i).getModelInstance();
-			if ((instance == null) || !instance.shown() || !instance.isVisible(viewer.worldScene.camera)) {
-				continue;
-			}
-			final boolean hit = ((MdxModel) instance.model).geosets.isEmpty()
-					? instance.intersectRayBounds(War3MapViewer.gdxRayHeap, War3MapViewer.intersectionHeap)
-					: instance.intersectRayWithCollision(War3MapViewer.gdxRayHeap, War3MapViewer.intersectionHeap, true, true);
-			if (hit) {
-				final float distance = War3MapViewer.intersectionHeap.dst2(War3MapViewer.gdxRayHeap.origin);
-				if (distance < pickedDistance) {
-					pickedDistance = distance;
-					picked = viewer.trackableOwners.get(i);
-				}
-			}
-		}
-		return picked;
+		return viewer.trackables.pick(War3MapViewer.gdxRayHeap, War3MapViewer.intersectionHeap,
+				viewer.worldScene.camera);
 	}
 
 	static void deselect(final War3MapViewer viewer) {

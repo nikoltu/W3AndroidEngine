@@ -10,6 +10,11 @@ public class CTerrainCorner extends Corner {
 	public boolean romp;
 	/** A terrain doodad (a bridge, a ramp of its own) took the cell out of the cliff layout. */
 	public boolean hideCliff;
+	/**
+	 * The cell is a cliff beside a ramp slope that has no ramp model. It gets no cliff model either, as its corners follow
+	 * the lifted ground and a model would leave a gap, so the ground under it stays drawn.
+	 */
+	public boolean openCliff;
 
 	public CTerrainCorner(final Corner corner) {
 		super(corner);

@@ -10,11 +10,17 @@ import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
+import android.graphics.Color;
+import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
 import android.provider.OpenableColumns;
 import android.provider.Settings;
+import android.text.SpannableStringBuilder;
+import android.text.Spanned;
+import android.text.style.ForegroundColorSpan;
+import android.text.style.StyleSpan;
 import android.util.Log;
 
 import com.etheller.warsmash.launcher.CustomContent;
@@ -128,6 +134,47 @@ final class CustomContentActions {
 		this.activity.preferences.edit().remove(KEY_TREE).apply();
 		this.activity.reloadContent();
 		this.activity.optionsPage.showOptions(OptionsPage.TAB_GAME_DATA);
+	}
+
+	/** How many maps the player has imported into the content folder. */
+	int importedCount() {
+		return CustomContent.importedMaps(folder()).size();
+	}
+
+	/** The result line with the count in bold red, the only part of it that tells anything new. */
+	private CharSequence deletedLine(final int deleted) {
+		final String text = getString(R.string.game_delete_imported_done, deleted);
+		final SpannableStringBuilder line = new SpannableStringBuilder(text);
+		final String count = Integer.toString(deleted);
+		final int at = text.indexOf(count);
+		if (at >= 0) {
+			line.setSpan(new ForegroundColorSpan(Color.RED), at, at + count.length(),
+					Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+			line.setSpan(new StyleSpan(Typeface.BOLD), at, at + count.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+		}
+		return line;
+	}
+
+	/** Asks, then deletes every imported map; game data, built-in maps and the folder's other files stay. */
+	void askDeleteImported() {
+		final int count = importedCount();
+		if (count == 0) {
+			this.activity.dialogs.showMessage(getString(R.string.game_delete_imported_none), null);
+			return;
+		}
+		// Destructive: No comes first and is the plain way out.
+		this.activity.dialogs.showQuestion(getString(R.string.game_delete_imported_question, count), null,
+				new CharSequence[] { this.activity.customPage.glueLabel("NO", getString(R.string.game_no)),
+					this.activity.customPage.glueLabel("YES", getString(R.string.game_yes)) },
+				new Runnable[] { null, () -> {
+					final int deleted = CustomContent.deleteImportedMaps(folder());
+					final String chosen = this.activity.preferences.getString(KEY_MAP, null);
+					if ((chosen != null) && chosen.startsWith("Maps\\Custom\\")) {
+						this.activity.preferences.edit().remove(KEY_MAP).apply();
+					}
+					this.activity.reloadContent();
+					this.activity.dialogs.showMessage(deletedLine(deleted), null);
+				} });
 	}
 
 	void chooseMap() {

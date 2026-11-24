@@ -3,7 +3,9 @@ package com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.inventor
 import java.util.ArrayList;
 import java.util.List;
 
+import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.util.War3ID;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.ability.AbilityBuilderAbility;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CItem;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.item.CEquipmentType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CItemType;
@@ -698,6 +700,7 @@ public class CAbilityInventory extends AbstractGenericNoIconAbility {
 									this.itemsHeldAbilities[itemIndex].add(abilityFromItem);
 								}
 							}
+							applyCarriedCooldowns(simulation, hero, item);
 						}
 						hero.onPickUpItem(simulation, item, true);
 						return itemIndex;
@@ -805,6 +808,45 @@ public class CAbilityInventory extends AbstractGenericNoIconAbility {
 		}
 	}
 
+	private static void carryCooldowns(final CSimulation simulation, final CUnit hero, final CItem item,
+			final List<CAbility> itemAbilities) {
+		item.clearCarriedCooldowns();
+		if (item.getCharges() != 0) {
+			return;
+		}
+		for (final CAbility ability : itemAbilities) {
+			final War3ID key = cooldownKey(item, ability);
+			if (key != null) {
+				final int remaining = hero.getCooldownRemainingTicks(simulation, key);
+				if (remaining > 0) {
+					item.carryCooldown(key, simulation.getGameTurnTick() + remaining);
+				}
+			}
+		}
+	}
+
+	/** The cooldown an item's ability runs on the unit: the item's group for the ability builder kind, its code otherwise. */
+	public static War3ID cooldownKey(final CItem item, final CAbility ability) {
+		if (ability instanceof AbilityBuilderAbility) {
+			if (item.getItemType().isIgnoreCooldown()) {
+				return null;
+			}
+			final War3ID group = item.getItemType().getCooldownGroup();
+			return (group != null) ? group : ability.getCode();
+		}
+		return (ability instanceof CAbilitySpellBase) ? ability.getCode() : null;
+	}
+
+	private static void applyCarriedCooldowns(final CSimulation simulation, final CUnit hero, final CItem item) {
+		for (final java.util.Map.Entry<War3ID, Integer> entry : item.getCarriedCooldownEnds().entrySet()) {
+			final int remaining = entry.getValue() - simulation.getGameTurnTick();
+			if (remaining > hero.getCooldownRemainingTicks(simulation, entry.getKey())) {
+				hero.beginCooldown(simulation, entry.getKey(), remaining * WarsmashConstants.SIMULATION_STEP_TIME);
+			}
+		}
+		item.clearCarriedCooldowns();
+	}
+
 	public void dropItem(final CSimulation simulation, final CUnit hero, final int slotIndex, final float x,
 			final float y, final boolean playUserUISounds) {
 		final CItem droppedItem = this.itemsHeld[slotIndex];
@@ -849,6 +891,7 @@ public class CAbilityInventory extends AbstractGenericNoIconAbility {
 			itemAbilities = this.loadoutAbilities[worn];
 		}
 		hero.onDropItem(simulation, itemToDrop, playUserUISounds);
+		carryCooldowns(simulation, hero, itemToDrop, itemAbilities);
 		itemToDrop.setLastHolder(hero);
 		itemToDrop.setContainedInventory(null, null);
 		for (final CAbility ability : itemAbilities) {

@@ -358,6 +358,11 @@ public class MeleeToggleUI implements WarsmashUI {
 	}
 
 	@Override
+	public void setScriptFocus(final UIFrame frame, final boolean focus) {
+		this.meleeUI.setScriptFocus(frame, focus);
+	}
+
+	@Override
 	public void endTouchHover() {
 		this.meleeUI.endTouchHover();
 	}

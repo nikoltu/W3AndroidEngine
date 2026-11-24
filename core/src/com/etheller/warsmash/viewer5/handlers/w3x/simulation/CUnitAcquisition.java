@@ -209,7 +209,7 @@ final class CUnitAcquisition {
 			return (int) ((AbilityBuilderAbility) self.autocastAbility).getCooldownRemainingTicks(game, self);
 		}
 		if (self.autocastAbility instanceof CAbilitySpellBase) {
-			return self.getCooldownRemainingTicks(game, ((CAbilitySpellBase) self.autocastAbility).getCode());
+			return self.getCooldownRemainingTicks(game, ((CAbilitySpellBase) self.autocastAbility).getCooldownKey());
 		}
 		return 0;
 	}

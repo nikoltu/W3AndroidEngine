@@ -939,6 +939,19 @@ final class LauncherKit {
 		}
 	}
 
+	/** A colour code's colour, opaque and, where it would vanish on the launcher's dark pages, lightened. */
+	private static int legible(final int colour) {
+		int r = Color.red(colour);
+		int g = Color.green(colour);
+		int b = Color.blue(colour);
+		if (((0.2126f * r) + (0.7152f * g) + (0.0722f * b)) < 90) {
+			r += (255 - r) * 0.6f;
+			g += (255 - g) * 0.6f;
+			b += (255 - b) * 0.6f;
+		}
+		return Color.rgb(r, g, b);
+	}
+
 	/**
 	 * Glue strings mark the shortcut letter with a colour code ("|CffffffffC|Rampaign"); the codes become colour spans
 	 * and the rest of the text keeps the view's colour.
@@ -949,7 +962,7 @@ final class LauncherKit {
 			final int start = text.length();
 			text.append(run.text);
 			if (run.colour != 0) {
-				text.setSpan(new ForegroundColorSpan(run.colour), start, text.length(),
+				text.setSpan(new ForegroundColorSpan(legible(run.colour)), start, text.length(),
 						Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
 			}
 		}

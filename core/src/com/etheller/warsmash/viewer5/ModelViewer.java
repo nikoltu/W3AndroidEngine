@@ -587,7 +587,11 @@ public abstract class ModelViewer {
 	}
 
 	public Scene addSimpleScene() {
-		final Scene scene = new SimpleScene(this, createLightManager(true));
+		return addSimpleScene(createLightManager(true));
+	}
+
+	public Scene addSimpleScene(final SceneLightManager lightManager) {
+		final Scene scene = new SimpleScene(this, lightManager);
 
 		this.scenes.add(scene);
 

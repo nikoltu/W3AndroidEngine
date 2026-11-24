@@ -10,6 +10,8 @@ import com.etheller.interpreter.ast.value.visitor.RealJassValueVisitor;
 import com.etheller.interpreter.ast.value.visitor.StringJassValueVisitor;
 import com.etheller.warsmash.parsers.jass.Jass2.CommonEnvironment;
 import com.etheller.warsmash.util.War3ID;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.ability.AbilityBuilderAbility;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.CAbilitySpellBase;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CItem;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnitType;
@@ -429,6 +431,20 @@ final class OrderNatives extends CommonNatives {
 					if (abilityHandleId != 0) {
 						defaultPlayerUnitOrderExecutor.issueImmediateOrder(whichUnit.getHandleId(), abilityHandleId,
 								orderId, false);
+						// Measured on 1.29: the item is on cooldown the moment UnitUseItem accepts it, before the
+						// cast point, so a second use or a hand-over right after finds it running.
+						for (final CAbility itemAbility : whichUnit.getInventoryData().getItemAbilities(item)) {
+							if (itemAbility instanceof AbilityBuilderAbility) {
+								if (((AbilityBuilderAbility) itemAbility).getCooldown() > 0) {
+									((AbilityBuilderAbility) itemAbility).startCooldown(this.simulation, whichUnit);
+								}
+							}
+							else if ((itemAbility instanceof CAbilitySpellBase)
+									&& (((CAbilitySpellBase) itemAbility).getCooldown() > 0)) {
+								whichUnit.beginCooldown(this.simulation, ((CAbilitySpellBase) itemAbility).getCode(),
+										((CAbilitySpellBase) itemAbility).getCooldown());
+							}
+						}
 					}
 					return BooleanJassValue.of(itemUsable);
 				});

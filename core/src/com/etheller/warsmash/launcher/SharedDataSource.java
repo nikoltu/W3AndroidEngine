@@ -32,6 +32,11 @@ public final class SharedDataSource implements DataSource {
 	}
 
 	@Override
+	public synchronized File fileOnDisk(final String filepath) {
+		return this.data.fileOnDisk(filepath);
+	}
+
+	@Override
 	public synchronized File getDirectory(final String filepath) throws IOException {
 		return this.data.getDirectory(filepath);
 	}

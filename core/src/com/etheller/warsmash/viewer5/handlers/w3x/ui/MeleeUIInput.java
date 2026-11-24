@@ -262,6 +262,16 @@ final class MeleeUIInput {
 		if (this.ui.smashEscMenu.isVisible()) {
 			return this.ui.menus.menuKeyDown(keycode);
 		}
+		if (heldByScriptFocus()) {
+			// Escape lets go of the text box; Enter reaches it, which tells the script, and the box keeps the keys.
+			if (keycode == Input.Keys.ESCAPE) {
+				this.ui.takeScriptFocus(null);
+			}
+			else {
+				this.ui.scriptFocus.keyDown(keycode);
+			}
+			return true;
+		}
 		if (this.ui.chat.isEntryOpen()) {
 			return this.ui.chat.entryKeyDown(keycode);
 		}
@@ -442,6 +452,18 @@ final class MeleeUIInput {
 		}
 	}
 
+	/** A text box of the map's interface with the focus, still showing: the keys go to it and not to the game. */
+	private boolean heldByScriptFocus() {
+		if (this.ui.scriptFocus == null) {
+			return false;
+		}
+		if (!this.ui.scriptFocus.isVisibleOnScreen()) {
+			this.ui.takeScriptFocus(null);
+			return false;
+		}
+		return true;
+	}
+
 	public boolean keyTyped(final char character) {
 		if (this.ui.swallowNextTypedChar) {
 			this.ui.swallowNextTypedChar = false;
@@ -449,6 +471,10 @@ final class MeleeUIInput {
 		}
 		if (this.ui.menuFocus != null) {
 			return this.ui.menuFocus.keyTyped(character);
+		}
+		if (!this.ui.smashEscMenu.isVisible() && heldByScriptFocus()) {
+			this.ui.scriptFocus.keyTyped(character);
+			return true;
 		}
 		if (this.ui.chat.isEntryOpen() && !this.ui.smashEscMenu.isVisible()) {
 			return this.ui.chat.entryKeyTyped(character);
@@ -629,6 +655,11 @@ final class MeleeUIInput {
 		}
 		final UIFrame clickedUIFrame = this.ui.rootFrame.touchDown(MeleeUI.screenCoordsVector.x,
 				MeleeUI.screenCoordsVector.y, button);
+		if (!this.ui.smashEscMenu.isVisible()) {
+			// A click on a text box gives it the keys; a click anywhere else takes them back.
+			this.ui.takeScriptFocus((clickedUIFrame instanceof FocusableFrame)
+					&& ((FocusableFrame) clickedUIFrame).isFocusable() ? (FocusableFrame) clickedUIFrame : null);
+		}
 		if (this.ui.smashEscMenu.isVisible()) {
 			this.ui.gameMenu.pressed(clickedUIFrame);
 			if (clickedUIFrame == null) {

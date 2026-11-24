@@ -19,65 +19,136 @@ public class Trigger implements CAllocatedHandle {
 	private boolean handleReleased;
 	private boolean handleIdKept;
 	private int referenceCount;
-	private final List<TriggerBooleanExpression> conditions = new ArrayList<>();
-	private final List<JassFunction> actions = new ArrayList<>();
-	private final List<RemovableTriggerEvent> events = new ArrayList<>();
+	// A script may make millions of triggers, most with one of each, so a list holds nothing (null) or its only element
+	// itself until a second one comes. Elements are never lists, and a list from a save is used as it is.
+	private Object conditions;
+	private Object actions;
+	private Object events;
 	private int evalCount;
 	private int execCount;
 	private boolean enabled = true;
 	// used for eval
-	private transient final TriggerExecutionScope triggerExecutionScope = new TriggerExecutionScope(this);
+	private transient TriggerExecutionScope triggerExecutionScope;
 	private boolean waitOnSleeps = true;
 
 	public void addEvent(final RemovableTriggerEvent event) {
-		this.events.add(event);
+		this.events = with(this.events, event);
 	}
 
 	public int addAction(final JassFunction function) {
-		final int index = this.actions.size();
-		this.actions.add(function);
+		final int index = sizeOf(this.actions);
+		this.actions = with(this.actions, function);
 		return index;
 	}
 
 	public int addAction(final CodeJassValue function) {
-		final int index = this.actions.size();
-		this.actions.add(new JassThreadActionFunc(function));
-		return index;
+		return addAction(new JassThreadActionFunc(function));
 	}
 
 	public JassFunction getActionAt(final int index) {
-		return this.actions.get(index);
+		return (JassFunction) at(this.actions, index);
 	}
 
 	public void removeAction(final JassFunction action) {
-		for (int i = 0; i < this.actions.size(); i++) {
-			if (this.actions.get(i) == action) {
-				this.actions.remove(i);
+		final List<Object> list = listOf(this.actions);
+		for (int i = 0; i < list.size(); i++) {
+			if (list.get(i) == action) {
+				list.remove(i);
+				this.actions = shrunk(list);
 				return;
 			}
 		}
 	}
 
 	public void clearActions() {
-		this.actions.clear();
+		this.actions = null;
 	}
 
 	public int addCondition(final TriggerBooleanExpression boolexpr) {
-		final int index = this.conditions.size();
-		this.conditions.add(boolexpr);
+		final int index = sizeOf(this.conditions);
+		this.conditions = with(this.conditions, boolexpr);
 		return index;
 	}
 
 	public void removeCondition(final TriggerBooleanExpression boolexpr) {
-		this.conditions.remove(boolexpr);
+		final List<Object> list = listOf(this.conditions);
+		if (list.remove(boolexpr)) {
+			this.conditions = shrunk(list);
+		}
 	}
 
 	public void removeConditionAtIndex(final int conditionIndex) {
-		this.conditions.remove(conditionIndex);
+		final List<Object> list = listOf(this.conditions);
+		list.remove(conditionIndex);
+		this.conditions = shrunk(list);
 	}
 
 	public void clearConditions() {
-		this.conditions.clear();
+		this.conditions = null;
+	}
+
+	private static int sizeOf(final Object slot) {
+		if (slot == null) {
+			return 0;
+		}
+		return slot instanceof List ? ((List<?>) slot).size() : 1;
+	}
+
+	private static Object at(final Object slot, final int index) {
+		if (slot instanceof List) {
+			return ((List<?>) slot).get(index);
+		}
+		if ((slot == null) || (index != 0)) {
+			throw new IndexOutOfBoundsException("Index " + index + " out of bounds for length " + sizeOf(slot));
+		}
+		return slot;
+	}
+
+	private static Object with(final Object slot, final Object element) {
+		if ((slot == null) && (element != null)) {
+			return element;
+		}
+		final List<Object> list = listOf(slot);
+		list.add(element);
+		return list;
+	}
+
+	/** The elements as a list that may be changed, which then replaces the slot through {@link #shrunk}. */
+	@SuppressWarnings("unchecked")
+	private static List<Object> listOf(final Object slot) {
+		if (slot instanceof ArrayList) {
+			return (List<Object>) slot;
+		}
+		final List<Object> list = new ArrayList<>(2);
+		if (slot instanceof List) {
+			list.addAll((List<Object>) slot);
+		}
+		else if (slot != null) {
+			list.add(slot);
+		}
+		return list;
+	}
+
+	private static Object shrunk(final List<Object> list) {
+		if (list.isEmpty()) {
+			return null;
+		}
+		if ((list.size() == 1) && (list.get(0) != null)) {
+			return list.get(0);
+		}
+		return list;
+	}
+
+	/** A copy to walk while the trigger changes. */
+	@SuppressWarnings("unchecked")
+	private static <T> List<T> copyOf(final Object slot) {
+		if (slot == null) {
+			return Collections.emptyList();
+		}
+		if (slot instanceof List) {
+			return new ArrayList<>((List<T>) slot);
+		}
+		return Collections.singletonList((T) slot);
 	}
 
 	public int getEvalCount() {
@@ -91,7 +162,7 @@ public class Trigger implements CAllocatedHandle {
 	public boolean evaluate(final GlobalScope globalScope, final TriggerExecutionScope triggerScope) {
 		// Every condition runs, even after one has failed (1.29).
 		boolean result = true;
-		for (final TriggerBooleanExpression condition : new ArrayList<>(this.conditions)) {
+		for (final TriggerBooleanExpression condition : Trigger.<TriggerBooleanExpression>copyOf(this.conditions)) {
 			// A null boolexpr evaluates false.
 			if ((condition == null) || !condition.evaluate(globalScope, triggerScope)) {
 				result = false;
@@ -125,10 +196,14 @@ public class Trigger implements CAllocatedHandle {
 	}
 
 	private JassThread runActions(final GlobalScope globalScope, final TriggerExecutionScope triggerScope) {
-		if (this.actions.isEmpty()) {
+		if (this.actions == null) {
 			return null;
 		}
-		final ActionsThread thread = new ActionsThread(globalScope, triggerScope, new ArrayList<>(this.actions));
+		final List<JassFunction> copy = Trigger.<JassFunction>copyOf(this.actions);
+		if (copy.isEmpty()) {
+			return null;
+		}
+		final ActionsThread thread = new ActionsThread(globalScope, triggerScope, copy);
 		try {
 			if (thread.advance() && globalScope.runThreadUntilSleep(thread)) {
 				return thread;
@@ -152,10 +227,10 @@ public class Trigger implements CAllocatedHandle {
 	}
 
 	public void destroy() {
-		for (final RemovableTriggerEvent event : this.events) {
+		for (final RemovableTriggerEvent event : Trigger.<RemovableTriggerEvent>copyOf(this.events)) {
 			event.remove();
 		}
-		this.events.clear();
+		this.events = null;
 	}
 
 	public void reset() {
@@ -257,13 +332,19 @@ public class Trigger implements CAllocatedHandle {
 	}
 
 	public TriggerExecutionScope getTriggerExecutionScope() {
+		if (this.triggerExecutionScope == null) {
+			this.triggerExecutionScope = new TriggerExecutionScope(this);
+		}
 		return this.triggerExecutionScope;
 	}
 
 	public void removeEvent(final RemovableTriggerEvent evt) {
 		if (evt != null) {
 			evt.remove();
-			this.events.remove(evt);
+			final List<Object> list = listOf(this.events);
+			if (list.remove(evt)) {
+				this.events = shrunk(list);
+			}
 		}
 	}
 

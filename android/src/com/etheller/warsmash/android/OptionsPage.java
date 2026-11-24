@@ -532,6 +532,11 @@ final class OptionsPage extends LauncherViews {
 					return true;
 				}, getString(R.string.options_perf_note));
 		reportRows(rows);
+		final FrameLayout importedRow = labelledRow(rows, R.string.options_delete_imported);
+		final float importedH = b.tablet ? 80 : 64;
+		place(importedRow, button(getString(R.string.options_delete_imported_button), importedH, b.tablet ? 32 : 24,
+				v -> this.activity.customContent.askDeleteImported()), controlX(0), (b.rowH - importedH) / 2,
+				b.tablet ? 300 : 200, importedH);
 		unlockRows(rows);
 	}
 

@@ -34,8 +34,19 @@ public final class CTerrainDeformations {
 	public Deformation ripple(final CSimulation simulation, final float x, final float y, final float radius,
 			final float depth, final int durationMs, final int count, final float spaceWaves, final float timeWaves,
 			final float radiusStartPct, final boolean limitNeg) {
+		return ripple(simulation, x, y, radius, depth, durationMs, count, spaceWaves, timeWaves, radiusStartPct,
+				limitNeg, 0);
+	}
+
+	/**
+	 * The ripples of abilities start their waves a little after they are made: the ground shows nothing until
+	 * delayMs has passed, and the wave runs from there.
+	 */
+	public Deformation ripple(final CSimulation simulation, final float x, final float y, final float radius,
+			final float depth, final int durationMs, final int count, final float spaceWaves, final float timeWaves,
+			final float radiusStartPct, final boolean limitNeg, final int delayMs) {
 		return add(simulation, new Ripple(x, y, radius, depth, durationMs, count, spaceWaves, timeWaves,
-				radiusStartPct, limitNeg));
+				radiusStartPct, limitNeg, delayMs));
 	}
 
 	public Deformation wave(final CSimulation simulation, final float x, final float y, final float dirX,
@@ -43,6 +54,15 @@ public final class CTerrainDeformations {
 			final int trailTimeMs, final int count) {
 		return add(simulation,
 				new Wave(x, y, dirX, dirY, distance, speed, radius, depth, trailTimeMs, count));
+	}
+
+	/**
+	 * A mound (positive height) or hollow that grows over the sink time, stays for the static time and settles over
+	 * the fill time, in the shape of a quarter cosine from the middle to the radius.
+	 */
+	public Deformation bowl(final CSimulation simulation, final float x, final float y, final float radius,
+			final float height, final int sinkTimeMs, final int staticTimeMs, final int fillTimeMs) {
+		return add(simulation, new Bowl(x, y, radius, height, sinkTimeMs, staticTimeMs, fillTimeMs));
 	}
 
 	public Deformation random(final CSimulation simulation, final float x, final float y, final float radius,
@@ -348,6 +368,56 @@ public final class CTerrainDeformations {
 		}
 	}
 
+	private static final class Bowl extends Deformation {
+		private final float x;
+		private final float y;
+		private final float radius;
+		private final float height;
+		private final float sink;
+		private final float hold;
+		private final float fill;
+
+		Bowl(final float x, final float y, final float radius, final float height, final int sinkTimeMs,
+				final int staticTimeMs, final int fillTimeMs) {
+			this.x = x;
+			this.y = y;
+			this.radius = radius;
+			this.height = height;
+			this.sink = Math.max(0, sinkTimeMs) / 1000f;
+			this.hold = Math.max(0, staticTimeMs) / 1000f;
+			this.fill = Math.max(0, fillTimeMs) / 1000f;
+		}
+
+		@Override
+		void bounds(final CTerrainDeformations owner) {
+			bounds(owner, this.x - this.radius, this.y - this.radius, this.x + this.radius, this.y + this.radius);
+		}
+
+		@Override
+		float totalTime() {
+			return this.sink + this.hold + this.fill;
+		}
+
+		@Override
+		float offset(final float px, final float py) {
+			final float distance = (float) StrictMath.hypot(px - this.x, py - this.y);
+			if ((this.radius <= 0) || (distance >= this.radius)) {
+				return 0;
+			}
+			final float phase;
+			if (this.elapsed < this.sink) {
+				phase = this.elapsed / this.sink;
+			}
+			else if (this.elapsed < (this.sink + this.hold)) {
+				phase = 1;
+			}
+			else {
+				phase = 1 - ((this.elapsed - this.sink - this.hold) / this.fill);
+			}
+			return (float) (this.height * phase * StrictMath.cos((Math.PI / 2) * (distance / this.radius)));
+		}
+	}
+
 	private static final class Ripple extends Deformation {
 		private final float x;
 		private final float y;
@@ -359,10 +429,12 @@ public final class CTerrainDeformations {
 		private final float timeWaves;
 		private final float radiusStartPct;
 		private final boolean limitNeg;
+		private final float delay;
 
 		Ripple(final float x, final float y, final float radius, final float depth, final int durationMs,
 				final int count, final float spaceWaves, final float timeWaves, final float radiusStartPct,
-				final boolean limitNeg) {
+				final boolean limitNeg, final int delayMs) {
+			this.delay = Math.max(0, delayMs) / 1000f;
 			this.x = x;
 			this.y = y;
 			this.radius = radius;
@@ -383,15 +455,16 @@ public final class CTerrainDeformations {
 
 		@Override
 		float totalTime() {
-			return this.total;
+			return this.total + this.delay;
 		}
 
 		@Override
 		float offset(final float px, final float py) {
-			if ((this.radius <= 0) || (this.total <= 0)) {
+			final float time = this.elapsed - this.delay;
+			if ((this.radius <= 0) || (this.total <= 0) || (time < 0)) {
 				return 0;
 			}
-			final float progress = Math.min(1, this.elapsed / this.total);
+			final float progress = Math.min(1, time / this.total);
 			final float currentRadius = this.radius
 					* (this.radiusStartPct + ((1 - this.radiusStartPct) * progress));
 			final float distance = (float) StrictMath.hypot(px - this.x, py - this.y);
@@ -399,7 +472,7 @@ public final class CTerrainDeformations {
 				return 0;
 			}
 			final float value = (float) (-this.depth * (1 - progress) * StrictMath.sin((Math.PI * this.spaceWaves
-					* (distance / this.radius)) + (Math.PI * this.timeWaves * (this.elapsed / this.period))));
+					* (distance / this.radius)) + (Math.PI * this.timeWaves * (time / this.period))));
 			return this.limitNeg ? Math.min(0, value) : value;
 		}
 	}

@@ -31,6 +31,10 @@ public class GeosetAnimation extends AnimatedObject {
 		return this.getVectorValue(out, AnimationMap.KGAC.getWar3id(), sequence, frame, counter, this.color);
 	}
 
+	boolean hasAlphaTimeline() {
+		return hasTimeline(AnimationMap.KGAO.getWar3id());
+	}
+
 	public boolean isAlphaVariant(final int sequence) {
 		return this.isVariant(AnimationMap.KGAO.getWar3id(), sequence);
 	}

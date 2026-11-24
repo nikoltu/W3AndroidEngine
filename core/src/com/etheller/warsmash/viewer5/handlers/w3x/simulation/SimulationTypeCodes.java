@@ -9,10 +9,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.beha
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.behavior.CBehaviorFinishTransformation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.behavior.CBehaviorSendOrder;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.effects.ABGroupEffect;
-import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.effects.ABTerrainBowlEffect;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.effects.ABTerrainEffect;
-import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.effects.ABTerrainRippleEffect;
-import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.effects.ABTerrainWaveEffect;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.timer.ABTimer;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.timer.AltitudeAdjustmentTimer;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.timer.DelayInstantTransformationTimer;
@@ -164,9 +161,6 @@ final class SimulationTypeCodes {
 		add(TransformationMorphAnimationTimer.class, "TransformationMorphAnimationTimer");
 		add(ABGroupEffect.class, "ABGroupEffect");
 		add(ABTerrainEffect.class, "ABTerrainEffect");
-		add(ABTerrainBowlEffect.class, "ABTerrainBowlEffect");
-		add(ABTerrainRippleEffect.class, "ABTerrainRippleEffect");
-		add(ABTerrainWaveEffect.class, "ABTerrainWaveEffect");
 	}
 
 	private SimulationTypeCodes() {

@@ -29,6 +29,7 @@ public class CAbilityBlightedGoldMine extends CAbilityOverlayedMine {
 	private final Vector2[] minerLocs;
 	private int currentActiveMinerCount;
 	private int lastIncomeTick;
+	private boolean mined;
 
 	private final List<SimulationRenderComponent> spellEffects = new ArrayList<>();
 
@@ -79,7 +80,15 @@ public class CAbilityBlightedGoldMine extends CAbilityOverlayedMine {
 
 	@Override
 	public void onTick(final CSimulation game, final CUnit unit) {
-		if (this.currentActiveMinerCount > 0) {
+		if (this.currentActiveMinerCount <= 0) {
+			this.mined = false;
+		}
+		else {
+			// Measured: the first payment comes half a second more than an interval after the first miner starts.
+			if (!this.mined) {
+				this.mined = true;
+				this.lastIncomeTick = game.getGameTurnTick() + CTimer.wholeSteps(0.5f);
+			}
 			final float currentInterval = this.intervalDuration
 					* ((float) this.maxNumberOfMiners / this.currentActiveMinerCount);
 			final int nextIncomeTick = this.lastIncomeTick
@@ -90,7 +99,10 @@ public class CAbilityBlightedGoldMine extends CAbilityOverlayedMine {
 			if ((currentTurnTick >= nextIncomeTick) && (parentGoldMineAbility != null) && (totalGoldAvailable > 0)) {
 				this.lastIncomeTick = currentTurnTick;
 				final CPlayer player = game.getPlayer(unit.getPlayerIndex());
-				final int goldGained = Math.min(totalGoldAvailable, this.goldPerInterval);
+				int goldGained = Math.min(totalGoldAvailable, this.goldPerInterval);
+				if (player.getAiScript() != null) {
+					goldGained = player.getAiScript().getController().scaleHarvestedAmount(goldGained);
+				}
 				final int goldReceived = player.addHarvestedGold(game, goldGained);
 				parentGoldMineAbility.setGold(totalGoldAvailable - goldGained);
 				game.unitGainResourceEvent(unit, player.getId(), ResourceType.GOLD, goldReceived);

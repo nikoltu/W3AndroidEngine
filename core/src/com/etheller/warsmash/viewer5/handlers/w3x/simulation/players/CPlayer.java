@@ -745,7 +745,7 @@ public class CPlayer extends CBasePlayer {
 	public void fireUnitDeathEvents(final CUnit dyingUnit, final CUnit killingUnit) {
 		final List<CPlayerEvent> eventList = getEventList(JassGameEventsWar3.EVENT_PLAYER_UNIT_DEATH);
 		if (eventList != null) {
-			for (final CPlayerEvent event : eventList) {
+			for (final CPlayerEvent event : new ArrayList<>(eventList)) {
 				event.fire(dyingUnit, CommonTriggerExecutionScope.unitDeathScope(
 						JassGameEventsWar3.EVENT_PLAYER_UNIT_DEATH, event.getTrigger(), dyingUnit, killingUnit, this));
 			}

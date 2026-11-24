@@ -45,6 +45,20 @@ public class War3Map implements DataSource {
 	private DataSource internalMpqContentsDataSource;
 	private DataSource mapContentsDataSource;
 	private GraphicsSet graphics = GraphicsSet.CLASSIC;
+	/** A map of a data folder bigger than this is read from its file: held in the heap, a big map is too much on Android. */
+	private static final long IN_MEMORY_LIMIT = 16L << 20;
+
+	/** Reads the archive straight from the file, which keeps none of its contents in the heap. */
+	private static MpqDataSource openFromFile(final File file) throws IOException, MPQException {
+		final FileReadChannel sbc = new FileReadChannel(file);
+		try {
+			return new MpqDataSource(new MPQArchive(sbc), sbc);
+		}
+		catch (final IOException | MPQException | RuntimeException e) {
+			sbc.close();
+			throw e;
+		}
+	}
 
 	public War3Map(final DataSource dataSource, final String mapFileName) {
 		try {
@@ -53,9 +67,14 @@ public class War3Map implements DataSource {
 			// 2.) Setup a Data Source that will read assets
 			// from either the map or the game, giving the map priority.
 
-			SeekableByteChannel sbc;
-			sbc = new SeekableInMemoryByteChannel(dataSource.read(mapFileName).array());
-			this.internalMpqContentsDataSource = new MpqDataSource(new MPQArchive(sbc), sbc);
+			final File onDisk = dataSource.fileOnDisk(mapFileName);
+			if ((onDisk != null) && (onDisk.length() > IN_MEMORY_LIMIT)) {
+				this.internalMpqContentsDataSource = openFromFile(onDisk);
+			}
+			else {
+				final SeekableByteChannel sbc = new SeekableInMemoryByteChannel(dataSource.read(mapFileName).array());
+				this.internalMpqContentsDataSource = new MpqDataSource(new MPQArchive(sbc), sbc);
+			}
 			this.mapContentsDataSource = localized(this.internalMpqContentsDataSource, GameLanguage.inGame());
 			this.baseDataSource = new CompoundDataSource(Arrays.asList(dataSource, this.mapContentsDataSource));
 			this.dataSource = this.baseDataSource;
@@ -75,15 +94,7 @@ public class War3Map implements DataSource {
 				this.internalMpqContentsDataSource = new FolderDataSource(mapFileName.toPath());
 			}
 			else {
-				// Read the archive straight from the file: a big map held in the heap is too much on Android.
-				final FileReadChannel sbc = new FileReadChannel(mapFileName);
-				try {
-					this.internalMpqContentsDataSource = new MpqDataSource(new MPQArchive(sbc), sbc);
-				}
-				catch (final IOException | MPQException | RuntimeException e) {
-					sbc.close();
-					throw e;
-				}
+				this.internalMpqContentsDataSource = openFromFile(mapFileName);
 			}
 			this.mapContentsDataSource = localized(this.internalMpqContentsDataSource, GameLanguage.inGame());
 			this.baseDataSource = new CompoundDataSource(Arrays.asList(dataSource, this.mapContentsDataSource));

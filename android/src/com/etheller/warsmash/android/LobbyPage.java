@@ -90,7 +90,7 @@ final class LobbyPage extends LauncherViews {
 		if (t) {
 			// The column heads sit over the slots' choices.
 			final float xr = frame + 8 + 84 + 20 + 260;
-			final float[] hx = { xr, xr + 312, xr + 312 + 142, xr + 312 + 142 + 112 };
+			final float[] hx = { xr, xr + 328, xr + 328 + 142, xr + 328 + 142 + 96 };
 			final String[] heads = { glue("RACE"), glue("TEAM"), glue("COLOR"), LauncherText.get("lan_handicap") };
 			for (int i = 0; i < heads.length; i++) {
 				place(left, text(heads[i], 22, this.activity.art.text2()), hx[i], headY - 4, 200, -1);
@@ -410,10 +410,10 @@ final class LobbyPage extends LauncherViews {
 		final float gp = t ? 12 : 6;
 		final float ph = t ? 84 : 72;
 		final float pp = t ? 84 : 66;
-		final float raceW = t ? 300 : 136;
+		final float raceW = t ? 316 : 126;
 		// The drop-down keeps its rim and arrow clear of the text; a narrower box leaves the number no room.
 		final float teamW = t ? 130 : 104;
-		final float colW = t ? 100 : 62;
+		final float colW = ph;
 		final float hcW = t ? 180 : 0;
 		final float x1 = 8 + pp + (t ? 20 : 8);
 		final float nameW = t ? 260 : 136;
@@ -519,7 +519,10 @@ final class LobbyPage extends LauncherViews {
 		place(cell, dropdown(teams, Math.min(row.team, teams.length - 1), edit, ph, size,
 				c -> send(row, row.race, c, row.color, row.handicap)), xr + raceW + gp, py, teamW, ph);
 		place(cell, dropdown(colors, Math.floorMod(row.color, CustomGame.PLAYER_COLORS.length), edit, ph, size,
-				c -> send(row, row.race, row.team, c, row.handicap), CustomGame.PLAYER_COLORS),
+				c -> send(row, row.race, row.team, c, row.handicap), CustomGame.PLAYER_COLORS, () -> {
+					final LanLobbyView now = this.activity.lan().lobby();
+					return now == null ? null : now.takenColors(row.slot);
+				}),
 				xr + raceW + teamW + (2 * gp), py, colW, ph);
 		if (t) {
 			final String[] handicaps = { "100%", "90%", "80%", "70%", "60%", "50%" };

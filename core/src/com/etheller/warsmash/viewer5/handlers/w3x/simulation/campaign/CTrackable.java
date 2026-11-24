@@ -1,6 +1,7 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.campaign;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 import com.etheller.interpreter.ast.scope.GlobalScope;
@@ -19,11 +20,12 @@ public final class CTrackable extends AllocatedHandle {
 	private final float x;
 	private final float y;
 	private final float facing;
-	private final List<Trigger> hitTriggers = new ArrayList<>();
-	private final List<Trigger> trackTriggers = new ArrayList<>();
+	/** Null, one trigger, or a list of them: a script may make millions of trackables, most with one trigger. */
+	private Object hitTriggers;
+	private Object trackTriggers;
 
 	public CTrackable(final String modelPath, final float x, final float y, final float facing) {
-		this.modelPath = modelPath == null ? "" : modelPath;
+		this.modelPath = modelPath == null ? "" : modelPath.intern();
 		this.x = x;
 		this.y = y;
 		this.facing = facing;
@@ -47,31 +49,63 @@ public final class CTrackable extends AllocatedHandle {
 	}
 
 	public RemovableTriggerEvent addHitEvent(final Trigger trigger) {
-		return addEvent(this.hitTriggers, trigger);
+		this.hitTriggers = with(this.hitTriggers, trigger);
+		return new EventRegistration(trigger, this, true);
 	}
 
 	public RemovableTriggerEvent addTrackEvent(final Trigger trigger) {
-		return addEvent(this.trackTriggers, trigger);
+		this.trackTriggers = with(this.trackTriggers, trigger);
+		return new EventRegistration(trigger, this, false);
 	}
 
-	private static RemovableTriggerEvent addEvent(final List<Trigger> triggers, final Trigger trigger) {
-		triggers.add(trigger);
-		return new EventRegistration(trigger, triggers);
+	@SuppressWarnings("unchecked")
+	private static Object with(final Object triggers, final Trigger trigger) {
+		if (triggers == null) {
+			return trigger;
+		}
+		if (triggers instanceof Trigger) {
+			final List<Trigger> list = new ArrayList<>(2);
+			list.add((Trigger) triggers);
+			list.add(trigger);
+			return list;
+		}
+		((List<Trigger>) triggers).add(trigger);
+		return triggers;
+	}
+
+	@SuppressWarnings("unchecked")
+	private static Object without(final Object triggers, final Trigger trigger) {
+		if (triggers == trigger) {
+			return null;
+		}
+		if (triggers instanceof List) {
+			final List<Trigger> list = (List<Trigger>) triggers;
+			list.remove(trigger);
+			return list.isEmpty() ? null : triggers;
+		}
+		return triggers;
 	}
 
 	private static final class EventRegistration extends RemovableTriggerEvent {
 		private final Trigger trigger;
-		private final List<Trigger> triggers;
+		private final CTrackable trackable;
+		private final boolean hit;
 
-		private EventRegistration(final Trigger trigger, final List<Trigger> triggers) {
+		private EventRegistration(final Trigger trigger, final CTrackable trackable, final boolean hit) {
 			super(trigger);
 			this.trigger = trigger;
-			this.triggers = triggers;
+			this.trackable = trackable;
+			this.hit = hit;
 		}
 
 		@Override
 		public void remove() {
-			this.triggers.remove(this.trigger);
+			if (this.hit) {
+				this.trackable.hitTriggers = without(this.trackable.hitTriggers, this.trigger);
+			}
+			else {
+				this.trackable.trackTriggers = without(this.trackable.trackTriggers, this.trigger);
+			}
 		}
 	}
 
@@ -85,8 +119,14 @@ public final class CTrackable extends AllocatedHandle {
 		fire(globalScope, this.trackTriggers, JassGameEventsWar3.EVENT_GAME_TRACKABLE_TRACK);
 	}
 
-	private void fire(final GlobalScope globalScope, final List<Trigger> triggers, final JassGameEventsWar3 event) {
-		for (final Trigger trigger : new ArrayList<>(triggers)) {
+	@SuppressWarnings("unchecked")
+	private void fire(final GlobalScope globalScope, final Object triggers, final JassGameEventsWar3 event) {
+		if (triggers == null) {
+			return;
+		}
+		final List<Trigger> copy = triggers instanceof Trigger ? Collections.singletonList((Trigger) triggers)
+				: new ArrayList<>((List<Trigger>) triggers);
+		for (final Trigger trigger : copy) {
 			final CommonTriggerExecutionScope scope = CommonTriggerExecutionScope.trackableScope(event, trigger, this);
 			globalScope.queueTrigger(null, null, trigger, scope, scope);
 		}

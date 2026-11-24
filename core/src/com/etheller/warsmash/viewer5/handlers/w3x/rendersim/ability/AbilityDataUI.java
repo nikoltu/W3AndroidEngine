@@ -100,6 +100,7 @@ public class AbilityDataUI {
 	private static final String UPGRADE_ICON_NORMAL_XY = "Buttonpos"; // replaced from 'gbpx'
 	private static final String UPGRADE_ICON_NORMAL = "Art"; // replaced from 'gar1'
 	private static final String UPGRADE_LEVELS = "maxlevel"; // replaced from 'glvl'
+	private static final int MAX_UPGRADE_ICON_LEVELS = 256;
 	private static final String UPGRADE_TIP = "Tip"; // replaced from 'gtp1'
 	private static final String UPGRADE_UBER_TIP = "Ubertip"; // replaced from 'gub1'
 	private static final String UPGRADE_HOTKEY = "Hotkey"; // replaced from 'ghk1'
@@ -368,7 +369,9 @@ public class AbilityDataUI {
 		}
 		for (final String alias : upgradeData.keySet()) {
 			final GameObject upgradeTypeData = upgradeData.get(alias);
-			final int upgradeLevels = upgradeTypeData.getFieldAsInteger(UPGRADE_LEVELS, 0);
+			// Maps use dummy upgrades with millions of levels; the last icon serves every level past the cap (getUpgradeUI).
+			final int upgradeLevels = Math.min(upgradeTypeData.getFieldAsInteger(UPGRADE_LEVELS, 0),
+					MAX_UPGRADE_ICON_LEVELS);
 			final int iconNormalX = upgradeTypeData.getFieldAsInteger(UPGRADE_ICON_NORMAL_XY, 0);
 			final int iconNormalY = upgradeTypeData.getFieldAsInteger(UPGRADE_ICON_NORMAL_XY, 1);
 			final List<IconUI> upgradeIconsByLevel = new ArrayList<>();

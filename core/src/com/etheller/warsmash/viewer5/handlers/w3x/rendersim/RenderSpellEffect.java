@@ -162,6 +162,26 @@ public class RenderSpellEffect extends AllocatedHandle implements RenderEffect, 
 		}
 	}
 
+	/** Takes the model off the scene now; false while it is still being read and cannot be taken off yet. */
+	public boolean release() {
+		if (this.modelInstance == null) {
+			return true;
+		}
+		if (this.waiting) {
+			return false;
+		}
+		if (!this.viewer.worldScene.leaveParticles(this.modelInstance)) {
+			if (this.modelInstance.parent != null) {
+				this.modelInstance.setParent(null);
+			}
+			this.viewer.worldScene.removeInstance(this.modelInstance);
+		}
+		this.lastLocalZ = this.modelInstance.localLocation.z;
+		this.modelInstance = null;
+		this.sequences = Collections.emptyList();
+		return true;
+	}
+
 	public void setAnimations(final PrimaryTag[] animations, final boolean killWhenDone) {
 		this.animationQueue = animations;
 		this.animationQueueIndex = 0;

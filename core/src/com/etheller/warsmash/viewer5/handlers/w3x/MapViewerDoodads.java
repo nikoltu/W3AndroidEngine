@@ -271,7 +271,7 @@ final class MapViewerDoodads {
 		simulationDestructable.setLife(viewer.simulation, simulationDestructable.getLife() * (lifePercent / 100f));
 		final RenderDestructable renderDestructable = new RenderDestructable(viewer, model, portraitModel, row, location,
 				scale, facingRadians, selectionScale, maxPitch, maxRoll, lifePercent, destructableShadow, lateShadow,
-				waitForModel, simulationDestructable, doodadVariation);
+				waitForModel, true, simulationDestructable, doodadVariation);
 		if (walkable) {
 			final float angle = facingRadians;
 			BoundingBox boundingBox = model.bounds.getBoundingBox();
@@ -372,7 +372,11 @@ final class MapViewerDoodads {
 		final float minY = (float) StrictMath.min(StrictMath.min(y1prime, y2prime), StrictMath.min(y3prime, y4prime));
 		final float maxX = (float) StrictMath.max(StrictMath.max(x1prime, x2prime), StrictMath.max(x3prime, x4prime));
 		final float maxY = (float) StrictMath.max(StrictMath.max(y1prime, y2prime), StrictMath.max(y3prime, y4prime));
-		return new Rectangle(x + minX, y + minY, maxX - minX, maxY - minY);
+		// A model without extent is a point that can sit on the border of two nodes of the tree and overlap neither.
+		final float width = StrictMath.max(maxX - minX, 1f);
+		final float height = StrictMath.max(maxY - minY, 1f);
+		return new Rectangle(x + minX - ((width - (maxX - minX)) / 2), y + minY - ((height - (maxY - minY)) / 2), width,
+				height);
 	}
 
 	static CDestructable createDestructableForSavedGame(final War3MapViewer viewer, final CreatedDestructable created) {
