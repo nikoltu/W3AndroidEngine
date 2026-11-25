@@ -3,6 +3,7 @@ package com.etheller.interpreter.ast.value.visitor.cast;
 import com.etheller.interpreter.ast.value.ArrayJassValue;
 import com.etheller.interpreter.ast.value.BooleanJassValue;
 import com.etheller.interpreter.ast.value.CodeJassValue;
+import com.etheller.interpreter.ast.value.InstructionCodeJassValue;
 import com.etheller.interpreter.ast.value.DummyJassValue;
 import com.etheller.interpreter.ast.value.HandleJassValue;
 import com.etheller.interpreter.ast.value.IntegerJassValue;
@@ -19,7 +20,7 @@ public class TypeCastToCodeJassValueVisitor implements JassValueVisitor<JassValu
 
 	@Override
 	public JassValue accept(final IntegerJassValue value) {
-		return new CodeJassValue(value.getValue());
+		return new InstructionCodeJassValue(value.getValue());
 	}
 
 	@Override

@@ -296,6 +296,8 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 	public MappedData doodadMetaData = new MappedData();
 	public MappedData destructableMetaData = new MappedData();
 	public List<RenderDoodad> doodads = new ArrayList<>();
+	/** Whether the map's doodads are made empty and loaded where the camera first sees them (a map with very many). */
+	boolean lazyDoodads;
 	/** Doodads still waiting for their model to give them a first animation. */
 	public final List<RenderDoodad> pendingDoodads = new ArrayList<>();
 	/** The doodads scripts read: from the map file, not from the drawn ones. */

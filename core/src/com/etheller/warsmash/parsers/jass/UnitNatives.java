@@ -614,7 +614,7 @@ final class UnitNatives extends CommonNatives {
 				(arguments, globalScope, triggerScope) -> {
 					final CUnit whichUnit = inGame(nullable(arguments, 0, ObjectJassValueVisitor.<CUnit>getInstance()));
 					final CUnitState whichUnitState = arguments.get(1).visit(ObjectJassValueVisitor.getInstance());
-					if (whichUnit == null) {
+					if ((whichUnit == null) || (whichUnitState == null)) {
 						return RealJassValue.ZERO;
 					}
 					return RealJassValue

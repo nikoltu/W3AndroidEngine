@@ -19,6 +19,7 @@ public class JassThread {
 	public JassThread parent;
 	private boolean sleepEndsThread;
 	private boolean halted;
+	private ThreadContinuation continuation;
 
 	public JassThread(final JassStackFrame stackFrame, final GlobalScope globalScope,
 			final TriggerExecutionScope triggerScope, final int instructionPtr) {
@@ -64,7 +65,40 @@ public class JassThread {
 	 * @return true if the thread has more to run
 	 */
 	public boolean advance() {
-		return false;
+		return resumeContinuation();
+	}
+
+	/** The code this thread runs in place of instructions (Lua), or null. */
+	public ThreadContinuation getContinuation() {
+		return this.continuation;
+	}
+
+	public void setContinuation(final ThreadContinuation continuation) {
+		this.continuation = continuation;
+	}
+
+	/**
+	 * Runs the continuation up to its end or to the next sleep.
+	 *
+	 * @return true if it is not finished
+	 */
+	protected final boolean resumeContinuation() {
+		final ThreadContinuation current = this.continuation;
+		if (current == null) {
+			return false;
+		}
+		final boolean more;
+		try {
+			more = current.resume(this);
+		}
+		catch (final RuntimeException | Error e) {
+			this.continuation = null;
+			throw e;
+		}
+		if (!more && (this.continuation == current)) {
+			this.continuation = null;
+		}
+		return more;
 	}
 
 	public void setSleepEndsThread(final boolean sleepEndsThread) {

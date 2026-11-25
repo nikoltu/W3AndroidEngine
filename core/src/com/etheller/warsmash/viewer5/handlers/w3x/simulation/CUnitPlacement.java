@@ -306,6 +306,15 @@ final class CUnitPlacement {
 		if (self.pendingRegionEvents == null) {
 			self.pendingRegionEvents = new ArrayList<>();
 		}
+		if (self.regionEventsLate) {
+			regionManager.queueLateUnit(self);
+		}
+		if (self.regionEventsLate && enter) {
+			// the triggers the region has now are the ones that get the event, the latest registered first
+			self.pendingRegionEvents.add(0,
+					new PendingRegionEvent(region, true, new ArrayList<>(region.getEnterTriggers())));
+			return;
+		}
 		self.pendingRegionEvents.add(new PendingRegionEvent(region, enter));
 	}
 

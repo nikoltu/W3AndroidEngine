@@ -52,6 +52,7 @@ public class StringFrame extends AbstractRenderableFrame {
 	private float layoutFontScale;
 	private float layoutFontLineHeight;
 	private float layoutWidth;
+	private boolean wrapToAnchors;
 	private float layoutLineSpacing;
 	private TextJustify layoutJustifyH;
 	private TextJustify layoutLineJustifyH;
@@ -123,6 +124,11 @@ public class StringFrame extends AbstractRenderableFrame {
 		this.color = color;
 	}
 
+	/** A script's text wraps at the width its points give it, as the game's does, not only at a width set on it. */
+	public void setWrapToAnchors(final boolean wrapToAnchors) {
+		this.wrapToAnchors = wrapToAnchors;
+	}
+
 	public Color getColor() {
 		return this.color;
 	}
@@ -183,7 +189,8 @@ public class StringFrame extends AbstractRenderableFrame {
 
 	@Override
 	public void positionBounds(final GameUI gameUI, final Viewport viewport) {
-		createInternalFrames(gameUI.getGlyphLayout());
+		createInternalFrames(gameUI.getGlyphLayout(),
+				this.wrapToAnchors ? anchoredWidth(gameUI, viewport) : getAssignedWidth());
 		if (getAssignedHeight() == 0) {
 			this.renderBounds.height = getPredictedViewportHeight();
 		}
@@ -219,10 +226,9 @@ public class StringFrame extends AbstractRenderableFrame {
 	 * Splits the text into one frame per run of one color on one line. "|cAARRGGBB" starts a color, "|r" ends it and
 	 * "|n" breaks the line; spaces next to them are kept. Text wraps at spaces when the frame has a width.
 	 */
-	private void createInternalFrames(final GlyphLayout glyphLayout) {
+	private void createInternalFrames(final GlyphLayout glyphLayout, final float wrapWidth) {
 		// text layout shares libGDX state across all layouts (its run pool)
 		SimThreadGuard.assertGl();
-		final float wrapWidth = getAssignedWidth();
 		final float fontScale = this.frameFont.getScaleX();
 		final float fontLineHeight = this.frameFont.getLineHeight();
 		final float lineSpacing = getLineSpacing();

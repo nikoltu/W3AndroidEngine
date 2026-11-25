@@ -1,3 +1,5 @@
+evaluationDependsOn(":lua")
+
 [compileJava, compileTestJava]*.options*.encoding = 'UTF-8'
 
 java {
@@ -89,6 +91,11 @@ dependencies {
 
 test {
     useJUnitPlatform()
+    // Tests of the Lua bridge load the library the lua module builds for this machine.
+    dependsOn ":lua:buildNativeDesktop"
+    doFirst {
+        systemProperty "warsmash.lua.native", project(":lua").ext.nativeLibrary.absolutePath
+    }
 }
 
 

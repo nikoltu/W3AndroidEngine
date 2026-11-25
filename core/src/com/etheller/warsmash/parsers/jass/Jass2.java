@@ -50,7 +50,11 @@ import com.etheller.warsmash.parsers.jass.triggers.LocationJass;
 import com.etheller.warsmash.parsers.jass.triggers.UnitGroup;
 import com.etheller.warsmash.units.Element;
 import com.etheller.warsmash.util.GameDataConstants;
+import com.etheller.warsmash.parsers.lua.LuaEnvironment;
+import com.etheller.warsmash.parsers.lua.LuaMapScript;
+import com.etheller.warsmash.parsers.lua.LuaNativeReport;
 import com.etheller.warsmash.util.Log;
+import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.util.PerfStats;
 import com.etheller.warsmash.viewer5.Scene;
 import com.etheller.warsmash.viewer5.handlers.w3x.War3MapViewer;
@@ -139,6 +143,24 @@ public class Jass2 {
 				this.slices.add(() -> queueFile(file));
 			}
 			this.slices.add(this::initialize);
+			this.slices.add(this::initializeLua);
+		}
+
+		/** A map with a Lua script gets it compiled, with blizzard.j as Lua, once the natives are in. */
+		private void initializeLua() {
+			if (!LuaMapScript.isEnabled() || !LuaMapScript.usesLua(this.scripts)) {
+				return;
+			}
+			try {
+				this.environment.luaScript = LuaMapScript.load(this.scripts, this.jassProgramVisitor.getGlobals(),
+						luaHost(this.war3MapViewer, this.war3MapViewer.simulation, this.meleeUI));
+				logLuaNatives(this.environment.luaScript, this.scripts, this.jassProgramVisitor);
+			}
+			catch (final Exception e) {
+				Log.error(e);
+				JassLog.report(e);
+				this.environment.scriptFailed(e);
+			}
 		}
 
 		private void queueFile(final String file) {
@@ -152,7 +174,13 @@ public class Jass2 {
 				final String lowerCaseDirectoryPath = file.toLowerCase(Locale.US);
 				final String lowerCaseDirectoryPathLinux = file.toLowerCase(Locale.US).replace("\\", "/");
 
-				final Collection<String> listfile = this.scripts.getListfile();
+				// only the matching paths are kept: the whole list of a big map's archive is hundreds of thousands of
+				// strings, which a copy of it in lower case doubles while the heap is at its fullest
+				final Collection<String> listfile = this.scripts.getListfile(path -> {
+					final String lowerCasePath = path.toLowerCase(Locale.US);
+					return lowerCasePath.startsWith(lowerCaseDirectoryPath)
+							|| lowerCasePath.startsWith(lowerCaseDirectoryPathLinux);
+				});
 				final Map<String, String> fixedListfile = new HashMap<>();
 				for (final String path : listfile) {
 					fixedListfile.put(path.toLowerCase(Locale.US), path);
@@ -301,7 +329,100 @@ public class Jass2 {
 			JassLog.report(e);
 		}
 		jassProgramVisitor.getJassNativeManager().checkUnregisteredNatives();
+		if (LuaMapScript.isEnabled() && LuaMapScript.usesLua(dataSource)) {
+			try {
+				environment.luaScript = LuaMapScript.load(dataSource, jassProgramVisitor.getGlobals(),
+						luaHost(null, null, null));
+				logLuaNatives(environment.luaScript, dataSource, jassProgramVisitor);
+			}
+			catch (final Exception e) {
+				Log.error(e);
+				JassLog.report(e);
+				environment.scriptFailed(e);
+			}
+		}
 		return environment;
+	}
+
+	private static void logLuaNatives(final LuaMapScript script, final DataSource dataSource,
+			final JassProgram program) {
+		try {
+			final LuaNativeReport report = script.nativeReport(dataSource,
+					program.getJassNativeManager().getUndeclaredNativeNames());
+			if (report.getHidden().isEmpty() && report.getWithoutCode().isEmpty()) {
+				Log.info(report.summary());
+			}
+			else {
+				Log.warn(report.detail());
+			}
+		}
+		catch (final Exception e) {
+			Log.error(e);
+		}
+	}
+
+	/** What a Lua script sees of the game: the simulation's random numbers and time, the text it prints. */
+	private static LuaEnvironment.Host luaHost(final War3MapViewer viewer, final CSimulation simulation,
+			final WarsmashUI ui) {
+		final java.util.Random configRandom = new java.util.Random(0);
+		if (simulation != null) {
+			simulation.setLateCreationRegionEvents(true);
+		}
+		return new LuaEnvironment.Host() {
+			@Override
+			public com.etheller.warsmash.lua.LuaRandomSource random() {
+				return () -> simulation == null ? configRandom.nextLong() : simulation.getSeededRandom().nextLong();
+			}
+
+			@Override
+			public void print(final String text) {
+				final String line = text.endsWith("\n") ?text.substring(0, text.length() - 1) : text;
+				if (ui != null) {
+					final float duration = Math.min(2.8f + (0.1f * line.length()), 10.7f);
+					RenderSide.of(viewer).post(RenderSide.TEXT, () -> ui.displayTimedText(0f, 0f, duration, line));
+				}
+				else {
+					Log.info(line);
+				}
+			}
+
+			@Override
+			public double gameSeconds() {
+				return simulation == null ? 0 : simulation.getGameTurnTick() * WarsmashConstants.SIMULATION_STEP_TIME;
+			}
+
+			@Override
+			public long startTimeSeconds() {
+				// The clock of a game is its own: the same on every machine and in a replay.
+				return 1_700_000_000L;
+			}
+
+			@Override
+			public boolean isLobby() {
+				return simulation == null;
+			}
+
+			@Override
+			public void setEarlyHandleIds(final boolean early) {
+				if (simulation != null) {
+					simulation.getHandleIdAllocator().setEarlyIds(early);
+				}
+			}
+
+			@Override
+			public void watchReleases(final java.util.function.Consumer<Object> listener) {
+				if (simulation != null) {
+					simulation.getHandleIdAllocator().setReleaseListener(listener);
+				}
+			}
+
+			@Override
+			public void forgetHandle(final Object handle) {
+				if (simulation != null) {
+					simulation.getHandleIdAllocator().forgetScriptHandle(handle);
+				}
+			}
+		};
 	}
 
 	public static JUIEnvironment loadJUI(final DataSource dataSource, final Viewport uiViewport, final Scene uiScene,
@@ -511,6 +632,7 @@ public class Jass2 {
 		final Rectangle tempRect = new Rectangle();
 		private final SavedGame.AiScriptStarter aiScriptStarter;
 		private Exception scriptError;
+		private LuaMapScript luaScript;
 
 		private CommonEnvironment(final JassProgram jassProgramVisitor, final DataSource dataSource,
 				final Viewport uiViewport, final Scene uiScene, final War3MapViewer war3MapViewer,
@@ -789,8 +911,18 @@ public class Jass2 {
 			return this.scriptError;
 		}
 
+		/** The Lua environment of a map with a Lua script, or null. */
+		public LuaEnvironment getLuaEnvironment() {
+			return this.luaScript == null ? null : this.luaScript.getEnvironment();
+		}
+
 		public void main() {
 			this.simulation.setGlobalScope(this.jassProgramVisitor.getGlobals());
+			if (this.luaScript != null) {
+				this.luaScript.start();
+				this.simulation.startScriptOnFirstStep();
+				return;
+			}
 			// The JASS ability layer is optional: abilities_main exists only when JassFileList names
 			// Scripts\abilitiesDefaults.j.
 			if (this.jassProgramVisitor.getGlobals().getUserFunctionInstructionPtr("abilities_main") != null) {
@@ -831,6 +963,7 @@ public class Jass2 {
 		private Element skin;
 		private final JassProgram jassProgramVisitor;
 		private Exception scriptError;
+		private LuaMapScript luaScript;
 
 		private ConfigEnvironment(final JassProgram jassProgramVisitor, final DataSource dataSource,
 				final Viewport uiViewport, final Scene uiScene, final GameUI gameUI, final War3MapConfig mapConfig) {
@@ -1058,6 +1191,10 @@ public class Jass2 {
 		}
 
 		public void config() {
+			if (this.luaScript != null) {
+				this.luaScript.runConfig();
+				return;
+			}
 			try {
 				final JassThread configThread = this.jassProgramVisitor.getGlobals().createThread("config",
 						Collections.emptyList(), TriggerExecutionScope.EMPTY);

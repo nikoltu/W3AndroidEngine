@@ -59,6 +59,7 @@ import com.etheller.interpreter.ast.util.JassSettings;
 import com.etheller.interpreter.ast.value.ArrayJassType;
 import com.etheller.interpreter.ast.value.BooleanJassValue;
 import com.etheller.interpreter.ast.value.CodeJassValue;
+import com.etheller.interpreter.ast.value.InstructionCodeJassValue;
 import com.etheller.interpreter.ast.value.HandleJassType;
 import com.etheller.interpreter.ast.value.JassType;
 import com.etheller.interpreter.ast.value.JassValue;
@@ -767,7 +768,7 @@ public class InstructionAppendingJassStatementVisitor
 		if (userFunctionInstructionPtr == null) {
 			throw new RuntimeException("Unable to find function: " + identifier);
 		}
-		this.instructions.add(new PushLiteralInstruction(new CodeJassValue(userFunctionInstructionPtr)));
+		this.instructions.add(new PushLiteralInstruction(new InstructionCodeJassValue(userFunctionInstructionPtr)));
 		return null;
 	}
 
@@ -786,7 +787,7 @@ public class InstructionAppendingJassStatementVisitor
 			// TODO looking in method table here means that a static struct method call
 			// cannot be called recursively, nor from above its declaration
 			final Integer nonvirtualBranchInstructionPtr = staticType.getMethodTable().get(tableIndex);
-			this.instructions.add(new PushLiteralInstruction(new CodeJassValue(nonvirtualBranchInstructionPtr)));
+			this.instructions.add(new PushLiteralInstruction(new InstructionCodeJassValue(nonvirtualBranchInstructionPtr)));
 		}
 		else {
 			insertExpressionInstructions(structExpression);

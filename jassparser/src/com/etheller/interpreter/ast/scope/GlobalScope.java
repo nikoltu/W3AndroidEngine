@@ -69,7 +69,7 @@ public final class GlobalScope {
 	private final List<JassInstruction> instructions = new ArrayList<JassInstruction>();
 	private final Map<String, Integer> globals = new HashMap<>();
 	private final Map<String, GlobalScopeAssignable> fastGlobals = new HashMap<>();
-	private final Map<Integer, TriggerBooleanExpression> functionBoolExprs = new HashMap<>();
+	private final Map<Object, TriggerBooleanExpression> functionBoolExprs = new HashMap<>();
 	private final Map<String, UserJassFunction> functionNameToDefinition = new HashMap<>();
 	private final Map<String, Integer> functionNameToInstructionPtr = new HashMap<>();
 	private final Map<String, Integer> functionNameToNativeId = new HashMap<>();
@@ -146,12 +146,12 @@ public final class GlobalScope {
 	}
 
 	/** The boolexpr Condition or Filter made for the function at this instruction, or null. */
-	public TriggerBooleanExpression getFunctionBoolExpr(final Integer instructionPtr) {
-		return this.functionBoolExprs.get(instructionPtr);
+	public TriggerBooleanExpression getFunctionBoolExpr(final Object functionKey) {
+		return this.functionBoolExprs.get(functionKey);
 	}
 
-	public void putFunctionBoolExpr(final Integer instructionPtr, final TriggerBooleanExpression boolExpr) {
-		this.functionBoolExprs.put(instructionPtr, boolExpr);
+	public void putFunctionBoolExpr(final Object functionKey, final TriggerBooleanExpression boolExpr) {
+		this.functionBoolExprs.put(functionKey, boolExpr);
 	}
 
 	private HandleIdSource handleIdSource;
@@ -569,9 +569,7 @@ public final class GlobalScope {
 	}
 
 	public JassThread createThread(final CodeJassValue codeValue) {
-		final JassThread newThread = createThread(codeValue.getUserFunctionInstructionPtr());
-		codeValue.initStack(newThread.stackFrame);
-		return newThread;
+		return createThread(codeValue, TriggerExecutionScope.EMPTY);
 	}
 
 	public JassThread createThread(final int instructionPtr) {
@@ -583,8 +581,10 @@ public final class GlobalScope {
 	}
 
 	public JassThread createThread(final CodeJassValue codeValue, final TriggerExecutionScope triggerScope) {
-		final JassThread newThread = createThread(codeValue.getUserFunctionInstructionPtr(), triggerScope);
-		codeValue.initStack(newThread.stackFrame);
+		final JassStackFrame jassStackFrame = new JassStackFrame();
+		jassStackFrame.returnAddressInstructionPtr = -1;
+		final JassThread newThread = new JassThread(jassStackFrame, this, triggerScope, -1);
+		codeValue.startOn(newThread);
 		return newThread;
 	}
 
@@ -597,9 +597,11 @@ public final class GlobalScope {
 
 	public JassThread createThreadCapturingReturnValue(final CodeJassValue codeValue,
 			final TriggerExecutionScope triggerScope) {
-		final JassThread jassThread = createThreadCapturingReturnValue(codeValue.getUserFunctionInstructionPtr(),
-				Collections.emptyList(), triggerScope);
-		codeValue.initStack(jassThread.stackFrame);
+		final JassStackFrame jassStackFrame = new JassStackFrame(0);
+		jassStackFrame.returnAddressInstructionPtr = -1;
+		final JassThread jassThread = new JassThread(jassStackFrame, this, triggerScope, -1);
+		jassThread.stackFrame.stackBase = new JassStackFrame();
+		codeValue.startOn(jassThread);
 		return jassThread;
 	}
 
@@ -732,6 +734,9 @@ public final class GlobalScope {
 				JassProfiler.sliceEnd(thread, failed);
 			}
 			this.currentThread = parentThread;
+			if (parentThread == null) {
+				runThreadEndHook();
+			}
 		}
 	}
 
@@ -755,7 +760,7 @@ public final class GlobalScope {
 		JassValue jassReturnValue;
 		try {
 			runThreadUntilCompletionOrFail(thread);
-			if (thread.instructionPtr == -1) {
+			if ((thread.instructionPtr == -1) && !thread.isSleeping()) {
 				jassReturnValue = thread.stackFrame.getLast(0);
 			}
 			else {
@@ -778,6 +783,26 @@ public final class GlobalScope {
 			return defaultValue;
 		}
 		return jassReturnValue;
+	}
+
+	private Runnable threadEndHook;
+	private boolean inThreadEndHook;
+
+	/** Runs after every thread slice of the queue and after every thread that is run from outside the queue. */
+	public void setThreadEndHook(final Runnable hook) {
+		this.threadEndHook = hook;
+	}
+
+	private void runThreadEndHook() {
+		if ((this.threadEndHook != null) && !this.inThreadEndHook) {
+			this.inThreadEndHook = true;
+			try {
+				this.threadEndHook.run();
+			}
+			finally {
+				this.inThreadEndHook = false;
+			}
+		}
 	}
 
 	private void runOneThreadLooop() {
@@ -824,6 +849,7 @@ public final class GlobalScope {
 				this.yieldedCurrentThread = false;
 				continue;
 			}
+			runThreadEndHook();
 			if (this.yieldedCurrentThread) {
 				this.currentThread.setSleeping(false);
 				this.newThreads.add(this.threads.remove(threadIndex));
@@ -836,13 +862,36 @@ public final class GlobalScope {
 		return this.currentThread;
 	}
 
+	private final Map<String, List<VariableEvent>> scriptVariableEvents = new HashMap<>();
+
+	/** The variable events of a variable the script keeps, as for a global: they fire when the value comes to match. */
+	public void scriptVariableChanged(final String varName, final double previous, final double current) {
+		final List<VariableEvent> events = this.scriptVariableEvents.get(varName);
+		if (events == null) {
+			return;
+		}
+		for (final VariableEvent event : new ArrayList<>(events)) {
+			if (!event.isMatching(previous) && event.isMatching(current)) {
+				event.fire(this);
+			}
+		}
+	}
+
 	public RemovableTriggerEvent registerVariableEvent(final Trigger trigger, final String varName,
 			final CLimitOp limitOp, final double doubleValue) {
 		final VariableEvent variableEvent = new VariableEvent(trigger, limitOp, doubleValue);
 		final GlobalScopeAssignable assignableGlobal = getAssignableGlobal(varName);
 		if (assignableGlobal == null) {
-			throw new IllegalArgumentException(
-					"registerVariableEvent failed to find var with name: \"" + varName + "\"");
+			// A script that keeps its variables itself (Lua) reports their changes by name.
+			final List<VariableEvent> named = this.scriptVariableEvents.computeIfAbsent(varName,
+					name -> new ArrayList<>());
+			named.add(variableEvent);
+			return new RemovableTriggerEvent(trigger) {
+				@Override
+				public void remove() {
+					named.remove(variableEvent);
+				}
+			};
 		}
 		assignableGlobal.add(variableEvent);
 		return new RemovableTriggerEvent(trigger) {

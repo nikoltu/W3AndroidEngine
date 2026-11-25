@@ -196,6 +196,15 @@ public class CPathfindingProcessor {
 			return grid;
 		}
 
+		private void trimSearchPages() {
+			if (this.owner == null) {
+				final SearchGrid grid = this.cells != null ? this.cells : this.corners;
+				if (grid != null) {
+					grid.trimPages();
+				}
+			}
+		}
+
 		private int pathableEpoch(final int jobId, final int tick) {
 			if ((jobId != this.epochJobId) || (tick != this.epochTick)) {
 				this.epochJobId = jobId;
@@ -319,7 +328,9 @@ public class CPathfindingProcessor {
 			if ((this.cells != null) || (this.corners != null)) {
 				return true;
 			}
-			return heapFits((long) (pathingGrid.getWidth() + 1) * (pathingGrid.getHeight() + 1), SEARCH_BYTES_PER_POINT);
+			final long points = (long) (pathingGrid.getWidth() + 1) * (pathingGrid.getHeight() + 1);
+			// a map of more points makes pages of the arrays as a search reaches them
+			return (points > SearchGrid.FLAT_POINTS) || heapFits(points, SEARCH_BYTES_PER_POINT);
 		}
 
 		/**
@@ -392,6 +403,21 @@ public class CPathfindingProcessor {
 				}
 				if (entry.lastUse < this.reachability[slot].lastUse) {
 					slot = i;
+				}
+			}
+			if (!heapFits((long) (pathingGrid.getWidth() + 1) * (pathingGrid.getHeight() + 1), REACH_BYTES_PER_POINT)) {
+				// A big map's entry is some 18 MB, and a game that asks for many sizes would fill a phone's heap with
+				// them: the one used longest ago makes room, to be found again if it is asked for.
+				int oldest = -1;
+				for (int i = 0; i < this.reachability.length; i++) {
+					if ((this.reachability[i] != null)
+							&& ((oldest == -1) || (this.reachability[i].lastUse < this.reachability[oldest].lastUse))) {
+						oldest = i;
+					}
+				}
+				if (oldest != -1) {
+					this.reachability[oldest] = null;
+					slot = oldest;
 				}
 			}
 			if (PathingProfile.ENABLED) {
@@ -978,6 +1004,7 @@ public class CPathfindingProcessor {
 		if (this.graph.owner == this) {
 			this.graph.owner = null;
 		}
+		this.graph.trimSearchPages();
 	}
 
 	/**
@@ -1402,7 +1429,7 @@ public class CPathfindingProcessor {
 		private final float[] xs;
 		private final float[] ys;
 		/** The g and f of each point, side by side. */
-		private final double[] scores;
+		private final double[][] scores;
 		/**
 		 * Four ints for each point, so that what a search reads of a point is in one cache line: the search it was last
 		 * touched by, the point it was reached from (-1 for none), the step to it as the ordinal of the direction plus
@@ -1410,7 +1437,19 @@ public class CPathfindingProcessor {
 		 * the result in bit 0. Entries whose stamp is not the search's are from an earlier search and are reset when
 		 * the search first touches them.
 		 */
-		private final int[] state;
+		private final int[][] state;
+		/**
+		 * The scores and state are kept in pages of points made when a search first reaches one: a search of a big map
+		 * walks a small part of it, and arrays for all of its points were more than the heap of a phone could hold. A
+		 * map of up to {@link #FLAT_POINTS} points has one page, which is the arrays it always had.
+		 */
+		private static final int FLAT_POINTS = 1 << 20;
+		private static final int PAGE_SHIFT = 12;
+		private static final int FLAT_SHIFT = 30;
+		private static final int KEPT_PAGES = 64;
+		private final int pageShift;
+		private final int pageMask;
+		private final int pageLength;
 		private int[] heap = new int[64];
 		private int heapSize;
 		/**
@@ -1472,14 +1511,21 @@ public class CPathfindingProcessor {
 			for (int y = 0; y < this.height; y++) {
 				this.ys[y] = corner ? pathingGrid.getWorldYFromCorner(y) : pathingGrid.getWorldY(y);
 			}
+			final int count = (pathingGrid.getWidth() + 1) * (pathingGrid.getHeight() + 1);
 			if (shared != null) {
 				this.scores = shared.scores;
 				this.state = shared.state;
+				this.pageShift = shared.pageShift;
+				this.pageMask = shared.pageMask;
+				this.pageLength = shared.pageLength;
 			}
 			else {
-				final int count = (pathingGrid.getWidth() + 1) * (pathingGrid.getHeight() + 1);
-				this.scores = new double[count * 2];
-				this.state = new int[count * 4];
+				this.pageShift = count <= FLAT_POINTS ? FLAT_SHIFT : PAGE_SHIFT;
+				this.pageMask = (1 << this.pageShift) - 1;
+				this.pageLength = count <= FLAT_POINTS ? count : 1 << PAGE_SHIFT;
+				final int pages = ((count - 1) >> this.pageShift) + 1;
+				this.scores = new double[pages][];
+				this.state = new int[pages][];
 			}
 			final GridMapping mapping = corner ? GridMapping.CORNERS : GridMapping.CELLS;
 			boolean regular = true;
@@ -1502,57 +1548,107 @@ public class CPathfindingProcessor {
 			this.regular = regular;
 		}
 
+		/**
+		 * Lets go of the pages when more than a few were made, so that one long search over a big map does not keep the
+		 * memory of what it walked: what a page holds is reset by the first touch of the next search anyway.
+		 */
+		private void trimPages() {
+			if (this.pageShift == FLAT_SHIFT) {
+				return;
+			}
+			int live = 0;
+			for (final int[] page : this.state) {
+				if (page != null) {
+					live++;
+				}
+			}
+			if (live > KEPT_PAGES) {
+				Arrays.fill(this.state, null);
+				Arrays.fill(this.scores, null);
+			}
+		}
+
+		/** The page of the index, made at its first use; a page starts as zeros, as the arrays did. */
+		private int[] statePage(final int index) {
+			final int page = index >> this.pageShift;
+			int[] values = this.state[page];
+			if (values == null) {
+				values = new int[this.pageLength << 2];
+				this.state[page] = values;
+			}
+			return values;
+		}
+
+		private double[] scorePage(final int index) {
+			final int page = index >> this.pageShift;
+			double[] values = this.scores[page];
+			if (values == null) {
+				values = new double[this.pageLength << 1];
+				this.scores[page] = values;
+			}
+			return values;
+		}
+
 		private double g(final int index) {
-			return this.scores[index << 1];
+			return scorePage(index)[(index & this.pageMask) << 1];
 		}
 
 		private double f(final int index) {
-			return this.scores[(index << 1) + 1];
+			return scorePage(index)[((index & this.pageMask) << 1) + 1];
 		}
 
 		private void setScores(final int index, final double g, final double f) {
-			this.scores[index << 1] = g;
-			this.scores[(index << 1) + 1] = f;
+			final double[] page = scorePage(index);
+			final int at = (index & this.pageMask) << 1;
+			page[at] = g;
+			page[at + 1] = f;
 		}
 
 		private int cameFrom(final int index) {
-			return this.state[(index << 2) + 1];
+			return statePage(index)[((index & this.pageMask) << 2) + 1];
 		}
 
 		private int direction(final int index) {
-			return this.state[(index << 2) + 2] & DIRECTION_MASK;
+			return statePage(index)[((index & this.pageMask) << 2) + 2] & DIRECTION_MASK;
 		}
 
 		private void setCameFrom(final int index, final int from, final int direction) {
-			this.state[(index << 2) + 1] = from;
-			this.state[(index << 2) + 2] = (this.state[(index << 2) + 2] & OPEN_FLAG) | direction;
+			final int[] page = statePage(index);
+			final int at = (index & this.pageMask) << 2;
+			page[at + 1] = from;
+			page[at + 2] = (page[at + 2] & OPEN_FLAG) | direction;
 		}
 
 		private boolean isOpen(final int index) {
-			return (this.state[(index << 2) + 2] & OPEN_FLAG) != 0;
+			return (statePage(index)[((index & this.pageMask) << 2) + 2] & OPEN_FLAG) != 0;
 		}
 
 		private void setOpen(final int index, final boolean open) {
-			final int flags = this.state[(index << 2) + 2];
-			this.state[(index << 2) + 2] = open ? (flags | OPEN_FLAG) : (flags & DIRECTION_MASK);
+			final int[] page = statePage(index);
+			final int at = ((index & this.pageMask) << 2) + 2;
+			final int flags = page[at];
+			page[at] = open ? (flags | OPEN_FLAG) : (flags & DIRECTION_MASK);
 		}
 
 		private int pathable(final int index) {
-			return this.state[(index << 2) + 3];
+			return statePage(index)[((index & this.pageMask) << 2) + 3];
 		}
 
 		private void setPathable(final int index, final int value) {
-			this.state[(index << 2) + 3] = value;
+			statePage(index)[((index & this.pageMask) << 2) + 3] = value;
 		}
 
 		private void touch(final int index, final int pathfindJobId) {
-			final int at = index << 2;
-			if (pathfindJobId != this.state[at]) {
-				this.scores[index << 1] = Float.POSITIVE_INFINITY;
-				this.scores[(index << 1) + 1] = Float.POSITIVE_INFINITY;
-				this.state[at] = pathfindJobId;
-				this.state[at + 1] = -1;
-				this.state[at + 2] = 0;
+			final int[] states = statePage(index);
+			final int at = (index & this.pageMask) << 2;
+			if (pathfindJobId != states[at]) {
+				final double[] scoreValues = scorePage(index);
+				final int scoreAt = (index & this.pageMask) << 1;
+				scoreValues[scoreAt] = Float.POSITIVE_INFINITY;
+				scoreValues[scoreAt + 1] = Float.POSITIVE_INFINITY;
+				states[at] = pathfindJobId;
+				states[at + 1] = -1;
+				states[at + 2] = 0;
 			}
 		}
 
@@ -1733,6 +1829,7 @@ public class CPathfindingProcessor {
 		final SharedGraph graph = this.graph;
 		if ((graph.owner == this) && (this.moveQueue.isEmpty() || !this.moveQueue.peek().jobStarted)) {
 			graph.owner = null;
+			graph.trimSearchPages();
 		}
 		if ((graph.reservedFor == this) && this.moveQueue.isEmpty()) {
 			graph.reservedFor = null;

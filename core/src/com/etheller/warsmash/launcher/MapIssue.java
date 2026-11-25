@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.util.Locale;
 
 import com.etheller.warsmash.datasources.DataSource;
+import com.etheller.warsmash.parsers.lua.LuaMapScript;
 import com.etheller.warsmash.parsers.w3x.War3Map;
 import com.etheller.warsmash.viewer5.handlers.w3x.War3MapViewer;
 import com.etheller.warsmash.viewer5.handlers.w3x.ui.menu.CampaignMission;
@@ -15,8 +16,8 @@ import com.etheller.warsmash.viewer5.handlers.w3x.ui.menu.CampaignMission;
  */
 public enum MapIssue {
 	NONE(null, null, null),
-	/** The map's script is Lua; the engine runs JASS only. */
-	LUA("map_issue_lua", "map_tag_lua", "This map uses a Lua script, which is not supported yet."),
+	/** The map's script is Lua and this system has no Lua library to run it. */
+	LUA("map_issue_lua", "map_tag_lua", "This map uses a Lua script, and the Lua library is not available on this system."),
 	/** The map carries no script of either kind. */
 	NO_SCRIPT("map_issue_no_script", "map_tag_no_script", "This map has no script and cannot be played."),
 	/** The archive is encrypted (Forsaken Kingdom's .w3xd files). */
@@ -55,7 +56,7 @@ public enum MapIssue {
 
 	/** The issue of an opened map's script. */
 	public static MapIssue of(final War3Map map) {
-		if (map.hasJassScript()) {
+		if (map.hasJassScript() || (LuaMapScript.isEnabled() && map.hasLuaScript())) {
 			return NONE;
 		}
 		return map.hasLuaScript() ? LUA : NO_SCRIPT;

@@ -311,14 +311,16 @@ public class Trigger implements CAllocatedHandle {
 
 		@Override
 		public boolean advance() {
+			if (resumeContinuation()) {
+				return true;
+			}
 			while (this.nextAction < this.actions.size()) {
 				final JassFunction action = this.actions.get(this.nextAction++);
 				if (action instanceof JassThreadActionFunc) {
 					final CodeJassValue code = ((JassThreadActionFunc) action).codeJassValue;
 					this.stackFrame = new JassStackFrame();
 					this.stackFrame.returnAddressInstructionPtr = -1;
-					this.instructionPtr = code.getUserFunctionInstructionPtr();
-					code.initStack(this.stackFrame);
+					code.startOn(this);
 					return true;
 				}
 				action.call(Collections.emptyList(), this.globalScope, this.triggerScope);

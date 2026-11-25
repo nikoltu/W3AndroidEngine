@@ -99,6 +99,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.vision.CPla
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.vision.CUnitAttackVisionFogModifier;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.region.CRegion;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.region.CRegionManager;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.region.CRegionTriggerEnter;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.state.CUnitState;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.timers.CTimer;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.JassGameEventsWar3;
@@ -290,6 +291,7 @@ public class CUnit extends CWidget {
 	transient Set<CRegion> containingRegions = new LinkedHashSet<>();
 	transient Set<CRegion> priorContainingRegions = new LinkedHashSet<>();
 	transient boolean regionEventsDeferred;
+	transient boolean regionEventsLate;
 	transient float deadScriptLife = Float.NaN;
 	transient List<PendingRegionEvent> pendingRegionEvents;
 
@@ -1145,13 +1147,26 @@ public class CUnit extends CWidget {
 		CUnitPlacement.dispatchRegionEvent(this, regionManager, region, enter);
 	}
 
+	/** The enter events of a unit that is being created wait for the next tick, see {@code setLateCreationRegionEvents}. */
+	void setRegionEventsLate(final boolean late) {
+		this.regionEventsDeferred = late;
+		this.regionEventsLate = late;
+	}
+
 	static final class PendingRegionEvent {
 		final CRegion region;
 		final boolean enter;
+		/** The enter triggers the region had when the event was queued, or null to take the region's at delivery. */
+		final List<CRegionTriggerEnter> triggers;
 
 		PendingRegionEvent(final CRegion region, final boolean enter) {
+			this(region, enter, null);
+		}
+
+		PendingRegionEvent(final CRegion region, final boolean enter, final List<CRegionTriggerEnter> triggers) {
 			this.region = region;
 			this.enter = enter;
+			this.triggers = triggers;
 		}
 	}
 

@@ -811,6 +811,11 @@ public class WarsmashGdxMenuScreen implements InputProcessor, Screen, SingleMode
 		return (this.menuUI != null) && this.menuUI.isLoadingScreenShown();
 	}
 
+	/** Whether a game is on its way: asked for before the menu was built, or loading since. */
+	public boolean isStartingGame() {
+		return (this.pendingStart != null) || ((this.menuUI != null) && this.menuUI.isStartingGame());
+	}
+
 	/** Game data already open, read by the menu and its maps and left open when they end; set before it is shown. */
 	public void setGameData(final DataSource gameData) {
 		this.gameData = gameData;

@@ -185,15 +185,21 @@ final class RegionNatives extends CommonNatives {
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("RegionAddRect",
 				(arguments, globalScope, triggerScope) -> {
-					final CRegion region = arguments.get(0).visit(ObjectJassValueVisitor.<CRegion>getInstance());
-					final Rectangle rect = arguments.get(1).visit(ObjectJassValueVisitor.<Rectangle>getInstance());
+					final CRegion region = nullable(arguments, 0, ObjectJassValueVisitor.<CRegion>getInstance());
+					final Rectangle rect = nullable(arguments, 1, ObjectJassValueVisitor.<Rectangle>getInstance());
+					if ((region == null) || (rect == null)) {
+						return null;
+					}
 					region.addRect(rect, this.simulation.getRegionManager());
 					return null;
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("RegionClearRect",
 				(arguments, globalScope, triggerScope) -> {
-					final CRegion region = arguments.get(0).visit(ObjectJassValueVisitor.<CRegion>getInstance());
-					final Rectangle rect = arguments.get(1).visit(ObjectJassValueVisitor.<Rectangle>getInstance());
+					final CRegion region = nullable(arguments, 0, ObjectJassValueVisitor.<CRegion>getInstance());
+					final Rectangle rect = nullable(arguments, 1, ObjectJassValueVisitor.<Rectangle>getInstance());
+					if ((region == null) || (rect == null)) {
+						return null;
+					}
 					region.clearRect(rect, this.simulation.getRegionManager());
 					return null;
 				});

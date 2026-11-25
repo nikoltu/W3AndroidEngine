@@ -160,7 +160,7 @@ public class MdxComplexInstance extends ModelInstance implements SceneUpdateWork
 		// A shared typed array for all world matrices of the internal nodes.
 		this.worldMatrices = ((List<Matrix4>) sharedNodeData[1]).toArray(new Matrix4[0]);
 		// only the bones are drawn with, and they come first among the nodes
-		this.worldMatricesCopyArray = new float[16 * model.bones.size()];
+		this.worldMatricesCopyArray = null;
 
 		// And now initialize all of the nodes and objects
 		for (final Bone bone : model.bones) {
@@ -665,9 +665,17 @@ public class MdxComplexInstance extends ModelInstance implements SceneUpdateWork
 		return ((texels + BoneAtlas.WIDTH - 1) / BoneAtlas.WIDTH) * BoneAtlas.WIDTH;
 	}
 
+	/** Made when the instance is first drawn: most of a big map's doodads are never in view. */
+	private float[] worldMatricesCopy() {
+		if (this.worldMatricesCopyArray == null) {
+			this.worldMatricesCopyArray = new float[16 * ((MdxModel) this.model).bones.size()];
+		}
+		return this.worldMatricesCopyArray;
+	}
+
 	public void updateBoneTexture() {
 		if (this.hasBones) {
-			final float[] copy = this.worldMatricesCopyArray;
+			final float[] copy = worldMatricesCopy();
 			// Only the bones are drawn with (they come first among the nodes); the textures hold no more of them.
 			for (int i = 0, l = ((MdxModel) this.model).bones.size(); i < l; i++) {
 				final float[] val = this.worldMatrices[i].val;
@@ -698,7 +706,7 @@ public class MdxComplexInstance extends ModelInstance implements SceneUpdateWork
 		if (this.hasBones) {
 			this.packedAtlas = atlas;
 			this.packedStamp = atlas.getStamp();
-			this.packedBase = atlas.add(this.worldMatricesCopyArray, ((MdxModel) this.model).bones.size() * 16);
+			this.packedBase = atlas.add(worldMatricesCopy(), ((MdxModel) this.model).bones.size() * 16);
 		}
 	}
 
@@ -746,7 +754,7 @@ public class MdxComplexInstance extends ModelInstance implements SceneUpdateWork
 			if (this.boneTextureStale) {
 				final int bones = ((MdxModel) this.model).bones.size();
 				final FloatBuffer upload = boneUploadBuffer(boneTextureTexels(bones) * 4);
-				upload.put(this.worldMatricesCopyArray, 0, bones * 16);
+				upload.put(worldMatricesCopy(), 0, bones * 16);
 				while (upload.hasRemaining()) {
 					upload.put(0f);
 				}

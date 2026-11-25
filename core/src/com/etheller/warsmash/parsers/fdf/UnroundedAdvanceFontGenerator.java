@@ -1,5 +1,7 @@
 package com.etheller.warsmash.parsers.fdf;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 
 import com.badlogic.gdx.files.FileHandle;
@@ -11,6 +13,8 @@ import com.badlogic.gdx.graphics.g2d.freetype.FreeType.GlyphMetrics;
 import com.badlogic.gdx.graphics.g2d.freetype.FreeType.Library;
 import com.badlogic.gdx.graphics.g2d.freetype.FreeType.Stroker;
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
+import com.badlogic.gdx.utils.BufferUtils;
+import com.badlogic.gdx.utils.GdxRuntimeException;
 
 /**
  * libGDX takes a glyph's advance from the hinted outline and rounds it up to whole pixels, which makes a line of
@@ -38,12 +42,39 @@ public class UnroundedAdvanceFontGenerator extends FreeTypeFontGenerator {
 	UnroundedAdvanceFontGenerator(final FileHandle fontFile, final boolean fallbackAllowed) {
 		super(fontFile);
 		this.fallbackAllowed = fallbackAllowed;
-		final byte[] bytes = fontFile.readBytes();
-		final ByteBuffer buffer = ByteBuffer.allocateDirect(bytes.length);
-		buffer.put(bytes);
-		buffer.flip();
+		final ByteBuffer metricsBuffer = readNative(fontFile);
 		this.metricsLibrary = FreeType.initFreeType();
-		this.metricsFace = this.metricsLibrary.newMemoryFace(buffer, 0);
+		this.metricsFace = this.metricsLibrary.newMemoryFace(metricsBuffer, 0);
+	}
+
+	/**
+	 * The font in memory the heap does not hold: a font of the device that covers Korean and Chinese is some 30 MB, and a
+	 * direct buffer of that size counts against the heap of a phone, as does the array it is read through.
+	 */
+	private static ByteBuffer readNative(final FileHandle fontFile) {
+		final int size = (int) fontFile.length();
+		if (size <= 0) {
+			final byte[] bytes = fontFile.readBytes();
+			final ByteBuffer buffer = BufferUtils.newUnsafeByteBuffer(bytes.length);
+			buffer.put(bytes);
+			buffer.flip();
+			return buffer;
+		}
+		final ByteBuffer buffer = BufferUtils.newUnsafeByteBuffer(size);
+		try (InputStream input = fontFile.read()) {
+			final byte[] chunk = new byte[64 * 1024];
+			int read;
+			while (buffer.hasRemaining()
+					&& ((read = input.read(chunk, 0, Math.min(chunk.length, buffer.remaining()))) != -1)) {
+				buffer.put(chunk, 0, read);
+			}
+		}
+		catch (final IOException e) {
+			BufferUtils.disposeUnsafeByteBuffer(buffer);
+			throw new GdxRuntimeException("Error reading font file: " + fontFile, e);
+		}
+		buffer.flip();
+		return buffer;
 	}
 
 	@Override
@@ -77,6 +108,7 @@ public class UnroundedAdvanceFontGenerator extends FreeTypeFontGenerator {
 
 	@Override
 	public void dispose() {
+		// the face frees the buffer it was made from
 		this.metricsFace.dispose();
 		this.metricsLibrary.dispose();
 		super.dispose();

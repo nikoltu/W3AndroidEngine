@@ -297,6 +297,8 @@ class StaticStateTest {
 			"core.launcher.HotkeyCatalog#BUILD_COMMANDS",
 			// The GL memory accounting of a diagnostic switch; counts the platform GL objects, not a game's state.
 			"core.util.GlMemory#ON", "core.util.GlMemory#OWNERS", "core.util.GlMemory#unit", "core.util.GlMemory#vao", "core.util.GlMemory#renderbuffer", "core.util.GlMemory#textureBytes", "core.util.GlMemory#bufferBytes", "core.util.GlMemory#renderbufferBytes", "core.util.GlMemory#unknownFormats",
+			// The input latency probe of a diagnostic switch; times one order of this machine's player.
+			"core.util.InputLatencyProbe#watchId", "core.util.InputLatencyProbe#state", "core.util.InputLatencyProbe#eventNanos", "core.util.InputLatencyProbe#lastInputNanos", "core.util.InputLatencyProbe#submitNanos", "core.util.InputLatencyProbe#drainNanos", "core.util.InputLatencyProbe#applyNanos", "core.util.InputLatencyProbe#reactNanos", "core.util.InputLatencyProbe#haveBase", "core.util.InputLatencyProbe#movedBefore", "core.util.InputLatencyProbe#baseX", "core.util.InputLatencyProbe#baseY", "core.util.InputLatencyProbe#baseFacing",
 			// Counters of the performance report; only counted when the switch is set, and not a game's state.
 			"core.util.PerfStats#ENABLED", "core.util.PerfStats#WINDOW_HISTOGRAM", "core.util.PerfStats#RUN_HISTOGRAM", "core.util.PerfStats#firstFrame", "core.util.PerfStats#frameLoads", "core.util.PerfStats#frameLoadNanos", "core.util.PerfStats#frameTextureNanos", "core.util.PerfStats#slowestLoadNanos", "core.util.PerfStats#slowestLoad", "core.util.PerfStats#checkedLocalFile", "core.util.PerfStats#TOTALS",
 			"core.util.PerfStats#STEP_TOTALS", "core.util.PerfStats#textureBytes", "core.util.PerfStats#evictedTextures", "core.util.PerfStats#evictedModels", "core.util.PerfStats#FRAME_SECTIONS", "core.util.PerfStats#WORST_SECTIONS",
@@ -349,6 +351,12 @@ class StaticStateTest {
 			"core.launcher.SkinArt#STRING_FILES", "core.launcher.SkinArt#CLASSIC_PORTRAIT_RACES",
 			"core.launcher.SkinArt#CLASSIC_PORTRAITS", "core.launcher.SkinArt#EDGE_PLACES",
 			"core.launcher.ResultMotion#EASE",
+			// The words of Lua that JASS names may not be, and the places a map's scripts are looked for; never written.
+			"core.parsers.lua.JassToLuaTranspiler#LUA_WORDS", "core.parsers.lua.LuaEnvironment#SLEEPING_NATIVES",
+			"core.parsers.lua.LuaEnvironment#CODE_ONLY_DURING_CALL", "core.parsers.lua.LuaEnvironment#CODE_OWNERSHIP",
+			"core.parsers.lua.LuaEnvironment#REMOVING_NATIVES",
+			"core.parsers.lua.LuaMapScript#MAP_SCRIPTS", "core.parsers.lua.LuaMapScript#JASS_MAP_SCRIPTS",
+			"core.parsers.lua.LuaMapScript#COMMON", "core.parsers.lua.LuaMapScript#BLIZZARD",
 			"core.parsers.fdf.frames.AbstractRenderableFrame#LEFT_ANCHOR_PRIORITY",
 			"core.parsers.fdf.frames.AbstractRenderableFrame#RIGHT_ANCHOR_PRIORITY",
 			"core.parsers.fdf.frames.AbstractRenderableFrame#CENTER_HORIZ_ANCHOR_PRIORITY",

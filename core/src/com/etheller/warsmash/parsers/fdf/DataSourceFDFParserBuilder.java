@@ -85,10 +85,54 @@ public class DataSourceFDFParserBuilder implements FDFParserBuilder {
 		}
 	}
 
+	/**
+	 * The game reads a number written as ".15" or "-.5"; the grammar wants a digit first, so one is put in front of
+	 * every such number outside strings and comments.
+	 */
+	static String withLeadingZeros(final String text) {
+		if (text.indexOf('.') < 0) {
+			return text;
+		}
+		final StringBuilder out = new StringBuilder(text.length() + 16);
+		final int length = text.length();
+		int i = 0;
+		while (i < length) {
+			final char c = text.charAt(i);
+			if (c == '"') {
+				int end = text.indexOf('"', i + 1);
+				end = end < 0 ? length : end + 1;
+				out.append(text, i, end);
+				i = end;
+			}
+			else if ((c == '/') && (i + 1 < length) && (text.charAt(i + 1) == '/')) {
+				int end = text.indexOf('\n', i);
+				end = end < 0 ? length : end;
+				out.append(text, i, end);
+				i = end;
+			}
+			else if ((c == '/') && (i + 1 < length) && (text.charAt(i + 1) == '*')) {
+				int end = text.indexOf("*/", i + 2);
+				end = end < 0 ? length : end + 2;
+				out.append(text, i, end);
+				i = end;
+			}
+			else if ((c == '.') && (i + 1 < length) && Character.isDigit(text.charAt(i + 1))
+					&& ((i == 0) || !(Character.isLetterOrDigit(text.charAt(i - 1)) || (text.charAt(i - 1) == '_')))) {
+				out.append('0').append(c);
+				i++;
+			}
+			else {
+				out.append(c);
+				i++;
+			}
+		}
+		return out.toString();
+	}
+
 	private FDFParser build(final String path, final InputStream input) {
 		FDFLexer lexer;
 		try {
-			lexer = new FDFLexer(CharStreams.fromStream(input));
+			lexer = new FDFLexer(CharStreams.fromString(withLeadingZeros(CharStreams.fromStream(input).toString())));
 		}
 		catch (final IOException e) {
 			throw new RuntimeException(e);

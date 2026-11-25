@@ -39,8 +39,10 @@ import com.etheller.warsmash.parsers.fdf.frames.BackdropFrame;
 import com.etheller.warsmash.parsers.fdf.frames.CheckBoxFrame;
 import com.etheller.warsmash.parsers.fdf.frames.EditBoxFrame;
 import com.etheller.warsmash.parsers.fdf.frames.GlueButtonFrame;
+import com.etheller.warsmash.parsers.fdf.frames.PopupMenuFrame;
 import com.etheller.warsmash.parsers.fdf.frames.ScrollBarFrame;
 import com.etheller.warsmash.parsers.fdf.frames.SetPoint;
+import com.etheller.warsmash.parsers.fdf.frames.GlueTextButtonFrame;
 import com.etheller.warsmash.parsers.fdf.frames.SimpleButtonFrame;
 import com.etheller.warsmash.parsers.fdf.frames.SimpleCheckBoxFrame;
 import com.etheller.warsmash.parsers.fdf.frames.SimpleStatusBarFrame;
@@ -81,12 +83,15 @@ final class FrameNatives implements FrameEventSink {
 	private static final int EVENT_CHECKBOX_CHECKED = 7;
 	private static final int EVENT_CHECKBOX_UNCHECKED = 8;
 	private static final int EVENT_EDITBOX_TEXT_CHANGED = 9;
+	private static final int EVENT_POPUPMENU_ITEM_CHANGED = 10;
 	private static final int EVENT_MOUSE_DOUBLECLICK = 11;
 	private static final int EVENT_SLIDER_VALUE_CHANGED = 13;
 	private static final int EVENT_EDITBOX_ENTER = 16;
 	private static final int ORIGIN_GAME_UI = 0;
 	private static final int ORIGIN_WORLD_FRAME = 17;
 	private static final int ORIGIN_SIMPLE_UI_PARENT = 18;
+	private static final int ORIGIN_COMMAND_BUTTON = 1;
+	private static final int ORIGIN_ITEM_BUTTON = 7;
 	private static final int ORIGIN_MINIMAP = 8;
 	private static final int ORIGIN_CHAT_MSG = 13;
 	private static final int ORIGIN_UNIT_MSG = 14;
@@ -255,6 +260,12 @@ final class FrameNatives implements FrameEventSink {
 		return GameUI.convertY(this.uiViewport, y);
 	}
 
+	private static void anchorsDecideSize(final UIFrame frame) {
+		if (frame instanceof com.etheller.warsmash.parsers.fdf.frames.AbstractRenderableFrame) {
+			((com.etheller.warsmash.parsers.fdf.frames.AbstractRenderableFrame) frame).anchorsDecideSize();
+		}
+	}
+
 	/** A frame the script made or changed is laid out again before the next draw. */
 	private void markDirty(final UIFrame frame) {
 		if (frame != null) {
@@ -289,9 +300,27 @@ final class FrameNatives implements FrameEventSink {
 	private void created(final UIFrame frame) {
 		if (frame != null) {
 			markDirty(frame);
+			if (frame instanceof StringFrame) {
+				((StringFrame) frame).setWrapToAnchors(true);
+			}
 			this.scriptFrames.add(frame);
+			showChosenItems(frame);
 			if (this.viewer.scriptUiState.isOriginFramesHidden()) {
 				idOf(frame);
+			}
+		}
+	}
+
+	/** A popup menu of the script's frames shows the item chosen in it, whether or not the script listens for it. */
+	private void showChosenItems(final UIFrame frame) {
+		if (frame instanceof PopupMenuFrame) {
+			final PopupMenuFrame popup = (PopupMenuFrame) frame;
+			popup.setMenuClickListener((button, index) -> popup.setSelectedIndex(gameUI(), index));
+			popup.setSelectedIndex(gameUI(), 0);
+		}
+		if (frame instanceof AbstractUIFrame) {
+			for (final UIFrame child : ((AbstractUIFrame) frame).getChildFrames()) {
+				showChosenItems(child);
 			}
 		}
 	}
@@ -329,8 +358,24 @@ final class FrameNatives implements FrameEventSink {
 			created(frame);
 			return handle(globalScope, frame);
 		});
-		addCall("BlzGetFrameByName", (arguments, globalScope, triggerScope) -> handle(globalScope,
-				gameUI().getFrameByName(string(arguments, 0), integer(arguments, 1))));
+		addCall("BlzGetFrameByName", (arguments, globalScope, triggerScope) -> {
+			final String name = string(arguments, 0);
+			UIFrame frame = gameUI().getFrameByNameInContext(name, integer(arguments, 1));
+			// The game's own buttons carry the data names CommandButton_<n> and InventoryButton_<n>.
+			if ((frame == null) && (this.ui != null) && (name != null)) {
+				final boolean command = name.startsWith("CommandButton_");
+				if (command || name.startsWith("InventoryButton_")) {
+					try {
+						frame = this.ui.getOriginFrame(command ? ORIGIN_COMMAND_BUTTON : ORIGIN_ITEM_BUTTON,
+								Integer.parseInt(name.substring(name.indexOf('_') + 1)));
+					}
+					catch (final NumberFormatException exc) {
+						frame = null;
+					}
+				}
+			}
+			return handle(globalScope, frame);
+		});
 		addCall("BlzFrameGetName", (arguments, globalScope, triggerScope) -> {
 			final UIFrame frame = object(arguments, 0);
 			return new StringJassValue(frame == null || frame.getName() == null ? "" : frame.getName());
@@ -339,6 +384,7 @@ final class FrameNatives implements FrameEventSink {
 			final UIFrame frame = object(arguments, 0);
 			if ((frame != null) && (frame != gameUI())) {
 				frame.setVisible(false);
+				gameUI().releaseSprites(frame);
 				final UIFrame parent = frame.getParent();
 				if (parent instanceof AbstractUIFrame) {
 					((AbstractUIFrame) parent).remove(frame);
@@ -364,6 +410,7 @@ final class FrameNatives implements FrameEventSink {
 					this.worldFrame = gameUI().createSimpleFrame("WorldFrame", gameUI(), 0);
 					this.worldFrame.setSetAllPoints(true);
 					this.worldFrame.setVisible(true);
+					this.viewer.scriptUiState.setWorldFrame(this.worldFrame);
 				}
 				return handle(globalScope, this.worldFrame);
 			}
@@ -412,6 +459,7 @@ final class FrameNatives implements FrameEventSink {
 			if ((frame != null) && (point != null) && (relativePoint != null)) {
 				frame.addSetPoint(new SetPoint(point, relative, relativePoint, frameX(real(arguments, 4)),
 						frameY(real(arguments, 5))));
+					anchorsDecideSize(frame);
 				markDirty(frame);
 			}
 			return null;
@@ -424,6 +472,7 @@ final class FrameNatives implements FrameEventSink {
 				frame.addSetPoint(new SetPoint(point, gameUI(), FramePoint.BOTTOMLEFT,
 						frameX(real(arguments, 2)) - gameUI().getFramePointX(FramePoint.LEFT),
 						frameY(real(arguments, 3)) - gameUI().getFramePointY(FramePoint.BOTTOM)));
+					anchorsDecideSize(frame);
 				markDirty(frame);
 			}
 			return null;
@@ -440,9 +489,13 @@ final class FrameNatives implements FrameEventSink {
 		addCommand("BlzFrameSetAllPoints", (arguments, globalScope, triggerScope) -> {
 			final UIFrame frame = object(arguments, 0);
 			final UIFrame relative = ownerOrRoot(arguments, 1);
-			if (frame != null) {
+			// A missing frame to follow leaves the frame where it is instead of stretching it over the screen.
+			if ((frame != null) && (object(arguments, 1) != null)) {
 				frame.addSetPoint(new SetPoint(FramePoint.TOPLEFT, relative, FramePoint.TOPLEFT, 0, 0));
 				frame.addSetPoint(new SetPoint(FramePoint.BOTTOMRIGHT, relative, FramePoint.BOTTOMRIGHT, 0, 0));
+				// Opposite corners decide the size; a size set before them no longer applies.
+				frame.setWidth(0);
+				frame.setHeight(0);
 				markDirty(frame);
 			}
 			return null;
@@ -532,6 +585,14 @@ final class FrameNatives implements FrameEventSink {
 		if (frame instanceof StringFrame) {
 			return (StringFrame) frame;
 		}
+		// A button keeps its label apart from its other children, and the other text children (the highlight or
+		// disabled labels) are not the one the script means.
+		final UIFrame label = frame instanceof PopupMenuFrame ? popupTitleText((PopupMenuFrame) frame)
+				: frame instanceof GlueTextButtonFrame ? ((GlueTextButtonFrame) frame).getButtonText()
+				: frame instanceof SimpleButtonFrame ? ((SimpleButtonFrame) frame).getButtonText() : null;
+		if (label instanceof StringFrame) {
+			return (StringFrame) label;
+		}
 		if (frame instanceof AbstractUIFrame) {
 			for (final UIFrame child : ((AbstractUIFrame) frame).getChildFrames()) {
 				if (child instanceof StringFrame) {
@@ -540,6 +601,11 @@ final class FrameNatives implements FrameEventSink {
 			}
 		}
 		return null;
+	}
+
+	private static UIFrame popupTitleText(final PopupMenuFrame popup) {
+		final UIFrame title = popup.getPopupTitleFrame();
+		return title instanceof GlueTextButtonFrame ? ((GlueTextButtonFrame) title).getButtonText() : title;
 	}
 
 	private static Color argb(final int color) {
@@ -786,6 +852,9 @@ final class FrameNatives implements FrameEventSink {
 	/** What BlzFrameGetValue tells: the slider's value or the status bar's fill in the script's units. */
 	private float valueOf(final UIFrame frame) {
 		final float[] range = this.ranges.get(frame);
+		if (frame instanceof PopupMenuFrame) {
+			return ((PopupMenuFrame) frame).getSelectedIndex();
+		}
 		if (frame instanceof ScrollBarFrame) {
 			final int step = ((ScrollBarFrame) frame).getValue();
 			return range == null ? step : fromStep(range, step);
@@ -929,6 +998,14 @@ final class FrameNatives implements FrameEventSink {
 			box.setOnClick(() -> {
 				send(frameId, EVENT_CONTROL_CLICK, 0, "");
 				send(frameId, box.isChecked() ? EVENT_CHECKBOX_CHECKED : EVENT_CHECKBOX_UNCHECKED, 0, "");
+			});
+		}
+		else if (frame instanceof PopupMenuFrame) {
+			// The click that opens the list stays the popup's own; choosing an item changes the title and the value.
+			final PopupMenuFrame popup = (PopupMenuFrame) frame;
+			popup.setMenuClickListener((button, index) -> {
+				popup.setSelectedIndex(gameUI(), index);
+				send(frameId, EVENT_POPUPMENU_ITEM_CHANGED, index, "");
 			});
 		}
 		else if (frame instanceof GlueButtonFrame) {

@@ -446,7 +446,7 @@ Android will not install the release over this copy, because it is signed with a
     <string name="game_closed_line">Start it again; the last autosave is in Load Saved Game.</string>
     <string name="game_not_started">The game could not be started.</string>
     <string name="game_map_unreadable">The map could not be read.</string>
-    <string name="map_issue_lua">This map uses a Lua script, which is not supported yet.</string>
+    <string name="map_issue_lua">This map uses a Lua script, and the Lua library is not available on this system.</string>
     <string name="map_issue_no_script">This map has no script and cannot be played.</string>
     <string name="map_issue_protected">This map is protected and cannot be opened.</string>
     <string name="map_issue_missing">Map not in the game data</string>

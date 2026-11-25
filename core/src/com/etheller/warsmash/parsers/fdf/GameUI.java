@@ -104,6 +104,9 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 	private final FontGeneratorHolder fontGenerator;
 	private final FreeTypeFontParameter fontParam;
 	private final Map<String, UIFrame> nameToFrame = new HashMap<>();
+	/** The frames of one name by the create context the script gave, as a script's own frames of one name differ by it. */
+	private final Map<String, Map<Integer, UIFrame>> namedByContext = new HashMap<>();
+	private int createContext;
 	private final Viewport fdfCoordinateResolutionDummyViewport;
 	private final DataTable skinData;
 	private final Element errorStrings;
@@ -116,6 +119,8 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 	private final List<FocusableFrame> focusableFrames = new ArrayList<>();
 	// Each portrait frame renders through a scene of its own that its viewer does not know of.
 	private final List<SpriteFrame2> portraitFrames = new ArrayList<>();
+	// Their models are drawn by the interface scene, so each frame follows what the batch does to its frame.
+	private final List<SpriteFrame> spriteFrames = new ArrayList<>();
 	private boolean wideRoot;
 	// The menu switches the game version while a game keeps its interface.
 	private final int gameVersion;
@@ -139,6 +144,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 		this.racialCommandIndex = racialCommandIndex;
 		updateRootBounds();
 		this.templates = new FrameTemplateEnvironment();
+		this.templates.setStringResolver(value -> WTS.resolve(this.mapStrings, value));
 
 		this.dynamicFontGeneratorHolder = new DynamicFontGeneratorHolder(this.modelViewer.dataSource, this.skin);
 		this.fontGenerator = this.dynamicFontGeneratorHolder.getFontGenerator("MasterFont");
@@ -466,9 +472,16 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 			// A map's script may ask for a frame its own files never defined; the game gives it no frame.
 			return null;
 		}
-		final UIFrame inflatedFrame = inflate(frameDefinition, owner, null, frameDefinition.has("DecorateFileNames"));
-		attachToOwner(inflatedFrame, owner);
-		return inflatedFrame;
+		this.createContext = createContext;
+		try {
+			final UIFrame inflatedFrame = inflate(frameDefinition, owner, null,
+					frameDefinition.has("DecorateFileNames"));
+			attachToOwner(inflatedFrame, owner);
+			return inflatedFrame;
+		}
+		finally {
+			this.createContext = 0;
+		}
 	}
 
 	/** A frame the script makes under an owner is drawn with it; an owner that holds no children leaves it at the root. */
@@ -485,6 +498,16 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 	}
 
 	public UIFrame createSimpleFrame(final String name, final UIFrame owner, final int createContext) {
+		this.createContext = createContext;
+		try {
+			return createSimpleFrame(name, owner);
+		}
+		finally {
+			this.createContext = 0;
+		}
+	}
+
+	private UIFrame createSimpleFrame(final String name, final UIFrame owner) {
 		final FrameDefinition frameDefinition = this.templates.getFrame(name);
 		if (frameDefinition == null) {
 			final SimpleFrame simpleFrame = new SimpleFrame(name, owner);
@@ -512,7 +535,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 	public TextureFrame createTextureFrame(final String name, final UIFrame parent, final boolean decorateFileNames,
 			final Vector4Definition texCoord) {
 		final TextureFrame textureFrame = new TextureFrame(name, parent, decorateFileNames, texCoord);
-		this.nameToFrame.put(name, textureFrame);
+		registerName(name, textureFrame);
 		add(textureFrame);
 		checkInternalMappingSize();
 		return textureFrame;
@@ -523,7 +546,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 		final FilterModeTextureFrame textureFrame = new FilterModeTextureFrame(name, parent, decorateFileNames,
 				texCoord);
 		textureFrame.setFilterMode(filterMode);
-		this.nameToFrame.put(name, textureFrame);
+		registerName(name, textureFrame);
 		add(textureFrame);
 		checkInternalMappingSize();
 		return textureFrame;
@@ -540,7 +563,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 		final BitmapFont frameFont = generateFont(fdfFontSize);
 		final StringFrame stringFrame = new StringFrame(name, parent, color, justifyH, justifyV, frameFont, name,
 				highlightColor, null);
-		this.nameToFrame.put(name, stringFrame);
+		registerName(name, stringFrame);
 		add(stringFrame);
 		checkInternalMappingSize();
 		return stringFrame;
@@ -549,6 +572,13 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 	@Override
 	public void remove(UIFrame childFrame) {
 		this.nameToFrame.remove(childFrame.getName());
+		final Map<Integer, UIFrame> byContext = this.namedByContext.get(childFrame.getName());
+		if (byContext != null) {
+			byContext.values().remove(childFrame);
+			if (byContext.isEmpty()) {
+				this.namedByContext.remove(childFrame.getName());
+			}
+		}
 		super.remove(childFrame);
 	}
 
@@ -619,7 +649,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 				// TODO: we should not need to put ourselves in this map 2x, but we do
 				// since there are nested inflate calls happening before the general case
 				// mapping
-				this.nameToFrame.put(frameDefinition.getName(), simpleFrame);
+				registerName(frameDefinition.getName(), simpleFrame);
 				for (final FrameDefinition childDefinition : frameDefinition.getInnerFrames()) {
 					final UIFrame inflatedChild = inflate(childDefinition, simpleFrame, frameDefinition,
 							inDecorateFileNames || childDefinition.has("DecorateFileNames"));
@@ -640,7 +670,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 				final SimpleStatusBarFrame simpleStatusBarFrame = new SimpleStatusBarFrame(frameDefinition.getName(),
 						parent, decorateFileNames, false, 0.0f);
 				// Its parts pin to the bar by name, so the bar is known before they are made.
-				this.nameToFrame.put(frameDefinition.getName(), simpleStatusBarFrame);
+				registerName(frameDefinition.getName(), simpleStatusBarFrame);
 				for (final FrameDefinition childDefinition : frameDefinition.getInnerFrames()) {
 					simpleStatusBarFrame.add(inflate(childDefinition, simpleStatusBarFrame, frameDefinition,
 							inDecorateFileNames || childDefinition.has("DecorateFileNames")));
@@ -738,7 +768,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 					viewport2 = this.viewport; // TODO was fdfCoordinateResolutionDummyViewport here previously, but is
 												// that
 					// a good idea?
-					this.nameToFrame.put(frameDefinition.getName(), spriteFrame);
+					registerName(frameDefinition.getName(), spriteFrame);
 					for (final FrameDefinition childDefinition : frameDefinition.getInnerFrames()) {
 						spriteFrame.add(inflate(childDefinition, spriteFrame, frameDefinition,
 								inDecorateFileNames || childDefinition.has("DecorateFileNames")));
@@ -749,6 +779,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 				else {
 					final SpriteFrame spriteFrame = new SpriteFrame(frameDefinition.getName(), parent, this.uiScene,
 							viewport2);
+					this.spriteFrames.add(spriteFrame);
 					String backgroundArt = frameDefinition.getString("BackgroundArt");
 					if (frameDefinition.has("DecorateFileNames") || inDecorateFileNames) {
 						if (backgroundArt != null) {
@@ -767,7 +798,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 					viewport2 = this.viewport; // TODO was fdfCoordinateResolutionDummyViewport here previously, but is
 												// that
 					// a good idea?
-					this.nameToFrame.put(frameDefinition.getName(), spriteFrame);
+					registerName(frameDefinition.getName(), spriteFrame);
 					for (final FrameDefinition childDefinition : frameDefinition.getInnerFrames()) {
 						spriteFrame.add(inflate(childDefinition, spriteFrame, frameDefinition,
 								inDecorateFileNames || childDefinition.has("DecorateFileNames")));
@@ -780,7 +811,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 				// TODO: we should not need to put ourselves in this map 2x, but we do
 				// since there are nested inflate calls happening before the general case
 				// mapping
-				this.nameToFrame.put(frameDefinition.getName(), simpleFrame);
+				registerName(frameDefinition.getName(), simpleFrame);
 				for (final FrameDefinition childDefinition : frameDefinition.getInnerFrames()) {
 					simpleFrame.add(inflate(childDefinition, simpleFrame, frameDefinition,
 							inDecorateFileNames || childDefinition.has("DecorateFileNames")));
@@ -793,7 +824,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 				// since there are nested inflate calls happening before the general case
 				// mapping
 				final String dialogBackdropKey = frameDefinition.getString("DialogBackdrop");
-				this.nameToFrame.put(frameDefinition.getName(), simpleFrame);
+				registerName(frameDefinition.getName(), simpleFrame);
 
 				if (SHOW_BLACKNESS_BEHIND_DIALOGS) {
 					final TextureFrame modalDialogBlacknessScreenCover = new ClickConsumingTextureFrame(null, parent,
@@ -931,7 +962,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 				// TODO: we should not need to put ourselves in this map 2x, but we do
 				// since there are nested inflate calls happening before the general case
 				// mapping
-				this.nameToFrame.put(frameDefinition.getName(), glueButtonFrame);
+				registerName(frameDefinition.getName(), glueButtonFrame);
 				final String controlBackdropKey = frameDefinition.getString("ControlBackdrop");
 				final String controlPushedBackdropKey = frameDefinition.getString("ControlPushedBackdrop");
 				final String controlDisabledBackdropKey = frameDefinition.getString("ControlDisabledBackdrop");
@@ -986,7 +1017,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 				// TODO: we should not need to put ourselves in this map 2x, but we do
 				// since there are nested inflate calls happening before the general case
 				// mapping
-				this.nameToFrame.put(frameDefinition.getName(), glueButtonFrame);
+				registerName(frameDefinition.getName(), glueButtonFrame);
 
 				final Float popupButtonInset = frameDefinition.getFloat("PopupButtonInset");
 				final String controlBackdropKey = frameDefinition.getString("ControlBackdrop");
@@ -1078,7 +1109,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 				// TODO: we should not need to put ourselves in this map 2x, but we do
 				// since there are nested inflate calls happening before the general case
 				// mapping
-				this.nameToFrame.put(frameDefinition.getName(), simpleButtonFrame);
+				registerName(frameDefinition.getName(), simpleButtonFrame);
 				final StringPairFrameDefinitionField normalTextDefinition = frameDefinition.getStringPair("NormalText");
 				final StringPairFrameDefinitionField disabledTextDefinition = frameDefinition
 						.getStringPair("DisabledText");
@@ -1150,7 +1181,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 				// TODO: we should not need to put ourselves in this map 2x, but we do
 				// since there are nested inflate calls happening before the general case
 				// mapping
-				this.nameToFrame.put(frameDefinition.getName(), glueButtonFrame);
+				registerName(frameDefinition.getName(), glueButtonFrame);
 				final String controlBackdropKey = frameDefinition.getString("ControlBackdrop");
 				final String controlPushedBackdropKey = frameDefinition.getString("ControlPushedBackdrop");
 				final String controlDisabledBackdropKey = frameDefinition.getString("ControlDisabledBackdrop");
@@ -1195,7 +1226,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 				// TODO: we should not need to put ourselves in this map 2x, but we do
 				// since there are nested inflate calls happening before the general case
 				// mapping
-				this.nameToFrame.put(frameDefinition.getName(), glueButtonFrame);
+				registerName(frameDefinition.getName(), glueButtonFrame);
 				final String controlBackdropKey = frameDefinition.getString("ControlBackdrop");
 				final String controlPushedBackdropKey = frameDefinition.getString("ControlPushedBackdrop");
 				final String controlDisabledBackdropKey = frameDefinition.getString("ControlDisabledBackdrop");
@@ -1235,7 +1266,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 				// TODO: we should not need to put ourselves in this map 2x, but we do
 				// since there are nested inflate calls happening before the general case
 				// mapping
-				this.nameToFrame.put(frameDefinition.getName(), glueButtonFrame);
+				registerName(frameDefinition.getName(), glueButtonFrame);
 				final String controlBackdropKey = frameDefinition.getString("ControlBackdrop");
 				final String controlPushedBackdropKey = frameDefinition.getString("ControlPushedBackdrop");
 				final String controlDisabledBackdropKey = frameDefinition.getString("ControlDisabledBackdrop");
@@ -1282,7 +1313,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 				// TODO: we should not need to put ourselves in this map 2x, but we do
 				// since there are nested inflate calls happening before the general case
 				// mapping
-				this.nameToFrame.put(frameDefinition.getName(), glueButtonFrame);
+				registerName(frameDefinition.getName(), glueButtonFrame);
 				final String controlBackdropKey = frameDefinition.getString("ControlBackdrop");
 				final String controlPushedBackdropKey = frameDefinition.getString("ControlPushedBackdrop");
 				final String controlDisabledBackdropKey = frameDefinition.getString("ControlDisabledBackdrop");
@@ -1352,7 +1383,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 				// TODO: we should not need to put ourselves in this map 2x, but we do
 				// since there are nested inflate calls happening before the general case
 				// mapping
-				this.nameToFrame.put(frameDefinition.getName(), editBoxFrame);
+				registerName(frameDefinition.getName(), editBoxFrame);
 				final String controlBackdropKey = frameDefinition.getString("ControlBackdrop");
 				final String editTextFrameKey = frameDefinition.getString("EditTextFrame");
 				for (final FrameDefinition childDefinition : frameDefinition.getInnerFrames()) {
@@ -1405,7 +1436,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 				// TODO: we should not need to put ourselves in this map 2x, but we do
 				// since there are nested inflate calls happening before the general case
 				// mapping
-				this.nameToFrame.put(frameDefinition.getName(), editBoxFrame);
+				registerName(frameDefinition.getName(), editBoxFrame);
 				final String controlBackdropKey = frameDefinition.getString("ControlBackdrop");
 				for (final FrameDefinition childDefinition : frameDefinition.getInnerFrames()) {
 					if (childDefinition.getName().equals(controlBackdropKey)) {
@@ -1434,7 +1465,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 				// TODO: we should not need to put ourselves in this map 2x, but we do
 				// since there are nested inflate calls happening before the general case
 				// mapping
-				this.nameToFrame.put(frameDefinition.getName(), controlFrame);
+				registerName(frameDefinition.getName(), controlFrame);
 				final String controlBackdropKey = frameDefinition.getString("ControlBackdrop");
 				for (final FrameDefinition childDefinition : frameDefinition.getInnerFrames()) {
 					if (childDefinition.getName().equals(controlBackdropKey)) {
@@ -1453,7 +1484,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 				// TODO: we should not need to put ourselves in this map 2x, but we do
 				// since there are nested inflate calls happening before the general case
 				// mapping
-				this.nameToFrame.put(frameDefinition.getName(), controlFrame);
+				registerName(frameDefinition.getName(), controlFrame);
 				final String controlBackdropKey = frameDefinition.getString("ControlBackdrop");
 				final String listBoxScrollBarKey = frameDefinition.getString("ListBoxScrollBar");
 				final Float listBoxBorder = frameDefinition.getFloat("ListBoxBorder");
@@ -1491,7 +1522,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 				// TODO: we should not need to put ourselves in this map 2x, but we do
 				// since there are nested inflate calls happening before the general case
 				// mapping
-				this.nameToFrame.put(frameDefinition.getName(), controlFrame);
+				registerName(frameDefinition.getName(), controlFrame);
 				final String controlBackdropKey = frameDefinition.getString("ControlBackdrop");
 				final String listBoxScrollBarKey = frameDefinition.getString("TextAreaScrollBar");
 				final Float textAreaLineHeight = frameDefinition.getFloat("TextAreaLineHeight");
@@ -1556,7 +1587,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 				// TODO: we should not need to put ourselves in this map 2x, but we do
 				// since there are nested inflate calls happening before the general case
 				// mapping
-				this.nameToFrame.put(frameDefinition.getName(), controlFrame);
+				registerName(frameDefinition.getName(), controlFrame);
 				final String controlBackdropKey = frameDefinition.getString("ControlBackdrop");
 				for (final FrameDefinition childDefinition : frameDefinition.getInnerFrames()) {
 					if (childDefinition.getName().equals(controlBackdropKey)) {
@@ -1656,7 +1687,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 				}
 				// Frames inside a highlight (a script swaps the hover picture of a button through one) are drawn with it.
 				final SimpleFrame highlightFrame = new SimpleFrame(frameDefinition.getName(), parent);
-				this.nameToFrame.put(frameDefinition.getName(), highlightFrame);
+				registerName(frameDefinition.getName(), highlightFrame);
 				textureFrame.setSetAllPoints(true);
 				highlightFrame.add(textureFrame);
 				for (final FrameDefinition childDefinition : frameDefinition.getInnerFrames()) {
@@ -1712,7 +1743,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 				final BackdropFrame backdropFrame = new BackdropFrame(frameDefinition.getName(), parent,
 						decorateFileNames, tileBackground, background, cornerFlags, cornerSize, backgroundSize,
 						backgroundInsets, edgeFile, mirrored);
-				this.nameToFrame.put(frameDefinition.getName(), backdropFrame);
+				registerName(frameDefinition.getName(), backdropFrame);
 				for (final FrameDefinition childDefinition : frameDefinition.getInnerFrames()) {
 					backdropFrame.add(inflate(childDefinition, backdropFrame, frameDefinition, decorateFileNames));
 				}
@@ -1722,7 +1753,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 		case Layer:
 			final SimpleFrame simpleFrame = new SimpleFrame(frameDefinition.getName(), parent);
 			simpleFrame.setSetAllPoints(true);
-			this.nameToFrame.put(frameDefinition.getName(), simpleFrame);
+			registerName(frameDefinition.getName(), simpleFrame);
 			for (final FrameDefinition childDefinition : frameDefinition.getInnerFrames()) {
 				simpleFrame.add(inflate(childDefinition, simpleFrame, frameDefinition,
 						inDecorateFileNames || childDefinition.has("DecorateFileNames")));
@@ -1819,7 +1850,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 			}
 			for (final SetPointDefinition setPointDefinition : frameDefinition.getSetPoints()) {
 				final UIFrame otherFrameByName = getFrameByName(setPointDefinition.getOther(),
-						0 /* TODO: createContext */);
+						this.createContext);
 				if (otherFrameByName == null) {
 					Log.error("Failing to pin " + frameDefinition.getName() + " to "
 							+ setPointDefinition.getOther() + " because it was null!");
@@ -1834,7 +1865,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 							convertY(this.viewport, setPointDefinition.getY())));
 				}
 			}
-			this.nameToFrame.put(frameDefinition.getName(), inflatedFrame);
+			registerName(frameDefinition.getName(), inflatedFrame);
 		}
 		else {
 			// TODO in production throw some kind of exception here
@@ -1857,8 +1888,6 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 
 	public UIFrame createFrameByType(final String typeName, final String name, final UIFrame owner,
 			final String inherits, final int createContext) {
-		// TODO idk what inherits is doing yet, and I didn't implement createContext yet
-		// even though it looked like just mapping/indexing on int
 		// The template to copy is the one the script names in "inherits"; a frame without one takes the fields of a
 		// template of its own name.
 		final boolean withChildren = "WITHCHILDREN".equals(inherits);
@@ -1868,13 +1897,34 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 		if (baseTemplateDef != null) {
 			frameDefinition.inheritFrom(baseTemplateDef, withChildren || namesTemplate);
 		}
-		final UIFrame inflatedFrame = inflate(frameDefinition, owner, null, frameDefinition.has("DecorateFileNames"));
-		attachToOwner(inflatedFrame, owner);
-		return inflatedFrame;
+		this.createContext = createContext;
+		try {
+			final UIFrame inflatedFrame = inflate(frameDefinition, owner, null,
+					frameDefinition.has("DecorateFileNames"));
+			attachToOwner(inflatedFrame, owner);
+			return inflatedFrame;
+		}
+		finally {
+			this.createContext = 0;
+		}
 	}
 
+	/** The frame of the name made in the create context, else the latest of the name. */
 	public UIFrame getFrameByName(final String name, final int createContext) {
-		return this.nameToFrame.get(name);
+		final Map<Integer, UIFrame> byContext = this.namedByContext.get(name);
+		final UIFrame frame = byContext == null ? null : byContext.get(createContext);
+		return frame != null ? frame : this.nameToFrame.get(name);
+	}
+
+	/** What a script asks for: a name made in another context is a different frame, and none is not a frame. */
+	public UIFrame getFrameByNameInContext(final String name, final int createContext) {
+		final Map<Integer, UIFrame> byContext = this.namedByContext.get(name);
+		return byContext == null ? this.nameToFrame.get(name) : byContext.get(createContext);
+	}
+
+	private void registerName(final String name, final UIFrame frame) {
+		this.nameToFrame.put(name, frame);
+		this.namedByContext.computeIfAbsent(name, key -> new HashMap<>()).put(this.createContext, frame);
 	}
 
 	private static boolean isUnplaced(final FrameDefinition frameDefinition) {
@@ -1986,18 +2036,34 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 
 	@Override
 	protected void internalRender(final SpriteBatch batch, final BitmapFont baseFont, final GlyphLayout glyphLayout) {
+		for (int i = 0; i < this.spriteFrames.size(); i++) {
+			this.spriteFrames.get(i).refreshInstance();
+		}
 		super.internalRender(batch, baseFont, glyphLayout);
 	}
 
 	@Override
 	public void add(final UIFrame childFrame) {
 		super.add(childFrame);
-		this.nameToFrame.put(childFrame.getName(), childFrame);
+		registerName(childFrame.getName(), childFrame);
 		checkInternalMappingSize();
 	}
 
 	public void checkInternalMappingSize() {
 //		System.out.println("nameToFrame.size(): " + this.nameToFrame.size());
+	}
+
+	/** A destroyed frame and what it holds no longer keep a model in the interface scene. */
+	public void releaseSprites(final UIFrame frame) {
+		if (frame instanceof SpriteFrame) {
+			this.spriteFrames.remove(frame);
+			((SpriteFrame) frame).setModel(null);
+		}
+		if (frame instanceof AbstractUIFrame) {
+			for (final UIFrame child : new ArrayList<>(((AbstractUIFrame) frame).getChildFrames())) {
+				releaseSprites(child);
+			}
+		}
 	}
 
 	public Scene getUiScene() {

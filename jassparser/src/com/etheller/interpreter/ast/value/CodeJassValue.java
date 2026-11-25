@@ -1,57 +1,51 @@
 package com.etheller.interpreter.ast.value;
 
-import java.util.Objects;
-
 import com.etheller.interpreter.ast.execution.JassStackFrame;
 import com.etheller.interpreter.ast.execution.JassThread;
 import com.etheller.interpreter.ast.scope.GlobalScope;
 import com.etheller.interpreter.ast.scope.TriggerExecutionScope;
 
-public class CodeJassValue implements JassValue {
-	private final Integer userFunctionInstructionPtr;
+/**
+ * A function value ("code"): either a position in the JASS instructions or a function of another script language.
+ */
+public abstract class CodeJassValue implements JassValue {
 
-	public CodeJassValue(final Integer userFunctionInstructionPtr) {
-		this.userFunctionInstructionPtr = userFunctionInstructionPtr;
+	/** Runs the function on a new thread that the thread queue picks up. */
+	public abstract void call(GlobalScope globalScope, TriggerExecutionScope triggerScope);
+
+	/**
+	 * Runs the function now, to its end, and gives what it returns; the default if it does not finish (it waited) or
+	 * fails.
+	 */
+	public abstract JassValue callAndExecuteCapturingReturnValue(GlobalScope globalScope,
+			TriggerExecutionScope triggerScope, String contextNameForError, JassValue defaultValue);
+
+	/** Makes the thread run this function; the thread starts at its beginning and has an empty stack frame. */
+	public abstract void startOn(JassThread thread);
+
+	/** A code value of no function (the null of the type). */
+	public abstract boolean isNull();
+
+	/**
+	 * What names the function for Condition and Filter: both of one function give the same handle. Equal keys are the
+	 * same function.
+	 */
+	public abstract Object getBoolExprKey();
+
+	/**
+	 * The position in the JASS instructions; null for code of any other script language, which has no position.
+	 */
+	public Integer getUserFunctionInstructionPtr() {
+		return null;
 	}
 
-	public Integer getUserFunctionInstructionPtr() {
-		return this.userFunctionInstructionPtr;
+	/** The function as a number, for a cast to integer: its position, or a number of its own; 0 for none. */
+	public int toInteger() {
+		final Integer pointer = getUserFunctionInstructionPtr();
+		return pointer == null ? 0 : pointer;
 	}
 
 	public void initStack(final JassStackFrame stackFrame) {
-	}
-
-	public final void call(final GlobalScope globalScope, final TriggerExecutionScope triggerScope) {
-		final JassThread thread = globalScope.createThread(this, triggerScope);
-		globalScope.queueThread(thread);
-		return;
-	}
-
-	public final JassValue callAndExecuteCapturingReturnValue(final GlobalScope globalScope,
-			final TriggerExecutionScope triggerScope, final String contextNameForError, final JassValue defaultValue) {
-		final JassThread thread = globalScope.createThreadCapturingReturnValue(this, triggerScope);
-		return globalScope.runThreadUntilCompletionAndReadReturnValue(thread,
-				contextNameForError, defaultValue);
-	}
-
-	@Override
-	public int hashCode() {
-		return Objects.hash(this.userFunctionInstructionPtr);
-	}
-
-	@Override
-	public boolean equals(final Object obj) {
-		if (this == obj) {
-			return true;
-		}
-		if (obj == null) {
-			return false;
-		}
-		if (getClass() != obj.getClass()) {
-			return false;
-		}
-		final CodeJassValue other = (CodeJassValue) obj;
-		return Objects.equals(this.userFunctionInstructionPtr, other.userFunctionInstructionPtr);
 	}
 
 	@Override

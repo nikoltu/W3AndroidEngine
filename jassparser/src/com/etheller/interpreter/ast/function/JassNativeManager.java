@@ -42,6 +42,11 @@ public class JassNativeManager {
 		return this.nameToNativeCode.get(name);
 	}
 
+	/** The names of the natives the engine made code for that no script declared (so far). */
+	public java.util.Set<String> getUndeclaredNativeNames() {
+		return new java.util.TreeSet<>(this.nameToNativeCode.keySet());
+	}
+
 	public void registerNativeCode(final int lineNo, final String sourceFile, final String name,
 			final List<JassParameterDefinition> parameterDefinitions, final JassTypeToken returnTypeToken,
 			final Scope globals) {

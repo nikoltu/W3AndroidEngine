@@ -17,6 +17,7 @@ public class CRegionManager {
 	private final PathingGrid pathingGrid;
 	private transient int enterTriggerDepth;
 	private transient CUnit silentEnterUnit;
+	private final transient java.util.List<com.etheller.interpreter.ast.scope.trigger.Trigger> firingEnterTriggers = new ArrayList<>();
 
 	public CRegionManager(final Rectangle entireMapBounds, final PathingGrid pathingGrid) {
 		this.regionTree = new Quadtree<>(entireMapBounds, true);
@@ -199,17 +200,29 @@ public class CRegionManager {
 	}
 
 	public void onUnitEnterRegion(final CUnit unit, final CRegion region) {
-		if (unit == this.silentEnterUnit) {
-			return;
-		}
+		onUnitEnterRegion(unit, region, null);
+	}
+
+	/** @param queued the triggers the event was queued for, or null for those the region has now */
+	public void onUnitEnterRegion(final CUnit unit, final CRegion region, final List<CRegionTriggerEnter> queued) {
 		this.enterTriggerDepth++;
 		try {
 			// Measured on 1.29: events registered by a running trigger wait for the next unit, destroyed ones stop firing.
 			final List<CRegionTriggerEnter> triggers = region.getEnterTriggers();
 			if (!triggers.isEmpty()) {
-				for (final CRegionTriggerEnter enterTrigger : new ArrayList<>(triggers)) {
+				for (final CRegionTriggerEnter enterTrigger : new ArrayList<>(queued != null ? queued : triggers)) {
 					if (triggers.contains(enterTrigger)) {
-						enterTrigger.fire(unit, region);
+						// A unit made by a running enter trigger does not start that same trigger again; the others see it enter.
+						if ((unit == this.silentEnterUnit) && this.firingEnterTriggers.contains(enterTrigger.getTrigger())) {
+							continue;
+						}
+						this.firingEnterTriggers.add(enterTrigger.getTrigger());
+						try {
+							enterTrigger.fire(unit, region);
+						}
+						finally {
+							this.firingEnterTriggers.remove(this.firingEnterTriggers.size() - 1);
+						}
 					}
 				}
 			}
@@ -217,6 +230,24 @@ public class CRegionManager {
 		finally {
 			this.enterTriggerDepth--;
 		}
+	}
+
+	private final transient List<CUnit> lateUnits = new ArrayList<>();
+
+	/** A unit that has enter events waiting for the end of the script that made it. */
+	public void queueLateUnit(final CUnit unit) {
+		if (!this.lateUnits.contains(unit)) {
+			this.lateUnits.add(unit);
+		}
+	}
+
+	public List<CUnit> takeLateUnits() {
+		if (this.lateUnits.isEmpty()) {
+			return java.util.Collections.emptyList();
+		}
+		final List<CUnit> units = new ArrayList<>(this.lateUnits);
+		this.lateUnits.clear();
+		return units;
 	}
 
 	public boolean isRunningEnterTriggers() {

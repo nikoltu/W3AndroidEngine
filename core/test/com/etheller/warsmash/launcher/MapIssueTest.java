@@ -63,8 +63,22 @@ class MapIssueTest {
 		final String bare = mapFolder("Bare.w3x", "war3map.w3i").getAbsolutePath();
 		assertEquals(MapIssue.NONE, MapIssue.ofFile(data, jass));
 		assertEquals(MapIssue.NONE, MapIssue.ofFile(data, scripted));
-		assertEquals(MapIssue.LUA, MapIssue.ofFile(data, lua));
+		assertEquals(MapIssue.NONE, MapIssue.ofFile(data, lua));
 		assertEquals(MapIssue.NO_SCRIPT, MapIssue.ofFile(data, bare));
+	}
+
+	@Test
+	void aLuaMapIsRefusedWhereTheLuaLibraryIsOff() throws Exception {
+		final FolderDataSource data = new FolderDataSource(Files.createDirectories(new File(this.temp, "data").toPath()));
+		final String lua = mapFolder("Lua.w3x", "war3map.lua").getAbsolutePath();
+		System.setProperty("warsmash.lua.disabled", "true");
+		try {
+			assertEquals(MapIssue.LUA, MapIssue.ofFile(data, lua));
+			assertEquals(MapIssue.LUA, MapIssue.ofRecordedMap(data, lua));
+		}
+		finally {
+			System.clearProperty("warsmash.lua.disabled");
+		}
 	}
 
 	@Test
@@ -119,7 +133,7 @@ class MapIssueTest {
 			assertNotEquals(issue.tag, strings.get(issue.tag));
 			assertEquals(issue.english, strings.get(issue.message));
 		}
-		assertEquals("This map uses a Lua script, which is not supported yet.", strings.get(MapIssue.LUA.message));
+		assertEquals("This map uses a Lua script, and the Lua library is not available on this system.", strings.get(MapIssue.LUA.message));
 		assertEquals("This map is protected and cannot be opened.", strings.get(MapIssue.PROTECTED.message));
 	}
 
@@ -132,7 +146,7 @@ class MapIssueTest {
 		final String jass = mapFolder("Jass.w3x", "war3map.j").getAbsolutePath();
 		assertEquals(MapIssue.MISSING, MapIssue.ofRecordedMap(data, "Maps\\Gone.w3x"));
 		assertEquals(MapIssue.MISSING, MapIssue.ofRecordedMap(data, new File(this.temp, "Gone.w3x").getAbsolutePath()));
-		assertEquals(MapIssue.LUA, MapIssue.ofRecordedMap(data, lua));
+		assertEquals(MapIssue.NONE, MapIssue.ofRecordedMap(data, lua));
 		assertEquals(MapIssue.NONE, MapIssue.ofRecordedMap(data, jass));
 		assertEquals(MapIssue.PROTECTED, MapIssue.ofRecordedMap(data, "Campaign\\ForsakenKingdom\\HumanRE01.w3xd"));
 		assertEquals(MapIssue.NONE, MapIssue.ofRecordedMap(data, null));

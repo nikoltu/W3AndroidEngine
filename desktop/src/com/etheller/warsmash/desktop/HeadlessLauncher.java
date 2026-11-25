@@ -252,7 +252,8 @@ public final class HeadlessLauncher {
 					frame = Math.min(frame, (steps - tick) * WarsmashConstants.SIMULATION_STEP_TIME);
 				}
 			}
-			else if ((last != null) && !LanHeadless.isRestarting()) {
+			else if ((last != null) && !LanHeadless.isRestarting() && !menuScreen.isStartingGame()) {
+				// A game left for the one a saved game loads (LoadGame) is already loading by then.
 				break;
 			}
 			else if ((last == null) && (menuScreen.mapLoadErrorCount() > 0)) {

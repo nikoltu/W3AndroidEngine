@@ -27,7 +27,10 @@ import com.etheller.interpreter.ast.scope.GlobalScope;
 import com.etheller.interpreter.ast.scope.GlobalScopeAssignable;
 import com.etheller.interpreter.ast.value.CodeJassValue;
 import com.etheller.warsmash.launcher.ProjectInfo;
+import com.etheller.warsmash.parsers.jass.Jass2;
 import com.etheller.warsmash.parsers.jass.JassAIEnvironment;
+import com.etheller.warsmash.parsers.lua.LuaContinuation;
+import com.etheller.warsmash.parsers.lua.LuaEnvironment;
 import com.etheller.warsmash.util.Log;
 import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.viewer5.handlers.w3x.CampaignMaps;
@@ -212,6 +215,13 @@ public final class SavedGame {
 		}
 	}
 
+	/** The environment of the map's Lua script, or null for a map of JASS. */
+	static LuaEnvironment luaEnvironmentOf(final War3MapViewer viewer) {
+		final Object environment = viewer.getScriptEnvironment();
+		return environment instanceof Jass2.CommonEnvironment ? ((Jass2.CommonEnvironment) environment).getLuaEnvironment()
+				: null;
+	}
+
 	/** What the graph starts from. */
 	private static final class Root {
 		private CSimulation simulation;
@@ -221,6 +231,7 @@ public final class SavedGame {
 		private SavedInterfaceState interfaceState;
 		private boolean scriptPaused;
 		private boolean playerPaused;
+		private LuaEnvironment.Snapshot luaState;
 		private List<SavedEffect> effects;
 		private List<SavedLightning> lightnings;
 		private List<SavedWeather> weathers;
@@ -501,6 +512,8 @@ public final class SavedGame {
 				state.runningTriggerQueue = scope.getRunningTriggerQueue();
 				root.scopes.add(state);
 			}
+			final LuaEnvironment luaEnvironment = luaEnvironmentOf(viewer);
+			root.luaState = luaEnvironment == null ? null : luaEnvironment.capture();
 			root.gameCaches = bytesOf(CGameCache::writeAll);
 			root.interfaceState = viewer.captureInterfaceState();
 			root.scriptPaused = viewer.isGamePaused(War3MapViewer.PauseSource.SCRIPT);
@@ -681,6 +694,7 @@ public final class SavedGame {
 		private Root root;
 		private DataInputStream bodies;
 		private SavedObjectGraph.Reader reader;
+		private List<LuaContinuation> luaContinuations = Collections.emptyList();
 		private List<CSound> sounds = Collections.emptyList();
 		private List<SimSound> restoredSounds = Collections.emptyList();
 
@@ -836,6 +850,7 @@ public final class SavedGame {
 				restoreHandleIds(this.reader, this.viewer.simulation, this.header.formatVersion);
 				this.sounds = this.reader.objectsOf(CSound.class);
 				this.restoredSounds = this.reader.objectsOf(SimSound.class);
+				this.luaContinuations = this.reader.objectsOf(LuaContinuation.class);
 				if (this.mapping != null) {
 					this.mapping.apply(this.reader.objectsOf(JassThread.class),
 							this.reader.objectsOf(CodeJassValue.class), this.programs, this.header.scopeSizes);
@@ -860,6 +875,10 @@ public final class SavedGame {
 			for (int i = 0; i < this.aiEnvironments.size(); i++) {
 				simulation.getPlayer(this.header.aiScripts.get(i).playerIndex)
 						.setAiScript(this.aiEnvironments.get(i));
+			}
+			final LuaEnvironment luaEnvironment = luaEnvironmentOf(this.viewer);
+			if ((luaEnvironment != null) && (this.root.luaState != null)) {
+				luaEnvironment.restore(this.root.luaState, this.luaContinuations);
 			}
 			try (DataInputStream caches = new DataInputStream(new ByteArrayInputStream(this.root.gameCaches))) {
 				CGameCache.restoreAll(caches);
@@ -924,8 +943,8 @@ public final class SavedGame {
 			final GlobalScope scope = condition.getScope();
 			final CodeJassValue function = condition.getFunction();
 			if ((scope != null) && (function != null)
-					&& (scope.getFunctionBoolExpr(function.getUserFunctionInstructionPtr()) == null)) {
-				scope.putFunctionBoolExpr(function.getUserFunctionInstructionPtr(), condition);
+					&& (scope.getFunctionBoolExpr(function.getBoolExprKey()) == null)) {
+				scope.putFunctionBoolExpr(function.getBoolExprKey(), condition);
 			}
 		}
 	}

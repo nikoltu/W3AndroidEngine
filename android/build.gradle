@@ -29,8 +29,8 @@ android {
         applicationId = "com.etheller.warsmash.android"
         minSdk = 26
         targetSdk = 36
-        versionCode = 5038
-        versionName = "0.5.38"
+        versionCode = 5058
+        versionName = "0.5.58"
         // Kept apart from the main build on a device: its own package, name and icon.
         applicationIdSuffix = ".multithread"
         versionNameSuffix = "-mt"
@@ -91,6 +91,7 @@ configurations {
 
 dependencies {
     implementation project(":core")
+    implementation project(":lua")
     implementation "com.badlogicgames.gdx:gdx-backend-android:$gdxVersion"
     // Installs the baseline profile (baseline-prof.txt next to the manifest) for sideloaded APKs, which no store compiles ahead of time.
     implementation "androidx.profileinstaller:profileinstaller:1.4.1"

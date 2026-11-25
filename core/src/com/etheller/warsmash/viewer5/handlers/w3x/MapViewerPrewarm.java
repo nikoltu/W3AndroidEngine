@@ -604,9 +604,19 @@ final class MapViewerPrewarm {
 		loader.addSlices(learned.iterator(), candidate -> {
 			candidate.load.run();
 			loadedAhead[0]++;
-		}, () -> ((viewer.getTextureBytes() - baseline) + (loadedAhead[0] * MODEL_HEAP_BYTES)) < learnedBudget,
+		}, () -> ((viewer.getTextureBytes() - baseline) + (loadedAhead[0] * MODEL_HEAP_BYTES)) < learnedBudget
+				&& heapHasRoom(),
 				() -> loader.addNextTask(loader.settled(loader.modelTask(() -> loadScriptCreations(viewer, pending,
 						budget, baseline, started, loadedAhead[0], total, null, 0, seen, loader)))));
+	}
+
+	/**
+	 * Whether the heap is less than seven tenths full. A map that fills most of it by itself (tens of thousands of
+	 * doodads) gets no types loaded ahead: they load when the script first makes one, as the budget leaves them to.
+	 */
+	private static boolean heapHasRoom() {
+		final Runtime runtime = Runtime.getRuntime();
+		return (runtime.totalMemory() - runtime.freeMemory()) < ((runtime.maxMemory() / 10) * 7);
 	}
 
 	/** What the types earlier games of the map made may take: they are made in the game anyway, a little later. */
@@ -630,7 +640,8 @@ final class MapViewerPrewarm {
 		}
 		final long used = (now - baseline) + (loaded * MODEL_HEAP_BYTES);
 		final Candidate next = pending.peek();
-		if ((next == null) || (used >= budget) || ((next.bytes >= 0) && ((used + next.bytes) > budget))) {
+		if ((next == null) || (used >= budget) || ((next.bytes >= 0) && ((used + next.bytes) > budget))
+				|| !heapHasRoom()) {
 			Log.info("Script types loaded ahead: " + loaded + " of " + total + ", " + (used >> 20) + " of "
 					+ (budget >> 20) + " MB in " + ((System.nanoTime() - started) / 1_000_000) + " ms");
 			writeTypeCosts(seen);

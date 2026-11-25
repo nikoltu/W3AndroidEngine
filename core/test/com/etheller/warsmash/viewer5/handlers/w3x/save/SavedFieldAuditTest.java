@@ -72,7 +72,10 @@ class SavedFieldAuditTest {
 			// Made with the trigger and handed to every thread it runs.
 			"com.etheller.interpreter.ast.scope.trigger.Trigger#triggerExecutionScope",
 			// Nonzero while a trigger of an entered region runs, which a script can save from.
-			"region.CRegionManager#enterTriggerDepth", "region.CRegionManager#silentEnterUnit"));
+			"region.CRegionManager#enterTriggerDepth", "region.CRegionManager#silentEnterUnit",
+			"region.CRegionManager#firingEnterTriggers",
+			// Units created in a script tick whose enter events wait for the end of that tick, which a save never falls in.
+			"CSimulation#lateCreationRegionEvents", "CUnit#regionEventsLate", "region.CRegionManager#lateUnits"));
 
 	/** Fields of a render, UI or cache type that are stored on purpose. */
 	private static final Set<String> STORED_RENDER_TYPED = new TreeSet<>(Arrays.asList(
