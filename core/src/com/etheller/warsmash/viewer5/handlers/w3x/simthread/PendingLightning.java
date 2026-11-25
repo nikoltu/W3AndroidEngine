@@ -1,6 +1,7 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simthread;
 
 import com.etheller.interpreter.ast.util.AllocatedHandle;
+import com.etheller.interpreter.ast.util.CAllocatedHandle;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.SimulationRenderComponentLightningMovable;
 
 /**
@@ -20,6 +21,9 @@ public final class PendingLightning extends AllocatedHandle implements Simulatio
 
 	/** Render thread: the lightning the creating command made. */
 	public void attach(final SimulationRenderComponentLightningMovable made) {
+		if ((made instanceof CAllocatedHandle) && (((CAllocatedHandle) made).getHandleId() == 0)) {
+			((CAllocatedHandle) made).setHandleId(getHandleId());
+		}
 		this.lightning = made;
 	}
 

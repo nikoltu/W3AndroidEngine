@@ -14,6 +14,10 @@ public final class PendingEffect extends AllocatedHandle implements ScriptEffect
 
 	/** Render thread: the effect the creating command made, null when the model could not be shown. */
 	public void attach(final RenderSpellEffect made) {
+		if ((made != null) && (made.getHandleId() == 0)) {
+			// the effect stands for the script's handle, as when no thread makes it later: a save names it by this id
+			made.setHandleId(getHandleId());
+		}
 		this.effect = made;
 	}
 

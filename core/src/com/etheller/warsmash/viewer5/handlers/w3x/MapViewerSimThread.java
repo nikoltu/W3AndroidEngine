@@ -83,6 +83,7 @@ final class MapViewerSimThread {
 	private final BufferingRenderController buffering;
 	private final RenderEventPlayer player;
 	private final IntMap<CUnit> units = new IntMap<>();
+	private final java.util.IdentityHashMap<CUnit, UnitAnimationListenerImpl> madeAhead = new java.util.IdentityHashMap<>();
 	private final IntMap<CDestructable> destructables = new IntMap<>();
 	private final IntMap<CUnitAnimationListener> listeners = new IntMap<>();
 	private final MapViewerPeers peers;
@@ -141,7 +142,7 @@ final class MapViewerSimThread {
 				});
 			}
 		}, () -> this.simulation == null ? 0 : this.simulation.getGameTurnTick());
-		this.peers = new MapViewerPeers(viewer);
+		this.peers = new MapViewerPeers(viewer, this);
 		this.buffering = new BufferingRenderController(this.sink,
 				new MapViewerSimWorld(viewer, this.sink, this.peers.queue(), this.thread::isSimThread));
 		this.player = new RenderEventPlayer(this.real, new RenderEventPlayer.Resolver() {
@@ -183,6 +184,18 @@ final class MapViewerSimThread {
 			@Override
 			public CProjectile projectile(final int id) {
 				return MapViewerSimThread.this.buffering.projectile(id);
+			}
+
+			@Override
+			public void unitRemoved(final int handle) {
+				MapViewerSimThread.this.units.remove(handle);
+				MapViewerSimThread.this.listeners.remove(handle);
+			}
+
+			@Override
+			public void destructableRemoved(final int handle) {
+				MapViewerSimThread.this.destructables.remove(handle);
+				MapViewerSimThread.this.listeners.remove(handle);
 			}
 		}, null, this.peers);
 		this.player.setAnimationPlayer(new BufferedAnimationListener.Player(new BufferedAnimationListener.Player.Lookup() {
@@ -404,7 +417,6 @@ final class MapViewerSimThread {
 			if (frame != null) {
 				this.player.playFrame(frame);
 				this.viewer.takePresentedFog(frame);
-				forgetRemoved(frame);
 				final UiFrameSource source = this.viewer.uiFrameSource();
 				if (source != null) {
 					source.present(frame.ui);
@@ -421,31 +433,34 @@ final class MapViewerSimThread {
 		}
 	}
 
-	private void forgetRemoved(final SimFrame frame) {
-		for (int i = 0, n = frame.eventCount(); i < n; i++) {
-			final RenderEvent event = frame.event(i);
-			if (event.code == RenderCallCodes.UNIT_REMOVE) {
-				this.units.remove(event.a);
-				this.listeners.remove(event.a);
-			}
-			else if (event.code == RenderCallCodes.DESTRUCTABLE_REMOVE) {
-				this.destructables.remove(event.a);
-				this.listeners.remove(event.a);
-			}
-		}
-	}
-
 	/**
 	 * Render thread (a unit's peer was made): the peer keeps the real listener. A unit the simulation made has its
 	 * stand-in already; one the map made gets it now.
 	 */
 	void attachAnimationListener(final CUnit unit, final UnitAnimationListenerImpl real) {
 		final int handle = unit.getHandleId();
+		if (unit.getUnitAnimationListener() instanceof BufferedAnimationListener) {
+			// Handles are given out again once a unit is gone, and a peer is built before the events of the unit
+			// that held the handle before are played, so the handle names this unit only from its create event on.
+			this.madeAhead.put(unit, real);
+			return;
+		}
 		this.units.put(handle, unit);
 		this.listeners.put(handle, real);
-		if (!(unit.getUnitAnimationListener() instanceof BufferedAnimationListener)) {
-			unit.setUnitAnimationListener(new BufferedAnimationListener(this.sink, handle));
-			this.unseeded.add(handle);
+		unit.setUnitAnimationListener(new BufferedAnimationListener(this.sink, handle));
+		this.unseeded.add(handle);
+	}
+
+	/** Render thread (the create event of a unit the simulation made was played): its handle names it from now on. */
+	void unitMade(final int handle, final CUnit unit) {
+		final CUnit made = unit != null ? unit : this.simulation.getUnit(handle);
+		if (made == null) {
+			return;
+		}
+		this.units.put(handle, made);
+		final UnitAnimationListenerImpl real = this.madeAhead.remove(made);
+		if (real != null) {
+			this.listeners.put(handle, real);
 		}
 	}
 
@@ -681,7 +696,9 @@ final class MapViewerSimThread {
 		drainOrdersNow();
 		publishPending();
 		final War3MapViewer viewer = this.viewer;
-		if (viewer.isGamePaused() && !viewer.isFastForwarding() && !viewer.gameEnded
+		// A command just drained (a dialog's button) can end the script dialog's stop; the render side grants steps
+		// only while the stop is off, and only this side reads the dialog's state.
+		if (viewer.isGamePausedOnSimulation() && !viewer.isFastForwarding() && !viewer.gameEnded
 				&& (viewer.gameTurnManager != null)) {
 			final long now = System.nanoTime();
 			if ((now - this.lastWhilePaused) >= WHILE_PAUSED_NANOS) {

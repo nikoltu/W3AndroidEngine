@@ -22,12 +22,14 @@ final class MapViewerPeers implements RenderEventPlayer.WorldPeers, PeerQueue.Bu
 	private static final long STATS_EVERY = Long.getLong("warsmash.simthread.peerstats", 0L);
 
 	private final War3MapViewer viewer;
+	private final MapViewerSimThread simThread;
 	private final IntMap<CItem> items = new IntMap<>();
 	private long frames;
 	private final PeerQueue queue = new PeerQueue(this);
 
-	MapViewerPeers(final War3MapViewer viewer) {
+	MapViewerPeers(final War3MapViewer viewer, final MapViewerSimThread simThread) {
 		this.viewer = viewer;
+		this.simThread = simThread;
 	}
 
 	PeerQueue queue() {
@@ -111,6 +113,7 @@ final class MapViewerPeers implements RenderEventPlayer.WorldPeers, PeerQueue.Bu
 	public void unitCreated(final int handle, final War3ID typeId, final int playerIndex, final float x, final float y,
 			final float facing, final WorldPeerData.Unit data) {
 		present(handle, typeId);
+		this.simThread.unitMade(handle, data == null ? null : data.unit);
 	}
 
 	@Override

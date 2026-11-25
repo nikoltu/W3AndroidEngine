@@ -42,6 +42,13 @@ public final class RenderEventPlayer {
 
 		/** By the id {@link BufferingRenderController#projectileId} gave. */
 		CProjectile projectile(int id);
+
+		/** The unit's remove event was played: its handle names the next unit made with it, not this one. */
+		default void unitRemoved(final int handle) {
+		}
+
+		default void destructableRemoved(final int handle) {
+		}
 	}
 
 	/**
@@ -111,8 +118,11 @@ public final class RenderEventPlayer {
 		}
 	}
 
+	/** Stands for a null id in an event; a War3ID of value 0 is a real id (a buff or ability with a blank code). */
+	public static final int NO_ID = Integer.MIN_VALUE;
+
 	private static War3ID id(final int raw) {
-		return raw == 0 ? null : new War3ID(raw);
+		return raw == NO_ID ? null : new War3ID(raw);
 	}
 
 	private CUnit unit(final int handle) {
@@ -249,9 +259,11 @@ public final class RenderEventPlayer {
 			break;
 		case RenderCallCodes.UNIT_REMOVE:
 			this.target.removeUnit(unit(e.a));
+			this.resolver.unitRemoved(e.a);
 			break;
 		case RenderCallCodes.DESTRUCTABLE_REMOVE:
 			this.target.removeDestructable(destructable(e.a));
+			this.resolver.destructableRemoved(e.a);
 			break;
 		case RenderCallCodes.INSTANT_ATTACK_EFFECT:
 			if ((e.o0 instanceof WorldPeerData.InstantAttack) && (this.target instanceof ValueTarget)) {

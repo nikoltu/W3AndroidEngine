@@ -194,7 +194,7 @@ public final class BufferingRenderController implements SimulationRenderControll
 	}
 
 	private static int raw(final War3ID id) {
-		return id == null ? 0 : id.getValue();
+		return id == null ? RenderEventPlayer.NO_ID : id.getValue();
 	}
 
 	@Override
