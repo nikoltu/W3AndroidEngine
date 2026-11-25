@@ -1,6 +1,7 @@
 package com.etheller.warsmash.parsers.jass;
 
 import com.badlogic.gdx.files.FileHandle;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.List;
@@ -134,6 +135,12 @@ final class CampaignNatives {
 	 */
 	private void addRender(final String name, final JassFunction function) {
 		add(name, (arguments, globalScope, triggerScope) -> this.link.onRender(name,
+				() -> function.call(arguments, globalScope, triggerScope)));
+	}
+
+	/** As {@link #addRender}, but the commands the script sent before it (an effect it made) are run first. */
+	private void addAfterCommands(final String name, final JassFunction function) {
+		add(name, (arguments, globalScope, triggerScope) -> this.link.commands().call(name,
 				() -> function.call(arguments, globalScope, triggerScope)));
 	}
 
@@ -1089,19 +1096,43 @@ final class CampaignNatives {
 		void set(RenderSpellEffect effect, List<JassValue> arguments);
 	}
 
-	private void addEffectSetter(final String name, final EffectSetter setter) {
-		addRender(name, (arguments, globalScope, triggerScope) -> {
+	private interface EffectChange {
+		void apply(RenderSpellEffect effect);
+	}
+
+	/** Reads what the change needs from the simulation at the call; the change itself is left to the render side. */
+	private interface EffectChangePreparer {
+		EffectChange prepare(List<JassValue> arguments);
+	}
+
+	/**
+	 * A setter changes the drawn effect and returns nothing, so it is a command for the render side in frame order,
+	 * after the one that made the effect.
+	 */
+	private void addEffectChange(final String name, final EffectChangePreparer preparer) {
+		add(name, (arguments, globalScope, triggerScope) -> {
 			final ScriptEffect handle = object(arguments, 0);
-			final RenderSpellEffect effect = handle == null ? null : handle.getLiveEffect();
-			if (effect != null) {
-				setter.set(effect, arguments);
+			if (handle != null) {
+				final EffectChange change = preparer.prepare(new ArrayList<>(arguments));
+				if (change != null) {
+					this.link.commands().send(() -> {
+						final RenderSpellEffect effect = handle.getLiveEffect();
+						if (effect != null) {
+							change.apply(effect);
+						}
+					});
+				}
 			}
 			return null;
 		});
 	}
 
+	private void addEffectSetter(final String name, final EffectSetter setter) {
+		addEffectChange(name, arguments -> effect -> setter.set(effect, arguments));
+	}
+
 	private void addEffectGetter(final String name, final java.util.function.ToDoubleFunction<RenderSpellEffect> getter) {
-		addRender(name, (arguments, globalScope, triggerScope) -> {
+		addAfterCommands(name, (arguments, globalScope, triggerScope) -> {
 			final ScriptEffect handle = object(arguments, 0);
 			final RenderSpellEffect effect = handle == null ? null : handle.getLiveEffect();
 			return RealJassValue.of(effect == null ? 0 : getter.applyAsDouble(effect));
@@ -1131,11 +1162,14 @@ final class CampaignNatives {
 				(effect, arguments) -> effect.setScriptPosition(null, null, real(arguments, 1), true));
 		addEffectSetter("BlzSetSpecialEffectPosition", (effect, arguments) -> effect
 				.setScriptPosition(real(arguments, 1), real(arguments, 2), real(arguments, 3), false));
-		addEffectSetter("BlzSetSpecialEffectPositionLoc", (effect, arguments) -> {
+		addEffectChange("BlzSetSpecialEffectPositionLoc", arguments -> {
 			final AbilityPointTarget location = object(arguments, 1);
-			if (location != null) {
-				effect.setScriptPosition(location.x, location.y, null, false);
+			if (location == null) {
+				return null;
 			}
+			final float x = location.x;
+			final float y = location.y;
+			return effect -> effect.setScriptPosition(x, y, null, false);
 		});
 		addEffectSetter("BlzSetSpecialEffectScale",
 				(effect, arguments) -> effect.getModelInstance().setUniformScale(real(arguments, 1)));
@@ -1146,11 +1180,13 @@ final class CampaignNatives {
 		});
 		addEffectSetter("BlzSetSpecialEffectAlpha",
 				(effect, arguments) -> effect.getModelInstance().setVertexAlpha(colorByte(arguments, 1)));
-		addEffectSetter("BlzSetSpecialEffectColorByPlayer", (effect, arguments) -> {
+		addEffectChange("BlzSetSpecialEffectColorByPlayer", arguments -> {
 			final CPlayer player = object(arguments, 1);
-			if (player != null) {
-				effect.getModelInstance().setTeamColor(player.getColor());
+			if (player == null) {
+				return null;
 			}
+			final int color = player.getColor();
+			return effect -> effect.getModelInstance().setTeamColor(color);
 		});
 		addEffectSetter("BlzSetSpecialEffectTimeScale",
 				(effect, arguments) -> effect.getModelInstance().setAnimationSpeed(real(arguments, 1)));

@@ -1,6 +1,7 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities;
 
 import com.etheller.interpreter.ast.util.CExtensibleHandleAbstract;
+import com.etheller.warsmash.util.War3ID;
 
 public class COrderButton extends CExtensibleHandleAbstract {
 	private static final int INFINITE_CHARGES = -1;
@@ -18,6 +19,14 @@ public class COrderButton extends CExtensibleHandleAbstract {
 	private int foodCost;
 	private JassOrderButtonType type;
 	private boolean autoCastActive;
+	// What a script gave the button to show; the render side has its own copy to draw, this one is what scripts read.
+	private int buttonPositionX;
+	private int buttonPositionY;
+	private String tip;
+	private String uberTip;
+	private char hotkey;
+	private War3ID previewBuildUnitId;
+	private float mouseTargetRadius;
 
 	public COrderButton(final int orderId) {
 		this.orderId = orderId;
@@ -122,6 +131,63 @@ public class COrderButton extends CExtensibleHandleAbstract {
 
 	public void setAutoCastActive(final boolean autoCastActive) {
 		this.autoCastActive = autoCastActive;
+	}
+
+	public int getButtonPositionX() {
+		return this.buttonPositionX;
+	}
+
+	public void setButtonPositionX(final int buttonPositionX) {
+		this.buttonPositionX = buttonPositionX;
+	}
+
+	public int getButtonPositionY() {
+		return this.buttonPositionY;
+	}
+
+	public void setButtonPositionY(final int buttonPositionY) {
+		this.buttonPositionY = buttonPositionY;
+	}
+
+	public String getTip() {
+		return this.tip;
+	}
+
+	public void setTip(final String tip) {
+		this.tip = tip;
+	}
+
+	public String getUberTip() {
+		return this.uberTip;
+	}
+
+	public void setUberTip(final String uberTip) {
+		this.uberTip = uberTip;
+	}
+
+	public char getHotkey() {
+		return this.hotkey;
+	}
+
+	public void setHotkey(final char hotkey) {
+		this.hotkey = hotkey;
+	}
+
+	/** The unit type a build button previews; null until a script sets one. */
+	public War3ID getPreviewBuildUnitId() {
+		return this.previewBuildUnitId;
+	}
+
+	public void setPreviewBuildUnitId(final War3ID previewBuildUnitId) {
+		this.previewBuildUnitId = previewBuildUnitId;
+	}
+
+	public float getMouseTargetRadius() {
+		return this.mouseTargetRadius;
+	}
+
+	public void setMouseTargetRadius(final float mouseTargetRadius) {
+		this.mouseTargetRadius = mouseTargetRadius;
 	}
 
 	public static enum JassOrderButtonType {

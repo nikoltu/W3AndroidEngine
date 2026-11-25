@@ -35,7 +35,7 @@ final class ReforgedDoodadNatives {
 	private ReforgedDoodadNatives(final JassProgram program, final War3MapViewer viewer) {
 		this.program = program;
 		this.viewer = viewer;
-		this.commands = new RenderCommands(LocalUiLink.of(viewer, null));
+		this.commands = LocalUiLink.of(viewer, null).commands();
 	}
 
 	static void register(final JassProgram program, final War3MapViewer viewer) {

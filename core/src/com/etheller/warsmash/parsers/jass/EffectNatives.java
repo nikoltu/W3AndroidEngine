@@ -4,6 +4,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simthread.RenderCommands;
 import java.util.List;
 
 import com.etheller.interpreter.ast.value.BooleanJassValue;
+import com.etheller.interpreter.ast.value.HandleJassValue;
 import com.etheller.interpreter.ast.value.HandleJassType;
 import com.etheller.interpreter.ast.value.JassValue;
 import com.etheller.interpreter.ast.value.RealJassValue;
@@ -15,7 +16,10 @@ import com.etheller.interpreter.ast.value.visitor.RealJassValueVisitor;
 import com.etheller.interpreter.ast.value.visitor.StringJassValueVisitor;
 import com.etheller.warsmash.parsers.jass.Jass2.CommonEnvironment;
 import com.etheller.warsmash.util.War3ID;
+import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.RenderSpellEffect;
 import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.ScriptEffect;
+import com.etheller.warsmash.viewer5.handlers.w3x.simthread.PendingEffect;
+import com.etheller.warsmash.viewer5.handlers.w3x.simthread.PendingLightning;
 import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.ability.AbilityDataUI;
 import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.ability.AbilityUI;
 import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.ability.BuffUI;
@@ -35,12 +39,49 @@ final class EffectNatives extends CommonNatives {
 
 	EffectNatives(final CommonEnvironment environment) {
 		super(environment);
-		this.commands = new RenderCommands(this.link);
+		this.commands = this.link.commands();
 	}
 
-	/** Work on render objects whose result the script needs now; the commands sent before it have run first. */
-	private <T> T onRender(final String why, final java.util.function.Supplier<T> work) {
-		return this.commands.call(why, work);
+	/**
+	 * The handle of an effect the render side makes. With a simulation thread the handle is made at once and the effect
+	 * by the render thread in frame order, so the script never waits for it.
+	 */
+	private HandleJassValue effectHandle(final HandleJassType effectType,
+			final java.util.function.Supplier<RenderSpellEffect> create) {
+		if (!this.commands.isQueued()) {
+			return newHandle(effectType, create.get());
+		}
+		final PendingEffect pending = new PendingEffect();
+		final HandleJassValue handle = newHandle(effectType, pending);
+		this.commands.send(() -> pending.attach(create.get()));
+		return handle;
+	}
+
+	/**
+	 * A lightning that was made while the simulation had its own thread keeps what the script reads here; one a loaded
+	 * game brought back lives on the render side and is asked there.
+	 */
+	private <T> T lightningCall(final SimulationRenderComponentLightning lightning,
+			final java.util.function.Supplier<T> work) {
+		return (lightning == null) || (lightning instanceof PendingLightning)
+				|| (lightning == SimulationRenderComponentLightning.DO_NOTHING)
+				|| (lightning == SimulationRenderComponentLightningMovable.DO_NOTHING) ? work.get()
+				: this.commands.call("lightning", work);
+	}
+
+	/** The same for a lightning; a type the map does not draw has no handle to wait for. */
+	private HandleJassValue scriptLightning(final HandleJassType lightningType, final War3ID lightningId,
+			final java.util.function.Supplier<SimulationRenderComponentLightningMovable> create) {
+		if (!this.commands.isQueued()) {
+			return newLightning(lightningType, create.get());
+		}
+		if (!war3MapViewer.hasLightningType(lightningId)) {
+			return newLightning(lightningType, SimulationRenderComponentLightningMovable.DO_NOTHING);
+		}
+		final PendingLightning pending = new PendingLightning(this.commands);
+		final HandleJassValue handle = newLightning(lightningType, pending);
+		this.commands.send(() -> pending.attach(create.get()));
+		return handle;
 	}
 
 	@Override
@@ -53,24 +94,21 @@ final class EffectNatives extends CommonNatives {
 					final String modelName = arguments.get(0).visit(StringJassValueVisitor.getInstance());
 					final CWidget targetWidget = arguments.get(1).visit(ObjectJassValueVisitor.getInstance());
 					final String attachPointName = arguments.get(2).visit(StringJassValueVisitor.getInstance());
-					return newHandle(effectType, onRender("AddSpecialEffectTarget",
-							() -> war3MapViewer.addSpecialEffectTarget(modelName, targetWidget, attachPointName)));
+					return effectHandle(effectType, () -> war3MapViewer.addSpecialEffectTarget(modelName, targetWidget, attachPointName));
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("AddSpecialEffectLoc",
 				(arguments, globalScope, triggerScope) -> {
 					final String modelName = arguments.get(0).visit(StringJassValueVisitor.getInstance());
 					final AbilityPointTarget positionLoc = arguments.get(1)
 							.visit(ObjectJassValueVisitor.getInstance());
-					return newHandle(effectType, onRender("AddSpecialEffectLoc",
-							() -> war3MapViewer.addSpecialEffect(modelName, positionLoc.x, positionLoc.y, 0 /* facing */)));
+					return effectHandle(effectType, () -> war3MapViewer.addSpecialEffect(modelName, positionLoc.x, positionLoc.y, 0 /* facing */));
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("AddSpecialEffect",
 				(arguments, globalScope, triggerScope) -> {
 					final String modelName = arguments.get(0).visit(StringJassValueVisitor.getInstance());
 					final float x = arguments.get(1).visit(RealJassValueVisitor.getInstance()).floatValue();
 					final float y = arguments.get(2).visit(RealJassValueVisitor.getInstance()).floatValue();
-					return newHandle(effectType, onRender("AddSpecialEffect",
-							() -> war3MapViewer.addSpecialEffect(modelName, x, y, 0 /* facing */)));
+					return effectHandle(effectType, () -> war3MapViewer.addSpecialEffect(modelName, x, y, 0 /* facing */));
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("AddSpellEffectById",
 				(arguments, globalScope, triggerScope) -> {
@@ -79,8 +117,8 @@ final class EffectNatives extends CommonNatives {
 							.visit(ObjectJassValueVisitor.getInstance());
 					final double x = arguments.get(2).visit(RealJassValueVisitor.getInstance());
 					final double y = arguments.get(3).visit(RealJassValueVisitor.getInstance());
-					return newHandle(effectType, onRender("AddSpellEffectById", () -> war3MapViewer
-							.spawnSpellEffectEx((float) x, (float) y, 0 /* facing */, new War3ID(rawcode), whichEffectType, 0)));
+					return effectHandle(effectType, () -> war3MapViewer
+							.spawnSpellEffectEx((float) x, (float) y, 0 /* facing */, new War3ID(rawcode), whichEffectType, 0));
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("AddSpellEffectTargetById",
 				(arguments, globalScope, triggerScope) -> {
@@ -94,12 +132,12 @@ final class EffectNatives extends CommonNatives {
 						return newHandle(effectType, null);
 					}
 					if (attachmentPoint != null) {
-						return newHandle(effectType, onRender("AddSpellEffectTargetById", () -> war3MapViewer
-								.spawnSpellEffectOnUnitEx(target, new War3ID(rawcode), whichEffectType, 0, attachmentPoint)));
+						return effectHandle(effectType, () -> war3MapViewer
+								.spawnSpellEffectOnUnitEx(target, new War3ID(rawcode), whichEffectType, 0, attachmentPoint));
 					}
 					else {
-						return newHandle(effectType, onRender("AddSpellEffectTargetById", () -> war3MapViewer
-								.spawnSpellEffectOnUnitEx(target, new War3ID(rawcode), whichEffectType, 0)));
+						return effectHandle(effectType, () -> war3MapViewer
+								.spawnSpellEffectOnUnitEx(target, new War3ID(rawcode), whichEffectType, 0));
 					}
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("AddSpellEffectByIdLoc",
@@ -110,8 +148,8 @@ final class EffectNatives extends CommonNatives {
 					final AbilityPointTarget loc = arguments.get(2).visit(ObjectJassValueVisitor.getInstance());
 					final float x = loc.x;
 					final float y = loc.y;
-					return newHandle(effectType, onRender("AddSpellEffectByIdLoc", () -> war3MapViewer
-							.spawnSpellEffectEx(x, y, 0 /* facing */, new War3ID(rawcode), whichEffectType, 0)));
+					return effectHandle(effectType, () -> war3MapViewer
+							.spawnSpellEffectEx(x, y, 0 /* facing */, new War3ID(rawcode), whichEffectType, 0));
 				});
 		// Measured: the versions that take the ability as a string make no effect and read nothing, even for abilities
 		// that exist; only the rawcode versions work.
@@ -127,11 +165,10 @@ final class EffectNatives extends CommonNatives {
 					final double y = arguments.get(3).visit(RealJassValueVisitor.getInstance());
 					final double x2 = arguments.get(4).visit(RealJassValueVisitor.getInstance());
 					final double y2 = arguments.get(5).visit(RealJassValueVisitor.getInstance());
-					return newLightning(lightningType,
-							onRender("AddLightning", () -> war3MapViewer.createLightning(War3ID.fromString(rawcode),
-									(float) x, (float) y, war3MapViewer.terrain.getGroundHeight((float) x, (float) y),
-									(float) x2, (float) y2,
-									war3MapViewer.terrain.getGroundHeight((float) x2, (float) y2), checkVisibility)));
+					return scriptLightning(lightningType, War3ID.fromString(rawcode),
+							() -> war3MapViewer.createLightning(War3ID.fromString(rawcode), (float) x, (float) y,
+									war3MapViewer.terrain.getGroundHeight((float) x, (float) y), (float) x2, (float) y2,
+									war3MapViewer.terrain.getGroundHeight((float) x2, (float) y2), checkVisibility));
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("AddLightningEx",
 				(arguments, globalScope, triggerScope) -> {
@@ -143,10 +180,9 @@ final class EffectNatives extends CommonNatives {
 					final double x2 = arguments.get(5).visit(RealJassValueVisitor.getInstance());
 					final double y2 = arguments.get(6).visit(RealJassValueVisitor.getInstance());
 					final double z2 = arguments.get(7).visit(RealJassValueVisitor.getInstance());
-					return newLightning(lightningType,
-							onRender("AddLightningEx", () -> war3MapViewer.createLightning(War3ID.fromString(rawcode),
-									(float) x, (float) y, (float) z, (float) x2, (float) y2, (float) z2,
-									checkVisibility)));
+					return scriptLightning(lightningType, War3ID.fromString(rawcode),
+							() -> war3MapViewer.createLightning(War3ID.fromString(rawcode), (float) x, (float) y,
+									(float) z, (float) x2, (float) y2, (float) z2, checkVisibility));
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("MoveLightning",
 				(arguments, globalScope, triggerScope) -> {
@@ -156,7 +192,7 @@ final class EffectNatives extends CommonNatives {
 					final double y = arguments.get(3).visit(RealJassValueVisitor.getInstance());
 					final double x2 = arguments.get(4).visit(RealJassValueVisitor.getInstance());
 					final double y2 = arguments.get(5).visit(RealJassValueVisitor.getInstance());
-					return onRender("MoveLightning", () -> {
+					return lightningCall(lightning, () -> {
 						if ((lightning != null) && !lightning.isRemoved()) {
 							lightning.move((float) x, (float) y, (float) x2, (float) y2);
 							return BooleanJassValue.TRUE;
@@ -174,7 +210,7 @@ final class EffectNatives extends CommonNatives {
 					final double x2 = arguments.get(5).visit(RealJassValueVisitor.getInstance());
 					final double y2 = arguments.get(6).visit(RealJassValueVisitor.getInstance());
 					final double z2 = arguments.get(7).visit(RealJassValueVisitor.getInstance());
-					return onRender("MoveLightningEx", () -> {
+					return lightningCall(lightning, () -> {
 						if ((lightning != null) && !lightning.isRemoved()) {
 							lightning.move((float) x, (float) y, (float) z, (float) x2, (float) y2, (float) z2);
 							return BooleanJassValue.TRUE;
@@ -186,7 +222,7 @@ final class EffectNatives extends CommonNatives {
 				(arguments, globalScope, triggerScope) -> {
 					final SimulationRenderComponentLightning lightning = nullable(arguments, 0,
 							ObjectJassValueVisitor.getInstance());
-					return onRender("DestroyLightning", () -> {
+					return lightningCall(lightning, () -> {
 						if ((lightning != null) && !lightning.isRemoved()) {
 							lightning.remove();
 							return BooleanJassValue.TRUE;
@@ -202,7 +238,7 @@ final class EffectNatives extends CommonNatives {
 					final double g = arguments.get(2).visit(RealJassValueVisitor.getInstance());
 					final double b = arguments.get(3).visit(RealJassValueVisitor.getInstance());
 					final double a = arguments.get(4).visit(RealJassValueVisitor.getInstance());
-					return onRender("SetLightningColor", () -> {
+					return lightningCall(lightning, () -> {
 						if ((lightning != null) && !lightning.isRemoved()) {
 							lightning.setColor((float) r, (float) g, (float) b, (float) a);
 							return BooleanJassValue.TRUE;
@@ -292,7 +328,7 @@ final class EffectNatives extends CommonNatives {
 		if (lightning == null) {
 			return RealJassValue.of(0f);
 		}
-		final float[] color = onRender("GetLightningColor", lightning::getColor);
+		final float[] color = lightningCall(lightning, lightning::getColor);
 		return RealJassValue.of(color == null ? 1f : ((int) (color[channel] * 255f) & 0xFF) / 255f);
 	}
 }

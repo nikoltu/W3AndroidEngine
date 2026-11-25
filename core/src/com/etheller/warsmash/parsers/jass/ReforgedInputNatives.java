@@ -57,7 +57,7 @@ final class ReforgedInputNatives {
 		this.simulation = viewer.simulation;
 		this.ui = ui;
 		this.link = LocalUiLink.of(viewer, ui);
-		this.commands = new RenderCommands(this.link);
+		this.commands = this.link.commands();
 	}
 
 	static void register(final JassProgram program, final War3MapViewer viewer, final WarsmashUI ui) {

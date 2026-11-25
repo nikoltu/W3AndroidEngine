@@ -107,20 +107,21 @@ final class ObjectFieldNatives {
 	private static final List<String> ITEM_ARMOR_TYPES = Arrays.asList("flesh", "metal", "wood", "ethereal", "stone");
 
 	private static void tintItemField(final String code, final int channel) {
-		ITEM_INT_GET.put(id(code), (n, i) -> n.render.<Integer>call("BlzGetItemIntegerField", () -> {
-			final RenderItem peer = n.viewer.getRenderPeer(i);
-			return peer == null ? 255 : Math.round(peer.getInstance().vertexColor[channel] * 255f);
-		}));
-		ITEM_INT_SET.put(id(code), (n, i, v) -> n.render.<Boolean>call("BlzSetItemIntegerField", () -> {
-			final RenderItem peer = n.viewer.getRenderPeer(i);
-			if (peer == null) {
-				return false;
-			}
-			final float[] color = peer.getInstance().vertexColor.clone();
-			color[channel] = Math.max(0, Math.min(255, v)) / 255f;
-			peer.getInstance().setVertexColor(color[0], color[1], color[2], color[3]);
+		ITEM_INT_GET.put(id(code), (n, i) -> i.getTint(channel));
+		ITEM_INT_SET.put(id(code), (n, i, v) -> {
+			i.setTint(channel, v);
+			final float red = i.getTint(0) / 255f;
+			final float green = i.getTint(1) / 255f;
+			final float blue = i.getTint(2) / 255f;
+			final float alpha = i.getTint(3) / 255f;
+			n.render.post(RenderSide.WORLD, () -> {
+				final RenderItem peer = n.viewer.getRenderPeer(i);
+				if (peer != null) {
+					peer.getInstance().setVertexColor(red, green, blue, alpha);
+				}
+			});
 			return true;
-		}));
+		});
 	}
 
 	private static void tintFields(final String code, final int channel) {
@@ -359,18 +360,17 @@ final class ObjectFieldNatives {
 		tintItemField("iclg", 1);
 		tintItemField("iclb", 2);
 		tintItemField("ical", 3);
-		ITEM_REAL_GET.put(id("isca"), (n, i) -> n.render.<Float>call("BlzGetItemRealField", () -> {
-			final RenderItem peer = n.viewer.getRenderPeer(i);
-			return peer == null ? 1f : peer.getInstance().localScale.x;
-		}));
-		ITEM_REAL_SET.put(id("isca"), (n, i, v) -> n.render.<Boolean>call("BlzSetItemRealField", () -> {
-			final RenderItem peer = n.viewer.getRenderPeer(i);
-			if (peer == null) {
-				return false;
-			}
-			peer.getInstance().setUniformScale(v);
+		ITEM_REAL_GET.put(id("isca"), (n, i) -> i.getModelScale());
+		ITEM_REAL_SET.put(id("isca"), (n, i, v) -> {
+			i.setModelScale(v);
+			n.render.post(RenderSide.WORLD, () -> {
+				final RenderItem peer = n.viewer.getRenderPeer(i);
+				if (peer != null) {
+					peer.getInstance().setUniformScale(v);
+				}
+			});
 			return true;
-		}));
+		});
 		ITEM_BOOL_GET.put(id("idrp"), (n, i) -> i.isDropOnDeath());
 		ITEM_BOOL_SET.put(id("idrp"), (n, i, v) -> {
 			i.setDropOnDeath(v);

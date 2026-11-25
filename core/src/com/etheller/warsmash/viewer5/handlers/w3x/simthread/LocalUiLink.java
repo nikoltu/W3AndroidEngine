@@ -104,6 +104,7 @@ public final class LocalUiLink {
 	private final RenderCaller renderCaller;
 	private final LocalUiSnapshot.Exchange exchange = new LocalUiSnapshot.Exchange();
 	private final ConcurrentLinkedQueue<Command> waiting = new ConcurrentLinkedQueue<>();
+	private RenderCommands commands;
 	private final LocalUiSnapshot capture = new LocalUiSnapshot();
 	private final LocalUiSnapshot latest = new LocalUiSnapshot();
 	private final LocalUiSnapshot inputRead = new LocalUiSnapshot();
@@ -138,6 +139,17 @@ public final class LocalUiLink {
 	public static LocalUiLink queued(final RenderEventSink sink, final RenderCaller renderCaller,
 			final IntSupplier tick) {
 		return new LocalUiLink(null, sink, renderCaller, tick);
+	}
+
+	/**
+	 * The one queue of commands for the render side that all natives share, so a call that needs a made object finds
+	 * every command sent before it, whichever native sent it.
+	 */
+	public synchronized RenderCommands commands() {
+		if (this.commands == null) {
+			this.commands = new RenderCommands(this);
+		}
+		return this.commands;
 	}
 
 	/** The link of a viewer that has one, else a direct one. */

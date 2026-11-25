@@ -148,7 +148,7 @@ final class FrameNatives implements FrameEventSink {
 		this.ui = ui;
 		this.simulation = viewer.simulation;
 		this.link = LocalUiLink.of(viewer, ui);
-		this.commands = new RenderCommands(this.link);
+		this.commands = this.link.commands();
 	}
 
 	static void register(final JassProgram program, final War3MapViewer viewer, final Viewport uiViewport,

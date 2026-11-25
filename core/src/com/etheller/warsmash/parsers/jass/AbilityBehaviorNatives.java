@@ -51,11 +51,6 @@ final class AbilityBehaviorNatives extends CommonNatives {
 		this.render = RenderSide.of(this.war3MapViewer);
 	}
 
-	/** The order button's look is the render side's data, so these natives are carried out there. */
-	private void createRenderSideNative(final String name, final JassFunction function) {
-		jassProgramVisitor.getJassNativeManager().createNative(name, this.render.wholly(name, function));
-	}
-
 	@Override
 	void register() {
 		registerBehaviors();
@@ -317,21 +312,23 @@ final class AbilityBehaviorNatives extends CommonNatives {
 	private void registerOrderButtons() {
 		final HandleJassType orderbuttonType = type("orderbutton");
 
-		createRenderSideNative("CreateOrderButton",
+		jassProgramVisitor.getJassNativeManager().createNative("CreateOrderButton",
 				(arguments, globalScope, triggerScope) -> {
 					final JassOrderButtonType type = arguments.get(0).visit(ObjectJassValueVisitor.getInstance());
 					final int orderId = arguments.get(1).visit(IntegerJassValueVisitor.getInstance());
 					final CAbilityOrderButtonJass javaValue = new CAbilityOrderButtonJass(
 							this.simulation.getHandleIdAllocator().createHandleId(), orderId);
 					javaValue.setType(type);
-					war3MapViewer.getAbilityDataUI().createRenderPeer(javaValue);
+					final AbilityDataUI abilityDataUI = war3MapViewer.getAbilityDataUI();
+					this.render.post(RenderSide.WORLD, () -> abilityDataUI.createRenderPeer(javaValue));
 					return new HandleJassValue(orderbuttonType, javaValue);
 				});
-		createRenderSideNative("DestroyOrderButton",
+		jassProgramVisitor.getJassNativeManager().createNative("DestroyOrderButton",
 				(arguments, globalScope, triggerScope) -> {
 					final COrderButton orderCommandCard = arguments.get(0)
 							.visit(ObjectJassValueVisitor.getInstance());
-					war3MapViewer.getAbilityDataUI().removeRenderPeer(orderCommandCard);
+					final AbilityDataUI abilityDataUI = war3MapViewer.getAbilityDataUI();
+					this.render.post(RenderSide.WORLD, () -> abilityDataUI.removeRenderPeer(orderCommandCard));
 					return null;
 				});
 		orderbuttonType.setConstructorNative(new HandleJassTypeConstructor("CreateOrderButton"));
@@ -448,83 +445,94 @@ final class AbilityBehaviorNatives extends CommonNatives {
 							.visit(ObjectJassValueVisitor.getInstance());
 					return BooleanJassValue.of(orderCommandCard.isHidden());
 				});
-		createRenderSideNative("SetOrderButtonIconPath",
+		jassProgramVisitor.getJassNativeManager().createNative("SetOrderButtonIconPath",
 				(arguments, globalScope, triggerScope) -> {
 					final COrderButton orderCommandCard = arguments.get(0)
 							.visit(ObjectJassValueVisitor.getInstance());
 					final String iconPath = arguments.get(1).visit(StringJassValueVisitor.getInstance());
 					final AbilityDataUI abilityDataUI = war3MapViewer.getAbilityDataUI();
-					final OrderButtonUI peer = abilityDataUI.getRenderPeer(orderCommandCard);
-					peer.setIcon(this.gameUI.loadTexture(iconPath));
-					peer.setIconDisabled(this.gameUI
-							.loadTexture(AbilityDataUI.disable(iconPath, abilityDataUI.getDisabledPrefix())));
+					postToButton(orderCommandCard, peer -> {
+						peer.setIcon(this.gameUI.loadTexture(iconPath));
+						peer.setIconDisabled(this.gameUI
+								.loadTexture(AbilityDataUI.disable(iconPath, abilityDataUI.getDisabledPrefix())));
+					});
 					return null;
 				});
-		createRenderSideNative("SetOrderButtonButtonPositionX",
+		jassProgramVisitor.getJassNativeManager().createNative("SetOrderButtonButtonPositionX",
 				(arguments, globalScope, triggerScope) -> {
 					final COrderButton orderCommandCard = arguments.get(0)
 							.visit(ObjectJassValueVisitor.getInstance());
 					final int buttonPosX = arguments.get(1).visit(IntegerJassValueVisitor.getInstance());
-					war3MapViewer.getAbilityDataUI().getRenderPeer(orderCommandCard).setButtonPositionX(buttonPosX);
+					orderCommandCard.setButtonPositionX(buttonPosX);
+					postToButton(orderCommandCard, peer -> peer.setButtonPositionX(buttonPosX));
 					return null;
 				});
-		createRenderSideNative("SetOrderButtonButtonPositionY",
+		jassProgramVisitor.getJassNativeManager().createNative("SetOrderButtonButtonPositionY",
 				(arguments, globalScope, triggerScope) -> {
 					final COrderButton orderCommandCard = arguments.get(0)
 							.visit(ObjectJassValueVisitor.getInstance());
 					final int buttonPosY = arguments.get(1).visit(IntegerJassValueVisitor.getInstance());
-					war3MapViewer.getAbilityDataUI().getRenderPeer(orderCommandCard).setButtonPositionY(buttonPosY);
+					orderCommandCard.setButtonPositionY(buttonPosY);
+					postToButton(orderCommandCard, peer -> peer.setButtonPositionY(buttonPosY));
 					return null;
 				});
-		createRenderSideNative("SetOrderButtonToolTip",
+		jassProgramVisitor.getJassNativeManager().createNative("SetOrderButtonToolTip",
 				(arguments, globalScope, triggerScope) -> {
 					final COrderButton orderCommandCard = arguments.get(0)
 							.visit(ObjectJassValueVisitor.getInstance());
 					final String tip = arguments.get(1).visit(StringJassValueVisitor.getInstance());
-					war3MapViewer.getAbilityDataUI().getRenderPeer(orderCommandCard).setTip(tip);
+					orderCommandCard.setTip(tip);
+					postToButton(orderCommandCard, peer -> peer.setTip(tip));
 					return null;
 				});
-		createRenderSideNative("SetOrderButtonUberTip",
+		jassProgramVisitor.getJassNativeManager().createNative("SetOrderButtonUberTip",
 				(arguments, globalScope, triggerScope) -> {
 					final COrderButton orderCommandCard = arguments.get(0)
 							.visit(ObjectJassValueVisitor.getInstance());
 					final String uberTip = arguments.get(1).visit(StringJassValueVisitor.getInstance());
-					war3MapViewer.getAbilityDataUI().getRenderPeer(orderCommandCard).setUberTip(uberTip);
+					orderCommandCard.setUberTip(uberTip);
+					postToButton(orderCommandCard, peer -> peer.setUberTip(uberTip));
 					return null;
 				});
-		createRenderSideNative("SetOrderButtonHotKey",
+		jassProgramVisitor.getJassNativeManager().createNative("SetOrderButtonHotKey",
 				(arguments, globalScope, triggerScope) -> {
 					final COrderButton orderCommandCard = arguments.get(0)
 							.visit(ObjectJassValueVisitor.getInstance());
-					final String hotkeyString = arguments.get(1).visit(StringJassValueVisitor.getInstance());
-					war3MapViewer.getAbilityDataUI().getRenderPeer(orderCommandCard)
-							.setHotkey(hotkeyString.charAt(0));
+					final char hotkey = arguments.get(1).visit(StringJassValueVisitor.getInstance()).charAt(0);
+					orderCommandCard.setHotkey(hotkey);
+					postToButton(orderCommandCard, peer -> peer.setHotkey(hotkey));
 					return null;
 				});
-		createRenderSideNative("SetOrderButtonByIconUI",
+		jassProgramVisitor.getJassNativeManager().createNative("SetOrderButtonByIconUI",
 				(arguments, globalScope, triggerScope) -> {
 					final COrderButton orderCommandCard = arguments.get(0)
 							.visit(ObjectJassValueVisitor.getInstance());
 					final IconUI theIconUi = arguments.get(1).visit(ObjectJassValueVisitor.getInstance());
-					war3MapViewer.getAbilityDataUI().getRenderPeer(orderCommandCard).setFromIconUI(theIconUi);
+					orderCommandCard.setButtonPositionX(theIconUi.getButtonPositionX());
+					orderCommandCard.setButtonPositionY(theIconUi.getButtonPositionY());
+					orderCommandCard.setTip(theIconUi.getToolTip());
+					orderCommandCard.setUberTip(theIconUi.getUberTip());
+					orderCommandCard.setHotkey(theIconUi.getHotkey());
+					postToButton(orderCommandCard, peer -> peer.setFromIconUI(theIconUi));
 					return null;
 				});
-		createRenderSideNative("SetOrderButtonPreviewBuildUnitId",
+		jassProgramVisitor.getJassNativeManager().createNative("SetOrderButtonPreviewBuildUnitId",
 				(arguments, globalScope, triggerScope) -> {
 					final COrderButton orderCommandCard = arguments.get(0)
 							.visit(ObjectJassValueVisitor.getInstance());
-					final int unitId = arguments.get(1).visit(IntegerJassValueVisitor.getInstance());
-					war3MapViewer.getAbilityDataUI().getRenderPeer(orderCommandCard)
-							.setPreviewBuildUnitId(new War3ID(unitId));
+					final War3ID unitId = new War3ID(arguments.get(1).visit(IntegerJassValueVisitor.getInstance()));
+					orderCommandCard.setPreviewBuildUnitId(unitId);
+					postToButton(orderCommandCard, peer -> peer.setPreviewBuildUnitId(unitId));
 					return null;
 				});
-		createRenderSideNative("SetOrderButtonAOE",
+		jassProgramVisitor.getJassNativeManager().createNative("SetOrderButtonAOE",
 				(arguments, globalScope, triggerScope) -> {
 					final COrderButton orderCommandCard = arguments.get(0)
 							.visit(ObjectJassValueVisitor.getInstance());
-					final double radius = arguments.get(1).visit(RealJassValueVisitor.getInstance());
-					war3MapViewer.getAbilityDataUI().getRenderPeer(orderCommandCard)
-							.setMouseTargetRadius((float) radius);
+					final float radius = (float) arguments.get(1).visit(RealJassValueVisitor.getInstance())
+							.doubleValue();
+					orderCommandCard.setMouseTargetRadius(radius);
+					postToButton(orderCommandCard, peer -> peer.setMouseTargetRadius(radius));
 					return null;
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("GetOrderButtonOrderId",
@@ -593,57 +601,61 @@ final class AbilityBehaviorNatives extends CommonNatives {
 							.visit(ObjectJassValueVisitor.getInstance());
 					return BooleanJassValue.of(orderCommandCard.isAutoCastActive());
 				});
-		createRenderSideNative("GetOrderButtonButtonPositionX",
+		jassProgramVisitor.getJassNativeManager().createNative("GetOrderButtonButtonPositionX",
 				(arguments, globalScope, triggerScope) -> {
 					final COrderButton orderCommandCard = arguments.get(0)
 							.visit(ObjectJassValueVisitor.getInstance());
-					return IntegerJassValue.of(
-							war3MapViewer.getAbilityDataUI().getRenderPeer(orderCommandCard).getButtonPositionX());
+					return IntegerJassValue.of(orderCommandCard.getButtonPositionX());
 				});
-		createRenderSideNative("GetOrderButtonButtonPositionY",
+		jassProgramVisitor.getJassNativeManager().createNative("GetOrderButtonButtonPositionY",
 				(arguments, globalScope, triggerScope) -> {
 					final COrderButton orderCommandCard = arguments.get(0)
 							.visit(ObjectJassValueVisitor.getInstance());
-					return IntegerJassValue.of(
-							war3MapViewer.getAbilityDataUI().getRenderPeer(orderCommandCard).getButtonPositionY());
+					return IntegerJassValue.of(orderCommandCard.getButtonPositionY());
 				});
-		createRenderSideNative("GetOrderButtonToolTip",
+		jassProgramVisitor.getJassNativeManager().createNative("GetOrderButtonToolTip",
 				(arguments, globalScope, triggerScope) -> {
 					final COrderButton orderCommandCard = arguments.get(0)
 							.visit(ObjectJassValueVisitor.getInstance());
-					return StringJassValue
-							.of(war3MapViewer.getAbilityDataUI().getRenderPeer(orderCommandCard).getTip());
+					return StringJassValue.of(orderCommandCard.getTip());
 				});
-		createRenderSideNative("GetOrderButtonUberTip",
+		jassProgramVisitor.getJassNativeManager().createNative("GetOrderButtonUberTip",
 				(arguments, globalScope, triggerScope) -> {
 					final COrderButton orderCommandCard = arguments.get(0)
 							.visit(ObjectJassValueVisitor.getInstance());
-					return StringJassValue
-							.of(war3MapViewer.getAbilityDataUI().getRenderPeer(orderCommandCard).getUberTip());
+					return StringJassValue.of(orderCommandCard.getUberTip());
 				});
-		createRenderSideNative("GetOrderButtonHotKey",
+		jassProgramVisitor.getJassNativeManager().createNative("GetOrderButtonHotKey",
 				(arguments, globalScope, triggerScope) -> {
 					final COrderButton orderCommandCard = arguments.get(0)
 							.visit(ObjectJassValueVisitor.getInstance());
-					return StringJassValue.of(String
-							.valueOf(war3MapViewer.getAbilityDataUI().getRenderPeer(orderCommandCard).getHotkey()));
+					return StringJassValue.of(String.valueOf(orderCommandCard.getHotkey()));
 				});
-		createRenderSideNative("GetOrderButtonPreviewBuildUnitId",
+		jassProgramVisitor.getJassNativeManager().createNative("GetOrderButtonPreviewBuildUnitId",
 				(arguments, globalScope, triggerScope) -> {
 					final COrderButton orderCommandCard = arguments.get(0)
 							.visit(ObjectJassValueVisitor.getInstance());
-					return IntegerJassValue.of(war3MapViewer.getAbilityDataUI().getRenderPeer(orderCommandCard)
-							.getPreviewBuildUnitId().getValue());
+					final War3ID unitId = orderCommandCard.getPreviewBuildUnitId();
+					return IntegerJassValue.of(unitId == null ? 0 : unitId.getValue());
 				});
-		createRenderSideNative("GetOrderButtonAOE",
+		jassProgramVisitor.getJassNativeManager().createNative("GetOrderButtonAOE",
 				(arguments, globalScope, triggerScope) -> {
 					final COrderButton orderCommandCard = arguments.get(0)
 							.visit(ObjectJassValueVisitor.getInstance());
-					return RealJassValue.of(war3MapViewer.getAbilityDataUI().getRenderPeer(orderCommandCard)
-							.getMouseTargetRadius());
+					return RealJassValue.of(orderCommandCard.getMouseTargetRadius());
 				});
 	}
 
+	/** The look of a button is drawn by the render side from its own copy, which a command updates in frame order. */
+	private void postToButton(final COrderButton button, final java.util.function.Consumer<OrderButtonUI> change) {
+		final AbilityDataUI abilityDataUI = war3MapViewer.getAbilityDataUI();
+		this.render.post(RenderSide.WORLD, () -> {
+			final OrderButtonUI peer = abilityDataUI.getRenderPeer(button);
+			if (peer != null) {
+				change.accept(peer);
+			}
+		});
+	}
 	private void registerUsableChecks() {
 		jassProgramVisitor.getJassNativeManager().createNative("FailUsableCheckOnRequirement",
 				(arguments, globalScope, triggerScope) -> {

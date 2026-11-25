@@ -541,6 +541,11 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 		return MapViewerEffects.createWeatherEffect(this, weatherId, minX, minY, maxX, maxY);
 	}
 
+	/** Whether the map has a weather of this type; the types are read once, when the map loads. */
+	public boolean hasWeatherType(final War3ID weatherId) {
+		return (this.weatherTypes != null) && this.weatherTypes.containsKey(weatherId);
+	}
+
 	public CStackedSounds getStackedSounds() {
 		return this.stackedSounds;
 	}
@@ -743,6 +748,11 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 			final boolean checkVisibility) {
 		SimThreadGuard.assertGl();
 		return MapViewerEffects.createLightning(this, lightningId, x1, y1, z1, x2, y2, z2, checkVisibility);
+	}
+
+	/** Whether a script lightning of this type is drawn; the types are read once, when the map loads. */
+	public boolean hasLightningType(final War3ID lightningId) {
+		return (this.lightningTypeToModel != null) && this.lightningTypeToModel.containsKey(lightningId);
 	}
 
 	RenderLightningEffect addLightning(final RenderLightningEffect lightning) {

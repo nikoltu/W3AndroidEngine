@@ -30,6 +30,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.vision.CFog
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.vision.CRectFogModifier;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.state.CGameState;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.enumtypes.CFogState;
+import com.etheller.warsmash.viewer5.handlers.w3x.simthread.PendingWeather;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.SimulationRenderComponentWeather;
 import java.util.ArrayList;
 
@@ -162,10 +163,22 @@ final class WorldNatives extends CommonNatives {
 					if (where == null) {
 						return new HandleJassValue(weathereffectType, null);
 					}
-					return new HandleJassValue(weathereffectType,
-							render.<SimulationRenderComponentWeather>call("AddWeatherEffect",
-									() -> war3MapViewer.createWeatherEffect(new War3ID(effectId), where.x, where.y,
-											where.x + where.width, where.y + where.height)));
+					final War3ID weatherId = new War3ID(effectId);
+					final float minX = where.x;
+					final float minY = where.y;
+					final float maxX = where.x + where.width;
+					final float maxY = where.y + where.height;
+					if (!link.isQueued()) {
+						return new HandleJassValue(weathereffectType,
+								war3MapViewer.createWeatherEffect(weatherId, minX, minY, maxX, maxY));
+					}
+					if (!war3MapViewer.hasWeatherType(weatherId)) {
+						return new HandleJassValue(weathereffectType, SimulationRenderComponentWeather.DO_NOTHING);
+					}
+					final PendingWeather pending = new PendingWeather();
+					link.commands().send(
+							() -> pending.attach(war3MapViewer.createWeatherEffect(weatherId, minX, minY, maxX, maxY)));
+					return new HandleJassValue(weathereffectType, pending);
 				});
 		jassProgramVisitor.getJassNativeManager().createNative("EnableWeatherEffect",
 				(arguments, globalScope, triggerScope) -> {

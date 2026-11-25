@@ -36,6 +36,8 @@ public class CItemType {
 	private final List<CUnitTypeRequirement> requirements;
 	private int stockInitial = 1;
 	private int stackMax;
+	private final int[] tint = { 255, 255, 255 };
+	private float modelScale = 1f;
 	private CEquipmentType equipmentType = CEquipmentType.NONE;
 	private CItemTag itemTag = CItemTag.UNDEFINED;
 
@@ -142,6 +144,25 @@ public class CItemType {
 
 	public void setStackMax(final int stackMax) {
 		this.stackMax = stackMax;
+	}
+
+	/** The model's red, green and blue as the item data gives them, 0 to 255. */
+	public int getTint(final int channel) {
+		return this.tint[channel];
+	}
+
+	public void setTint(final int red, final int green, final int blue) {
+		this.tint[0] = red;
+		this.tint[1] = green;
+		this.tint[2] = blue;
+	}
+
+	public float getModelScale() {
+		return this.modelScale;
+	}
+
+	public void setModelScale(final float modelScale) {
+		this.modelScale = modelScale;
 	}
 
 	/** Where a unit can wear an item of this type (the 3.0 equipment column); NONE for a plain item. */

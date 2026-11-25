@@ -4,6 +4,10 @@ import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.RenderWeatherEffect;
 import com.badlogic.gdx.audio.Sound;
 import com.etheller.warsmash.units.GameObject;
 import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.RenderLightningEffect;
+import com.etheller.warsmash.viewer5.handlers.w3x.simthread.PendingEffect;
+import com.etheller.warsmash.viewer5.handlers.w3x.simthread.PendingLightning;
+import com.etheller.warsmash.viewer5.handlers.w3x.simthread.PendingWeather;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.SimulationRenderComponentWeather;
 import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.RenderSpellEffect;
 import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.RenderUbersplat;
 import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.SpellEffectModel;
@@ -317,7 +321,9 @@ final class SavedGameRules implements SavedObjectGraph.Rules {
 					|| SavedEffect.class.isAssignableFrom(type) || SavedEffectModel.class.isAssignableFrom(type)
 					|| SavedLightning.class.isAssignableFrom(type) || SavedWeather.class.isAssignableFrom(type)
 					|| SavedUbersplat.class.isAssignableFrom(type)
-					|| SimulationRenderComponent.class.isAssignableFrom(type);
+					|| PendingEffect.class.isAssignableFrom(type) || PendingLightning.class.isAssignableFrom(type)
+						|| PendingWeather.class.isAssignableFrom(type)
+						|| SimulationRenderComponent.class.isAssignableFrom(type);
 			REPLACEABLE_CLASSES.put(type, replaceable);
 		}
 		return replaceable;
@@ -387,6 +393,28 @@ final class SavedGameRules implements SavedObjectGraph.Rules {
 		}
 		if (object instanceof RenderUbersplat) {
 			return SavedUbersplat.of((RenderUbersplat) object);
+		}
+		if (object instanceof PendingEffect) {
+			// the effect a script made with the simulation on its own thread is saved as the effect itself
+			final PendingEffect pending = (PendingEffect) object;
+			final RenderSpellEffect made = pending.made();
+			final SavedEffect saved = (made == null) || (made.getModelName() == null) ? new SavedEffect()
+					: SavedEffect.of(made);
+			saved.setHandleId(pending.getHandleId());
+			return saved;
+		}
+		if (object instanceof PendingWeather) {
+			final SimulationRenderComponentWeather made = ((PendingWeather) object).made();
+			return made instanceof RenderWeatherEffect ? SavedWeather.of((RenderWeatherEffect) made) : object;
+		}
+		if (object instanceof PendingLightning) {
+			final PendingLightning pending = (PendingLightning) object;
+			if (pending.made() instanceof RenderLightningEffect) {
+				final SavedLightning saved = SavedLightning.of((RenderLightningEffect) pending.made());
+				saved.setHandleId(pending.getHandleId());
+				return saved;
+			}
+			return SavedRenderStubs.LIGHTNING;
 		}
 		if ((object instanceof SavedEffect) || (object instanceof SavedEffectModel)
 				|| (object instanceof SavedLightning) || (object instanceof SavedWeather)

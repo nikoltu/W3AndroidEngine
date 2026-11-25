@@ -35,6 +35,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.War3MapViewer;
 import com.etheller.warsmash.viewer5.handlers.w3x.simthread.LocalUiLink;
 import com.etheller.warsmash.viewer5.handlers.w3x.simthread.RenderCommands;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CItem;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CItemType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnitType;
@@ -71,7 +72,7 @@ final class ReforgedMiscNatives {
 		this.program = program;
 		this.viewer = viewer;
 		this.simulation = viewer.simulation;
-		this.commands = new RenderCommands(LocalUiLink.of(viewer, null));
+		this.commands = LocalUiLink.of(viewer, null).commands();
 		this.voices = new SoundVoices(viewer, null, LocalUiLink.of(viewer, null));
 	}
 
@@ -280,8 +281,12 @@ final class ReforgedMiscNatives {
 			final CItem item = object(arguments, 0);
 			if (item != null) {
 				final War3ID skin = new War3ID(integer(arguments, 1));
-				if (this.commands.call("BlzSetItemSkin", () -> this.viewer.setItemSkin(item, skin))) {
+				// The render side shows the skin's model with the skin's own color and size.
+				final CItemType skinType = this.simulation.getItemData().getItemType(skin);
+				if (skinType != null) {
 					item.setSkinId(skin);
+					item.setSkinLook(skinType);
+					this.commands.send(() -> this.viewer.setItemSkin(item, skin));
 				}
 			}
 			return null;

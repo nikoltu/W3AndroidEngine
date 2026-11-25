@@ -42,6 +42,10 @@ public class CItemData {
 	private static final String STOCK_START_DELAY = "stockStart"; // replaced from 'isst'
 	private static final String STOCK_INITIAL = "stockInitial"; // replaced from 'isit'
 	private static final String STACK_MAX = "stackMax"; // replaced from 'ista'
+	private static final String MODEL_SCALE = "scale"; // replaced from 'isca'
+	private static final String TINT_RED = "colorR"; // replaced from 'iclr'
+	private static final String TINT_GREEN = "colorG"; // replaced from 'iclg'
+	private static final String TINT_BLUE = "colorB"; // replaced from 'iclb'
 	private static final String EQUIPMENT = "equipment";
 	private static final String TAG = "tag";
 	private static final String DEPENDENCY_EQUIVALENTS = "DependencyOr";
@@ -177,6 +181,9 @@ public class CItemData {
 					itemClass, requirements);
 			itemTypeInstance.setStockInitial(itemType.getFieldAsInteger(STOCK_INITIAL, 0));
 			itemTypeInstance.setStackMax(itemType.getFieldAsInteger(STACK_MAX, 0));
+			itemTypeInstance.setTint(itemType.getFieldAsInteger(TINT_RED, 0), itemType.getFieldAsInteger(TINT_GREEN, 0),
+					itemType.getFieldAsInteger(TINT_BLUE, 0));
+			itemTypeInstance.setModelScale(itemType.getFieldAsFloat(MODEL_SCALE, 0));
 			itemTypeInstance.setEquipmentType(CEquipmentType.fromName(itemType.getFieldAsString(EQUIPMENT, 0)));
 			itemTypeInstance.setItemTag(CItemTag.fromName(itemType.getFieldAsString(TAG, 0)));
 			this.itemIdToItemType.put(typeId, itemTypeInstance);

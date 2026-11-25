@@ -41,6 +41,10 @@ public class CItem extends CWidget {
 	private int playerIndex = -1;
 	// The player color a script gave the model (SetItemColor); -1 leaves the model as it is. Only the picture.
 	private int scriptColor = -1;
+	// What a script set for the model's color and size (the item fields iclr, iclg, iclb, ical, isca); null reads the
+	// item type. Kept here so the script reads them back without asking the render side.
+	private int[] tintOverride;
+	private Float modelScaleOverride;
 	// What a script set on this one item through the object fields; null reads what the item type says.
 	private War3ID skinId;
 	private String nameOverride;
@@ -78,6 +82,8 @@ public class CItem extends CWidget {
 		this.droppable = this.itemType.isCanBeDropped();
 		this.pawnable = this.itemType.isPawnable();
 		this.skinId = null;
+		this.tintOverride = null;
+		this.modelScaleOverride = null;
 		this.nameOverride = null;
 		this.descriptionOverride = null;
 		this.perishableOverride = null;
@@ -296,6 +302,35 @@ public class CItem extends CWidget {
 
 	public void setScriptColor(final int scriptColor) {
 		this.scriptColor = scriptColor;
+	}
+
+	/** Red, green, blue (0 to 2) or alpha (3) of the model, 0 to 255. */
+	public int getTint(final int channel) {
+		if (this.tintOverride != null) {
+			return this.tintOverride[channel];
+		}
+		return channel == 3 ? 255 : this.itemType.getTint(channel);
+	}
+
+	public void setTint(final int channel, final int value) {
+		if (this.tintOverride == null) {
+			this.tintOverride = new int[] { getTint(0), getTint(1), getTint(2), getTint(3) };
+		}
+		this.tintOverride[channel] = Math.max(0, Math.min(255, value));
+	}
+
+	/** A skin brings the color and size of its own item type. */
+	public void setSkinLook(final CItemType skinType) {
+		this.tintOverride = new int[] { skinType.getTint(0), skinType.getTint(1), skinType.getTint(2), 255 };
+		this.modelScaleOverride = skinType.getModelScale();
+	}
+
+	public float getModelScale() {
+		return this.modelScaleOverride == null ? this.itemType.getModelScale() : this.modelScaleOverride;
+	}
+
+	public void setModelScale(final float modelScale) {
+		this.modelScaleOverride = modelScale;
 	}
 
 	public int getPlayerIndex() {
