@@ -238,10 +238,21 @@ public class MdlxModel {
 		final long end = reader.position() + size;
 		while (reader.position() < end) {
 			final E object = constructor.create();
+			final int start = reader.position();
+			// Every dynamic object starts with its own inclusive byte size.
+			final long objectSize = reader.remaining() >= 4 ? reader.readUInt32() : 0;
+			reader.position(start);
 
 			object.readMdx(reader, this.version);
 
 			out.add(object);
+
+			// An object that is longer than what we know (newer version, trailing fields)
+			// must not shift the objects behind it.
+			final long objectEnd = start + objectSize;
+			if (objectSize >= 4 && objectEnd <= end && reader.position() < objectEnd) {
+				reader.position((int) objectEnd);
+			}
 		}
 	}
 

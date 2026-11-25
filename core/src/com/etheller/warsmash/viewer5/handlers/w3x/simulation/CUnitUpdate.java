@@ -94,6 +94,23 @@ final class CUnitUpdate {
 		}
 	}
 
+	/** Fires the enter and leave events a unit has waiting. */
+	static void deliverRegionEvents(final CUnit self, final CSimulation game) {
+		if ((self.pendingRegionEvents == null) || self.pendingRegionEvents.isEmpty()) {
+			return;
+		}
+		final List<PendingRegionEvent> events = self.pendingRegionEvents;
+		self.pendingRegionEvents = null;
+		for (final PendingRegionEvent event : events) {
+			if (event.enter) {
+				game.getRegionManager().onUnitEnterRegion(self, event.region, event.triggers);
+			}
+			else {
+				game.getRegionManager().onUnitLeaveRegion(self, event.region);
+			}
+		}
+	}
+
 	/**
 	 * Updates one tick of simulation logic and return true if it's time to remove
 	 * this unit from the game.
@@ -114,16 +131,7 @@ final class CUnitUpdate {
 		}
 		updateDrawnFacing(self, CTimer.currentTime(game));
 		if ((self.pendingRegionEvents != null) && !self.pendingRegionEvents.isEmpty()) {
-			final List<PendingRegionEvent> events = self.pendingRegionEvents;
-			self.pendingRegionEvents = null;
-			for (final PendingRegionEvent event : events) {
-				if (event.enter) {
-					game.getRegionManager().onUnitEnterRegion(self, event.region);
-				}
-				else {
-					game.getRegionManager().onUnitLeaveRegion(self, event.region);
-				}
-			}
+			deliverRegionEvents(self, game);
 		}
 		// Mana regeneration and stat changes write the fields directly; they reach the state events here. Measured: the
 		// original writes a dying unit's life once more a moment after its death.

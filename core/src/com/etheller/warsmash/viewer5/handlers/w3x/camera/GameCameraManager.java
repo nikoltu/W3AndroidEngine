@@ -26,6 +26,7 @@ public final class GameCameraManager extends CameraManager {
 	private static final float MIN_FOV = 20f;
 	private static final float MAX_FOV = 120f;
 	private static final float MIN_DISTANCE = 100f;
+	private static final float ZOFFSET_APPLY_SECONDS = 0.001f;
 	private static final float PAN_SPEED = 3000f;
 	// CameraSetSmoothingFactor: seconds the player's own camera movement takes to follow the keys per unit of the
 	// factor. Not measured.
@@ -1240,6 +1241,10 @@ public final class GameCameraManager extends CameraManager {
 		this.customSetup = cameraSetup;
 		this.farZRate = Float.POSITIVE_INFINITY;
 		this.cameraType = cameraSetup.getCameraType();
+		// Measured on 1.29: the angles, distance and field of view are the setup's in the same call, the height of the
+		// setup's target a step later.
+		moveFields(cameraSetup, CameraRates.INFINITY, 0);
+		setTargetZOffset(cameraSetup.getHeight(), ZOFFSET_APPLY_SECONDS);
 		if (doPan) {
 			if (panTimed) {
 				panTo(cameraSetup.getDestPositionX(), cameraSetup.getDestPositionY());

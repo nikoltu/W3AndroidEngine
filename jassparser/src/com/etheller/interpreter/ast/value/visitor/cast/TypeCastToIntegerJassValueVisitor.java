@@ -40,7 +40,7 @@ public class TypeCastToIntegerJassValueVisitor implements JassValueVisitor<JassV
 
 	@Override
 	public JassValue accept(final CodeJassValue value) {
-		return IntegerJassValue.of(value.getUserFunctionInstructionPtr());
+		return IntegerJassValue.of(value.toInteger());
 	}
 
 	@Override

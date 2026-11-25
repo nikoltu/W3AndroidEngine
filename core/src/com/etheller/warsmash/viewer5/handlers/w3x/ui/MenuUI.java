@@ -626,6 +626,11 @@ public class MenuUI {
 		return this.loadingScreen.isShown();
 	}
 
+	/** Whether a game has been asked for and is not yet running: its map is loading, or about to. */
+	public boolean isStartingGame() {
+		return this.beginGameInformation != null;
+	}
+
 	/** Whether a map is one of the missions of the campaign {@link #startCampaignMission} started. */
 	public boolean isStartedCampaignMission(final String mapFile) {
 		return this.campaigns.isStartedCampaignMission(mapFile);

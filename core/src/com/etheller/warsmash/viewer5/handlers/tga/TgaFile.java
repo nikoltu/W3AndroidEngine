@@ -156,8 +156,10 @@ public class TgaFile {
 			alpha = sampleBits == 16;
 		}
 		else {
-			alpha = ((sampleBits == 32) || (sampleBits == 16)) && (attributeBits != 0);
+			// Editors often write 32-bit files with the alpha channel but no attribute bits in the descriptor.
+			alpha = (sampleBits == 32) || ((sampleBits == 16) && (attributeBits != 0));
 		}
+		final boolean alphaUndeclared = alpha && !colorMapped && (baseType != 3) && (attributeBits == 0);
 
 		// a damaged header must not size the arrays below: 65535 x 65535 overflows an int
 		if ((w == 0) || (h == 0) || (((long) w * h) > MAX_PIXELS)) {
@@ -213,7 +215,18 @@ public class TgaFile {
 
 		dimensions[0] = w;
 		dimensions[1] = h;
-		dimensions[2] = alpha ? 1 : 0;
+		boolean hasAlpha = alpha;
+		if (alphaUndeclared) {
+			// A channel that is empty everywhere was never filled in; the picture is opaque.
+			hasAlpha = false;
+			for (int i = 0; i < pixelCount; i++) {
+				if ((pixels[i] >>> 24) != 0) {
+					hasAlpha = true;
+					break;
+				}
+			}
+		}
+		dimensions[2] = hasAlpha ? 1 : 0;
 		return pixels;
 	}
 

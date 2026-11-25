@@ -3,13 +3,13 @@ package com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.beh
 import java.util.Map;
 
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CTerrainDeformations;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityPointTarget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.behavior.callback.floatcallbacks.ABFloatCallback;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.behavior.callback.locationcallbacks.ABLocationCallback;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.core.ABAction;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.core.ABLocalStoreKeys;
-import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.effects.ABTerrainBowlEffect;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.effects.ABTerrainEffect;
 
 public class ABActionCreateTerrainBowlAtLocation implements ABAction {
@@ -52,8 +52,9 @@ public class ABActionCreateTerrainBowlAtLocation implements ABAction {
 			stpTm = stopDuration.callback(game, caster, localStore, castId);
 		}
 		
-		ABTerrainEffect fx = new ABTerrainBowlEffect(game, loc, rad, theDepth, snkTm, sttTm, fllTm, stpTm, startDep);
-		game.registerTimer(fx);
+		final CTerrainDeformations.Deformation deformation = game.getTerrainDeformations().bowl(game, loc.x, loc.y, rad,
+				theDepth + startDep, Math.round(snkTm), Math.round(sttTm), Math.round(fllTm));
+		final ABTerrainEffect fx = new ABTerrainEffect(game, deformation, Math.round(stpTm));
 		localStore.put(ABLocalStoreKeys.LASTCREATEDFX, fx);
 	}
 }

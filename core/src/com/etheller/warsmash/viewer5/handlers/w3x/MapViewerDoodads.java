@@ -34,6 +34,12 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CDoodadTable;
  * Creates the doodads and destructables of a map, and works out their pathing.
  */
 final class MapViewerDoodads {
+	/**
+	 * Maps with this many placed doodads and destructables make the doodads empty and load each where the camera first
+	 * sees it: all of them loaded at once were more than a phone's heap holds.
+	 */
+	private static final int LAZY_DOODADS_FROM = 8000;
+
 	private MapViewerDoodads() {
 	}
 
@@ -58,6 +64,7 @@ final class MapViewerDoodads {
 				placed.add(doodad);
 			}
 		}
+		viewer.lazyDoodads = placed.size() >= LAZY_DOODADS_FROM;
 		final LoadMapTask finish = () -> {
 			viewer.doodadTable = CDoodadTable.build(doo.getDoodads(), id -> {
 				final GameObject doodadRow = modifications.getDoodads().get(id);
@@ -145,12 +152,17 @@ final class MapViewerDoodads {
 		final float maxPitch = row.readSLKTagFloat("maxPitch");
 		final float maxRoll = row.readSLKTagFloat("maxRoll");
 		final float defScale = row.readSLKTagFloat("defScale");
-		final RenderDoodad renderDoodad = new RenderDoodad(viewer, model, row, location, scale, facingRadians, maxPitch,
-				maxRoll, defScale, doodadVariation);
+		final RenderDoodad renderDoodad = viewer.lazyDoodads
+				? RenderDoodad.createLazy(viewer, model, row, location, scale, facingRadians, maxPitch, maxRoll, defScale,
+						doodadVariation)
+				: new RenderDoodad(viewer, model, row, location, scale, facingRadians, maxPitch, maxRoll, defScale,
+						doodadVariation);
 		renderDoodad.instance.uniformScale(defScale);
 		renderDoodad.enableLazyClock();
 		viewer.doodads.add(renderDoodad);
-		viewer.pendingDoodads.add(renderDoodad);
+		if (!viewer.lazyDoodads) {
+			viewer.pendingDoodads.add(renderDoodad);
+		}
 		viewer.decals.add(renderDoodad);
 	}
 
@@ -271,7 +283,7 @@ final class MapViewerDoodads {
 		simulationDestructable.setLife(viewer.simulation, simulationDestructable.getLife() * (lifePercent / 100f));
 		final RenderDestructable renderDestructable = new RenderDestructable(viewer, model, portraitModel, row, location,
 				scale, facingRadians, selectionScale, maxPitch, maxRoll, lifePercent, destructableShadow, lateShadow,
-				waitForModel, simulationDestructable, doodadVariation);
+				waitForModel, true, simulationDestructable, doodadVariation);
 		if (walkable) {
 			final float angle = facingRadians;
 			BoundingBox boundingBox = model.bounds.getBoundingBox();
@@ -372,7 +384,11 @@ final class MapViewerDoodads {
 		final float minY = (float) StrictMath.min(StrictMath.min(y1prime, y2prime), StrictMath.min(y3prime, y4prime));
 		final float maxX = (float) StrictMath.max(StrictMath.max(x1prime, x2prime), StrictMath.max(x3prime, x4prime));
 		final float maxY = (float) StrictMath.max(StrictMath.max(y1prime, y2prime), StrictMath.max(y3prime, y4prime));
-		return new Rectangle(x + minX, y + minY, maxX - minX, maxY - minY);
+		// A model without extent is a point that can sit on the border of two nodes of the tree and overlap neither.
+		final float width = StrictMath.max(maxX - minX, 1f);
+		final float height = StrictMath.max(maxY - minY, 1f);
+		return new Rectangle(x + minX - ((width - (maxX - minX)) / 2), y + minY - ((height - (maxY - minY)) / 2), width,
+				height);
 	}
 
 	static CDestructable createDestructableForSavedGame(final War3MapViewer viewer, final CreatedDestructable created) {

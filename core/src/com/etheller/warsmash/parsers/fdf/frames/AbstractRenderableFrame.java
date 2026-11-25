@@ -111,6 +111,27 @@ public abstract class AbstractRenderableFrame implements UIFrame {
 		this.framePointToAssignment.clear();
 	}
 
+	/** Opposite anchors decide the size of a frame; a size given before them does not apply. */
+	public void anchorsDecideSize() {
+		if ((getLeftAnchor() != null) && (getRightAnchor() != null)) {
+			this.assignedWidth = 0;
+		}
+		if ((getTopAnchor() != null) && (getBottomAnchor() != null)) {
+			this.assignedHeight = 0;
+		}
+	}
+
+	/** The width the frame has: its own, else what its left and right points leave between them; 0 when neither. */
+	protected float anchoredWidth(final GameUI gameUI, final Viewport viewport) {
+		if (this.assignedWidth != 0) {
+			return this.assignedWidth;
+		}
+		final FramePointAssignment left = getLeftAnchor();
+		final FramePointAssignment right = getRightAnchor();
+		return (left != null) && (right != null) ? Math.max(0, right.getX(gameUI, viewport) - left.getX(gameUI, viewport))
+				: 0;
+	}
+
 	private FramePointAssignment getLeftAnchor() {
 		return getByPriority(LEFT_ANCHOR_PRIORITY);
 	}
@@ -343,6 +364,19 @@ public abstract class AbstractRenderableFrame implements UIFrame {
 		this.scriptHidden = scriptHidden;
 	}
 
+	/**
+	 * A frame made under an owner that keeps no children of its own is held by the root, so the owner's hiding does not
+	 * reach it by the usual way of the owner not drawing its children.
+	 */
+	public boolean isHiddenByAncestor() {
+		for (UIFrame ancestor = this.parent; ancestor != null; ancestor = ancestor.getParent()) {
+			if (!ancestor.isVisible()) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	public boolean isScriptHidden() {
 		return this.scriptHidden;
 	}
@@ -375,6 +409,106 @@ public abstract class AbstractRenderableFrame implements UIFrame {
 		return y;
 	}
 
+	/**
+	 * A frame that has a scale of its own and sits on the screen, or on frames that do, is drawn at that scale alone:
+	 * the scale of the frames it is a child of does not shrink it again.
+	 */
+	boolean ignoresAncestorScale() {
+		return ignoresAncestorScale(0);
+	}
+
+	private boolean ignoresAncestorScale(final int depth) {
+		if ((this.renderScale == 1f) || (depth > 8) || this.framePointToAssignment.isEmpty()) {
+			return false;
+		}
+		for (final FramePointAssignment assignment : this.framePointToAssignment.values()) {
+			if (!(assignment instanceof SetPoint)) {
+				return false;
+			}
+			final UIFrame other = ((SetPoint) assignment).getOther();
+			if ((other == null) || (other.getParent() == null)) {
+				continue;
+			}
+			if (!((other instanceof AbstractRenderableFrame)
+					&& ((AbstractRenderableFrame) other).ignoresAncestorScale(depth + 1))) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/** The frames above one that is drawn at its own scale alone are already off the matrix its children get. */
+	private static boolean stopsScaleChain(final UIFrame frame) {
+		return (frame instanceof AbstractRenderableFrame) && ((AbstractRenderableFrame) frame).ignoresAncestorScale();
+	}
+
+	private boolean hasScaledAncestor() {
+		for (UIFrame ancestor = this.parent; ancestor != null; ancestor = ancestor.getParent()) {
+			if ((ancestor instanceof AbstractRenderableFrame)
+					&& (((AbstractRenderableFrame) ancestor).renderScale != 1f)) {
+				return true;
+			}
+			if (stopsScaleChain(ancestor)) {
+				break;
+			}
+		}
+		return false;
+	}
+
+	/** The batch's matrix once the scales of the frames this one sits in are taken off again. */
+	private void undoAncestorScales(final Matrix4 matrix) {
+		for (UIFrame ancestor = this.parent; ancestor != null; ancestor = ancestor.getParent()) {
+			if ((ancestor instanceof AbstractRenderableFrame)
+					&& (((AbstractRenderableFrame) ancestor).renderScale != 1f)) {
+				final AbstractRenderableFrame scaled = (AbstractRenderableFrame) ancestor;
+				final float centerX = scaled.renderBounds.x + (scaled.renderBounds.width / 2);
+				final float centerY = scaled.renderBounds.y + (scaled.renderBounds.height / 2);
+				matrix.translate(centerX, centerY, 0).scale(1f / scaled.renderScale, 1f / scaled.renderScale, 1f)
+						.translate(-centerX, -centerY, 0);
+			}
+			if (stopsScaleChain(ancestor)) {
+				break;
+			}
+		}
+	}
+
+	/** A point the parent received, as the child takes it; inverse of what the drawing does to the child. */
+	public static float childX(final UIFrame parent, final UIFrame child, final float x) {
+		float result = x;
+		if ((child instanceof AbstractRenderableFrame) && ((AbstractRenderableFrame) child).ignoresAncestorScale()) {
+			for (UIFrame frame = parent; frame != null; frame = frame.getParent()) {
+				if ((frame instanceof AbstractRenderableFrame)
+						&& (((AbstractRenderableFrame) frame).renderScale != 1f)) {
+					final AbstractRenderableFrame scaled = (AbstractRenderableFrame) frame;
+					final float center = scaled.renderBounds.x + (scaled.renderBounds.width / 2);
+					result = center + ((result - center) * scaled.renderScale);
+				}
+				if (stopsScaleChain(frame)) {
+					break;
+				}
+			}
+		}
+		return localX(child, result);
+	}
+
+	public static float childY(final UIFrame parent, final UIFrame child, final float y) {
+		float result = y;
+		if ((child instanceof AbstractRenderableFrame) && ((AbstractRenderableFrame) child).ignoresAncestorScale()) {
+			for (UIFrame frame = parent; frame != null; frame = frame.getParent()) {
+				if ((frame instanceof AbstractRenderableFrame)
+						&& (((AbstractRenderableFrame) frame).renderScale != 1f)) {
+					final AbstractRenderableFrame scaled = (AbstractRenderableFrame) frame;
+					final float center = scaled.renderBounds.y + (scaled.renderBounds.height / 2);
+					result = center + ((result - center) * scaled.renderScale);
+				}
+				if (stopsScaleChain(frame)) {
+					break;
+				}
+			}
+		}
+		return localY(child, result);
+	}
+
 	public int getLevel() {
 		return this.level;
 	}
@@ -390,12 +524,22 @@ public abstract class AbstractRenderableFrame implements UIFrame {
 
 	@Override
 	public final void render(final SpriteBatch batch, final BitmapFont font20, final GlyphLayout glyphLayout) {
-		if (this.visible && !this.scriptHidden) {
+		if (this.visible && !this.scriptHidden && !isHiddenByAncestor()) {
+			final boolean detached = ignoresAncestorScale() && hasScaledAncestor();
+			final Matrix4 attached = detached ? new Matrix4(batch.getTransformMatrix()) : null;
+			if (detached) {
+				final Matrix4 own = new Matrix4(attached);
+				undoAncestorScales(own);
+				batch.setTransformMatrix(own);
+			}
 			if (this.renderScale != 1f) {
 				renderScaled(batch, font20, glyphLayout);
 			}
 			else {
 				renderFaded(batch, font20, glyphLayout);
+			}
+			if (detached) {
+				batch.setTransformMatrix(attached);
 			}
 		}
 	}

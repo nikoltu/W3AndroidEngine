@@ -8,6 +8,7 @@ import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -20,6 +21,7 @@ import com.etheller.warsmash.util.Log;
 import com.etheller.warsmash.util.SafeParse;
 import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.util.WarsmashConstants;
+import com.etheller.warsmash.viewer5.handlers.w3x.save.SavedTransient;
 import com.etheller.warsmash.viewer5.handlers.w3x.AnimationTokens.SecondaryTag;
 import com.etheller.warsmash.viewer5.handlers.w3x.SequenceUtils;
 import com.etheller.warsmash.viewer5.handlers.w3x.environment.PathingGrid;
@@ -261,6 +263,8 @@ public class CUnitData {
 	private final Map<War3ID, List<War3ID>> unitIdToTechEquivalents = new HashMap<>();
 	private Map<War3ID, List<War3ID>> unitIdToUpgradedFrom;
 	private int lightweightScannedKeyCount = -1;
+	@SavedTransient
+	private transient Iterator<String> lightweightScan;
 	private final CAbilityData abilityData;
 	private final CUpgradeData upgradeData;
 	private CItemData itemData;
@@ -799,7 +803,7 @@ public class CUnitData {
 				neutralBuildingShowMinimapIcon, tilesets, special);
 		unitTypeInstance.setCanSleep(unitType.getFieldAsBoolean(CAN_SLEEP, 0));
 		unitTypeInstance.setOrientationInterpolation(unitType.getFieldAsInteger(ORIENTATION_INTERPOLATION, 0));
-		unitTypeInstance.setStock(unitType.getFieldAsInteger(STOCK_MAX, 0),
+		unitTypeInstance.setStock(stockMaxOf(unitType),
 				unitType.getFieldAsInteger(STOCK_REPLENISH_INTERVAL, 0),
 				unitType.getFieldAsInteger(STOCK_START_DELAY, 0), unitType.getFieldAsInteger(STOCK_INITIAL, 0));
 		applyTechEquivalents(unitTypeInstance);
@@ -1186,6 +1190,11 @@ public class CUnitData {
 	 * the data without making the whole unit type: a shop only needs these when it is made, and the type is made when
 	 * something else asks for it. Null for a type the game does not have.
 	 */
+	/** Measured on 1.29: a sold unit whose data leaves the maximum stock blank has a stock of one. */
+	private static int stockMaxOf(final GameObject unitType) {
+		return Math.max(1, unitType.getFieldAsInteger(STOCK_MAX, 0));
+	}
+
 	public int[] getStockData(final War3ID rawcode) {
 		final CUnitType made = this.unitIdToUnitType.get(rawcode);
 		if (made != null) {
@@ -1198,7 +1207,7 @@ public class CUnitData {
 			if ((unitType == null) || WarsmashConstants.isOutOfMapVersion(unitType, this.mapGameVersion)) {
 				return null;
 			}
-			stock = new int[] { unitType.getFieldAsInteger(STOCK_MAX, 0),
+			stock = new int[] { stockMaxOf(unitType),
 					unitType.getFieldAsInteger(STOCK_REPLENISH_INTERVAL, 0),
 					unitType.getFieldAsInteger(STOCK_START_DELAY, 0), unitType.getFieldAsInteger(STOCK_INITIAL, 0) };
 			this.unitIdToStockData.put(rawcode, stock);
@@ -1283,6 +1292,34 @@ public class CUnitData {
 			}
 		}
 		return choices.isEmpty() ? null : choices.get(random.nextInt(choices.size()));
+	}
+
+	/**
+	 * {@link #getAllUnitTypesLightweight()} for the types it has not made yet, a slice of time at a time, so that the
+	 * loading screen keeps being drawn; the types are made in the same order.
+	 *
+	 * @return whether every type is made
+	 */
+	public boolean scanUnitTypesLightweightFor(final long nanos) {
+		final Set<String> keys = this.unitData.keySet();
+		if ((this.lightweightScannedKeyCount == keys.size()) || (this.unitIdToUnitTypeLightweight.size() >= keys.size())) {
+			this.lightweightScan = null;
+			this.lightweightScannedKeyCount = keys.size();
+			return true;
+		}
+		if (this.lightweightScan == null) {
+			this.lightweightScan = keys.iterator();
+		}
+		final long end = System.nanoTime() + nanos;
+		while (this.lightweightScan.hasNext()) {
+			getUnitTypeLightweight(War3ID.fromString(this.lightweightScan.next()));
+			if (System.nanoTime() >= end) {
+				return false;
+			}
+		}
+		this.lightweightScan = null;
+		this.lightweightScannedKeyCount = keys.size();
+		return true;
 	}
 
 	public Collection<CUnitType> getAllUnitTypesLightweight() {

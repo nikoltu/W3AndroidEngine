@@ -271,6 +271,9 @@ final class TriggerNatives extends CommonNatives {
 					}
 					final JassGameEventsWar3 whichPlayerEvent = arguments.get(2)
 							.visit(ObjectJassValueVisitor.getInstance());
+					if (whichPlayerEvent == null) {
+						return eventType.getNullValue();
+					}
 					return newEvent(eventType,
 							whichPlayer.addEvent(globalScope, whichTrigger, whichPlayerEvent));
 				});
@@ -840,11 +843,11 @@ final class TriggerNatives extends CommonNatives {
 		if (func == null) {
 			return null;
 		}
-		final Integer instructionPtr = func.getUserFunctionInstructionPtr();
-		TriggerBooleanExpression boolExpr = globalScope.getFunctionBoolExpr(instructionPtr);
+		final Object functionKey = func.getBoolExprKey();
+		TriggerBooleanExpression boolExpr = globalScope.getFunctionBoolExpr(functionKey);
 		if (boolExpr == null) {
 			boolExpr = handleIds.assign(new BoolExprCondition(func, globalScope));
-			globalScope.putFunctionBoolExpr(instructionPtr, boolExpr);
+			globalScope.putFunctionBoolExpr(functionKey, boolExpr);
 		}
 		return boolExpr;
 	}

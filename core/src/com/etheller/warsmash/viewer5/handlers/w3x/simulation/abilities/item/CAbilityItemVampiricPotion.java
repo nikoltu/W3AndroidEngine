@@ -60,7 +60,7 @@ public class CAbilityItemVampiricPotion extends AbstractCAbilityItemInstantUse {
 						new NonStackingStatBuff(NonStackingStatBuffType.HPSTEAL, key, this.lifeSteal)));
 		game.createTemporarySpellEffectOnUnit(caster, getAlias(), CEffectType.CASTER);
 		game.unitSoundEffectEvent(caster, getAlias());
-		caster.beginCooldown(game, getCode(), getCooldown());
+		caster.beginCooldown(game, getCooldownKey(), getCooldown());
 		return false;
 	}
 
@@ -69,7 +69,7 @@ public class CAbilityItemVampiricPotion extends AbstractCAbilityItemInstantUse {
 			final AbilityActivationReceiver receiver) {
 		final float cooldownRemaining = getCooldownRemaining(game, unit);
 		if (cooldownRemaining > 0) {
-			receiver.cooldownNotYetReady(cooldownRemaining, unit.getCooldownLengthDisplayTicks(game, getCode())
+			receiver.cooldownNotYetReady(cooldownRemaining, unit.getCooldownLengthDisplayTicks(game, getCooldownKey())
 					* com.etheller.warsmash.util.WarsmashConstants.SIMULATION_STEP_TIME);
 		}
 		else {

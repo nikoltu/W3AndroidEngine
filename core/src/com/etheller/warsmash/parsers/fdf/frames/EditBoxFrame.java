@@ -46,7 +46,9 @@ public class EditBoxFrame extends AbstractRenderableFrame implements FocusableFr
 	protected void innerPositionBounds(final GameUI gameUI, final Viewport viewport) {
 		this.gameUI = gameUI;
 		this.viewport = viewport;
-		this.controlBackdrop.positionBounds(gameUI, viewport);
+		if (this.controlBackdrop != null) {
+			this.controlBackdrop.positionBounds(gameUI, viewport);
+		}
 		if (this.editTextFrame != null) {
 			this.editTextFrame.positionBounds(gameUI, viewport);
 		}
@@ -55,7 +57,12 @@ public class EditBoxFrame extends AbstractRenderableFrame implements FocusableFr
 	@Override
 	protected void internalRender(final SpriteBatch batch, final BitmapFont baseFont, final GlyphLayout glyphLayout) {
 		this.glyphLayout = glyphLayout;
-		this.controlBackdrop.render(batch, baseFont, glyphLayout);
+		if (this.controlBackdrop != null) {
+			this.controlBackdrop.render(batch, baseFont, glyphLayout);
+		}
+		if (this.editTextFrame == null) {
+			return;
+		}
 		this.editTextFrame.render(batch, baseFont, glyphLayout);
 		if (this.focused) {
 			final long time = TimeUtils.millis();
@@ -73,6 +80,10 @@ public class EditBoxFrame extends AbstractRenderableFrame implements FocusableFr
 						this.editTextFrame.getFramePointY(FramePoint.LEFT) + ((frameFont.getCapHeight()) / 2));
 			}
 		}
+	}
+
+	public boolean hasEditTextFrame() {
+		return this.editTextFrame != null;
 	}
 
 	public void setEditTextFrame(final StringFrame editTextFrame) {
@@ -103,6 +114,9 @@ public class EditBoxFrame extends AbstractRenderableFrame implements FocusableFr
 
 	@Override
 	public boolean keyDown(final int keycode) {
+		if (this.editTextFrame == null) {
+			return false;
+		}
 		switch (keycode) {
 		case Input.Keys.LEFT: {
 			this.cursorIndex = Math.max(0, this.cursorIndex - 1);
@@ -157,6 +171,9 @@ public class EditBoxFrame extends AbstractRenderableFrame implements FocusableFr
 
 	@Override
 	public boolean keyTyped(final char character) {
+		if (this.editTextFrame == null) {
+			return false;
+		}
 		// The on-screen keyboard's Enter arrives as a typed line break rather than as the Enter key.
 		if (TouchInputRouter.isActive() && ((character == '\n') || (character == '\r'))) {
 			Gdx.input.setOnscreenKeyboardVisible(false);
@@ -180,7 +197,9 @@ public class EditBoxFrame extends AbstractRenderableFrame implements FocusableFr
 	@Override
 	public UIFrame touchDown(final float screenX, final float screenY, final int button) {
 		if (isVisible() && this.renderBounds.contains(screenX, screenY)) {
-
+			if ((this.editTextFrame == null) || (this.glyphLayout == null)) {
+				return this;
+			}
 			final String text = this.editTextFrame.getText();
 			int indexFound = -1;
 			final float fpXOfEditText = this.editTextFrame.getFramePointX(FramePoint.LEFT);
@@ -206,11 +225,16 @@ public class EditBoxFrame extends AbstractRenderableFrame implements FocusableFr
 	}
 
 	public String getText() {
+		if (this.editTextFrame == null) {
+			return "";
+		}
 		return this.editTextFrame.getText();
 	}
 
 	public void setText(final String text, final GameUI gameUI, final Viewport uiViewport) {
-		this.editTextFrame.setText(text, gameUI, uiViewport);
+		if (this.editTextFrame != null) {
+			this.editTextFrame.setText(text, gameUI, uiViewport);
+		}
 		this.cursorIndex = text == null ? 0 : text.length();
 	}
 
@@ -230,7 +254,7 @@ public class EditBoxFrame extends AbstractRenderableFrame implements FocusableFr
 		this.filter = new CharacterFilter() {
 			@Override
 			public boolean allow(final char character) {
-				return EditBoxFrame.this.editTextFrame.getFrameFont().getData().hasGlyph(character)
+				return (EditBoxFrame.this.editTextFrame != null) && EditBoxFrame.this.editTextFrame.getFrameFont().getData().hasGlyph(character)
 						&& (character >= 32);
 			}
 		};

@@ -25,7 +25,7 @@ public final class CPathingTextures {
 
 	/** The texture at the path, or null for none ("" or "_") or one that cannot be read. */
 	public ArgbImage get(final String path) {
-		if ((path == null) || path.isEmpty() || "_".equals(path)) {
+		if ((path == null) || path.isEmpty() || "_".equals(path) || "none".equalsIgnoreCase(path)) {
 			return null;
 		}
 		final String key = path.toLowerCase(Locale.ROOT);

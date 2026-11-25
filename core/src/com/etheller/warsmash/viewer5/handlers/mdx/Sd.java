@@ -102,7 +102,8 @@ public abstract class Sd<TYPE> {
 		this.interpolationType = forcedInterp != null ? forcedInterp : timeline.getInterpolationType().ordinal();
 
 		final SdSequence.SharedKeys shared = SdSequence.sharedKeys(model.arrayPool, timeline);
-		if ((globalSequenceId != -1) && (globalSequences.size() > 0)) {
+		// A track naming a global sequence the model does not have plays on the normal sequences.
+		if ((globalSequenceId >= 0) && (globalSequenceId < globalSequences.size())) {
 			this.global = true;
 			this.sequences = new SdSequence<TYPE>(this, new int[1],
 					new int[] { (int) globalSequences.get(globalSequenceId).longValue() }, timeline, true,

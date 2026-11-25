@@ -35,6 +35,8 @@ final class AIHarvest {
 	static final int WOOD = 1;
 	private static final int TREE_CACHE_TICKS = CTimer.wholeSteps(20);
 	private static final int SETTLE_TICKS = 5;
+	private static final int LEFTOVER_RETRY_TICKS = CTimer.wholeSteps(30);
+	private static final int LEFTOVER_STEP_TICKS = CTimer.wholeSteps(2);
 
 	private AIHarvest() {
 	}
@@ -70,7 +72,7 @@ final class AIHarvest {
 	 * first, then free workers already at that resource, then free workers at the other one; of those, one carrying
 	 * a load stops and waits for the next change of requests, which sends it off. Workers inside a
 	 * mine are passed over, and so is the worker that was already mining when the script started. Idle workers left
-	 * without a job then mine gold.
+	 * without a job then mine gold, but a Wisp goes to the trees.
 	 */
 	static void assignHarvesters(final AIController ai) {
 		final List<CUnit> workers = new ArrayList<>();
@@ -82,6 +84,7 @@ final class AIHarvest {
 		}
 		ai.harvestJobs.keySet().retainAll(new HashSet<>(workers));
 		ai.harvestUnsent.retainAll(ai.harvestJobs.keySet());
+		ai.harvestLeftoverWisps.keySet().retainAll(workers);
 		// A script sets its requests over several calls that may run in different ticks; they are dealt once it is
 		// done.
 		if (ai.harvestPassPending && ((ai.ticks - ai.harvestCallTick) >= SETTLE_TICKS)) {
@@ -100,7 +103,14 @@ final class AIHarvest {
 				if (!ai.harvestJobs.containsKey(worker) && !worker.isHidden() && isFree(worker)
 						&& isWorkerType(worker)) {
 					final int town = canDo(ai, worker, GOLD, 0) ? 0 : Math.max(AITowns.townWithMine(ai), 0);
-					if (canDo(ai, worker, GOLD, town)) {
+					// Measured: a leftover Wisp does not enter the Entangled Mine, it goes to the trees.
+					if (isWisp(worker)) {
+						if (canDo(ai, worker, WOOD, town)) {
+							ai.harvestLeftoverWisps.put(worker, new int[] { ai.ticks, 0, ai.ticks });
+							orderHarvest(ai, worker, WOOD, town);
+						}
+					}
+					else if (canDo(ai, worker, GOLD, town)) {
 						orderHarvest(ai, worker, GOLD, town);
 					}
 				}
@@ -115,6 +125,20 @@ final class AIHarvest {
 			}
 			else if (!worker.isHidden()) {
 				orderHarvest(ai, worker, job[0], job[1]);
+			}
+		}
+		// A Wisp whose tree turned out unreachable stands idle after its retargets; it is sent on to the next trees for
+		// a while.
+		for (final Iterator<Map.Entry<CUnit, int[]>> iterator = ai.harvestLeftoverWisps.entrySet()
+				.iterator(); iterator.hasNext();) {
+			final Map.Entry<CUnit, int[]> entry = iterator.next();
+			if ((ai.ticks - entry.getValue()[0]) > LEFTOVER_RETRY_TICKS) {
+				iterator.remove();
+			}
+			else if (isIdle(entry.getKey()) && !entry.getKey().isHidden()
+					&& ((ai.ticks - entry.getValue()[2]) >= LEFTOVER_STEP_TICKS)) {
+				entry.getValue()[2] = ai.ticks;
+				orderHarvest(ai, entry.getKey(), WOOD, Math.max(AITowns.townWithMine(ai), 0), ++entry.getValue()[1]);
 			}
 		}
 		if (ai.peonsRepair) {
@@ -236,6 +260,11 @@ final class AIHarvest {
 
 	private static void orderHarvest(final AIController ai, final CUnit worker, final int resource,
 			final int townId) {
+		orderHarvest(ai, worker, resource, townId, 0);
+	}
+
+	private static void orderHarvest(final AIController ai, final CUnit worker, final int resource, final int townId,
+			final int skipTrees) {
 		final AITown town = AITowns.getTown(ai, townId);
 		if (town == null) {
 			return;
@@ -256,10 +285,15 @@ final class AIHarvest {
 		}
 		final List<CDestructable> trees = getTrees(ai, town);
 		int tries = 0;
+		int skipped = 0;
 		for (final Iterator<CDestructable> iterator = trees.iterator(); iterator.hasNext() && (tries < 6);) {
 			final CDestructable tree = iterator.next();
 			if (tree.isDead()) {
 				iterator.remove();
+				continue;
+			}
+			if (skipped < skipTrees) {
+				skipped++;
 				continue;
 			}
 			tries++;
@@ -267,6 +301,10 @@ final class AIHarvest {
 				return;
 			}
 		}
+	}
+
+	private static boolean isWisp(final CUnit worker) {
+		return worker.getFirstAbilityOfType(CAbilityWispHarvest.class) != null;
 	}
 
 	/**

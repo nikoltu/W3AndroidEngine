@@ -2,17 +2,19 @@ package com.etheller.warsmash.viewer5.handlers.w3x.simulation;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 
 import com.etheller.interpreter.ast.scope.HandleIdSource;
 import com.etheller.interpreter.ast.util.CAllocatedHandle;
 import com.etheller.interpreter.ast.util.CHandle;
 import com.etheller.warsmash.viewer5.handlers.w3x.TextTag;
 import com.etheller.warsmash.viewer5.handlers.w3x.save.SavedAddedFields;
+import com.etheller.warsmash.viewer5.handlers.w3x.save.SavedTransient;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.campaign.CImage;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.ScriptHandleTable;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.SimulationRenderComponentLightning;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.SimulationRenderComponentUbersplat;
 
@@ -60,9 +62,13 @@ public class HandleIdAllocator implements SavedAddedFields, HandleIdSource {
 	private final List<UntrackedHandle> untrackedHandles = new ArrayList<>();
 	/**
 	 * The handles scripts got the id of, to give them back when a script reads an integer as a handle. An entry goes
-	 * when its id is freed, so it always names the handle that holds the id; keyed by {@link #key}.
+	 * when its id is freed, so it always names the handle that holds the id; by pool and id.
 	 */
-	private final Map<Long, Object> scriptHandles = new HashMap<>();
+	private ScriptHandleTable scriptHandleTable;
+	/** The map of saves from before the table above: its entries move into it when a script next asks. */
+	private Map<Long, Object> scriptHandles;
+	@SavedTransient
+	private Consumer<Object> releaseListener;
 	private int nextEarlyId;
 	private int earlyIdEnd;
 	private boolean earlyIds;
@@ -126,8 +132,40 @@ public class HandleIdAllocator implements SavedAddedFields, HandleIdSource {
 	 * local variable kept it by the end of the step.
 	 */
 	public void release(final CAllocatedHandle handle) {
-		if ((handle != null) && handle.releaseHandle() && (handle.getHandleId() > 0)) {
-			this.releasedHandles.add(handle);
+		if ((handle != null) && handle.releaseHandle()) {
+			if (this.releaseListener != null) {
+				this.releaseListener.accept(handle);
+			}
+			if (handle.getHandleId() > 0) {
+				this.releasedHandles.add(handle);
+			}
+		}
+	}
+
+	/** Tells the listener of each handle that is destroyed, once; a script that holds handles lets go of them. */
+	public void setReleaseListener(final Consumer<Object> listener) {
+		this.releaseListener = listener;
+	}
+
+	/**
+	 * A script let go of a destroyed handle that no other id will name: the table of handles scripts got ids of, and the
+	 * numbering of handles that have no id field, let go of it too.
+	 */
+	public void forgetScriptHandle(final Object handle) {
+		int handleId = 0;
+		if (handle instanceof CHandle) {
+			handleId = ((CHandle) handle).getHandleId();
+		}
+		if ((handleId == 0) || (handleId == UNNUMBERED)) {
+			for (int i = 0; i < this.untrackedHandles.size(); i++) {
+				if (this.untrackedHandles.get(i).handle == handle) {
+					handleId = this.untrackedHandles.remove(i).handleId;
+					break;
+				}
+			}
+		}
+		if ((handleId != 0) && (handleId != UNNUMBERED) && (scriptHandles().get(poolOf(handle), handleId) == handle)) {
+			scriptHandles().remove(poolOf(handle), handleId);
 		}
 	}
 
@@ -173,7 +211,7 @@ public class HandleIdAllocator implements SavedAddedFields, HandleIdSource {
 	}
 
 	private void pushFreeId(final int handleId) {
-		this.scriptHandles.remove(key(TABLE, handleId));
+		scriptHandles().remove(TABLE, handleId);
 		if (this.freeHandleIdCount == this.freeHandleIds.length) {
 			this.freeHandleIds = Arrays.copyOf(this.freeHandleIds, this.freeHandleIds.length * 2);
 		}
@@ -196,7 +234,7 @@ public class HandleIdAllocator implements SavedAddedFields, HandleIdSource {
 
 	public void freeTextTagId(final int textTagId) {
 		if ((textTagId >= 0) && (textTagId < TEXT_TAG_COUNT)) {
-			this.scriptHandles.remove(key(TEXT_TAGS, textTagId));
+			scriptHandles().remove(TEXT_TAGS, textTagId);
 			for (int i = 0; i < this.freeTextTagIdCount; i++) {
 				if (this.freeTextTagIds[i] == textTagId) {
 					return;
@@ -205,7 +243,7 @@ public class HandleIdAllocator implements SavedAddedFields, HandleIdSource {
 			this.freeTextTagIds[this.freeTextTagIdCount++] = textTagId;
 		}
 		else if (textTagId >= TEXT_TAG_COUNT) {
-			this.scriptHandles.remove(key(TEXT_TAGS, textTagId));
+			scriptHandles().remove(TEXT_TAGS, textTagId);
 			freeHandleId(textTagId);
 		}
 	}
@@ -227,7 +265,7 @@ public class HandleIdAllocator implements SavedAddedFields, HandleIdSource {
 
 	public void freeImageId(final int imageId) {
 		if (imageId >= 0) {
-			this.scriptHandles.remove(key(IMAGES, imageId));
+			scriptHandles().remove(IMAGES, imageId);
 			this.freeImageIds.add(imageId);
 		}
 	}
@@ -241,7 +279,7 @@ public class HandleIdAllocator implements SavedAddedFields, HandleIdSource {
 
 	public void freeUbersplatId(final int ubersplatId) {
 		if (ubersplatId >= 0) {
-			this.scriptHandles.remove(key(UBERSPLATS, ubersplatId));
+			scriptHandles().remove(UBERSPLATS, ubersplatId);
 			this.freeUbersplatIds.add(ubersplatId);
 		}
 	}
@@ -250,7 +288,7 @@ public class HandleIdAllocator implements SavedAddedFields, HandleIdSource {
 	@Override
 	public int handleIdOf(final Object handle) {
 		final int handleId = numberOf(handle);
-		this.scriptHandles.put(key(poolOf(handle), handleId), handle);
+		scriptHandles().put(poolOf(handle), handleId, handle);
 		return handleId;
 	}
 
@@ -261,21 +299,31 @@ public class HandleIdAllocator implements SavedAddedFields, HandleIdSource {
 	@Override
 	public Object handleOfId(final int handleId, final String typeName) {
 		final int pool = poolOf(typeName);
-		final Object handle = this.scriptHandles.get(key(pool, handleId));
+		final Object handle = scriptHandles().get(pool, handleId);
 		if ((handle instanceof CHandle) && (((CHandle) handle).getHandleId() != handleId)) {
 			return null;
 		}
 		if ((pool == LIGHTNINGS) && (handle instanceof SimulationRenderComponentLightning)
 				&& ((SimulationRenderComponentLightning) handle).isRemoved()) {
 			// Lightning ids are never given again, so a destroyed one has nothing to free its entry.
-			this.scriptHandles.remove(key(pool, handleId));
+			scriptHandles().remove(pool, handleId);
 			return null;
 		}
 		return handle;
 	}
 
-	private static long key(final int pool, final int handleId) {
-		return (((long) pool) << 32) | (handleId & 0xFFFFFFFFL);
+	private ScriptHandleTable scriptHandles() {
+		if (this.scriptHandleTable == null) {
+			this.scriptHandleTable = new ScriptHandleTable(FIRST_HANDLE_ID);
+		}
+		if (this.scriptHandles != null) {
+			for (final Map.Entry<Long, Object> entry : this.scriptHandles.entrySet()) {
+				final long key = entry.getKey();
+				this.scriptHandleTable.put((int) (key >>> 32), (int) key, entry.getValue());
+			}
+			this.scriptHandles = null;
+		}
+		return this.scriptHandleTable;
 	}
 
 	private static int poolOf(final Object handle) {

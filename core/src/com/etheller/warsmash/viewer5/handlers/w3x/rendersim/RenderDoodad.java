@@ -160,6 +160,7 @@ public class RenderDoodad {
 
 	/** An animation by name; random picks one of the sequences that share the name (Stand, Stand - 2, ...). */
 	public void playAnimation(final String animation, final boolean random) {
+		this.instance.loadNow();
 		if (!random || !(this.instance instanceof MdxComplexInstance)) {
 			playAnimation(animation);
 			return;
@@ -188,6 +189,7 @@ public class RenderDoodad {
 	}
 
 	public void playAnimation(final String animation) {
+		this.instance.loadNow();
 		if (this.instance instanceof MdxComplexInstance) {
 			final MdxComplexInstance mdxInstance = (MdxComplexInstance) this.instance;
 			mdxInstance.settleClock(true);
@@ -210,6 +212,24 @@ public class RenderDoodad {
 	}
 
 	/**
+	 * A doodad whose instance is made empty and loaded where the camera first sees it, which is when its stand
+	 * animation starts too: a map with very many doodads would not fit the heap of a phone otherwise.
+	 */
+	public static RenderDoodad createLazy(final War3MapViewer map, final MdxModel model, final GameObject row,
+			final float[] location3D, final float[] scale3D, final float facingRadians, final float maxPitch,
+			final float maxRoll, final float selectionScale, final int doodadVariation) {
+		final RenderDoodad doodad = new RenderDoodad(map, model, row, location3D, scale3D, facingRadians, maxPitch, maxRoll,
+				selectionScale, doodadVariation, false, true);
+		final float scaleZ = scale3D[2];
+		((MdxComplexInstance) doodad.instance).modelLoadedObserver = () -> {
+			((MdxComplexInstance) doodad.instance).sceneryShadow = map.getDynamicShadowManager().castsSceneShadow(model,
+					scaleZ);
+			doodad.startStandSequence();
+		};
+		return doodad;
+	}
+
+	/**
 	 * @param waitForModel whether the instance is made before the model is built (see
 	 *                     {@link MdxModel#addWaitingInstance()}); what depends on the model's contents is then left to
 	 *                     the owner once it is built
@@ -217,6 +237,18 @@ public class RenderDoodad {
 	protected RenderDoodad(final War3MapViewer map, final MdxModel model, final GameObject row,
 			final float[] location3D, final float[] scale3D, final float facingRadians, final float maxPitch,
 			final float maxRoll, final float selectionScale, final int doodadVariation, final boolean waitForModel) {
+		this(map, model, row, location3D, scale3D, facingRadians, maxPitch, maxRoll, selectionScale, doodadVariation,
+				waitForModel, false);
+	}
+
+	/**
+	 * @param lazy whether the instance is made empty and loads when it is first in view (see
+	 *             {@code Model.addLazyInstance()}); its owner then handles it as one made before its model was built
+	 */
+	protected RenderDoodad(final War3MapViewer map, final MdxModel model, final GameObject row,
+			final float[] location3D, final float[] scale3D, final float facingRadians, final float maxPitch,
+			final float maxRoll, final float selectionScale, final int doodadVariation, final boolean waitForModel,
+			final boolean lazy) {
 		this.maxPitch = maxPitch;
 		this.maxRoll = maxRoll;
 		this.z = location3D[2];
@@ -231,11 +263,12 @@ public class RenderDoodad {
 			instance = model.addInstance(1);
 		}
 		else {
-			instance = waitForModel ? model.addWaitingInstance() : model.addInstance();
+			instance = lazy ? model.addLazyInstance()
+					: waitForModel ? model.addWaitingInstance() : model.addInstance();
 			((MdxComplexInstance) instance).setSequenceLoopMode(SequenceLoopMode.NEVER_LOOP);
 		}
 
-		if (!waitForModel) {
+		if (!waitForModel && !instance.isWaiting()) {
 			((MdxComplexInstance) instance).sceneryShadow = map.getDynamicShadowManager().castsSceneShadow(model,
 					scale3D[2]);
 		}

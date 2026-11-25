@@ -38,7 +38,7 @@ public class TypeCastToBooleanJassValueVisitor implements JassValueVisitor<JassV
 
 	@Override
 	public JassValue accept(final CodeJassValue value) {
-		return BooleanJassValue.of(value.getUserFunctionInstructionPtr() != null);
+		return BooleanJassValue.of(!value.isNull());
 	}
 
 	@Override

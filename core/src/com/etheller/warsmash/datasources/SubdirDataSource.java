@@ -30,6 +30,11 @@ public class SubdirDataSource implements DataSource {
 	}
 
 	@Override
+	public File fileOnDisk(final String filepath) {
+		return this.dataSource.fileOnDisk(this.subdir + filepath);
+	}
+
+	@Override
 	public File getDirectory(String filepath) throws IOException {
 		return this.dataSource.getDirectory(this.subdir + filepath);
 	}

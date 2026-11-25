@@ -59,6 +59,13 @@ public class MapsFolderDataSource implements DataSource {
 	}
 
 	@Override
+	public File fileOnDisk(final String filepath) {
+		final String path = inside(filepath);
+		final FolderDataSource maps = this.maps;
+		return (path == null) || (maps == null) ? null : maps.fileOnDisk(path);
+	}
+
+	@Override
 	public File getDirectory(final String filepath) throws IOException {
 		final String path = inside(filepath);
 		final FolderDataSource maps = this.maps;

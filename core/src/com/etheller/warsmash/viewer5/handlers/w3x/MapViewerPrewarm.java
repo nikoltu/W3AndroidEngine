@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
+import java.util.concurrent.CompletableFuture;
 import java.util.regex.Pattern;
 
 import com.etheller.warsmash.datasources.DataSource;
@@ -31,6 +32,7 @@ import com.etheller.warsmash.util.Log;
 import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.viewer5.PathSolver;
 import com.etheller.warsmash.viewer5.handlers.blp.TextureTranscoder;
+import com.etheller.warsmash.viewer5.handlers.w3x.War3MapViewer.LoadMapTask;
 import com.etheller.warsmash.viewer5.handlers.w3x.War3MapViewer.MapLoader;
 import com.etheller.warsmash.viewer5.handlers.w3x.environment.PathingGrid;
 import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.RenderItemTypeData;
@@ -50,24 +52,24 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.sound.CSoundFromLab
  * loader. Left to the first frames of the game, they were all loaded in one frame that showed nothing new.
  */
 final class MapViewerPrewarm {
-	private static final Pattern SCRIPT_LABEL_SOUND = Pattern
+	static final Pattern SCRIPT_LABEL_SOUND = Pattern
 			.compile("(?:SetAmbientDaySound|SetAmbientNightSound|CreateMIDISound)\\s*\\(\\s*\"([^\"]+)\"");
 	private static final int MAX_PREFETCHED_FILES = 4;
-	private static final Pattern SCRIPT_FILE_SOUND = Pattern
+	static final Pattern SCRIPT_FILE_SOUND = Pattern
 			.compile("\\b(?:CreateSound|CreateSoundFilenameWithLabel)\\s*\\(\\s*\"((?:[^\"\\\\]++|\\\\.)*+)\"");
 	private static final Pattern SCRIPT_PRELOAD = Pattern
 			.compile("\\bPreload\\s*\\(\\s*\"((?:[^\"\\\\]++|\\\\.)*+)\"");
-	private static final Pattern SCRIPT_PRELOADER = Pattern
+	static final Pattern SCRIPT_PRELOADER = Pattern
 			.compile("\\bPreloader\\s*\\(\\s*\"((?:[^\"\\\\]++|\\\\.)*+)\"");
-	private static final Pattern SCRIPT_SKY_MODEL = Pattern
+	static final Pattern SCRIPT_SKY_MODEL = Pattern
 			.compile("\\bSetSkyModel\\s*\\(\\s*\"((?:[^\"\\\\]++|\\\\.)++)\"");
 	// The model is the last argument of the BJ forms, so any model path on the line is taken. The string patterns
 	// here are possessive: a repeated alternative is matched recursively, and a long string overflowed the stack.
 	static final Pattern SCRIPT_EFFECT_MODEL = Pattern.compile(
 			"\\bAddSpecialEffect\\w*\\s*\\([^\\r\\n]*?\"((?:[^\"\\\\\\r\\n]++|\\\\.)*+)(?<=\\.[mM][dD][lLxX])\"");
-	private static final Pattern SCRIPT_LABEL_PARAMETERS = Pattern
+	static final Pattern SCRIPT_LABEL_PARAMETERS = Pattern
 			.compile("\\bSetSoundParamsFromLabel\\s*\\([^,()]+,\\s*\"((?:[^\"\\\\]++|\\\\.)++)\"");
-	private static final Pattern SCRIPT_LABEL_CREATE = Pattern
+	static final Pattern SCRIPT_LABEL_CREATE = Pattern
 			.compile("\\bCreateSoundFromLabel\\s*\\(\\s*\"((?:[^\"\\\\]++|\\\\.)++)\"");
 	private static final long PRELOAD_BATCH_NANOS = 8_000_000L;
 	static final Pattern SCRIPT_UNIT_CREATION = Pattern.compile(
@@ -101,15 +103,17 @@ final class MapViewerPrewarm {
 		types.warmModelLookups();
 
 		final String script = readMapScript(viewer);
+		final MapScriptScans scans = new MapScriptScans(script);
 		viewer.typeUsage = new MapTypeUsage(script);
 		viewer.scriptSpeaksLines = script.contains("Transmission") || script.contains("CinematicScene")
 				|| script.contains("Dialogue");
 		viewer.prefetchFrameTemplates();
 		// First, so that the decoding runs beside the model loading that follows.
-		loader.addLoadTask(() -> prefetchAmbientSounds(viewer, script, loader));
+		loader.addLoadTask(whenScanned(loader, () -> prefetchAmbientSounds(viewer, scans, loader), scans.ambientLabels));
 		loader.addLoadTask(() -> prefetchInterfaceTextures(viewer, loader));
-		loader.addLoadTask(() -> prefetchScriptSounds(viewer, script, loader));
-		loader.addLoadTask(() -> prepareScriptLabels(viewer, script));
+		loader.addLoadTask(whenScanned(loader, () -> prefetchScriptSounds(viewer, scans, loader), scans.soundFiles));
+		loader.addLoadTask(whenScanned(loader, () -> prepareScriptLabels(viewer, script, scans), scans.labelParameters,
+				scans.labelCreations));
 		loader.addLoadTask(() -> SimulationClassPrewarm.queue(loader));
 
 		final Set<War3ID> placed = new LinkedHashSet<>();
@@ -143,16 +147,51 @@ final class MapViewerPrewarm {
 		for (final War3ID typeId : started) {
 			loader.addLoadTask(loader.modelTask(() -> load(viewer, types, items, typeId)));
 		}
-		loader.addLoadTask(() -> queuePreloads(viewer, w3i, script, loader));
+		loader.addLoadTask(whenScanned(loader, () -> queuePreloads(viewer, w3i, script, scans, loader),
+				scans.preloaders, scans.preloadedFiles, scans.skyModels, scans.effectModels));
 		final Set<War3ID> known = new LinkedHashSet<>(placed);
 		known.addAll(started);
-		loader.addLoadTask(loader.settled(() -> queueScriptCreations(viewer, script, known, types, items, loader)));
+		loader.addLoadTask(settledWhenScanned(loader,
+				() -> queueScriptCreations(viewer, script, scans, known, types, items, loader),
+				scans.units, scans.items, scans.destructables, scans.variations, scans.rawCodes));
 		loader.addLoadTask(loader.modelTask(() -> loadSleepEffect(viewer)));
-		loader.addLoadTask(() -> queueSimulationTypes(viewer, script, known, loader));
+		loader.addLoadTask(whenScanned(loader, () -> queueSimulationTypes(viewer, scans, known, loader),
+				scans.units, scans.rawCodes));
 		if (viewer.scriptSpeaksLines) {
 			// Last, so that it runs beside the decoding of the textures the loading still has under way.
 			loader.addLoadTask(() -> viewer.faceFxLibrary().prepare());
 		}
+	}
+
+	/** A task that waits for its turn, behind the others, until the scans of the script it needs are done. */
+	private static LoadMapTask whenScanned(final MapLoader loader, final LoadMapTask task,
+			final CompletableFuture<?>... scans) {
+		return new LoadMapTask() {
+			@Override
+			public void run() throws IOException {
+				if (MapScriptScans.isDone(scans)) {
+					task.run();
+				}
+				else {
+					loader.retryLater(this);
+				}
+			}
+		};
+	}
+
+	/** {@link #whenScanned} for a task that {@link MapLoader#settled} holds until the textures before it are in. */
+	private static LoadMapTask settledWhenScanned(final MapLoader loader, final LoadMapTask task,
+			final CompletableFuture<?>... scans) {
+		final LoadMapTask[] self = new LoadMapTask[1];
+		self[0] = loader.settled(() -> {
+			if (MapScriptScans.isDone(scans)) {
+				task.run();
+			}
+			else {
+				loader.retryLater(self[0]);
+			}
+		});
+		return self[0];
 	}
 
 	/**
@@ -160,13 +199,13 @@ final class MapViewerPrewarm {
 	 * their abilities, while the loading screen is still up: the first unit of a type parses its data and loads the
 	 * classes of its abilities, in the frame the script made it in. The abilities made here are thrown away.
 	 */
-	private static void queueSimulationTypes(final War3MapViewer viewer, final String script, final Set<War3ID> known,
-			final MapLoader loader) throws IOException {
+	private static void queueSimulationTypes(final War3MapViewer viewer, final MapScriptScans scans,
+			final Set<War3ID> known, final MapLoader loader) throws IOException {
 		final Set<War3ID> typeIds = new LinkedHashSet<>(known);
-		typeIds.addAll(createdTypes(SCRIPT_UNIT_CREATION, script));
+		typeIds.addAll(scans.units.join());
 		loader.addSlices(typeIds.iterator(), typeId -> loadSimulationType(viewer.simulation, typeId), () -> {
 		});
-		loader.addLoadTask(() -> queuePathingData(viewer, typeIds, script, loader));
+		loader.addLoadTask(() -> queuePathingData(viewer, typeIds, scans, loader));
 	}
 
 	/**
@@ -175,8 +214,8 @@ final class MapViewerPrewarm {
 	 * types it has as raw codes anywhere follow the ones it makes plainly: otherwise the first search of each size
 	 * finds the parts of the whole map in the step that orders it.
 	 */
-	private static void queuePathingData(final War3MapViewer viewer, final Set<War3ID> typeIds, final String script,
-			final MapLoader loader) throws IOException {
+	private static void queuePathingData(final War3MapViewer viewer, final Set<War3ID> typeIds,
+			final MapScriptScans scans, final MapLoader loader) throws IOException {
 		final Set<String> sizes = new LinkedHashSet<>();
 		final List<CUnitType> walkers = new ArrayList<>();
 		for (final War3ID typeId : typeIds) {
@@ -187,7 +226,7 @@ final class MapViewerPrewarm {
 			}
 		}
 		if (walkers.size() < 4) {
-			for (final War3ID typeId : rawCodes(script)) {
+			for (final War3ID typeId : scans.rawCodes.join()) {
 				if (typeIds.contains(typeId)) {
 					continue;
 				}
@@ -486,18 +525,18 @@ final class MapViewerPrewarm {
 	 * the script made it in.
 	 */
 	private static void queueScriptCreations(final War3MapViewer viewer, final String script,
-			final Set<War3ID> known, final RenderUnitTypeData types, final RenderItemTypeData items,
+			final MapScriptScans scans, final Set<War3ID> known, final RenderUnitTypeData types, final RenderItemTypeData items,
 			final MapLoader loader) throws IOException {
 		final long budget = scriptCreationBudget(GraphicsSettings.deviceMemoryMb(), Runtime.getRuntime().maxMemory());
 		if (budget <= 0) {
 			return;
 		}
-		final List<War3ID> units = createdTypes(SCRIPT_UNIT_CREATION, script);
+		final List<War3ID> units = new ArrayList<>(scans.units.join());
 		units.removeAll(known);
-		final List<War3ID> itemTypes = createdTypes(SCRIPT_ITEM_CREATION, script);
+		final List<War3ID> itemTypes = new ArrayList<>(scans.items.join());
 		itemTypes.removeAll(known);
-		final List<War3ID> destructables = createdTypes(SCRIPT_DESTRUCTABLE_CREATION, script);
-		final Map<War3ID, Set<Integer>> variations = createdDestructableVariations(script);
+		final List<War3ID> destructables = scans.destructables.join();
+		final Map<War3ID, Set<Integer>> variations = scans.variations.join();
 		final List<Candidate> created = new ArrayList<>();
 		final int count = Math.max(units.size(), Math.max(itemTypes.size(), destructables.size()));
 		for (int i = 0; i < count; i++) {
@@ -517,7 +556,7 @@ final class MapViewerPrewarm {
 		final Set<War3ID> made = new LinkedHashSet<>(units);
 		made.addAll(known);
 		final List<Candidate> named = new ArrayList<>();
-		for (final War3ID typeId : namedTypes(script)) {
+		for (final War3ID typeId : scans.rawCodes.join()) {
 			if (!made.contains(typeId) && (viewer.allObjectData.getUnits().get(typeId) != null)) {
 				named.add(new Candidate("u" + typeId, () -> load(viewer, types, null, typeId)));
 			}
@@ -565,9 +604,19 @@ final class MapViewerPrewarm {
 		loader.addSlices(learned.iterator(), candidate -> {
 			candidate.load.run();
 			loadedAhead[0]++;
-		}, () -> ((viewer.getTextureBytes() - baseline) + (loadedAhead[0] * MODEL_HEAP_BYTES)) < learnedBudget,
+		}, () -> ((viewer.getTextureBytes() - baseline) + (loadedAhead[0] * MODEL_HEAP_BYTES)) < learnedBudget
+				&& heapHasRoom(),
 				() -> loader.addNextTask(loader.settled(loader.modelTask(() -> loadScriptCreations(viewer, pending,
 						budget, baseline, started, loadedAhead[0], total, null, 0, seen, loader)))));
+	}
+
+	/**
+	 * Whether the heap is less than seven tenths full. A map that fills most of it by itself (tens of thousands of
+	 * doodads) gets no types loaded ahead: they load when the script first makes one, as the budget leaves them to.
+	 */
+	private static boolean heapHasRoom() {
+		final Runtime runtime = Runtime.getRuntime();
+		return (runtime.totalMemory() - runtime.freeMemory()) < ((runtime.maxMemory() / 10) * 7);
 	}
 
 	/** What the types earlier games of the map made may take: they are made in the game anyway, a little later. */
@@ -591,7 +640,8 @@ final class MapViewerPrewarm {
 		}
 		final long used = (now - baseline) + (loaded * MODEL_HEAP_BYTES);
 		final Candidate next = pending.peek();
-		if ((next == null) || (used >= budget) || ((next.bytes >= 0) && ((used + next.bytes) > budget))) {
+		if ((next == null) || (used >= budget) || ((next.bytes >= 0) && ((used + next.bytes) > budget))
+				|| !heapHasRoom()) {
 			Log.info("Script types loaded ahead: " + loaded + " of " + total + ", " + (used >> 20) + " of "
 					+ (budget >> 20) + " MB in " + ((System.nanoTime() - started) / 1_000_000) + " ms");
 			writeTypeCosts(seen);
@@ -774,7 +824,7 @@ final class MapViewerPrewarm {
 	 * the script hands to Preloader, and what the standard melee script gives the playing races.
 	 */
 	private static void queuePreloads(final War3MapViewer viewer, final War3MapW3i w3i, final String script,
-			final MapLoader loader) {
+			final MapScriptScans scans, final MapLoader loader) {
 		final Set<String> lists = new LinkedHashSet<>();
 		if (w3i.hasFlag(War3MapW3iFlags.MELEE_MAP) && script.contains("MeleeStartingUnits")) {
 			lists.add("scripts\\SharedMelee.pld");
@@ -785,26 +835,19 @@ final class MapViewerPrewarm {
 				}
 			}
 		}
-		final Matcher matcher = SCRIPT_PRELOADER.matcher(script);
-		while (matcher.find()) {
-			lists.add(unescape(matcher.group(1)));
-		}
+		lists.addAll(scans.preloaders.join());
 		final Set<String> files = new LinkedHashSet<>();
 		for (final String list : lists) {
 			if (viewer.dataSource.has(list)) {
 				addPreloadedFiles(files, readText(viewer.dataSource, list));
 			}
 		}
-		addPreloadedFiles(files, script);
-		final Matcher sky = SCRIPT_SKY_MODEL.matcher(script);
-		while (sky.find()) {
-			final String path = unescape(sky.group(1));
+		files.addAll(scans.preloadedFiles.join());
+		for (final String path : scans.skyModels.join()) {
 			loader.addLoadTask(loader.modelTask(() -> MapViewerEffects.loadModelMdx(viewer.dataSource, viewer, path,
 					viewer.mapPathSolver, viewer.solverParams)));
 		}
-		final Set<String> effects = new LinkedHashSet<>();
-		addMatches(effects, SCRIPT_EFFECT_MODEL, script);
-		for (final String path : effects) {
+		for (final String path : scans.effectModels.join()) {
 			loader.addLoadTask(loader.modelTask(() -> loadEffectModel(viewer, path)));
 		}
 		if (!files.isEmpty()) {
@@ -827,7 +870,7 @@ final class MapViewerPrewarm {
 		}
 	}
 
-	private static void addPreloadedFiles(final Set<String> files, final String script) {
+	static void addPreloadedFiles(final Set<String> files, final String script) {
 		final Matcher matcher = SCRIPT_PRELOAD.matcher(script);
 		while (matcher.find()) {
 			files.add(unescape(matcher.group(1)));
@@ -865,13 +908,9 @@ final class MapViewerPrewarm {
 	 * Starts the decoding of the ambience the map's script names, which it starts in the first game step; where a
 	 * sound is decoded on the calling thread, that decoding held up the first frame for a second.
 	 */
-	private static void prefetchAmbientSounds(final War3MapViewer viewer, final String script,
+	private static void prefetchAmbientSounds(final War3MapViewer viewer, final MapScriptScans scans,
 			final MapLoader loader) throws IOException {
-		final Matcher matcher = SCRIPT_LABEL_SOUND.matcher(script);
-		final Set<String> labels = new LinkedHashSet<>();
-		while (matcher.find()) {
-			labels.add(matcher.group(1));
-		}
+		final Set<String> labels = new LinkedHashSet<>(scans.ambientLabels.join());
 		loader.addSlices(labels.iterator(), label -> {
 			final UnitSound sound = viewer.uiSounds.getSound(label);
 			if (sound.getSoundCount() <= MAX_PREFETCHED_FILES) {
@@ -896,14 +935,10 @@ final class MapViewerPrewarm {
 	 * in the first game step, which decoded a campaign's dialogue there for half a second. What the script does not
 	 * make by the end of the sound preload is let go then.
 	 */
-	private static void prefetchScriptSounds(final War3MapViewer viewer, final String script,
+	private static void prefetchScriptSounds(final War3MapViewer viewer, final MapScriptScans scans,
 			final MapLoader loader) throws IOException {
-		final Matcher matcher = SCRIPT_FILE_SOUND.matcher(script);
 		// Each time a path is named, as two sounds of the same file each take a decoding.
-		final List<String> files = new ArrayList<>();
-		while (matcher.find()) {
-			files.add(unescape(matcher.group(1)));
-		}
+		final List<String> files = scans.soundFiles.join();
 		loader.addSlices(files.iterator(),
 				file -> UnitSound.prefetchSound(viewer.mapMpq, viewer.getScriptSoundFile(file)), () -> {
 				});
@@ -913,16 +948,15 @@ final class MapViewerPrewarm {
 	 * Finds the sound labels the script asks for, with the lengths of their files: the map script's own labels are in
 	 * a table read only for them, and the game's script makes sounds of labels too, all in the first step.
 	 */
-	private static void prepareScriptLabels(final War3MapViewer viewer, final String script) {
+	private static void prepareScriptLabels(final War3MapViewer viewer, final String script,
+			final MapScriptScans scans) {
 		if (script.isEmpty()) {
 			return;
 		}
-		final Matcher parameters = SCRIPT_LABEL_PARAMETERS.matcher(script);
-		while (parameters.find()) {
-			viewer.getSoundLabel(unescape(parameters.group(1)));
+		for (final String label : scans.labelParameters.join()) {
+			viewer.getSoundLabel(label);
 		}
-		final Set<String> labels = new LinkedHashSet<>();
-		addMatches(labels, SCRIPT_LABEL_CREATE, script);
+		final Set<String> labels = new LinkedHashSet<>(scans.labelCreations.join());
 		if (viewer.mapMpq.has(BLIZZARD_SCRIPT)) {
 			addMatches(labels, SCRIPT_LABEL_CREATE, readText(viewer.mapMpq, BLIZZARD_SCRIPT));
 		}

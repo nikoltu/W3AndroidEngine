@@ -364,7 +364,7 @@ class LanLauncherModelTest {
 		this.model = new LanLauncherModel(this.env);
 		final LanLauncherModel.CreateSettings lua = settings();
 		lua.issue = MapIssue.LUA;
-		assertEquals("This map uses a Lua script, which is not supported yet.", this.model.create(lua));
+		assertEquals("This map uses a Lua script, and the Lua library is not available on this system.", this.model.create(lua));
 		assertFalse(this.model.inSession());
 		assertNull(LanSessions.current());
 

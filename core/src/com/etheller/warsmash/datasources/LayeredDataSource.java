@@ -165,6 +165,11 @@ public final class LayeredDataSource implements DataSource {
 	}
 
 	@Override
+	public File fileOnDisk(final String filepath) {
+		return this.data.fileOnDisk(resolve(filepath));
+	}
+
+	@Override
 	public File getDirectory(final String filepath) throws IOException {
 		return this.data.getDirectory(filepath);
 	}

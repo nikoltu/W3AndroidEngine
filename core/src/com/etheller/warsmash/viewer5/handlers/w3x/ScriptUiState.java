@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import com.etheller.warsmash.parsers.fdf.frames.UIFrame;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.campaign.CheckpointSaves;
 import com.etheller.warsmash.viewer5.handlers.w3x.ui.CommandButtonEffect;
 
@@ -24,6 +25,7 @@ public final class ScriptUiState {
 	private int commandButtonEffectsVersion;
 	private final CheckpointSaves checkpointSaves = new CheckpointSaves();
 	private Runnable frameFlush;
+	private UIFrame worldFrame;
 
 	/** Called by the interface every frame, for the Frame API to lay out the frames a script changed. */
 	public void setFrameFlush(final Runnable frameFlush) {
@@ -34,6 +36,15 @@ public final class ScriptUiState {
 		if (this.frameFlush != null) {
 			this.frameFlush.run();
 		}
+	}
+
+	/** The script's handle of the world frame, whose rectangle the 3D world follows once the game's own frames are hidden. */
+	public UIFrame getWorldFrame() {
+		return this.worldFrame;
+	}
+
+	public void setWorldFrame(final UIFrame worldFrame) {
+		this.worldFrame = worldFrame;
 	}
 
 	public boolean isCursorEnabled() {

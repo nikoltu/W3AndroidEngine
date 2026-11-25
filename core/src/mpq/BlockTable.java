@@ -23,6 +23,10 @@ public class BlockTable {
 	public Entry lookupEntry(int entry){
 		return tableArray[entry];
 	}
+	
+	public int size(){
+		return tableArray.length;
+	}
 		
 	public static String flagsToString(int source){
 		return ( (source&FLAG_IMPLODE) != 0 ? "IMPLODE " : "" )+

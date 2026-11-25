@@ -4,7 +4,7 @@ import java.util.Objects;
 
 import com.etheller.interpreter.ast.execution.JassStackFrame;
 
-public class MethodJassValue extends CodeJassValue {
+public class MethodJassValue extends InstructionCodeJassValue {
 
 	private final JassValue thisStruct;
 

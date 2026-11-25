@@ -53,7 +53,10 @@ public class CAbilityEntangledMine extends CAbilityOverlayedMine implements CAbi
 				final int totalGoldAvailable = parentGoldMineAbility.getGold();
 				if (totalGoldAvailable > 0) {
 					final CPlayer player = game.getPlayer(unit.getPlayerIndex());
-					final int goldGained = Math.min(totalGoldAvailable, this.goldPerInterval);
+					int goldGained = Math.min(totalGoldAvailable, this.goldPerInterval);
+					if (player.getAiScript() != null) {
+						goldGained = player.getAiScript().getController().scaleHarvestedAmount(goldGained);
+					}
 					final int goldReceived = player.addHarvestedGold(game, goldGained);
 					parentGoldMineAbility.setGold(totalGoldAvailable - goldGained);
 					game.unitGainResourceEvent(unit, player.getId(), ResourceType.GOLD, goldReceived);

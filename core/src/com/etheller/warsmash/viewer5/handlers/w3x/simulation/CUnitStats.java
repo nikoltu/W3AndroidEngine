@@ -735,7 +735,10 @@ final class CUnitStats {
 					self.stats.baseMaximumLife);
 			final int newMaxLife = Math.round((self.stats.baseMaximumLife + totalNSMaxHPBuff) * self.handicap);
 			if (newMaxLife > self.stats.maximumLife) {
-				self.life += newMaxLife - self.stats.maximumLife;
+				// A corpse stays at 0 life; raising it would bring the unit back from the dead and kill it again.
+				if (!self.isDead()) {
+					self.life += newMaxLife - self.stats.maximumLife;
+				}
 				self.stats.maximumLife = newMaxLife;
 			} else {
 				self.stats.maximumLife = newMaxLife;
@@ -855,6 +858,10 @@ final class CUnitStats {
 	}
 
 	static void removeNonStackingDisplayBuff(final CUnit self, final CSimulation game, final String stackingKey, final CBuff buff) {
+		if (buff == null) {
+			// A channel that ends before its buff was made has nothing to take off.
+			return;
+		}
 		final List<CBuff> existingBuffs = self.nonStackingDisplayBuffs.get(stackingKey);
 		if (existingBuffs != null) {
 			existingBuffs.remove(buff);

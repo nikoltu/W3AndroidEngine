@@ -61,6 +61,10 @@ public abstract class CTimer {
 		return this.repeats;
 	}
 
+	public boolean isPaused() {
+		return this.paused;
+	}
+
 	public boolean isRunning() {
 		return this.running;
 	}

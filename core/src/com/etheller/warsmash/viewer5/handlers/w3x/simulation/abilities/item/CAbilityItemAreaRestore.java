@@ -68,7 +68,7 @@ public class CAbilityItemAreaRestore extends AbstractCAbilityItemInstantUse {
 			return false;
 		});
 		game.unitSoundEffectEvent(caster, getAlias());
-		caster.beginCooldown(game, getCode(), getCooldown());
+		caster.beginCooldown(game, getCooldownKey(), getCooldown());
 		return false;
 	}
 
@@ -78,7 +78,7 @@ public class CAbilityItemAreaRestore extends AbstractCAbilityItemInstantUse {
 		final float cooldownRemaining = getCooldownRemaining(game, unit);
 		if (cooldownRemaining > 0) {
 			receiver.cooldownNotYetReady(cooldownRemaining,
-					unit.getCooldownLengthDisplayTicks(game, getCode()) * WarsmashConstants.SIMULATION_STEP_TIME);
+					unit.getCooldownLengthDisplayTicks(game, getCooldownKey()) * WarsmashConstants.SIMULATION_STEP_TIME);
 		}
 		else {
 			receiver.useOk();

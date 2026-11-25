@@ -153,13 +153,13 @@ public class ScrollBarFrame extends AbstractRenderableFrame implements Clickable
 					: this.incButtonFrame.getAssignedHeight();
 			final float decButtonFrameHeight = this.decButtonFrame == null ? 0
 					: this.decButtonFrame.getAssignedHeight();
-			return this.renderBounds.height - this.thumbButtonFrame.getAssignedHeight() - incButtonFrameHeight
+			return this.renderBounds.height - thumbButtonHeight() - incButtonFrameHeight
 					- decButtonFrameHeight;
 		}
 		else {
 			final float incButtonFrameWidth = this.incButtonFrame == null ? 0 : this.incButtonFrame.getAssignedWidth();
 			final float decButtonFrameWidth = this.decButtonFrame == null ? 0 : this.decButtonFrame.getAssignedWidth();
-			return this.renderBounds.width - this.thumbButtonFrame.getAssignedWidth() - incButtonFrameWidth
+			return this.renderBounds.width - thumbButtonWidth() - incButtonFrameWidth
 					- decButtonFrameWidth;
 		}
 	}
@@ -175,7 +175,18 @@ public class ScrollBarFrame extends AbstractRenderableFrame implements Clickable
 		return this.scrollValuePercent;
 	}
 
+	private float thumbButtonHeight() {
+		return this.thumbButtonFrame == null ? 0 : this.thumbButtonFrame.getAssignedHeight();
+	}
+
+	private float thumbButtonWidth() {
+		return this.thumbButtonFrame == null ? 0 : this.thumbButtonFrame.getAssignedWidth();
+	}
+
 	public void updateThumbButtonPoint() {
+		if (this.thumbButtonFrame == null) {
+			return;
+		}
 		if (this.vertical) {
 			final float newYValue = (this.scrollValuePercent / (float) this.maxValue)
 					* getMaxThumbButtonTravelDistance();
@@ -274,14 +285,14 @@ public class ScrollBarFrame extends AbstractRenderableFrame implements Clickable
 		if (this.vertical) {
 			final float decFrameHeight = this.decButtonFrame == null ? 0 : this.decButtonFrame.getAssignedHeight();
 			newScrollValuePercent = Math.min(this.maxValue, Math.max(this.minValue, Math
-					.round(((y - this.renderBounds.y - decFrameHeight - (this.thumbButtonFrame.getAssignedHeight() / 2))
+					.round(((y - this.renderBounds.y - decFrameHeight - (thumbButtonHeight() / 2))
 							/ maxThumbButtonTravelDistance) * this.maxValue)));
 		}
 		else {
 			final float decFrameWidth = this.decButtonFrame == null ? 0 : this.decButtonFrame.getAssignedWidth();
 			newScrollValuePercent = Math.min(this.maxValue,
 					Math.max(this.minValue, Math.round(
-							((x - this.renderBounds.x - decFrameWidth - (this.thumbButtonFrame.getAssignedWidth() / 2))
+							((x - this.renderBounds.x - decFrameWidth - (thumbButtonWidth() / 2))
 									/ maxThumbButtonTravelDistance) * this.maxValue)));
 		}
 		if (newScrollValuePercent != this.scrollValuePercent) {
@@ -294,7 +305,8 @@ public class ScrollBarFrame extends AbstractRenderableFrame implements Clickable
 	@Override
 	public UIFrame touchUp(final float screenX, final float screenY, final int button) {
 		if (isInGrabArea(screenX, screenY)) {
-			UIFrame frameChildUnderMouse = this.thumbButtonFrame.touchUp(screenX, screenY, button);
+			UIFrame frameChildUnderMouse = this.thumbButtonFrame == null ? null
+					: this.thumbButtonFrame.touchUp(screenX, screenY, button);
 			if (frameChildUnderMouse != null) {
 				return frameChildUnderMouse;
 			}
@@ -326,7 +338,8 @@ public class ScrollBarFrame extends AbstractRenderableFrame implements Clickable
 		if (isInGrabArea(screenX, screenY)) {
 			this.pressX = screenX;
 			this.pressY = screenY;
-			UIFrame frameChildUnderMouse = this.thumbButtonFrame.touchDown(screenX, screenY, button);
+			UIFrame frameChildUnderMouse = this.thumbButtonFrame == null ? null
+					: this.thumbButtonFrame.touchDown(screenX, screenY, button);
 			if (frameChildUnderMouse != null) {
 				return frameChildUnderMouse;
 			}
@@ -356,7 +369,8 @@ public class ScrollBarFrame extends AbstractRenderableFrame implements Clickable
 	@Override
 	public UIFrame getFrameChildUnderMouse(final float screenX, final float screenY) {
 		if (isInGrabArea(screenX, screenY)) {
-			UIFrame frameChildUnderMouse = this.thumbButtonFrame.getFrameChildUnderMouse(screenX, screenY);
+			UIFrame frameChildUnderMouse = this.thumbButtonFrame == null ? null
+					: this.thumbButtonFrame.getFrameChildUnderMouse(screenX, screenY);
 			if (frameChildUnderMouse != null) {
 				return frameChildUnderMouse;
 			}

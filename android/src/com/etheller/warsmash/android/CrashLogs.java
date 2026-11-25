@@ -131,6 +131,7 @@ final class CrashLogs {
 			details.renderer = CrashReport.rendererFrom(details.log);
 			details.graphics = graphics(game);
 			details.map = map(game);
+			details.memory = memoryAtCrash(game);
 			final String name = CrashReport.fileName(details.time, ZoneId.systemDefault());
 			store(game, name, CrashReport.text(details, ZoneId.systemDefault()).getBytes(StandardCharsets.UTF_8));
 		}
@@ -216,6 +217,17 @@ final class CrashLogs {
 		catch (final RuntimeException e) {
 			return null;
 		}
+	}
+
+	/** The memory notes of this run with the state now; never fails, a game that ran out of memory has little room. */
+	private static String memoryAtCrash(final Context context) {
+		try {
+			MemoryState.note(context, "crash");
+		}
+		catch (final Throwable e) {
+			Log.w(TAG, "Unable to note the memory at the crash", e);
+		}
+		return MemoryState.recent(context);
 	}
 
 	private static String map(final AndroidLauncher game) {

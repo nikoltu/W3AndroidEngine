@@ -29,10 +29,21 @@ class MapStartIssueTest {
 	}
 
 	@Test
-	void aLuaMapIsRefusedWithItsIssue() throws Exception {
-		final MapIssueException refused = assertThrows(MapIssueException.class,
-				() -> MenuMapStart.requireJassScript(map("war3map.lua"), "Maps/Lua.w3x"));
-		assertEquals(MapIssue.LUA, refused.issue());
+	void aLuaMapIsNotRefused() throws Exception {
+		assertDoesNotThrow(() -> MenuMapStart.requireJassScript(map("war3map.lua"), "Maps/Lua.w3x"));
+	}
+
+	@Test
+	void aLuaMapIsRefusedWithItsIssueWhereTheLuaLibraryIsOff() throws Exception {
+		System.setProperty("warsmash.lua.disabled", "true");
+		try {
+			final MapIssueException refused = assertThrows(MapIssueException.class,
+					() -> MenuMapStart.requireJassScript(map("war3map.lua"), "Maps/Lua.w3x"));
+			assertEquals(MapIssue.LUA, refused.issue());
+		}
+		finally {
+			System.clearProperty("warsmash.lua.disabled");
+		}
 	}
 
 	@Test

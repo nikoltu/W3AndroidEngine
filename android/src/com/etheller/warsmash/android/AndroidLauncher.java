@@ -122,6 +122,7 @@ public class AndroidLauncher extends AndroidApplication {
 	private boolean fromLauncher;
 	private volatile boolean resultWritten;
 	private boolean initialized;
+	private boolean loadingNoted;
 	/** The game started from the launcher that is running, for the crash handler. */
 	private static volatile AndroidLauncher launched;
 	/** The game activity that is running by any start path, for the crash log. */
@@ -204,6 +205,7 @@ public class AndroidLauncher extends AndroidApplication {
 		// Every start path, also a map started from outside the launcher, leaves a crash log.
 		crashSource = this;
 		leaveCrashResult();
+		MemoryState.noteAsync(this, "game activity created");
 		ExitLogs.recordPreviousExit(this);
 		final File iniFile = new File(EngineResources.appFolder(this), INI_FILE_NAME);
 		if (!iniFile.isFile()) {
@@ -577,6 +579,7 @@ public class AndroidLauncher extends AndroidApplication {
 
 	@Override
 	protected void onPause() {
+		MemoryState.noteAsync(this, "game paused");
 		// The backend pauses only the music and sounds it made itself.
 		PreparedMusic.pauseAll();
 		PooledSounds.pauseAll();
@@ -603,10 +606,28 @@ public class AndroidLauncher extends AndroidApplication {
 		PooledSounds.resumeAll();
 	}
 
+	/** Notes the memory as a map starts and finishes loading, with the highest total in between. */
+	private void noteLoading(final boolean loading) {
+		if (loading) {
+			if (!this.loadingNoted) {
+				this.loadingNoted = true;
+				MemoryState.resetPeak();
+				MemoryState.noteAsync(this, "load start");
+			}
+			MemoryState.samplePeakAsync();
+		}
+		else if (this.loadingNoted) {
+			this.loadingNoted = false;
+			MemoryState.noteAsync(this, "load end (peak pss " + (MemoryState.peakPssKb() >> 10) + "MB)");
+		}
+	}
+
 	/** The screen stays on while a map loads, which can take minutes on a first run and draws no touch input. */
 	private void keepScreenOnWhileLoading() {
 		final WarsmashGdxMultiScreenGame current = this.game;
+		final boolean loading = (current == null) || current.isLoadingMap();
 		final boolean keep = this.replayScreenOn || ((current != null) && current.isLoadingMap());
+		noteLoading(loading);
 		if (keep != this.screenKeptOn) {
 			this.screenKeptOn = keep;
 			if (keep) {

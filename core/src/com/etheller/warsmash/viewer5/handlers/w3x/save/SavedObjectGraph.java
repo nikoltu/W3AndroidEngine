@@ -1857,6 +1857,9 @@ public final class SavedObjectGraph {
 				"com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.undead.dreadlord.CAbilityCarrionSwarmDummy");
 		FORMER_CLASS_NAMES.put("com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.test.CBehaviorCarrionSwarmDummy",
 				"com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.skills.undead.dreadlord.CBehaviorCarrionSwarmDummy");
+		// The function value of the JASS instructions was the one class CodeJassValue before code of other languages.
+		FORMER_CLASS_NAMES.put("com.etheller.interpreter.ast.value.CodeJassValue",
+				"com.etheller.interpreter.ast.value.InstructionCodeJassValue");
 	}
 
 	/** For tables that carry no format, as the saves this engine writes. */

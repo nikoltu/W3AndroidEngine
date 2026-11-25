@@ -33,6 +33,7 @@ import com.etheller.warsmash.networking.WarsmashClient;
 import com.etheller.warsmash.networking.WarsmashClientSendingOrderListener;
 import com.etheller.warsmash.networking.WarsmashClientWriter;
 import com.etheller.warsmash.parsers.jass.Jass2;
+import com.etheller.warsmash.parsers.lua.LuaMapScript;
 import com.etheller.warsmash.parsers.w3x.War3Map;
 import com.etheller.warsmash.parsers.w3x.objectdata.Warcraft3MapObjectData;
 import com.etheller.warsmash.parsers.w3x.w3i.War3MapW3i;
@@ -847,7 +848,7 @@ final class MenuMapStart {
 	}
 
 	static void requireJassScript(final War3Map map, final String mapFilename) throws IOException {
-		if (!map.hasJassScript()) {
+		if (!map.hasJassScript() && !(LuaMapScript.isEnabled() && map.hasLuaScript())) {
 			throw new MapIssueException(map.hasLuaScript() ? MapIssue.LUA : MapIssue.NO_SCRIPT, mapFilename);
 		}
 	}

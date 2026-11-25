@@ -98,6 +98,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.vision.CPla
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.vision.CUnitAttackVisionFogModifier;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.region.CRegion;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.region.CRegionManager;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.region.CRegionTriggerEnter;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.state.CUnitState;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.timers.CTimer;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.trigger.JassGameEventsWar3;
@@ -289,6 +290,7 @@ public class CUnit extends CWidget {
 	transient Set<CRegion> containingRegions = new LinkedHashSet<>();
 	transient Set<CRegion> priorContainingRegions = new LinkedHashSet<>();
 	transient boolean regionEventsDeferred;
+	transient boolean regionEventsLate;
 	transient float deadScriptLife = Float.NaN;
 	transient List<PendingRegionEvent> pendingRegionEvents;
 
@@ -767,7 +769,9 @@ public class CUnit extends CWidget {
 		final int oldMaximumLife = getMaximumLife();
 		final float oldLife = getLife();
 		setMaximumLife(this.stats.baseMaximumLife + hitPointBonus);
-		setLife(game, (oldLife * getMaximumLife()) / oldMaximumLife);
+		if (oldLife > 0) {
+			setLife(game, (oldLife * getMaximumLife()) / oldMaximumLife);
+		}
 	}
 
 	/**
@@ -1134,13 +1138,26 @@ public class CUnit extends CWidget {
 		CUnitPlacement.dispatchRegionEvent(this, regionManager, region, enter);
 	}
 
+	/** The enter events of a unit that is being created wait for the next tick, see {@code setLateCreationRegionEvents}. */
+	void setRegionEventsLate(final boolean late) {
+		this.regionEventsDeferred = late;
+		this.regionEventsLate = late;
+	}
+
 	static final class PendingRegionEvent {
 		final CRegion region;
 		final boolean enter;
+		/** The enter triggers the region had when the event was queued, or null to take the region's at delivery. */
+		final List<CRegionTriggerEnter> triggers;
 
 		PendingRegionEvent(final CRegion region, final boolean enter) {
+			this(region, enter, null);
+		}
+
+		PendingRegionEvent(final CRegion region, final boolean enter, final List<CRegionTriggerEnter> triggers) {
 			this.region = region;
 			this.enter = enter;
+			this.triggers = triggers;
 		}
 	}
 
@@ -2365,6 +2382,9 @@ public class CUnit extends CWidget {
 			// setting hidden to let things that refer to this before it gets garbage
 			// collected see it as basically worthless
 		}
+		// Marked before its auras are emptied: they take buffs off this unit one by one and must not put the next one's
+		// effect on a unit whose model is already gone.
+		this.removedFromGame = true;
 		// Its auras no longer tick, so nothing else would take their bonuses off the units around it.
 		for (final CAbility ability : new ArrayList<>(this.abilities)) {
 			if (!wasDead && (ability instanceof final CAbilityOverlayedMine overlayedMine)) {
@@ -2376,7 +2396,6 @@ public class CUnit extends CWidget {
 		}
 		killPathingInstance();
 		simulation.getWorldCollision().removeUnit(this);
-		this.removedFromGame = true;
 		this.unitAnimationListener = CUnitAnimationListener.NONE;
 		// Its listeners (the selection and info panel on the render side) must not keep it, nor it them.
 		this.stateListenersUpdates.clear();
@@ -2936,6 +2955,9 @@ public class CUnit extends CWidget {
 	}
 
 	public void beginCooldown(final CSimulation game, final War3ID abilityId, final float cooldownDuration) {
+		if (abilityId == null) {
+			return;
+		}
 		final int gameTurnTick = game.getGameTurnTick();
 		final boolean noCooldowns = game.getPlayer(this.playerIndex).hasCheat(CReleaseCheats.NO_COOLDOWNS);
 		this.rawcodeToCooldownExpireTime.put(abilityId.getValue(),
@@ -2944,7 +2966,11 @@ public class CUnit extends CWidget {
 		fireCooldownsChangedEvent();
 	}
 
+	/** A buff without an id (an ability whose data names no buff) has no cooldown. */
 	public int getCooldownRemainingTicks(final CSimulation game, final War3ID abilityId) {
+		if (abilityId == null) {
+			return 0;
+		}
 		final int expireTime = this.rawcodeToCooldownExpireTime.get(abilityId.getValue(), -1);
 		final int gameTurnTick = game.getGameTurnTick();
 		if ((expireTime == -1) || (expireTime <= gameTurnTick)) {
@@ -2954,6 +2980,9 @@ public class CUnit extends CWidget {
 	}
 
 	public int getCooldownLengthDisplayTicks(final CSimulation game, final War3ID abilityId) {
+		if (abilityId == null) {
+			return 0;
+		}
 		final int startTime = this.rawcodeToCooldownStartTime.get(abilityId.getValue(), -1);
 		final int expireTime = this.rawcodeToCooldownExpireTime.get(abilityId.getValue(), -1);
 		if ((startTime == -1) || (expireTime == -1)) {

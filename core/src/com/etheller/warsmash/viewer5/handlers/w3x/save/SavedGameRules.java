@@ -28,9 +28,11 @@ import com.etheller.interpreter.ast.function.UserJassFunction;
 import com.etheller.interpreter.ast.scope.GlobalScope;
 import com.etheller.interpreter.ast.scope.GlobalScopeAssignable;
 import com.etheller.interpreter.ast.value.CodeJassValue;
+import com.etheller.interpreter.ast.value.InstructionCodeJassValue;
 import com.etheller.interpreter.ast.value.JassType;
 import com.etheller.warsmash.parsers.jass.JassAIEnvironment;
 import com.etheller.warsmash.parsers.jass.ai.AIController;
+import com.etheller.warsmash.parsers.lua.LuaEnvironment;
 import com.etheller.warsmash.util.Log;
 import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.viewer5.handlers.w3x.War3MapViewer;
@@ -93,6 +95,10 @@ final class SavedGameRules implements SavedObjectGraph.Rules {
 		name(viewer.worldScene.audioContext, "audio:world");
 		name(viewer.getUiAudioContext(), "audio:ui");
 		name(this.simulation, "simulation");
+		final LuaEnvironment luaEnvironment = SavedGame.luaEnvironmentOf(viewer);
+		if (luaEnvironment != null) {
+			name(luaEnvironment, "luaEnvironment");
+		}
 		name(this.simulation.getPathingGrid(), "pathing");
 		name(this.simulation.getSimulationRenderController(), "renderController");
 		name(this.simulation.getQuestLog(), "questLog");
@@ -162,9 +168,9 @@ final class SavedGameRules implements SavedObjectGraph.Rules {
 			}
 			return null;
 		}
-		if (object.getClass() == CodeJassValue.class) {
+		if (object.getClass() == InstructionCodeJassValue.class) {
 			final Integer scope = literalCodes().get(object);
-			final Integer pointer = ((CodeJassValue) object).getUserFunctionInstructionPtr();
+			final Integer pointer = ((InstructionCodeJassValue) object).getUserFunctionInstructionPtr();
 			if ((scope != null) && (pointer != null) && (pointer >= 0)) {
 				return functionName(scope, "code:", pointer);
 			}
@@ -194,7 +200,7 @@ final class SavedGameRules implements SavedObjectGraph.Rules {
 					for (final JassInstruction instruction : this.scopes.get(i).getInstructions()) {
 						if (instruction instanceof PushLiteralInstruction) {
 							final Object literal = value.get(instruction);
-							if ((literal != null) && (literal.getClass() == CodeJassValue.class)
+							if ((literal != null) && (literal.getClass() == InstructionCodeJassValue.class)
 									&& !this.literalCodes.containsKey(literal)) {
 								this.literalCodes.put(literal, i);
 							}
@@ -235,7 +241,7 @@ final class SavedGameRules implements SavedObjectGraph.Rules {
 				throw new IllegalStateException("The loaded game has no script function " + function);
 			}
 			final int pointer = program.start(segment) + Integer.parseInt(function.substring(at + 1));
-			final Object resolved = code ? new CodeJassValue(pointer) : program.instructionAt(pointer);
+			final Object resolved = code ? new InstructionCodeJassValue(pointer) : program.instructionAt(pointer);
 			this.externalObjects.put(name, resolved);
 			return resolved;
 		}

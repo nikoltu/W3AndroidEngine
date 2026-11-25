@@ -411,7 +411,7 @@
     <string name="game_closed_line">Vuelve a iniciarlo; el último guardado automático está en Cargar partida.</string>
     <string name="game_not_started">No se pudo iniciar el juego.</string>
     <string name="game_map_unreadable">No se pudo leer el mapa.</string>
-    <string name="map_issue_lua">Este mapa usa un script de Lua, que aún no es compatible.</string>
+    <string name="map_issue_lua">Este mapa usa un script de Lua y la biblioteca de Lua no está disponible en este sistema.</string>
     <string name="map_issue_no_script">Este mapa no tiene script y no se puede jugar.</string>
     <string name="map_issue_protected">Este mapa está protegido y no se puede abrir.</string>
     <string name="map_issue_missing">El mapa no está en los datos del juego</string>
@@ -422,6 +422,11 @@
     <string name="game_cannot_load">No se puede cargar esta partida</string>
     <string name="game_delete_save">¿Eliminar la partida guardada \'%1$s\'?</string>
     <string name="game_import_map">Importar mapa…</string>
+    <string name="options_delete_imported">Mapas importados</string>
+    <string name="options_delete_imported_button">Eliminar todos</string>
+    <string name="game_delete_imported_none">No se importó ningún mapa.</string>
+    <string name="game_delete_imported_question">¿Eliminar los %1$d mapas importados? No se puede deshacer.</string>
+    <string name="game_delete_imported_done">Se eliminaron %1$d mapas importados.</string>
     <string name="game_import_title">Importar mapa</string>
     <string name="game_import_done">%1$s se añadió a los mapas personalizados.</string>
     <string name="game_import_not_map">%1$s no es un archivo de mapa. Elige un archivo que termine en .w3x o .w3m.</string>

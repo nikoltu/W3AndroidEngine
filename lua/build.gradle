@@ -1,0 +1,114 @@
+import org.gradle.internal.os.OperatingSystem
+
+[compileJava, compileTestJava]*.options*.encoding = 'UTF-8'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+sourceSets.main.java.srcDirs = [ "src/" ]
+sourceSets.test.java.srcDirs = [ "test/" ]
+
+dependencies {
+    testImplementation platform("org.junit:junit-bom:6.1.3")
+    testImplementation "org.junit.jupiter:junit-jupiter"
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+}
+
+// The native library: Android builds it through android/CMakeLists.txt; here it is built for the machine that runs
+// Gradle (the desktop client and the tests). Without a C compiler the task warns and the desktop has no Lua.
+def hostOs = OperatingSystem.current()
+def hostPlatform = hostOs.isWindows() ? "windows" : hostOs.isMacOsX() ? "macos" : "linux"
+def hostArch = System.getProperty("os.arch").toLowerCase()
+hostArch = (hostArch == "amd64" || hostArch == "x86_64") ? "x86_64" : (hostArch == "aarch64" || hostArch == "arm64") ? "arm64" : hostArch
+def libraryFileName = hostOs.isWindows() ? "warsmashlua.dll" : hostOs.isMacOsX() ? "libwarsmashlua.dylib" : "libwarsmashlua.so"
+def nativeOutDir = layout.buildDirectory.dir("natives/${hostPlatform}-${hostArch}")
+ext.nativeLibrary = nativeOutDir.get().file(libraryFileName).asFile
+def nativeSources = fileTree("native") { include "lua-5.3.6/*.c", "bridge/*.c", "libm/*.c" }
+
+def findCompiler = {
+    def candidates = []
+    def configured = findProperty("warsmash.cc") ?: System.getenv("CC")
+    if (configured) candidates << configured.toString()
+    candidates += hostOs.isMacOsX() ? ["cc", "clang"] : ["gcc", "cc", "clang"]
+    if (hostOs.isWindows()) {
+        candidates += ["C:/msys64/ucrt64/bin/gcc.exe", "C:/msys64/mingw64/bin/gcc.exe"]
+    }
+    candidates.find { candidate ->
+        try {
+            def process = new ProcessBuilder([candidate, "--version"]).redirectErrorStream(true).start()
+            process.inputStream.getText("UTF-8")
+            return process.waitFor() == 0
+        } catch (Exception e) {
+            return false
+        }
+    }
+}
+
+tasks.register("buildNativeDesktop") {
+    inputs.files(nativeSources)
+    inputs.files(fileTree("native") { include "lua-5.3.6/*.h", "libm/*.h" })
+    outputs.dir(nativeOutDir)
+    doLast {
+        def compiler = findCompiler()
+        def outDir = nativeOutDir.get().asFile
+        outDir.mkdirs()
+        if (compiler == null) {
+            logger.warn("No C compiler found (set -Pwarsmash.cc=<path> or CC): the desktop Lua library is not built")
+            return
+        }
+        def javaHome = System.getProperty("java.home")
+        def jniPlatform = hostOs.isWindows() ? "win32" : hostOs.isMacOsX() ? "darwin" : "linux"
+        def command = [compiler, "-shared", "-std=gnu99", "-O2", "-ffp-contract=off", "-fno-fast-math", "-fvisibility=hidden",
+                "-Inative/lua-5.3.6", "-I${javaHome}/include", "-I${javaHome}/include/${jniPlatform}",
+                "-o", new File(outDir, libraryFileName).absolutePath]
+        if (hostOs.isMacOsX()) {
+            command += ["-dynamiclib"]
+        } else {
+            command += ["-fPIC"]
+        }
+        if (hostOs.isWindows()) {
+            command += ["-static-libgcc"]
+        }
+        command += nativeSources.files.collect { it.absolutePath }.sort()
+        if (!hostOs.isWindows() && !hostOs.isMacOsX()) {
+            command += ["-lm"]
+        }
+        def builder = new ProcessBuilder(command*.toString()).directory(projectDir).redirectErrorStream(true)
+        def compilerFile = new File(compiler)
+        if (compilerFile.parentFile != null) {
+            // a MinGW compiler finds its own tools and libraries through the PATH
+            builder.environment().put("PATH", compilerFile.parentFile.absolutePath + File.pathSeparator + System.getenv("PATH"))
+        }
+        def process = builder.start()
+        def output = process.inputStream.getText("UTF-8")
+        if (process.waitFor() != 0) {
+            throw new GradleException("The Lua library did not compile:\n" + output)
+        }
+    }
+}
+
+// The desktop client puts this jar on its run-time class path; the loader extracts the library from it.
+tasks.register("nativesJar", Jar) {
+    dependsOn "buildNativeDesktop"
+    archiveClassifier = "natives"
+    from(nativeOutDir) { into "natives/${hostPlatform}-${hostArch}" }
+}
+
+configurations.create("desktopNatives")
+artifacts.add("desktopNatives", tasks.named("nativesJar"))
+
+test {
+    useJUnitPlatform()
+    dependsOn "buildNativeDesktop"
+    systemProperty "warsmash.lua.native", nativeOutDir.get().file(libraryFileName).asFile.absolutePath
+    // Test inputs that are not in the repository (the official Lua test suite, the maps' scripts) come from the environment.
+    systemProperty "warsmash.lua.tests", System.getenv("WARSMASH_LUA_TESTS") ?: ""
+    systemProperty "warsmash.lua.maps", System.getenv("WARSMASH_LUA_MAPS") ?: ""
+    testLogging { events "failed", "skipped"; exceptionFormat "full"; showStandardStreams = true }
+}
+
+eclipse.project {
+    name = appName + "-lua"
+}

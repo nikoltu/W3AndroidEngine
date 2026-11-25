@@ -245,6 +245,12 @@ public class FolderDataSource implements DataSource {
 	}
 
 	@Override
+	public File fileOnDisk(final String filepath) {
+		final String storedPath = findStoredPath(filepath);
+		return storedPath == null ? null : this.folderPath.resolve(storedPath).toFile();
+	}
+
+	@Override
 	public File getFile(String filepath) throws IOException {
 		final String storedPath = findStoredPath(filepath);
 		if (storedPath == null) {

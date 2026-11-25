@@ -11,6 +11,8 @@ import java.util.regex.Pattern;
 import com.etheller.warsmash.units.DataTable;
 import com.etheller.warsmash.units.Element;
 
+import mpq.MPQArchive;
+
 /**
  * The language the game text and speech are read in. A game's data holds its language files in a locale layer
  * ("war3.w3mod\_locales\enus.w3mod" of the newer installs, "enus-war3local.mpq" of the 1.30 ones, a "_locales" folder
@@ -50,6 +52,42 @@ public final class GameLanguage {
 	/** Notes the language a game data configuration is read in: the chosen one, else the one its data is made for. */
 	public static void useInGame(final DataTable ini) {
 		gameLanguage = effective(ini);
+		MPQArchive.setPreferredLocale(archiveLocale(gameLanguage));
+	}
+
+	/**
+	 * The locale id the original's archives store a file for a language under (the Windows language ids); the one of
+	 * English when the code is none the game has, as in the original, whose clients are a few locales.
+	 */
+	public static int archiveLocale(final String code) {
+		switch (canonical(code)) {
+		case "deDE":
+			return 0x407;
+		case "esES":
+			return 0x40A;
+		case "esMX":
+			return 0x80A;
+		case "frFR":
+			return 0x40C;
+		case "itIT":
+			return 0x410;
+		case "plPL":
+			return 0x415;
+		case "ptBR":
+			return 0x416;
+		case "ruRU":
+			return 0x419;
+		case "koKR":
+			return 0x412;
+		case "zhTW":
+			return 0x404;
+		case "zhCN":
+			return 0x804;
+		case "jaJP":
+			return 0x411;
+		default:
+			return 0x409;
+		}
 	}
 
 	/** The language a configuration is read in: the chosen one, else the one its data is made for; empty for none. */

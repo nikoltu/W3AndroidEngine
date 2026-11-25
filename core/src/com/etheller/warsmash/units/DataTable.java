@@ -12,6 +12,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -20,6 +21,9 @@ import com.etheller.warsmash.util.StringBundle;
 
 public class DataTable implements ObjectData {
 	public static final boolean DEBUG = false;
+
+	private static final Set<String> ACCUMULATED_LIST_FIELDS = new HashSet<>(
+			Arrays.asList("researches", "trains", "builds", "sellunits", "sellitems", "makeitems", "upgrade", "requires"));
 
 	Map<StringKey, Element> dataTable = new LinkedHashMap<>();
 
@@ -89,6 +93,7 @@ public class DataTable implements ObjectData {
 		String input = "";
 		Element currentUnit = null;
 		final boolean first = true;
+		final Set<String> listFieldsRead = new HashSet<>();
 		while ((input = reader.readLine()) != null) {
 			if (DEBUG) {
 				Log.info(input);
@@ -142,6 +147,19 @@ public class DataTable implements ObjectData {
 						Log.info("null for " + input);
 					}
 					values.add(builder.toString().trim());
+				}
+				if (ACCUMULATED_LIST_FIELDS.contains(fieldName.trim().toLowerCase(Locale.ROOT))
+						&& !listFieldsRead.add(currentUnit.getId() + "=" + fieldName.trim().toLowerCase(Locale.ROOT))) {
+					// A list given on two lines of one section is one list (the Temple of the Damned has its
+					// researches on two Researches lines).
+					final List<String> merged = new ArrayList<>(currentUnit.getFieldAsList(fieldName.trim()));
+					for (final String value : values) {
+						if (!merged.contains(value)) {
+							merged.add(value);
+						}
+					}
+					values.clear();
+					values.addAll(merged);
 				}
 				currentUnit.setField(fieldName, values);
 			}

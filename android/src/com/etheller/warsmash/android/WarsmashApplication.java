@@ -4,6 +4,7 @@ import java.security.MessageDigest;
 import java.util.Locale;
 
 import android.app.Application;
+import android.content.ComponentCallbacks2;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
@@ -24,6 +25,7 @@ public class WarsmashApplication extends Application {
 	@Override
 	public void onCreate() {
 		super.onCreate();
+		PrefsRepair.run(this);
 		signer = signingCertificateSha256();
 		BuildInfo.setSigningCertificate(signer);
 		ProfileStorageAndroid.init(this);
@@ -38,6 +40,25 @@ public class WarsmashApplication extends Application {
 			}
 			return arguments.length == 0 ? words.getString(id) : words.getString(id, arguments);
 		});
+	}
+
+	/** At the levels where the system takes cached processes (the app is hidden) or runs low, the caches go. */
+	@Override
+	public void onTrimMemory(final int level) {
+		super.onTrimMemory(level);
+		if (level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN || level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW
+				|| level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL) {
+			MemoryState.release(this, "trim " + MemoryState.levelName(level));
+		}
+		else {
+			MemoryState.noteAsync(this, "trim " + MemoryState.levelName(level));
+		}
+	}
+
+	@Override
+	public void onLowMemory() {
+		super.onLowMemory();
+		MemoryState.release(this, "low memory");
 	}
 
 	static void useLanguageResources(final Resources resources) {

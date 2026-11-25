@@ -25,6 +25,7 @@ import com.etheller.interpreter.ast.execution.instruction.JassInstruction;
 import com.etheller.interpreter.ast.scope.GlobalScope;
 import com.etheller.interpreter.ast.value.BooleanJassValue;
 import com.etheller.interpreter.ast.value.CodeJassValue;
+import com.etheller.interpreter.ast.value.InstructionCodeJassValue;
 import com.etheller.interpreter.ast.value.HandleJassValue;
 import com.etheller.interpreter.ast.value.IntegerJassValue;
 import com.etheller.interpreter.ast.value.JassType;
@@ -223,7 +224,9 @@ final class SavedScriptPositions {
 			}
 			else if (value instanceof CodeJassValue) {
 				final Integer pointer = ((CodeJassValue) value).getUserFunctionInstructionPtr();
-				out.append(value.getClass().getName()).append('(');
+				// The class was named CodeJassValue before code of other languages existed; saved names hash this text.
+				out.append(value.getClass() == InstructionCodeJassValue.class ? CodeJassValue.class.getName()
+						: value.getClass().getName()).append('(');
 				appendPointer(out, segment, pointer == null ? -1 : pointer);
 				out.append(')');
 			}
@@ -648,7 +651,7 @@ final class SavedScriptPositions {
 
 	private static void setCodePointer(final CodeJassValue code, final int pointer) {
 		try {
-			final Field field = CodeJassValue.class.getDeclaredField("userFunctionInstructionPtr");
+			final Field field = InstructionCodeJassValue.class.getDeclaredField("userFunctionInstructionPtr");
 			field.setAccessible(true);
 			field.set(code, pointer);
 		}

@@ -360,17 +360,29 @@ public class CWorldCollision {
 	}
 
 	public void enumDestructablesInRect(final Rectangle rect, final CDestructableEnumFunction callback) {
+		// The ones in the rect are taken first: a callback that makes new destructables there (a script that
+		// swaps every tree for another) must not meet them in the same enumeration. One a callback removed
+		// before its turn is not visited (measured).
+		final List<CDestructable> found = new ArrayList<>();
 		final Set<Object> seen = acquireOtherEnumSet();
 		try {
 			this.destructablesForEnum.intersect(rect, (dest) -> {
-				if (!seen.add(dest)) {
-					return false;
+				if (seen.add(dest)) {
+					found.add(dest);
 				}
-				return callback.call(dest);
+				return false;
 			});
 		}
 		finally {
 			this.otherEnumSetDepth--;
+		}
+		for (final CDestructable dest : found) {
+			if (dest.isRemovedFromGame() || dest.isRemovalQueued()) {
+				continue;
+			}
+			if (callback.call(dest)) {
+				return;
+			}
 		}
 	}
 

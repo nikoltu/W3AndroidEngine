@@ -487,7 +487,8 @@ public class Terrain implements GroundShading {
 		this.softwareGroundMesh = new SoftwareGroundMesh(this.groundHeights, this.groundCornerHeights,
 				this.centerOffset, width, height);
 		this.softwareWaterAndGroundMesh = new SoftwareWaterAndGroundMesh(this.waterHeightOffset,
-				this.groundCornerHeights, this.waterHeights, this.waterExistsData, this.centerOffset, width, height);
+				this.groundCornerHeights, this.waterHeights, this.waterExistsData, this.centerOffset, width, height,
+				this.softwareGroundMesh.indices);
 
 		this.testArrayBuffer = gl.glGenBuffer();
 		gl.glBindBuffer(GL30.GL_ARRAY_BUFFER, this.testArrayBuffer);
@@ -744,7 +745,7 @@ public class Terrain implements GroundShading {
 				getTextureVariations(i, j, this.groundTextureList, ((j * (this.columns - 1)) + i) * 4);
 
 				if (this.corners[i][j].cliff || this.corners[i][j].romp) {
-					if (isCornerRampEntrance(i, j)) {
+					if (isCornerRampEntrance(i, j) || this.corners[i][j].openCliff) {
 						continue;
 					}
 					this.groundTextureList[(((j * (this.columns - 1)) + i) * 4) + 3] |= 0b1000000000000000;
@@ -1852,9 +1853,10 @@ public class Terrain implements GroundShading {
 
 		private SoftwareWaterAndGroundMesh(final float waterHeightOffset, final float[] groundCornerHeights,
 				final float[] waterHeights, final byte[] waterExistsData, final float[] centerOffset, final int columns,
-				final int rows) {
+				final int rows, final int[] groundIndices) {
 			this.vertices = new float[(columns - 1) * (rows - 1) * Shapes.INSTANCE.quadVertices.length * 3];
-			this.indices = new int[(columns - 1) * (rows - 1) * Shapes.INSTANCE.quadIndices.length * 3];
+			// the triangles are those of the ground mesh, which never changes them
+			this.indices = groundIndices;
 			for (int y = 0; y < (rows - 1); y++) {
 				for (int x = 0; x < (columns - 1); x++) {
 					final int instanceId = (y * (columns - 1)) + x;
@@ -1874,16 +1876,6 @@ public class Terrain implements GroundShading {
 						this.vertices[(instanceId * 4 * 3) + (vertexId * 3) + 1] = ((vPositionY + y) * 128f)
 								+ centerOffset[1];
 						this.vertices[(instanceId * 4 * 3) + (vertexId * 3) + 2] = height * 128f;
-					}
-					for (int triangle = 0; triangle < Shapes.INSTANCE.quadIndices.length; triangle++) {
-						for (int vertexId = 0; vertexId < Shapes.INSTANCE.quadIndices[triangle].length; vertexId++) {
-							final int vertexIndex = Shapes.INSTANCE.quadIndices[triangle][vertexId];
-							final int indexValue = vertexIndex + (instanceId * 4);
-							if ((indexValue * 3) >= this.vertices.length) {
-								throw new IllegalStateException();
-							}
-							this.indices[(instanceId * 2 * 3) + (triangle * 3) + vertexId] = indexValue;
-						}
 					}
 				}
 			}

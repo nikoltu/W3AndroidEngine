@@ -11,6 +11,7 @@ public class PopupMenuFrame extends GlueTextButtonFrame {
 	private UIFrame popupArrowFrame;
 	private UIFrame popupMenuFrame;
 	private MenuClickListener menuClickListener;
+	private int selectedIndex;
 
 	public PopupMenuFrame(final String name, final UIFrame parent) {
 		super(name, parent);
@@ -18,14 +19,52 @@ public class PopupMenuFrame extends GlueTextButtonFrame {
 			@Override
 			public void run() {
 				if (PopupMenuFrame.this.popupMenuFrame != null) {
-					PopupMenuFrame.this.popupMenuFrame.setVisible(!PopupMenuFrame.this.popupMenuFrame.isVisible());
+					final boolean open = !PopupMenuFrame.this.popupMenuFrame.isVisible();
+					PopupMenuFrame.this.popupMenuFrame.setVisible(open);
+					if (open) {
+						bringListToFront();
+					}
 				}
 			}
 		});
 	}
 
+	/** The open list is drawn and hit above the frames that were added to the root after it. */
+	private void bringListToFront() {
+		UIFrame root = this;
+		while (root.getParent() != null) {
+			root = root.getParent();
+		}
+		if ((root instanceof AbstractUIFrame) && ((AbstractUIFrame) root).getChildFrames().contains(this.popupMenuFrame)) {
+			((AbstractUIFrame) root).remove(this.popupMenuFrame);
+			((AbstractUIFrame) root).add(this.popupMenuFrame);
+		}
+	}
+
 	public UIFrame getPopupTitleFrame() {
 		return getButtonText();
+	}
+
+	/** The item the title shows; the title takes the item's text, as the original's popup menus do. */
+	public void setSelectedIndex(final GameUI gameUI, final int index) {
+		if (!(this.popupMenuFrame instanceof MenuFrame)) {
+			return;
+		}
+		final MenuFrame menu = (MenuFrame) this.popupMenuFrame;
+		if ((index < 0) || (index >= menu.getMenuItemCount())) {
+			return;
+		}
+		this.selectedIndex = index;
+		final UIFrame title = getPopupTitleFrame();
+		final UIFrame text = title instanceof GlueTextButtonFrame ? ((GlueTextButtonFrame) title).getButtonText()
+				: title;
+		if (text instanceof StringFrame) {
+			gameUI.setText((StringFrame) text, menu.getMenuItem(index).getText());
+		}
+	}
+
+	public int getSelectedIndex() {
+		return this.selectedIndex;
 	}
 
 	public void setPopupArrowFrame(final UIFrame popupArrowFrame) {

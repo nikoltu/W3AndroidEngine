@@ -160,7 +160,7 @@ public class MdxComplexInstance extends ModelInstance {
 		// A shared typed array for all world matrices of the internal nodes.
 		this.worldMatrices = ((List<Matrix4>) sharedNodeData[1]).toArray(new Matrix4[0]);
 		// only the bones are drawn with, and they come first among the nodes
-		this.worldMatricesCopyArray = new float[16 * model.bones.size()];
+		this.worldMatricesCopyArray = null;
 
 		// And now initialize all of the nodes and objects
 		for (final Bone bone : model.bones) {
@@ -636,9 +636,17 @@ public class MdxComplexInstance extends ModelInstance {
 		return ((texels + BoneAtlas.WIDTH - 1) / BoneAtlas.WIDTH) * BoneAtlas.WIDTH;
 	}
 
+	/** Made when the instance is first drawn: most of a big map's doodads are never in view. */
+	private float[] worldMatricesCopy() {
+		if (this.worldMatricesCopyArray == null) {
+			this.worldMatricesCopyArray = new float[16 * ((MdxModel) this.model).bones.size()];
+		}
+		return this.worldMatricesCopyArray;
+	}
+
 	public void updateBoneTexture() {
 		if (this.hasBones) {
-			final float[] copy = this.worldMatricesCopyArray;
+			final float[] copy = worldMatricesCopy();
 			// Only the bones are drawn with (they come first among the nodes); the textures hold no more of them.
 			for (int i = 0, l = ((MdxModel) this.model).bones.size(); i < l; i++) {
 				final float[] val = this.worldMatrices[i].val;
@@ -669,7 +677,7 @@ public class MdxComplexInstance extends ModelInstance {
 		if (this.hasBones) {
 			this.packedAtlas = atlas;
 			this.packedStamp = atlas.getStamp();
-			this.packedBase = atlas.add(this.worldMatricesCopyArray, ((MdxModel) this.model).bones.size() * 16);
+			this.packedBase = atlas.add(worldMatricesCopy(), ((MdxModel) this.model).bones.size() * 16);
 		}
 	}
 
@@ -717,7 +725,7 @@ public class MdxComplexInstance extends ModelInstance {
 			if (this.boneTextureStale) {
 				final int bones = ((MdxModel) this.model).bones.size();
 				final FloatBuffer upload = boneUploadBuffer(boneTextureTexels(bones) * 4);
-				upload.put(this.worldMatricesCopyArray, 0, bones * 16);
+				upload.put(worldMatricesCopy(), 0, bones * 16);
 				while (upload.hasRemaining()) {
 					upload.put(0f);
 				}
@@ -1146,7 +1154,7 @@ public class MdxComplexInstance extends ModelInstance {
 				if ((this.blendTime > 0) && (lastSequence != -1)) {
 					if ((this.blendTimeRemaining <= 0) && (this.counter > 0)) {
 						this.blendTimeRemaining = this.blendTime;
-						for (int i = 0, l = this.sortedNodes.length; i < l; i++) {
+						for (int i = 0, l = this.sortedNodes == null ? 0 : this.sortedNodes.length; i < l; i++) {
 							final SkeletalNode node = this.sortedNodes[i];
 							node.beginBlending();
 						}
@@ -1189,6 +1197,7 @@ public class MdxComplexInstance extends ModelInstance {
 	 * Get an attachment node.
 	 */
 	public MdxNode getAttachment(final int id) {
+		loadNow();
 		final MdxModel model = (MdxModel) this.model;
 		final Attachment attachment = model.attachments.get(id);
 
@@ -1241,6 +1250,16 @@ public class MdxComplexInstance extends ModelInstance {
 	}
 
 	/**
+	 * An instance that was never in view is loaded and put in its place before a ray is tried on it, as one that has
+	 * been seen would be.
+	 */
+	private void loadForIntersection() {
+		if (loadNow() && (this.scene != null)) {
+			update(0f, this.scene);
+		}
+	}
+
+	/**
 	 * Intersects a world ray with the model's CollisionShapes. Only ever call this
 	 * function on the Gdx thread because it uses static variables to hold state
 	 * while processing.
@@ -1248,6 +1267,11 @@ public class MdxComplexInstance extends ModelInstance {
 	 * @param ray
 	 */
 	public boolean intersectRayWithCollisionSimple(final Ray ray, final Vector3 intersection) {
+		loadForIntersection();
+		// A model that finishes loading late loads its instances afterwards; until then they have no nodes.
+		if (this.nodes == null) {
+			return false;
+		}
 		final MdxModel mdxModel = (MdxModel) this.model;
 		final List<CollisionShape> collisionShapes = mdxModel.collisionShapes;
 		boolean intersected = false;
@@ -1301,6 +1325,19 @@ public class MdxComplexInstance extends ModelInstance {
 	 */
 	public boolean intersectRayWithCollision(final Ray ray, final Vector3 intersection, final boolean alwaysUseMesh,
 			final boolean onlyUseMesh) {
+		if (onlyUseMesh && isLazyLoad() && this.model.ok && ((MdxModel) this.model).isMeshAlphaStatic()) {
+			// The triangles are tried in the instance's own space and none of them depends on the animation: one that
+			// was never in view needs its place, not its nodes.
+			if (this.dirty) {
+				recalculateTransformation();
+			}
+		}
+		else {
+			loadForIntersection();
+			if (this.nodes == null) {
+				return false;
+			}
+		}
 		final MdxModel mdxModel = (MdxModel) this.model;
 		final List<CollisionShape> collisionShapes = mdxModel.collisionShapes;
 		if (!onlyUseMesh) {
@@ -1388,7 +1425,7 @@ public class MdxComplexInstance extends ModelInstance {
 	}
 
 	public MdxNode inefficientlyGetNodeByNameSearch(final String name) {
-		if (this.model.ok) {
+		if (this.model.ok && (this.nodes != null)) {
 			for (final MdxNode node : this.nodes) {
 				if ((node.name != null) && node.name.equalsIgnoreCase(name)) {
 					return node;

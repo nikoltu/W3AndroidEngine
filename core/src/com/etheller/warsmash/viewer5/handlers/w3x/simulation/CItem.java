@@ -21,6 +21,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.AbilityTargetC
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.CommandStringErrorKeys;
 
 public class CItem extends CWidget {
+	private java.util.Map<War3ID, Integer> carriedCooldownEnds;
 	private final static int COLLISION_SIZE = 16;
 	private War3ID typeId;
 	private CItemType itemType;
@@ -228,6 +229,26 @@ public class CItem extends CWidget {
 
 	public int getCharges() {
 		return this.charges;
+	}
+
+	/**
+	 * Measured on 1.29: the cooldown of an item without charges stays with the item, so whoever picks it up next
+	 * finds it still running; a charged item's cooldown stays with the unit that used it.
+	 */
+	public void carryCooldown(final War3ID abilityCode, final int endTick) {
+		if (this.carriedCooldownEnds == null) {
+			this.carriedCooldownEnds = new java.util.HashMap<>();
+		}
+		this.carriedCooldownEnds.put(abilityCode, endTick);
+	}
+
+	public java.util.Map<War3ID, Integer> getCarriedCooldownEnds() {
+		return (this.carriedCooldownEnds == null) ? java.util.Collections.<War3ID, Integer>emptyMap()
+				: this.carriedCooldownEnds;
+	}
+
+	public void clearCarriedCooldowns() {
+		this.carriedCooldownEnds = null;
 	}
 
 	public void setCharges(final int charges) {

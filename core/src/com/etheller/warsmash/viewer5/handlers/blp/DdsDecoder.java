@@ -8,8 +8,9 @@ import java.util.Arrays;
 import com.etheller.warsmash.util.OffHeapBlock;
 
 /**
- * Decodes a block compressed DDS image (DXT1, DXT3, DXT5, ATI2) into RGBA bytes, without depending on java.awt or
- * javax.imageio: the largest stored mip level within a size limit, and the smaller stored levels below it when asked.
+ * Decodes a DDS image (DXT1, DXT3, DXT5, ATI2, and BC1 to BC3 or four byte pixels under a DX10 header) into RGBA
+ * bytes, without depending on java.awt or javax.imageio: the largest stored mip level within a size limit, and the
+ * smaller stored levels below it when asked.
  */
 public final class DdsDecoder {
 	private static final int MAGIC = 0x20534444; // "DDS "
@@ -20,6 +21,11 @@ public final class DdsDecoder {
 	static final int FOURCC_DXT3 = fourCC("DXT3");
 	static final int FOURCC_DXT5 = fourCC("DXT5");
 	private static final int FOURCC_ATI2 = fourCC("ATI2");
+	private static final int FOURCC_DX10 = fourCC("DX10");
+	private static final int DX10_HEADER_SIZE = 20;
+	/** Formats a DX10 header names that no legacy four character code does; never found in a file as a code. */
+	private static final int FORMAT_RGBA = fourCC("RGBA");
+	private static final int FORMAT_BGRA = fourCC("BGRA");
 
 	private final MipLevels levels;
 
@@ -86,13 +92,12 @@ public final class DdsDecoder {
 		final int maxLevels = layout.levels;
 		final long[] offsets = layout.offsets;
 		final int first = layout.first;
-		final int blockSize = layout.blockSize;
 		long offset = offsets[first];
 		final MipLevels levels = new MipLevels();
 		for (int level = first; level < maxLevels; level++) {
 			final int levelWidth = MipLevels.size(width, level);
 			final int levelHeight = MipLevels.size(height, level);
-			final long size = levelBytes(levelWidth, levelHeight, blockSize);
+			final long size = levelBytes(levelWidth, levelHeight, fourCC);
 			if ((level > first) && ((offset + size) > data.limit())) {
 				break;
 			}
@@ -134,6 +139,8 @@ public final class DdsDecoder {
 		int height;
 		int fourCC;
 		int blockSize;
+		/** Where the first level starts: after the header, and the extra header of a DX10 file. */
+		int dataOffset = HEADER_SIZE;
 		/** How many levels the file holds, whole or not. */
 		int levels;
 		/** Where level n starts; the last entry is the end of the last level. */
@@ -155,22 +162,29 @@ public final class DdsDecoder {
 			if ((pixelFormatFlags & DDPF_FOURCC) == 0) {
 				throw new IOException("Unsupported uncompressed DDS");
 			}
+			if (layout.fourCC == FOURCC_DX10) {
+				if (data.remaining() < (HEADER_SIZE + DX10_HEADER_SIZE)) {
+					throw new IOException("DDS file ends inside its DX10 header");
+				}
+				layout.fourCC = formatOfDxgi(data.getInt(HEADER_SIZE));
+				layout.dataOffset = HEADER_SIZE + DX10_HEADER_SIZE;
+			}
 			if ((layout.width <= 0) || (layout.height <= 0) || (((long) layout.width * layout.height) > (1 << 26))) {
 				throw new IOException("Bad DDS dimensions " + layout.width + "x" + layout.height);
 			}
 			final int fourCC = layout.fourCC;
 			if ((fourCC != FOURCC_DXT1) && (fourCC != FOURCC_DXT3) && (fourCC != FOURCC_DXT5)
-					&& (fourCC != FOURCC_ATI2)) {
+					&& (fourCC != FOURCC_ATI2) && !isRaw(fourCC)) {
 				throw new IOException("Unsupported DDS format: " + Integer.toHexString(fourCC));
 			}
-			layout.blockSize = fourCC == FOURCC_DXT1 ? 8 : 16;
+			layout.blockSize = blockSize(fourCC);
 			// A stored chain may stop early, or claim levels the file is too short to hold; only whole levels count.
 			layout.levels = Math.min(storedLevels, MipLevels.levelCount(layout.width, layout.height));
 			layout.offsets = new long[layout.levels + 1];
-			layout.offsets[0] = HEADER_SIZE;
+			layout.offsets[0] = layout.dataOffset;
 			for (int level = 0; level < layout.levels; level++) {
 				layout.offsets[level + 1] = layout.offsets[level] + levelBytes(MipLevels.size(layout.width, level),
-						MipLevels.size(layout.height, level), layout.blockSize);
+						MipLevels.size(layout.height, level), fourCC);
 			}
 			int first = MipLevels.firstWithin(layout.width, layout.height, maxSize, layout.levels);
 			while ((first > 0) && (layout.offsets[first + 1] > data.limit())) {
@@ -198,10 +212,10 @@ public final class DdsDecoder {
 		catch (final IOException e) {
 			return null;
 		}
-		if (layout.offsets[layout.first + 1] > data.limit()) {
+		final int fourCC = layout.fourCC;
+		if (isRaw(fourCC) || (layout.offsets[layout.first + 1] > data.limit())) {
 			return null;
 		}
-		final int fourCC = layout.fourCC;
 		final CompressedMips levels = new CompressedMips(fourCC == FOURCC_DXT1 ? CompressedMips.FORMAT_RGBA_S3TC_DXT1
 				: fourCC == FOURCC_DXT3 ? CompressedMips.FORMAT_RGBA_S3TC_DXT3
 						: fourCC == FOURCC_DXT5 ? CompressedMips.FORMAT_RGBA_S3TC_DXT5 : CompressedMips.FORMAT_RG_RGTC2);
@@ -228,8 +242,43 @@ public final class DdsDecoder {
 		return levels;
 	}
 
-	private static long levelBytes(final int width, final int height, final int blockSize) {
-		return (long) Math.max(1, (width + 3) / 4) * Math.max(1, (height + 3) / 4) * blockSize;
+	private static long levelBytes(final int width, final int height, final int format) {
+		if (isRaw(format)) {
+			return (long) width * height * 4;
+		}
+		return (long) Math.max(1, (width + 3) / 4) * Math.max(1, (height + 3) / 4) * blockSize(format);
+	}
+
+	private static int blockSize(final int format) {
+		return format == FOURCC_DXT1 ? 8 : isRaw(format) ? 4 : 16;
+	}
+
+	/** Whether the format stores a pixel in four bytes, not a block of them. */
+	private static boolean isRaw(final int format) {
+		return (format == FORMAT_RGBA) || (format == FORMAT_BGRA);
+	}
+
+	/** The format a DX10 header's DXGI_FORMAT stands for, which the colour space does not change for decoding. */
+	private static int formatOfDxgi(final int dxgi) throws IOException {
+		switch (dxgi) {
+		case 71: // BC1_UNORM
+		case 72: // BC1_UNORM_SRGB
+			return FOURCC_DXT1;
+		case 74: // BC2_UNORM
+		case 75: // BC2_UNORM_SRGB
+			return FOURCC_DXT3;
+		case 77: // BC3_UNORM
+		case 78: // BC3_UNORM_SRGB
+			return FOURCC_DXT5;
+		case 28: // R8G8B8A8_UNORM
+		case 29: // R8G8B8A8_UNORM_SRGB
+			return FORMAT_RGBA;
+		case 87: // B8G8R8A8_UNORM
+		case 91: // B8G8R8A8_UNORM_SRGB
+			return FORMAT_BGRA;
+		default:
+			throw new IOException("Unsupported DDS DXGI format: " + dxgi);
+		}
 	}
 
 	/**
@@ -245,9 +294,12 @@ public final class DdsDecoder {
 	/** As above for the length bytes of data from offset, which spares a copy of them. */
 	static byte[] decodeBlocks(final byte[] data, final int start, final int length, final int width,
 			final int height, final int fourCC) throws IOException {
+		if (isRaw(fourCC)) {
+			return decodeRaw(data, start, length, width, height, fourCC);
+		}
 		final int blocksWide = Math.max(1, (width + 3) / 4);
 		final int blocksHigh = Math.max(1, (height + 3) / 4);
-		final int blockSize = fourCC == FOURCC_DXT1 ? 8 : 16;
+		final int blockSize = blockSize(fourCC);
 		final int needed = blocksWide * blocksHigh * blockSize;
 		final byte[] src;
 		final int base;
@@ -279,9 +331,23 @@ public final class DdsDecoder {
 	 */
 	static void decodeBlocks(final ByteBuffer data, final int start, final int length, final int width,
 			final int height, final int fourCC, final ByteBuffer out) throws IOException {
+		if (isRaw(fourCC)) {
+			final byte[] pixels = new byte[width * height * 4];
+			final ByteBuffer source = data.duplicate();
+			final int stored = Math.max(0, Math.min(pixels.length, length));
+			if (stored > 0) {
+				source.position(start);
+				source.get(pixels, 0, stored);
+			}
+			swapIfBgra(pixels, fourCC);
+			final ByteBuffer target = out.duplicate();
+			target.clear();
+			target.put(pixels);
+			return;
+		}
 		final int blocksWide = Math.max(1, (width + 3) / 4);
 		final int blocksHigh = Math.max(1, (height + 3) / 4);
-		final int blockSize = fourCC == FOURCC_DXT1 ? 8 : 16;
+		final int blockSize = blockSize(fourCC);
 		final int rowBytes = blocksWide * blockSize;
 		final byte[] row = new byte[rowBytes];
 		final byte[] strip = new byte[width * 4 * 4];
@@ -308,6 +374,25 @@ public final class DdsDecoder {
 			target.put(strip, 0, stripRows * width * 4);
 		}
 		out.clear();
+	}
+
+	/** Pixels stored a pixel at a time; missing trailing ones decode as zeros. */
+	private static byte[] decodeRaw(final byte[] data, final int start, final int length, final int width,
+			final int height, final int format) {
+		final byte[] pixels = new byte[width * height * 4];
+		System.arraycopy(data, start, pixels, 0, Math.max(0, Math.min(pixels.length, length)));
+		swapIfBgra(pixels, format);
+		return pixels;
+	}
+
+	private static void swapIfBgra(final byte[] pixels, final int format) {
+		if (format == FORMAT_BGRA) {
+			for (int at = 0; at < pixels.length; at += 4) {
+				final byte blue = pixels[at];
+				pixels[at] = pixels[at + 2];
+				pixels[at + 2] = blue;
+			}
+		}
 	}
 
 	/** The arrays one block is decoded through. */

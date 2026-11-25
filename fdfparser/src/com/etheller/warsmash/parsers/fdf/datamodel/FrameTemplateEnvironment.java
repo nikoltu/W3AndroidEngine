@@ -2,22 +2,39 @@ package com.etheller.warsmash.parsers.fdf.datamodel;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.UnaryOperator;
 
 public class FrameTemplateEnvironment {
 	private final Map<String, String> idToDecoratedString = new HashMap<>();
 	private Map<String, FrameDefinition> idToFrame = new HashMap<>();
 	private Runnable reloader;
+	private Map<String, String> overrides = new HashMap<>();
+	private UnaryOperator<String> resolver = UnaryOperator.identity();
 
 	public void addDecoratedString(final String id, final String value) {
 		this.idToDecoratedString.put(id, value);
 	}
 
+	/** Strings a map's own skin file sets: they replace the interface's strings of the same name, whenever those are read. */
+	public void putOverride(final String id, final String value) {
+		this.overrides.put(id, value);
+	}
+
+	/** Turns what a string reads as into its final text, e.g. a map string key into the map's text. */
+	public void setStringResolver(final UnaryOperator<String> resolver) {
+		this.resolver = resolver == null ? UnaryOperator.identity() : resolver;
+	}
+
 	public String getDecoratedString(final String id) {
+		final String override = this.overrides.get(id);
+		if (override != null) {
+			return this.resolver.apply(override);
+		}
 		final String decoratedString = this.idToDecoratedString.get(id);
 		if (decoratedString != null) {
-			return decoratedString;
+			return this.resolver.apply(decoratedString);
 		}
-		return id;
+		return this.resolver.apply(id);
 	}
 
 	/** Takes over the definitions and strings of another environment, which is not used afterwards. */

@@ -3,6 +3,7 @@ package com.etheller.warsmash.viewer5.handlers.w3x.simulation.upgrade;
 import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayer;
 
 public class CUpgradeEffectTechMaxAllowed implements CUpgradeEffect {
 	private int maxAllowedChange;
@@ -19,7 +20,8 @@ public class CUpgradeEffectTechMaxAllowed implements CUpgradeEffect {
 
 	@Override
 	public void apply(CSimulation simulation, int playerIndex, int level) {
-		simulation.getPlayer(playerIndex).setTechtreeMaxAllowed(rawcode, maxAllowedChange);
+		final CPlayer player = simulation.getPlayer(playerIndex);
+		player.setTechtreeMaxAllowed(rawcode, player.getTechtreeMaxAllowed(rawcode) + maxAllowedChange);
 	}
 
 	@Override
@@ -28,6 +30,7 @@ public class CUpgradeEffectTechMaxAllowed implements CUpgradeEffect {
 
 	@Override
 	public void unapply(CSimulation simulation, int playerIndex, int level) {
-		simulation.getPlayer(playerIndex).setTechtreeMaxAllowed(rawcode, -maxAllowedChange);
+		final CPlayer player = simulation.getPlayer(playerIndex);
+		player.setTechtreeMaxAllowed(rawcode, player.getTechtreeMaxAllowed(rawcode) - maxAllowedChange);
 	}
 }

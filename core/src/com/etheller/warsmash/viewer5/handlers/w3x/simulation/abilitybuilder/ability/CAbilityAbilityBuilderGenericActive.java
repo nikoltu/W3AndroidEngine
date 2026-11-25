@@ -446,8 +446,9 @@ public abstract class CAbilityAbilityBuilderGenericActive extends AbstractGeneri
 					return item.getItemType().getCooldownGroup();
 				}
 			}
+			return getCode();
 		}
-		return getCode();
+		return getAlias();
 	}
 
 	@Override

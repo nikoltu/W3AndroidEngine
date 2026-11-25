@@ -624,9 +624,11 @@ final class HomePage extends LauncherViews {
 			place(parent, badge, 48, 1694, 560, 68);
 		}
 		else {
-			// Under the logo, which is the top corner nothing else of Home's phone layout uses.
+			// Under the logo, which is the top corner nothing else of Home's phone layout uses; the address needs the
+			// banner's width, not the logo's.
 			badge.setGravity(Gravity.END);
-			place(parent, badge, b.logoX, b.logoY + b.logoH - 6, b.logoW, 28);
+			final float left = (b.width - b.bannerW) + 30;
+			place(parent, badge, left, b.logoY + b.logoH - 6, (b.logoX + b.logoW) - left, 52);
 		}
 	}
 

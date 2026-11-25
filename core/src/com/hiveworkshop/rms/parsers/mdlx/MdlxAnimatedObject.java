@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
+import com.etheller.warsmash.util.Log;
 import com.etheller.warsmash.util.War3ID;
 import com.hiveworkshop.rms.parsers.mdlx.mdl.MdlTokenInputStream;
 import com.hiveworkshop.rms.parsers.mdlx.mdl.MdlTokenOutputStream;
@@ -19,11 +20,17 @@ public abstract class MdlxAnimatedObject implements MdlxChunk, MdlxBlock {
 	public final List<MdlxTimeline<?>> timelines = new ArrayList<>();
 
 	public void readTimelines(final BinaryReader reader, long size) {
-		while (size > 0) {
+		while (size >= 4 && reader.remaining() >= 4) {
 			final War3ID name = new War3ID(reader.readTag());
 			final AnimationMap animationMap = AnimationMap.ID_TO_TAG.get(name);
 			if (animationMap == null) {
-				throw new IllegalStateException("Unknown node tag: " + name);
+				// Not a timeline: what is left of this object is padding or fields of a newer version.
+				Log.warn("Unknown node tag: " + name);
+				reader.move((int) Math.min(size - 4, reader.remaining()));
+				break;
+			}
+			if (reader.remaining() < 12) {
+				break;
 			}
 			final MdlxTimeline<?> timeline = animationMap.getImplementation().createTimeline();
 

@@ -49,6 +49,7 @@ public class AIController {
 	boolean harvestPassPending;
 	int harvestCallTick;
 	final Set<CUnit> harvestUnsent = new LinkedHashSet<>();
+	final Map<CUnit, int[]> harvestLeftoverWisps = new LinkedHashMap<>();
 	CUnit harvestStarter;
 	boolean harvestStarterChosen;
 	final Map<Integer, List<CDestructable>> townTrees = new HashMap<>();
@@ -235,10 +236,15 @@ public class AIController {
 
 	/**
 	 * Measured: with slow chopping each load a worker brings home is a tenth of its size, at least one, for gold as
-	 * well as lumber; the trips take as long as ever.
+	 * well as lumber; the trips take as long as ever. A Ghoul's load of 20 lumber pays one, so the divisor never drops
+	 * below the worker's own capacity.
 	 */
 	public int scaleHarvestedAmount(final int amount) {
-		return this.slowChopping ? Math.max(1, amount / 10) : amount;
+		return scaleHarvestedAmount(amount, 10);
+	}
+
+	public int scaleHarvestedAmount(final int amount, final int loadCapacity) {
+		return this.slowChopping ? Math.max(1, amount / Math.max(10, loadCapacity)) : amount;
 	}
 
 	public void setWatchMegaTargets(final boolean watchMegaTargets) {

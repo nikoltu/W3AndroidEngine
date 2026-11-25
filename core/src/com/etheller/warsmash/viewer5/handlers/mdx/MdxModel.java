@@ -72,6 +72,26 @@ public class MdxModel extends com.etheller.warsmash.viewer5.Model<MdxHandler> {
 		return this.noVariants;
 	}
 
+	private int meshAlphaStatic;
+
+	/**
+	 * Whether no geoset's alpha is animated, so that which triangles count does not depend on the sequence an instance
+	 * plays or its frame.
+	 */
+	synchronized boolean isMeshAlphaStatic() {
+		if (this.meshAlphaStatic == 0) {
+			boolean fixed = true;
+			for (final Geoset geoset : this.geosets) {
+				if ((geoset.geosetAnimation != null) && geoset.geosetAnimation.hasAlphaTimeline()) {
+					fixed = false;
+					break;
+				}
+			}
+			this.meshAlphaStatic = fixed ? 1 : 2;
+		}
+		return this.meshAlphaStatic == 1;
+	}
+
 	private int[][] sequenceIntervals;
 
 	/** The start and the end of every sequence, as two arrays shared by the timelines of this model. */

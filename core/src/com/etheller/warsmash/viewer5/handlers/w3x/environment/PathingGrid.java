@@ -4,7 +4,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.Map;
 
 import com.badlogic.gdx.math.Rectangle;
@@ -31,7 +33,47 @@ public class PathingGrid {
 	private final short[] dynamicPathingOverlay; // for buildings and trees
 	private final int[] pathingGridSizes;
 	private final float[] centerOffset;
-	private final List<RemovablePathingMapInstance> dynamicPathingInstances;
+	private final Set<RemovablePathingMapInstance> dynamicPathingInstances;
+	/**
+	 * Set when instances were taken out: the overlay is laid down again from the remaining ones the next time it is read,
+	 * so a script that removes tens of thousands of trees in one go lays it down once.
+	 */
+	private boolean overlayStale;
+	/** The cells taken out since the overlay was last valid; a few of them are laid down again alone, many all at once. */
+	private static final int INCREMENTAL_REMOVALS = 16;
+	private final int[] removedCells = new int[INCREMENTAL_REMOVALS * 4];
+	private int removedCount;
+	/** The instances by the blocks of cells they reach, to find those near a removed one without going through all. */
+	private static final int BLOCK_SHIFT = 3;
+	private final Map<Long, List<RemovablePathingMapInstance>> instanceBlocks = new HashMap<>();
+	private int refreshStamp;
+
+	private static long blockKey(final int blockX, final int blockY) {
+		return (((long) blockY) << 32) ^ (blockX & 0xFFFFFFFFL);
+	}
+
+	private void indexInstance(final RemovablePathingMapInstance instance, final boolean add) {
+		final int[] cells = instance.cells();
+		final int maxBlockX = Math.max(cells[2], 0) >> BLOCK_SHIFT;
+		final int maxBlockY = Math.max(cells[3], 0) >> BLOCK_SHIFT;
+		for (int by = Math.max(cells[1], 0) >> BLOCK_SHIFT; by <= maxBlockY; by++) {
+			for (int bx = Math.max(cells[0], 0) >> BLOCK_SHIFT; bx <= maxBlockX; bx++) {
+				final long key = blockKey(bx, by);
+				if (add) {
+					this.instanceBlocks.computeIfAbsent(key, k -> new ArrayList<>()).add(instance);
+				}
+				else {
+					final List<RemovablePathingMapInstance> inBlock = this.instanceBlocks.get(key);
+					if (inBlock != null) {
+						inBlock.remove(instance);
+						if (inBlock.isEmpty()) {
+							this.instanceBlocks.remove(key);
+						}
+					}
+				}
+			}
+		}
+	}
 	private int overlayVersion;
 	/**
 	 * The pathing cells each recent change of the overlay touched, newest last in a ring, each with the version the
@@ -56,7 +98,7 @@ public class PathingGrid {
 		this.pathingGrid = terrainPathing.getPathing();
 		this.pathingGridSizes = terrainPathing.getSize();
 		this.dynamicPathingOverlay = new short[this.pathingGrid.length];
-		this.dynamicPathingInstances = new ArrayList<>();
+		this.dynamicPathingInstances = new LinkedHashSet<>();
 	}
 
 	// this blit function is basically copied from HiveWE, maybe remember to mention
@@ -112,6 +154,91 @@ public class PathingGrid {
 				this.dynamicPathingOverlay[(yy * this.pathingGridSizes[0]) + xx] |= data;
 			}
 		}
+	}
+
+	private void refreshOverlay() {
+		if (!this.overlayStale) {
+			return;
+		}
+		this.overlayStale = false;
+		final int version = this.overlayVersion;
+		if (this.removedCount <= INCREMENTAL_REMOVALS) {
+			// Few instances left: only the cells they covered are laid down again, from the instances that reach them,
+			// so a script that removes and creates one at a time does not lay down the whole overlay for each.
+			final int count = this.removedCount;
+			this.removedCount = 0;
+			for (int r = 0; r < count; r++) {
+				for (int y = this.removedCells[(r * 4) + 1]; y <= this.removedCells[(r * 4) + 3]; y++) {
+					final int row = y * this.pathingGridSizes[0];
+					Arrays.fill(this.dynamicPathingOverlay, row + this.removedCells[r * 4],
+							row + this.removedCells[(r * 4) + 2] + 1, (short) 0);
+				}
+			}
+			this.changesSuppressed = true;
+			try {
+				this.refreshStamp++;
+				for (int r = 0; r < count; r++) {
+					final int minX = this.removedCells[r * 4];
+					final int minY = this.removedCells[(r * 4) + 1];
+					final int maxX = this.removedCells[(r * 4) + 2];
+					final int maxY = this.removedCells[(r * 4) + 3];
+					for (int by = minY >> BLOCK_SHIFT; by <= (maxY >> BLOCK_SHIFT); by++) {
+						for (int bx = minX >> BLOCK_SHIFT; bx <= (maxX >> BLOCK_SHIFT); bx++) {
+							final List<RemovablePathingMapInstance> inBlock = this.instanceBlocks.get(blockKey(bx, by));
+							if (inBlock == null) {
+								continue;
+							}
+							for (int i = 0; i < inBlock.size(); i++) {
+								final RemovablePathingMapInstance instance = inBlock.get(i);
+								if ((instance.stamp != this.refreshStamp) && instance.reaches(minX, minY, maxX, maxY)) {
+									instance.stamp = this.refreshStamp;
+									instance.blit();
+								}
+							}
+						}
+					}
+				}
+			}
+			finally {
+				this.changesSuppressed = false;
+				this.overlayVersion = version;
+			}
+			return;
+		}
+		this.removedCount = 0;
+		Arrays.fill(this.dynamicPathingOverlay, (short) 0);
+		// The others are laid down again as they were; the cells that differ were logged when the instance was taken out.
+		this.changesSuppressed = true;
+		try {
+			for (final RemovablePathingMapInstance instance : this.dynamicPathingInstances) {
+				instance.blit();
+			}
+		}
+		finally {
+			this.changesSuppressed = false;
+			this.overlayVersion = version;
+		}
+	}
+
+	private void noteRemoved(final RemovablePathingMapInstance instance) {
+		if (this.removedCount >= INCREMENTAL_REMOVALS) {
+			this.removedCount = INCREMENTAL_REMOVALS + 1;
+			return;
+		}
+		final int[] cells = instance.cells();
+		final int minX = Math.max(cells[0], 0);
+		final int minY = Math.max(cells[1], 0);
+		final int maxX = Math.min(cells[2], this.pathingGridSizes[0] - 1);
+		final int maxY = Math.min(cells[3], this.pathingGridSizes[1] - 1);
+		if ((minX > maxX) || (minY > maxY)) {
+			return;
+		}
+		final int slot = this.removedCount * 4;
+		this.removedCells[slot] = minX;
+		this.removedCells[slot + 1] = minY;
+		this.removedCells[slot + 2] = maxX;
+		this.removedCells[slot + 3] = maxY;
+		this.removedCount++;
 	}
 
 	/** The cells a texture of divW x divH cells centred on a position covers (see the blit), as a logged change. */
@@ -359,6 +486,7 @@ public class PathingGrid {
 		if (!isCellInside(cellX, cellY)) {
 			return OUTSIDE_PATHING;
 		}
+		refreshOverlay();
 		final int index = (cellY * this.pathingGridSizes[0]) + cellX;
 		return (short) (this.pathingGrid[index] | this.dynamicPathingOverlay[index]);
 	}
@@ -527,6 +655,7 @@ public class PathingGrid {
 		}
 		// The footprint is inside the map, as checked above.
 		final short[] terrain = this.pathingGrid;
+		refreshOverlay();
 		final short[] overlay = this.dynamicPathingOverlay;
 		final int width = this.pathingGridSizes[0];
 		for (int cellY = firstY; cellY < (firstY + cells); cellY++) {
@@ -631,6 +760,7 @@ public class PathingGrid {
 		if (!isCellInside(cellX, cellY)) {
 			return true;
 		}
+		refreshOverlay();
 		final int index = (cellY * this.pathingGridSizes[0]) + cellX;
 		return PathingFlags.isPathingFlag(this.dynamicPathingOverlay[index], PathingFlags.BLOCKVISION);
 	}
@@ -739,6 +869,22 @@ public class PathingGrid {
 			this.pathingTextureTga = pathingTextureTga;
 		}
 
+		private int stamp;
+
+		private int[] cells() {
+			final boolean turned = (((this.rotationInput + 450) % 360) % 180) != 0;
+			final int w = turned ? this.pathingTextureTga.getHeight() : this.pathingTextureTga.getWidth();
+			final int h = turned ? this.pathingTextureTga.getWidth() : this.pathingTextureTga.getHeight();
+			final int minX = getCellX(this.positionX) - (w / 2);
+			final int minY = getCellY(this.positionY) - (h / 2);
+			return new int[] { minX, minY, (minX + w) - 1, (minY + h) - 1 };
+		}
+
+		private boolean reaches(final int minX, final int minY, final int maxX, final int maxY) {
+			final int[] own = cells();
+			return (own[0] <= maxX) && (own[2] >= minX) && (own[1] <= maxY) && (own[3] >= minY);
+		}
+
 		private void blit() {
 			blitPathingOverlayTexture(this.positionX, this.positionY, this.rotationInput, this.pathingTextureTga,
 					this.blocksVision);
@@ -750,18 +896,10 @@ public class PathingGrid {
 			}
 			this.added = false;
 			PathingGrid.this.dynamicPathingInstances.remove(this);
-			Arrays.fill(PathingGrid.this.dynamicPathingOverlay, (short) 0);
+			PathingGrid.this.indexInstance(this, false);
+			PathingGrid.this.overlayStale = true;
 			PathingGrid.this.overlayVersion++;
-			// The others are laid down again as they were; only the cells of this one can differ afterwards.
-			PathingGrid.this.changesSuppressed = true;
-			try {
-				for (final RemovablePathingMapInstance instance : PathingGrid.this.dynamicPathingInstances) {
-					instance.blit();
-				}
-			}
-			finally {
-				PathingGrid.this.changesSuppressed = false;
-			}
+			PathingGrid.this.noteRemoved(this);
 			final boolean turned = (((this.rotationInput + 450) % 360) % 180) != 0;
 			PathingGrid.this.logTextureChange(this.positionX, this.positionY,
 					turned ? this.pathingTextureTga.getHeight() : this.pathingTextureTga.getWidth(),
@@ -774,6 +912,7 @@ public class PathingGrid {
 			}
 			this.added = true;
 			PathingGrid.this.dynamicPathingInstances.add(this);
+			PathingGrid.this.indexInstance(this, true);
 			blit();
 		}
 

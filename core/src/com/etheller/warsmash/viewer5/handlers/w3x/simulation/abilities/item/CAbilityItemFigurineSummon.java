@@ -51,6 +51,9 @@ public class CAbilityItemFigurineSummon extends CAbilityNoTargetSpellBase {
 		for (int i = 0; i < this.summonUnitCount; i++) {
 			final CUnit summonedUnit = simulation.createUnitSimple(this.summonUnitId, unit.getPlayerIndex(), x, y,
 					facing);
+			if (summonedUnit == null) {
+				continue;
+			}
 			summonedUnit.addClassification(CUnitClassification.SUMMONED);
 			simulation.unitSummoned(unit, summonedUnit);
 			summonedUnit.add(simulation,
@@ -60,6 +63,9 @@ public class CAbilityItemFigurineSummon extends CAbilityNoTargetSpellBase {
 		for (int i = 0; i < this.summonUnit2Count; i++) {
 			final CUnit summonedUnit = simulation.createUnitSimple(this.summonUnit2Id, unit.getPlayerIndex(), x, y,
 					facing);
+			if (summonedUnit == null) {
+				continue;
+			}
 			summonedUnit.addClassification(CUnitClassification.SUMMONED);
 			simulation.unitSummoned(unit, summonedUnit);
 			summonedUnit.add(simulation,

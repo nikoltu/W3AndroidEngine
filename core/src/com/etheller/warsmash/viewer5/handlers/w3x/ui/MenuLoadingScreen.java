@@ -665,10 +665,11 @@ final class MenuLoadingScreen {
 				&& !mapInfo.hasFlag(War3MapW3iFlags.FIXED_PLAYER_SETTINGS_FOR_CUSTOM_FORCES);
 		final Map<Integer, List<ReforgedLoadingScreen.Player>> players = new TreeMap<>();
 		boolean localListed = false;
-		boolean firstUser = false;
+		final List<LauncherSlot> launcherSlots = LauncherSlot.parse(startupSlots);
+		// A launcher that names the local player's slot has moved the player off the map's first user slot.
+		boolean firstUser = LauncherSlot.firstUser(startupSlots) != null;
 		final boolean fixedSettings = mapInfo.hasFlag(War3MapW3iFlags.FIXED_PLAYER_SETTINGS_FOR_CUSTOM_FORCES)
 				&& mapInfo.hasFlag(War3MapW3iFlags.USE_CUSTOM_FORCES);
-		final List<LauncherSlot> launcherSlots = LauncherSlot.parse(startupSlots);
 		final int count = Math.min(WarsmashConstants.MAX_PLAYERS, mapPlayers.size());
 		for (int i = 0; i < count; i++) {
 			final Player mapPlayer = mapPlayers.get(i);

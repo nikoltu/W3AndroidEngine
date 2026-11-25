@@ -69,6 +69,7 @@ com_crashlytics_export_strings.xml
 /android/build/
 /android/.cxx/
 /core/build/
+/lua/build/
 /desktop/build/
 /html/build/
 /ios/build/

@@ -49,6 +49,7 @@ final class MenuSkirmish {
 	private final MenuUI menu;
 	private UIFrame skirmish;
 	private UIFrame mapInfoPanel;
+	private String[] mapPlayerNames;
 	private UIFrame advancedOptionsPanel;
 	private GlueTextButtonFrame mapInfoButton;
 	private GlueTextButtonFrame advancedOptionsButton;
@@ -157,6 +158,10 @@ final class MenuSkirmish {
 		MenuMapStart.requireJassScript(map, mapPath);
 		Jass2.loadConfig(map, this.menu.uiViewport, this.menu.uiScene, rootFrame, war3MapConfig,
 				WarsmashConstants.JASS_FILE_LIST).config();
+		this.mapPlayerNames = new String[WarsmashConstants.MAX_PLAYERS];
+		for (int i = 0; i < this.mapPlayerNames.length; i++) {
+			this.mapPlayerNames[i] = war3MapConfig.getPlayer(i).getName();
+		}
 		boolean foundFirstHuman = false;
 		boolean foundFirstComp = false;
 		for (int i = 0; i < WarsmashConstants.MAX_PLAYERS; i++) {
@@ -263,7 +268,20 @@ final class MenuSkirmish {
 			return false;
 		}
 		for (final LauncherSlot slot : LauncherSlot.parse(slots)) {
-			this.skirmishSlotListener.setPlayerSlot(slot.player, LobbyPlayerType.valueOf(slot.type));
+			final LobbyPlayerType type = LobbyPlayerType.valueOf(slot.type);
+			this.skirmishSlotListener.setPlayerSlot(slot.player, type);
+			if (type == LobbyPlayerType.USER) {
+				// A slot the player moved to is named as the first human slot is when the map is read.
+				this.menu.currentMapConfig.getPlayer(slot.player).setName(this.menu.profileManager.getCurrentProfile());
+			}
+			else {
+				// The map's first human slot was named for the player when it was read; a slot the player left
+				// is not that player's any more.
+				final CBasePlayer vacated = this.menu.currentMapConfig.getPlayer(slot.player);
+				if (this.menu.profileManager.getCurrentProfile().equals(vacated.getName())) {
+					vacated.setName(this.mapPlayerNames[slot.player]);
+				}
+			}
 			if (slot.race >= 0) {
 				this.skirmishSlotListener.setPlayerRace(slot.player, slot.race);
 			}

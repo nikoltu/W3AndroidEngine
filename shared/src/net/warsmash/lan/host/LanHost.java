@@ -1696,6 +1696,11 @@ public final class LanHost {
 		if (!colorTaken) {
 			target.color = color;
 		}
+		else {
+			// Two players asking for one color in the same moment: the first request got it; the other keeps its
+			// own, or gets the lowest free one when that was taken in between.
+			target.color = colorFree(target.color, target);
+		}
 		target.handicap = Math.max(50, Math.min(100, handicap));
 	}
 
@@ -1749,6 +1754,7 @@ public final class LanHost {
 				s.kind = LanProtocol.SLOT_COMPUTER;
 				s.computerLevel = a.level;
 				s.name = "Computer";
+				s.color = colorFree(s.color, s);
 			}
 			break;
 		case LanProtocol.ACTION_KICK: {

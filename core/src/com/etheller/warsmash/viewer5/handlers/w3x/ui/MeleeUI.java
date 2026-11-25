@@ -83,6 +83,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.SplatModel;
 import com.etheller.warsmash.viewer5.handlers.w3x.SplatModel.SplatMover;
 import com.etheller.warsmash.viewer5.handlers.w3x.TextTag;
 import com.etheller.warsmash.viewer5.handlers.w3x.UnitSound;
+import com.etheller.warsmash.viewer5.handlers.w3x.ScriptUiState;
 import com.etheller.warsmash.viewer5.handlers.w3x.War3MapViewer;
 import com.etheller.warsmash.viewer5.handlers.w3x.camera.CameraPreset;
 import com.etheller.warsmash.viewer5.handlers.w3x.camera.CameraRates;
@@ -315,6 +316,8 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 	boolean menuFocusFromTouch;
 	Runnable openMenuAction;
 	FocusableFrame menuFocus;
+	/** The text box of a map's own interface that holds the typed keys while the game menu is not up. */
+	FocusableFrame scriptFocus;
 	private UIFrame[] modalFrames;
 	private boolean[] modalFramesShown;
 	RenderWidget mouseOverUnit;
@@ -468,6 +471,7 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 	private static final float CAMERA_HEIGHT_STEP = 128;
 	private static final int CAMERA_HEIGHT_RADIUS = 8;
 	private boolean worldFrameFullScreen;
+	private Rectangle scriptWorldRect;
 	private int worldFrameWidth;
 	private int worldFrameHeight;
 
@@ -836,6 +840,7 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 	public void update(final float deltaTime) {
 		this.input.flushScriptSelection();
 		this.war3MapViewer.scriptUiState.flushFrames();
+		updateWorldFrameViewport();
 		this.originFrames.update();
 		this.menus.updateAlliesButton();
 		if (this.replayPanel != null) {
@@ -1403,10 +1408,48 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 	 */
 	void updateWorldFrameViewport() {
 		final boolean fullScreen = this.reforgedCinematics && this.cinematicPanel.isVisible();
-		if ((fullScreen != this.worldFrameFullScreen) && (this.worldFrameWidth > 0)) {
+		final Rectangle scriptRect = scriptWorldRectangle();
+		final boolean scriptChanged = (scriptRect == null) ? (this.scriptWorldRect != null)
+				: !scriptRect.equals(this.scriptWorldRect);
+		if (((fullScreen != this.worldFrameFullScreen) || scriptChanged) && (this.worldFrameWidth > 0)) {
 			this.worldFrameFullScreen = fullScreen;
+			this.scriptWorldRect = scriptRect;
 			this.cameraManager.resize(setupWorldFrameViewport(this.worldFrameWidth, this.worldFrameHeight));
 		}
+	}
+
+	/**
+	 * A script that hides the game's interface puts the world where its world frame is, which is the whole screen
+	 * unless the script moves or sizes that frame; null while the classic console keeps the world to its strip.
+	 */
+	private Rectangle scriptWorldRectangle() {
+		final ScriptUiState state = this.war3MapViewer.scriptUiState;
+		if (!state.isOriginFramesHidden() || (this.worldFrameWidth <= 0)) {
+			return null;
+		}
+		final UIFrame frame = state.getWorldFrame();
+		if (frame == null) {
+			return new Rectangle(0, 0, this.worldFrameWidth, this.worldFrameHeight);
+		}
+		final float uiWidth = this.uiViewport.getWorldWidth();
+		final float uiHeight = this.uiViewport.getWorldHeight();
+		final float left = frame.getFramePointX(FramePoint.LEFT);
+		final float right = frame.getFramePointX(FramePoint.RIGHT);
+		final float bottom = frame.getFramePointY(FramePoint.BOTTOM);
+		final float top = frame.getFramePointY(FramePoint.TOP);
+		if (!(right > left) || !(top > bottom) || !(uiWidth > 0) || !(uiHeight > 0)) {
+			return new Rectangle(0, 0, this.worldFrameWidth, this.worldFrameHeight);
+		}
+		final float scaleX = this.worldFrameWidth / uiWidth;
+		final float scaleY = this.worldFrameHeight / uiHeight;
+		final int x0 = Math.max(0, Math.round(left * scaleX));
+		final int y0 = Math.max(0, Math.round(bottom * scaleY));
+		final int x1 = Math.min(this.worldFrameWidth, Math.round(right * scaleX));
+		final int y1 = Math.min(this.worldFrameHeight, Math.round(top * scaleY));
+		if ((x1 <= x0) || (y1 <= y0)) {
+			return new Rectangle(0, 0, this.worldFrameWidth, this.worldFrameHeight);
+		}
+		return new Rectangle(x0, y0, x1 - x0, y1 - y0);
 	}
 
 	private float smoothedX = Float.NaN;
@@ -1457,6 +1500,11 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 	private Rectangle setupWorldFrameViewport(final int width, final int height) {
 		this.worldFrameWidth = width;
 		this.worldFrameHeight = height;
+		if (this.scriptWorldRect != null) {
+			this.tempRect.set(this.scriptWorldRect);
+			this.cameraManager.setProjectionHeightScale(1);
+			return this.tempRect;
+		}
 		this.tempRect.x = 0;
 		this.tempRect.width = width;
 		if (this.worldFrameFullScreen) {
@@ -1604,6 +1652,31 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 	@Override
 	public void setFrameEventSink(final FrameEventSink sink) {
 		this.frameEvents = sink;
+	}
+
+	@Override
+	public void setScriptFocus(final UIFrame frame, final boolean focus) {
+		if (focus) {
+			if ((frame instanceof FocusableFrame) && ((FocusableFrame) frame).isFocusable()) {
+				takeScriptFocus((FocusableFrame) frame);
+			}
+		}
+		else if (frame == this.scriptFocus) {
+			takeScriptFocus(null);
+		}
+	}
+
+	void takeScriptFocus(final FocusableFrame frame) {
+		if (frame == this.scriptFocus) {
+			return;
+		}
+		if (this.scriptFocus != null) {
+			this.scriptFocus.onFocusLost();
+		}
+		this.scriptFocus = frame;
+		if (frame != null) {
+			frame.onFocusGained();
+		}
 	}
 
 	@Override

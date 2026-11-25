@@ -44,6 +44,14 @@ public interface DataSource {
 	ByteBuffer read(String path) throws IOException;
 
 	/**
+	 * The file as it lies on the disk when this data source keeps it there as a file of its own (a data folder),
+	 * without copying or extracting anything; null for any other file.
+	 */
+	default File fileOnDisk(final String filepath) {
+		return null;
+	}
+
+	/**
 	 * Returns true if the data source contains a valid entry for a particular file.
 	 * Some data sources (MPQs) may contain files for which this returns true, even
 	 * though they cannot list the file in their Listfile.

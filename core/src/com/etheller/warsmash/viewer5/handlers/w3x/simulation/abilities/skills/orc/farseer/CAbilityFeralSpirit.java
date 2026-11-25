@@ -60,6 +60,9 @@ public class CAbilityFeralSpirit extends CAbilityNoTargetSpellBase {
 		for (int i = 0; i < this.summonUnitCount; i++) {
 			final CUnit summonedUnit = simulation.createUnitSimple(this.summonUnitId, unit.getPlayerIndex(), x, y,
 					facing);
+			if (summonedUnit == null) {
+				continue;
+			}
 			summonedUnit.addClassification(CUnitClassification.SUMMONED);
 			simulation.unitSummoned(unit, summonedUnit);
 			summonedUnit.add(simulation,

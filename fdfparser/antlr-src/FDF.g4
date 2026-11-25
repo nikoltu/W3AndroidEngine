@@ -21,7 +21,7 @@ UnicodeBOM :
 statement:
 	STRING_LIST OPEN_CURLY (ID STRING_LITERAL COMMA)*? CLOSE_CURLY # StringListStatement
 	|
-	INCLUDE_FILE STRING_LITERAL COMMA # IncludeStatement
+	INCLUDE_FILE STRING_LITERAL COMMA? # IncludeStatement
 	|
 	frame # FrameStatement
 	; 
@@ -49,33 +49,33 @@ frame:
 frame_element: 
 	frame # FrameFrameElement
 	|
-	ID FLOAT COMMA # FloatElement
+	ID FLOAT COMMA? # FloatElement
 	|
-	ID STRING_LITERAL COMMA # StringElement
+	ID STRING_LITERAL COMMA? # StringElement
 	|
-	ID STRING_LITERAL STRING_LITERAL COMMA # StringPairElement
+	ID STRING_LITERAL STRING_LITERAL COMMA? # StringPairElement
 	|
-	ID FLOAT FLOAT COMMA # Vector2Element
+	ID FLOAT FLOAT COMMA? # Vector2Element
 	|
-	ID COMMA # FlagElement
+	ID COMMA? # FlagElement
 	|
-	ID FLOAT FLOAT FLOAT FLOAT COMMA # Vector4Element
+	ID FLOAT FLOAT FLOAT FLOAT COMMA? # Vector4Element
 	|
-	ID FLOAT COMMA FLOAT COMMA FLOAT COMMA FLOAT COMMA # Vector4CommaElement
+	ID FLOAT COMMA FLOAT COMMA FLOAT COMMA FLOAT COMMA? # Vector4CommaElement
 	|
-	SETPOINT frame_point COMMA STRING_LITERAL COMMA frame_point COMMA FLOAT COMMA FLOAT COMMA # SetPointElement
+	SETPOINT frame_point COMMA STRING_LITERAL COMMA frame_point COMMA FLOAT COMMA FLOAT COMMA? # SetPointElement
 	|
-	ANCHOR frame_point COMMA FLOAT COMMA FLOAT COMMA # AnchorElement
+	ANCHOR frame_point COMMA FLOAT COMMA FLOAT COMMA? # AnchorElement
 	|
-	ID STRING_LITERAL COMMA FLOAT COMMA STRING_LITERAL COMMA # FontElement
+	ID STRING_LITERAL COMMA FLOAT COMMA STRING_LITERAL COMMA? # FontElement
 	|
-	ID FLOAT FLOAT FLOAT COMMA # Vector3Element
+	ID FLOAT FLOAT FLOAT COMMA? # Vector3Element
 	|
-	ID text_justify COMMA # TextJustifyElement
+	ID text_justify COMMA? # TextJustifyElement
 	|
-	ID STRING_LITERAL COMMA FLOAT COMMA # SimpleFontElement
+	ID STRING_LITERAL COMMA FLOAT COMMA? # SimpleFontElement
 	|
-	MENUITEM STRING_LITERAL COMMA FLOAT COMMA # MenuItemElement
+	MENUITEM STRING_LITERAL COMMA FLOAT COMMA? # MenuItemElement
 	;
 	
 text_justify:

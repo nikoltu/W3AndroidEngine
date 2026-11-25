@@ -63,6 +63,25 @@ public abstract class Model<HANDLER extends ModelHandler> extends HandlerResourc
 		return addUnfinishedInstance(0);
 	}
 
+	/**
+	 * An instance of a built model that is made empty and only loads (takes its nodes, matrices and emitters) once the
+	 * scene first has it in view, so what stands out of sight all game costs little more than its place. Whoever makes
+	 * one handles it as a waiting instance (see {@link ModelInstance#isWaiting()}); that holds for one of a model that
+	 * is still being built too, which is not loaded when the model is built either.
+	 */
+	public ModelInstance addLazyInstance() {
+		if (!this.ok && !this.pending) {
+			return addUnfinishedInstance(0);
+		}
+		final ModelInstance instance = createInstance(0);
+		followInstance(instance);
+		instance.setLazyLoad();
+		if (!this.ok) {
+			this.preloadedInstances.add(instance);
+		}
+		return instance;
+	}
+
 	private ModelInstance addUnfinishedInstance(final int type) {
 		final ModelInstance instance = createInstance(type);
 		followInstance(instance);

@@ -267,9 +267,6 @@ public class CSimulation implements CPlayerAPI, CSightWorld, HandleIdSource {
 				pathingTextures, mapGameVersion, gameData.getGameVersion());
 		this.unitData.setTechEquivalents(this.itemData.getTechEquivalents());
 		this.unitData.setItemData(this.itemData);
-		final long unitTypesStart = System.nanoTime();
-		this.unitData.getAllUnitTypesLightweight(); // Quick hack to avoid lag on first cast of Mech Critter
-		PerfStats.slowSetupPart("unit type scan", unitTypesStart);
 		this.destructableData = new CDestructableData(parsedDestructableData, pathingTextures);
 		this.units = new ArrayList<>();
 		this.newUnits = new ArrayList<>();
@@ -832,6 +829,27 @@ public class CSimulation implements CPlayerAPI, CSightWorld, HandleIdSource {
 
 	private boolean deferNewUnitFog;
 	private int unitCreationCount;
+	private transient boolean lateCreationRegionEvents;
+
+	/**
+	 * Measured on Reforged 3.0.1 (Lua maps) and on 1.29: the enter-region events of a created unit are delivered after the
+	 * script that created it has finished, to the triggers that were registered when the unit was created, the latest
+	 * registered first.
+	 */
+	public void setLateCreationRegionEvents(final boolean late) {
+		this.lateCreationRegionEvents = late;
+		installLateEventHook();
+	}
+
+	private void installLateEventHook() {
+		if (this.lateCreationRegionEvents && (this.globalScope != null)) {
+			this.globalScope.setThreadEndHook(() -> {
+				for (final CUnit unit : this.regionManager.takeLateUnits()) {
+					CUnitUpdate.deliverRegionEvents(unit, this);
+				}
+			});
+		}
+	}
 
 	public CUnit createUnitSimple(final War3ID typeId, final int playerIndex, float x, float y,
 			final float facing) {
@@ -875,6 +893,10 @@ public class CSimulation implements CPlayerAPI, CSightWorld, HandleIdSource {
 			if (silentEnter) {
 				this.regionManager.setSilentEnterUnit(newUnit);
 			}
+			final boolean lateEnter = this.lateCreationRegionEvents && !silentEnter;
+			if (lateEnter) {
+				newUnit.setRegionEventsLate(true);
+			}
 			if (keepPlace) {
 				newUnit.setPoint(x, y, this.worldCollision, this.regionManager);
 				unitRepositioned(newUnit);
@@ -883,6 +905,9 @@ public class CSimulation implements CPlayerAPI, CSightWorld, HandleIdSource {
 				newUnit.setPointAndCheckUnstuck(x, y, this);
 				// The unit sees from the spot it was nudged to, so a script can order it against what stands there.
 				updateFogOfWarOfNewUnit(newUnit);
+			}
+			if (lateEnter) {
+				newUnit.setRegionEventsLate(false);
 			}
 			if (silentEnter) {
 				this.regionManager.setSilentEnterUnit(null);
@@ -1261,14 +1286,27 @@ public class CSimulation implements CPlayerAPI, CSightWorld, HandleIdSource {
 				if ((giver != receiver) && sharesVision(giver, receiver)) {
 					if (!anyShared) {
 						anyShared = true;
+						// Only a giver's own cells are read later: a slot nobody shares from would hold a copy of its
+						// whole fog for nothing (on a big map, 28 of them).
 						for (final CPlayer player : this.players) {
-							player.getFogOfWar().keepOwnVision();
+							if (givesVision(player)) {
+								player.getFogOfWar().keepOwnVision();
+							}
 						}
 					}
 					receiver.getFogOfWar().addOwnVisionOf(giver.getFogOfWar());
 				}
 			}
 		}
+	}
+
+	private boolean givesVision(final CPlayer giver) {
+		for (final CPlayer receiver : this.players) {
+			if ((giver != receiver) && sharesVision(giver, receiver)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private static boolean sharesVision(final CPlayer giver, final CPlayer receiver) {
@@ -1335,7 +1373,10 @@ public class CSimulation implements CPlayerAPI, CSightWorld, HandleIdSource {
 		}
 		updateSelections();
 		for (int i = this.unitInRangeEvents.size() - 1; i >= 0; i--) {
-			this.unitInRangeEvents.get(i).update(this);
+			// An event's trigger may remove other events (a group's worth) while it runs.
+			if (i < this.unitInRangeEvents.size()) {
+				this.unitInRangeEvents.get(i).update(this);
+			}
 		}
 		final Iterator<CUnit> unitIterator = this.units.iterator();
 		while (unitIterator.hasNext()) {
@@ -2335,7 +2376,7 @@ public class CSimulation implements CPlayerAPI, CSightWorld, HandleIdSource {
 	public void removeDestructable(final CDestructable dest) {
 		// A removed destructable is gone for enumerations too; a script that removes it again (a campaign cleanup
 		// enumerating a rect it already cleared) must not remove its model twice.
-		if (dest.isRemovedFromGame() || this.removedDestructables.contains(dest)) {
+		if (dest.isRemovedFromGame() || dest.isRemovalQueued()) {
 			return;
 		}
 		if (dest.isDead()) {
@@ -2345,6 +2386,7 @@ public class CSimulation implements CPlayerAPI, CSightWorld, HandleIdSource {
 		else {
 			dest.setLife(this, 0);
 		}
+		dest.queueRemoval();
 		this.removedDestructables.add(dest);
 	}
 
@@ -2679,6 +2721,7 @@ public class CSimulation implements CPlayerAPI, CSightWorld, HandleIdSource {
 
 	public void setGlobalScope(final GlobalScope globalScope) {
 		this.globalScope = globalScope;
+		installLateEventHook();
 	}
 
 	public GlobalScope getGlobalScope() {
