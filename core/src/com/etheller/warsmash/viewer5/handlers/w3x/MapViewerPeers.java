@@ -98,9 +98,11 @@ final class MapViewerPeers implements RenderEventPlayer.WorldPeers, PeerQueue.Bu
 
 	private void present(final int handle, final War3ID typeId) {
 		// built ahead with its model still loading counts as late as one built now
-		if (this.queue.present(handle) || ((typeId != null) && (this.viewer.renderUnitTypeData != null)
+		final boolean late = this.queue.present(handle) || ((typeId != null) && (this.viewer.renderUnitTypeData != null)
 				&& this.viewer.typePrewarm.feed().isColdType(typeId)
-				&& !this.viewer.renderUnitTypeData.isModelReady(typeId))) {
+				&& !this.viewer.renderUnitTypeData.isModelReady(typeId));
+		// the opening steps play behind the loading screen, where no unit is shown yet
+		if (late && (this.viewer.getPresentedTick() > 0)) {
 			PerfStats.latePeer(typeId == null ? "handle " + handle : typeId.toString());
 		}
 	}

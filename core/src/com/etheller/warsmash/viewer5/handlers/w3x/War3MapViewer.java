@@ -27,6 +27,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilitybuilder.abil
 import com.etheller.warsmash.viewer5.handlers.w3x.rendersim.commandbuttons.CommandCardPopulatingAbilityVisitor;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.attacks.CUnitAttackMissileSplash;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.attacks.CUnitAttackMissileBounce;
+import com.etheller.warsmash.util.InputLatencyProbe;
 import com.etheller.warsmash.util.SessionResources;
 import com.etheller.warsmash.viewer5.AudioContext;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.sound.CSoundFilename;
@@ -1912,6 +1913,9 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 		if (this.simThread != null) {
 			this.simThread.afterFrame();
 		}
+		if (InputLatencyProbe.ENABLED) {
+			InputLatencyProbe.frameEnd();
+		}
 		// The map's script makes its starting units in the first game step.
 		if ((this.soundsToPreload != null) && (getPresentedTick() > 0)) {
 			final Collection<String> interfaceSoundKeys = this.soundsToPreload;
@@ -1994,7 +1998,7 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 		}
 		case FIRST_FRAME_SOUNDS: {
 			final long start = System.nanoTime();
-			if ((this.soundsToPreload == null) || (getPresentedTick() <= 0)) {
+			if ((this.soundsToPreload == null) || ((getPresentedTick() <= 0) && (this.openingStepsDone <= 0))) {
 				this.firstFrameStage = FIRST_FRAME_FINISH;
 			}
 			else {

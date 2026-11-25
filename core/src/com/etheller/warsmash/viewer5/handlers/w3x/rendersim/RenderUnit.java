@@ -8,6 +8,7 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.math.Quaternion;
 import com.badlogic.gdx.math.Vector3;
 import com.etheller.warsmash.parsers.fdf.GameUI;
+import com.etheller.warsmash.util.InputLatencyProbe;
 import com.etheller.warsmash.util.RenderMathUtils;
 import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.viewer5.handlers.mdx.MdxComplexInstance;
@@ -543,6 +544,9 @@ public class RenderUnit implements RenderWidget {
 		}
 		this.facing = (((this.facing + angleToAdd) % 360) + 360) % 360;
 		this.instance.setLocalRotation(tempQuat.setFromAxis(RenderMathUtils.VEC3_UNIT_Z, this.facing));
+		if (InputLatencyProbe.ENABLED) {
+			InputLatencyProbe.placed(this.handleId, this.location[0], this.location[1], this.facing);
+		}
 
 		final float facingRadians = (float) Math.toRadians(this.facing);
 		final float maxPitch = (float) Math.toRadians(this.typeData.getMaxPitch());

@@ -2,6 +2,7 @@ package com.etheller.warsmash.viewer5.handlers.w3x.simthread;
 
 import java.util.function.Consumer;
 
+import com.etheller.warsmash.util.InputLatencyProbe;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayerCommandCodec;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayerUnitOrderListener;
 
@@ -61,6 +62,9 @@ public final class ThreadedOrderListener implements CPlayerUnitOrderListener {
 	@Override
 	public synchronized void issueTargetOrder(final int unitHandleId, final int abilityHandleId, final int orderId,
 			final int targetHandleId, final boolean queue) {
+		if (InputLatencyProbe.ENABLED) {
+			InputLatencyProbe.submitted(unitHandleId);
+		}
 		this.encoder.issueTargetOrder(unitHandleId, abilityHandleId, orderId, targetHandleId, queue);
 		submit();
 	}
@@ -68,6 +72,9 @@ public final class ThreadedOrderListener implements CPlayerUnitOrderListener {
 	@Override
 	public synchronized void issuePointOrder(final int unitHandleId, final int abilityHandleId, final int orderId,
 			final float x, final float y, final boolean queue) {
+		if (InputLatencyProbe.ENABLED) {
+			InputLatencyProbe.submitted(unitHandleId);
+		}
 		this.encoder.issuePointOrder(unitHandleId, abilityHandleId, orderId, x, y, queue);
 		submit();
 	}
@@ -75,6 +82,9 @@ public final class ThreadedOrderListener implements CPlayerUnitOrderListener {
 	@Override
 	public synchronized void issueGroupPointOrder(final int[] unitHandleIds, final int[] abilityHandleIds,
 			final int orderId, final float[] xs, final float[] ys, final boolean queue) {
+		if (InputLatencyProbe.ENABLED) {
+			InputLatencyProbe.submitted(unitHandleIds[0]);
+		}
 		this.encoder.issueGroupPointOrder(unitHandleIds, abilityHandleIds, orderId, xs, ys, queue);
 		submit();
 	}
@@ -97,6 +107,9 @@ public final class ThreadedOrderListener implements CPlayerUnitOrderListener {
 	@Override
 	public synchronized void issueImmediateOrder(final int unitHandleId, final int abilityHandleId,
 			final int orderId, final boolean queue) {
+		if (InputLatencyProbe.ENABLED) {
+			InputLatencyProbe.submitted(unitHandleId);
+		}
 		this.encoder.issueImmediateOrder(unitHandleId, abilityHandleId, orderId, queue);
 		submit();
 	}

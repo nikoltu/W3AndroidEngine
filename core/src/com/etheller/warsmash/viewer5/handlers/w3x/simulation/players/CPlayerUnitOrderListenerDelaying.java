@@ -3,6 +3,8 @@ package com.etheller.warsmash.viewer5.handlers.w3x.simulation.players;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.etheller.warsmash.util.InputLatencyProbe;
+
 public class CPlayerUnitOrderListenerDelaying implements CPlayerUnitOrderListener {
 	private final CPlayerUnitOrderListener delegate;
 	private List<Runnable> actions = new ArrayList<>();
@@ -15,6 +17,9 @@ public class CPlayerUnitOrderListenerDelaying implements CPlayerUnitOrderListene
 	@Override
 	public void issueTargetOrder(final int unitHandleId, final int abilityHandleId, final int orderId,
 			final int targetHandleId, final boolean queue) {
+		if (InputLatencyProbe.ENABLED) {
+			InputLatencyProbe.delayed(unitHandleId);
+		}
 		this.actions.add(() -> {
 			this.delegate.issueTargetOrder(unitHandleId, abilityHandleId, orderId, targetHandleId, queue);
 		});
@@ -23,6 +28,9 @@ public class CPlayerUnitOrderListenerDelaying implements CPlayerUnitOrderListene
 	@Override
 	public void issuePointOrder(final int unitHandleId, final int abilityHandleId, final int orderId, final float x,
 			final float y, final boolean queue) {
+		if (InputLatencyProbe.ENABLED) {
+			InputLatencyProbe.delayed(unitHandleId);
+		}
 		this.actions.add(() -> {
 			this.delegate.issuePointOrder(unitHandleId, abilityHandleId, orderId, x, y, queue);
 		});
@@ -31,6 +39,9 @@ public class CPlayerUnitOrderListenerDelaying implements CPlayerUnitOrderListene
 	@Override
 	public void issueGroupPointOrder(final int[] unitHandleIds, final int[] abilityHandleIds, final int orderId,
 			final float[] xs, final float[] ys, final boolean queue) {
+		if (InputLatencyProbe.ENABLED) {
+			InputLatencyProbe.delayed(unitHandleIds[0]);
+		}
 		this.actions.add(() -> {
 			this.delegate.issueGroupPointOrder(unitHandleIds, abilityHandleIds, orderId, xs, ys, queue);
 		});
@@ -57,6 +68,9 @@ public class CPlayerUnitOrderListenerDelaying implements CPlayerUnitOrderListene
 	@Override
 	public void issueImmediateOrder(final int unitHandleId, final int abilityHandleId, final int orderId,
 			final boolean queue) {
+		if (InputLatencyProbe.ENABLED) {
+			InputLatencyProbe.delayed(unitHandleId);
+		}
 		this.actions.add(() -> {
 			this.delegate.issueImmediateOrder(unitHandleId, abilityHandleId, orderId, queue);
 		});
@@ -153,6 +167,9 @@ public class CPlayerUnitOrderListenerDelaying implements CPlayerUnitOrderListene
 	// An action can make the script issue more of them (skipping a cinematic selects units); those are inputs of the
 	// next step, as any other input given between two steps, so they wait for the next publish.
 	public void publishDelayedActions() {
+		if (InputLatencyProbe.ENABLED) {
+			InputLatencyProbe.applying();
+		}
 		final List<Runnable> batch = this.actions;
 		this.actions = this.publishing;
 		this.publishing = batch;

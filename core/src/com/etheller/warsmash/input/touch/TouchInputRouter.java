@@ -1,5 +1,6 @@
 package com.etheller.warsmash.input.touch;
 
+import com.etheller.warsmash.util.InputLatencyProbe;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.function.LongSupplier;
@@ -120,6 +121,9 @@ public final class TouchInputRouter {
 	}
 
 	public void post(final PointerEvent event) {
+		if (InputLatencyProbe.ENABLED) {
+			InputLatencyProbe.input();
+		}
 		this.events.add(event);
 	}
 

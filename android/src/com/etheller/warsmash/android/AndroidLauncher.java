@@ -311,6 +311,9 @@ public class AndroidLauncher extends AndroidApplication {
 		if (seed != null) {
 			System.setProperty("warsmash.seed", seed);
 		}
+		if (!this.fromLauncher && getIntent().getBooleanExtra("inputlatency", false)) {
+			System.setProperty("warsmash.inputlatency", "true");
+		}
 		// A map started from outside the launcher (automated runs) may name its own profile, as the desktop
 		// -Dwarsmash.profile does, so its saves and caches stay out of the player's. The process outlives the run, so
 		// a later game must not inherit it.
