@@ -98,6 +98,7 @@ import com.etheller.warsmash.viewer5.handlers.w3x.save.SavedInterfaceState;
 import com.etheller.warsmash.viewer5.handlers.w3x.simthread.LocalUiLink;
 import com.etheller.warsmash.viewer5.handlers.w3x.simthread.OncePerStep;
 import com.etheller.warsmash.viewer5.handlers.w3x.simthread.RenderEvent;
+import com.etheller.warsmash.viewer5.handlers.w3x.simthread.SimThreadGuard;
 import com.etheller.warsmash.viewer5.handlers.w3x.simthread.PresentationClock;
 import com.etheller.warsmash.viewer5.handlers.w3x.simthread.SimFrame;
 import com.etheller.warsmash.viewer5.handlers.w3x.simthread.UiFrameState;
@@ -491,7 +492,9 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 	static final int UNIT_HIDDEN = 2;
 	static final int UNIT_ORDERS = 3;
 	static final int UNIT_PANEL = 4;
-	static final int UNIT_STATE_KINDS = 5;
+	static final int UNIT_RALLY = 5;
+	static final int UNIT_WAYPOINTS = 6;
+	static final int UNIT_STATE_KINDS = 7;
 	/** Simulation thread: the changes of the selected unit sent to the interface. */
 	private final OncePerStep unitStateSent = new OncePerStep(UNIT_STATE_KINDS);
 
@@ -831,12 +834,18 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 	 * What the simulation tells the interface (a unit removed, a script selecting) happens in the next frame when the
 	 * simulation runs on its own thread: that thread never touches what the interface draws from.
 	 */
-	private boolean isSimulationThreadCall() {
+	boolean isSimulationThreadCall() {
 		return this.unitView.isFrameMode() && (Thread.currentThread() != this.renderThread);
 	}
 
 	void afterSimulation(final Runnable action) {
 		if (isSimulationThreadCall()) {
+			if (SimThreadGuard.collecting()) {
+				final StackTraceElement[] trace = new Throwable().getStackTrace();
+				SimThreadGuard.count("afterSimulation",
+						trace[1].getClassName().substring(trace[1].getClassName().lastIndexOf('.') + 1) + "."
+								+ trace[1].getMethodName() + ":" + trace[1].getLineNumber());
+			}
 			this.simulationCalls.add(action);
 		}
 		else {
@@ -1430,12 +1439,12 @@ public class MeleeUI implements CUnitStateListener, CommandButtonListener, Comma
 
 	@Override
 	public void rallyPointChanged() {
-		afterSimulation(this.commands::rallyPointChanged);
+		unitStateChanged(this.unitStateSent, UNIT_RALLY, this.commands::rallyPointChanged);
 	}
 
 	@Override
 	public void waypointsChanged() {
-		afterSimulation(this.commands::waypointsChanged);
+		unitStateChanged(this.unitStateSent, UNIT_WAYPOINTS, this.commands::waypointsChanged);
 	}
 
 	@Override

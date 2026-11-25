@@ -356,6 +356,7 @@ public final class SimThread implements SimThreadRunner {
 		}
 		final FutureTask<T> task = new FutureTask<>(call::get);
 		this.toRender.add(task);
+		final long waitStart = SimThreadGuard.collecting() ? System.nanoTime() : 0L;
 		try {
 			return task.get();
 		}
@@ -373,6 +374,11 @@ public final class SimThread implements SimThreadRunner {
 			}
 			throw new IllegalStateException(cause);
 		}
+		finally {
+			if (waitStart != 0L) {
+				SimThreadGuard.waited(System.nanoTime() - waitStart);
+			}
+		}
 	}
 
 	@Override
@@ -386,6 +392,7 @@ public final class SimThread implements SimThreadRunner {
 						SimThreadGuard.crossing("interface", type.getSimpleName() + "." + method.getName());
 					}
 					if (isSimThread() && (method.getReturnType() == void.class)) {
+						SimThreadGuard.notWaiting();
 						// nothing comes back, so the step does not wait for the interface
 						this.toRender.add(() -> invoke(method, target, args));
 						return null;

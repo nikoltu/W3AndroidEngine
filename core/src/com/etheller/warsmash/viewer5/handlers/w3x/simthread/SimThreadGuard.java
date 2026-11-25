@@ -47,13 +47,18 @@ public final class SimThreadGuard {
 	}
 
 	private static final Map<String, Violation> VIOLATIONS = new LinkedHashMap<>();
+	/** Per crossing: calls, nanoseconds the simulation thread waited, longest wait, waits over a frame (16 ms). */
 	private static final Map<String, long[]> CROSSINGS = new LinkedHashMap<>();
+	private static String pendingCrossing;
+	private static long simStartNanos;
+	private static long simSteps;
 	private static long lastReport;
 	private static boolean hookInstalled;
 
 	/** Called by the thread that runs simulation steps, when it starts. */
 	public static void registerSim(final Thread thread) {
 		simThread = thread;
+		simStartNanos = System.nanoTime();
 	}
 
 	/** Called by the render (GL) thread, when the screen starts. */
@@ -160,9 +165,65 @@ public final class SimThreadGuard {
 	public static void crossing(final String kind, final String what) {
 		if (COLLECTING) {
 			synchronized (VIOLATIONS) {
-				CROSSINGS.computeIfAbsent(kind + " " + what, key -> new long[1])[0]++;
+				final String key = kind + " " + what;
+				CROSSINGS.computeIfAbsent(key, k -> new long[4])[0]++;
+				pendingCrossing = key;
 				installHook();
 			}
+		}
+	}
+
+	/** A call counted without a wait of its own (collect mode). */
+	public static void count(final String kind, final String what) {
+		if (COLLECTING) {
+			synchronized (VIOLATIONS) {
+				CROSSINGS.computeIfAbsent(kind + " " + what, k -> new long[4])[0]++;
+			}
+		}
+	}
+
+	/** Whether {@link #waited} wants the time of each wait (collect mode). */
+	public static boolean collecting() {
+		return COLLECTING;
+	}
+
+	/** The crossing just counted does not make the simulation thread wait. */
+	public static void notWaiting() {
+		if (COLLECTING) {
+			synchronized (VIOLATIONS) {
+				pendingCrossing = null;
+			}
+		}
+	}
+
+	/** The simulation thread waited this long for the render thread, for the crossing counted last. */
+	public static void waited(final long nanos) {
+		synchronized (VIOLATIONS) {
+			final boolean internal = pendingCrossing == null;
+			final String key = internal ? "internal call" : pendingCrossing;
+			pendingCrossing = null;
+			final long[] stat = CROSSINGS.computeIfAbsent(key, k -> new long[4]);
+			if (internal) {
+				stat[0]++;
+			}
+			stat[1] += nanos;
+			stat[2] = Math.max(stat[2], nanos);
+			if (nanos > 16_000_000L) {
+				stat[3]++;
+			}
+			installHook();
+			final long now = System.nanoTime();
+			if ((now - lastReport) > REPORT_NANOS) {
+				lastReport = now;
+				report();
+			}
+		}
+	}
+
+	/** A simulation step ended (collect mode). */
+	public static void stepped() {
+		if (COLLECTING) {
+			simSteps++;
 		}
 	}
 
@@ -170,6 +231,19 @@ public final class SimThreadGuard {
 		if (!hookInstalled) {
 			hookInstalled = true;
 			Runtime.getRuntime().addShutdownHook(new Thread(SimThreadGuard::report, "guard-report"));
+			final Thread writer = new Thread(() -> {
+				while (true) {
+					try {
+						Thread.sleep(3000);
+					}
+					catch (final InterruptedException e) {
+						return;
+					}
+					report();
+				}
+			}, "guard-writer");
+			writer.setDaemon(true);
+			writer.start();
 		}
 	}
 
@@ -192,10 +266,14 @@ public final class SimThreadGuard {
 		sorted.sort(Comparator.comparing((Violation v) -> v.role).thenComparing((Violation v) -> -v.count));
 		final StringBuilder text = new StringBuilder();
 		text.append("GUARD sites=").append(sorted.size()).append('\n');
+		text.append("GUARD run seconds=").append((System.nanoTime() - simStartNanos) / 1_000_000_000L)
+				.append(" steps=").append(simSteps).append('\n');
 		synchronized (VIOLATIONS) {
 			for (final Map.Entry<String, long[]> crossing : CROSSINGS.entrySet()) {
-				text.append("GUARD crossing ").append(crossing.getKey()).append(" x").append(crossing.getValue()[0])
-						.append('\n');
+				final long[] stat = crossing.getValue();
+				text.append("GUARD crossing ").append(crossing.getKey()).append(" x").append(stat[0])
+						.append(" waitMs=").append(stat[1] / 1_000_000L).append(" maxMs=").append(stat[2] / 1_000_000L)
+						.append(" over16=").append(stat[3]).append('\n');
 			}
 		}
 		for (final Violation violation : sorted) {

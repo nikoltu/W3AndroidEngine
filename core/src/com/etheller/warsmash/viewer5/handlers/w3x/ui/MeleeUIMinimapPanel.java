@@ -1,5 +1,7 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.ui;
 
+import com.etheller.warsmash.viewer5.handlers.w3x.simthread.LocalUiLink;
+import com.etheller.warsmash.viewer5.handlers.w3x.simthread.RenderEvent;
 import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -611,7 +613,14 @@ final class MeleeUIMinimapPanel {
 			// judging is the interface's.
 			final int unitHandle = unit.getHandleId();
 			final int attackerHandle = attacker.getHandleId();
-			this.ui.afterSimulation(() -> unitAttackedFromFrame(clock, unitHandle, attackerHandle));
+			final LocalUiLink link = this.ui.isSimulationThreadCall() ? this.ui.war3MapViewer.localUiLink() : null;
+			if (link == null) {
+				this.ui.afterSimulation(() -> unitAttackedFromFrame(clock, unitHandle, attackerHandle));
+			}
+			else {
+				// an alert only draws and sounds; the step does not wait for it
+				link.send(RenderEvent.FRAME_COMMAND, () -> unitAttackedFromFrame(clock, unitHandle, attackerHandle));
+			}
 			return;
 		}
 		final CSimulation simulation = this.ui.war3MapViewer.simulation;

@@ -660,8 +660,10 @@ final class MapViewerSimThread {
 			return SimThread.WAIT;
 		}
 		this.simulation.update();
+		SimThreadGuard.stepped();
 		if (this.localUi.hasInterfaceCalls()) {
 			// the interface's answer to the step (a script's selection) goes out with the step's end
+			SimThreadGuard.crossing("internal", "runInterfaceCalls");
 			callOnRender(this.localUi::runInterfaceCalls);
 		}
 		drainOrdersNow();
@@ -689,6 +691,7 @@ final class MapViewerSimThread {
 			}
 		}
 		if (this.localUi.hasInterfaceCalls()) {
+			SimThreadGuard.crossing("internal", "runInterfaceCalls(idle)");
 			callOnRender(this.localUi::runInterfaceCalls);
 			drainOrdersNow();
 			publishPending();
@@ -699,6 +702,7 @@ final class MapViewerSimThread {
 	/** Simulation thread: a save is made, or a load handed on, by the render thread while the simulation waits. */
 	private void runSaveRequests() {
 		if ((this.viewer.pendingSave != null) || (this.viewer.pendingLoad != null)) {
+			SimThreadGuard.crossing("internal", "save");
 			callOnRender(() -> MapViewerSaves.runPendingSaveRequests(this.viewer));
 		}
 	}

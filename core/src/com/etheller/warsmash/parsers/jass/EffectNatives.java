@@ -49,7 +49,12 @@ final class EffectNatives extends CommonNatives {
 	private HandleJassValue effectHandle(final HandleJassType effectType,
 			final java.util.function.Supplier<RenderSpellEffect> create) {
 		if (!this.commands.isQueued()) {
-			return newHandle(effectType, create.get());
+			final RenderSpellEffect made = create.get();
+			if (made != null) {
+				return newHandle(effectType, made);
+			}
+			// the original gives a handle also for a model it cannot show, as it does when the effect is made later
+			return newHandle(effectType, new PendingEffect());
 		}
 		final PendingEffect pending = new PendingEffect();
 		final HandleJassValue handle = newHandle(effectType, pending);
@@ -117,6 +122,9 @@ final class EffectNatives extends CommonNatives {
 							.visit(ObjectJassValueVisitor.getInstance());
 					final double x = arguments.get(2).visit(RealJassValueVisitor.getInstance());
 					final double y = arguments.get(3).visit(RealJassValueVisitor.getInstance());
+					if (!war3MapViewer.hasSpellEffectArt(new War3ID(rawcode), whichEffectType, 0)) {
+						return newHandle(effectType, null);
+					}
 					return effectHandle(effectType, () -> war3MapViewer
 							.spawnSpellEffectEx((float) x, (float) y, 0 /* facing */, new War3ID(rawcode), whichEffectType, 0));
 				});
@@ -129,6 +137,9 @@ final class EffectNatives extends CommonNatives {
 					final String attachmentPoint = nullable(arguments, 3, StringJassValueVisitor.getInstance());
 					// Measured: an empty attachment point makes no effect.
 					if ((attachmentPoint != null) && attachmentPoint.isEmpty()) {
+						return newHandle(effectType, null);
+					}
+					if (!war3MapViewer.hasSpellEffectArt(new War3ID(rawcode), whichEffectType, 0)) {
 						return newHandle(effectType, null);
 					}
 					if (attachmentPoint != null) {
@@ -148,6 +159,9 @@ final class EffectNatives extends CommonNatives {
 					final AbilityPointTarget loc = arguments.get(2).visit(ObjectJassValueVisitor.getInstance());
 					final float x = loc.x;
 					final float y = loc.y;
+					if (!war3MapViewer.hasSpellEffectArt(new War3ID(rawcode), whichEffectType, 0)) {
+						return newHandle(effectType, null);
+					}
 					return effectHandle(effectType, () -> war3MapViewer
 							.spawnSpellEffectEx(x, y, 0 /* facing */, new War3ID(rawcode), whichEffectType, 0));
 				});

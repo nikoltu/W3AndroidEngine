@@ -2933,6 +2933,12 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 		this.gameTurnManager = gameTurnManager;
 	}
 
+	/** Whether the ability (or buff) has art of the kind, from the unit data alone: a script's effect handle is null without. */
+	public boolean hasSpellEffectArt(final War3ID alias, final CEffectType effectType, final int index) {
+		final EffectAttachmentUI art = MapViewerEffects.getEffectAttachmentUI(this, alias, effectType, index);
+		return (art != null) && (art.getModelPath() != null) && !MapViewerEffects.isNoModelPath(art.getModelPath());
+	}
+
 	public RenderSpellEffect spawnSpellEffectOnUnitEx(final CWidget unit, final War3ID alias,
 			final CEffectType effectType, final int index) {
 		SimThreadGuard.assertGl();

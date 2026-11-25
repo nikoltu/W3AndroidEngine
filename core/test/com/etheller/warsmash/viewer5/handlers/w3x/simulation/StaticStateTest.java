@@ -169,7 +169,7 @@ class StaticStateTest {
 			"w3x.simthread.SimThreadGuard#simThread", "w3x.simthread.SimThreadGuard#glThread", "w3x.simthread.SimThreadGuard#renderOwnsSimulation",
 			"w3x.simthread.SimThreadGuard#renderHoldsSimulation", "w3x.simthread.SimThreadGuard#threadsAlternate", "w3x.simthread.SimThreadMode#current",
 			// Debug list of calls that crossed threads, only filled with -Dwarsmash.simthread.guard=collect.
-			"w3x.simthread.SimThreadGuard#VIOLATIONS", "w3x.simthread.SimThreadGuard#CROSSINGS", "w3x.simthread.SimThreadGuard#lastReport", "w3x.simthread.SimThreadGuard#hookInstalled",
+			"w3x.simthread.SimThreadGuard#VIOLATIONS", "w3x.simthread.SimThreadGuard#CROSSINGS", "w3x.simthread.SimThreadGuard#lastReport", "w3x.simthread.SimThreadGuard#hookInstalled", "w3x.simthread.SimThreadGuard#pendingCrossing", "w3x.simthread.SimThreadGuard#simStartNanos", "w3x.simthread.SimThreadGuard#simSteps",
 			// Scratch objects of the render thread, filled and read within one call.
 			"w3x.environment.Terrain#sizeHeap", "w3x.environment.Terrain#fourComponentHeap",
 			"w3x.rendersim.RenderDoodad#VERTEX_COLOR_HEAP", "w3x.rendersim.RenderUnit#heapZ",
