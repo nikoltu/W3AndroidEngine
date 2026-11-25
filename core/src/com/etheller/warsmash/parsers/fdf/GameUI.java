@@ -1888,6 +1888,21 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 
 	public UIFrame createFrameByType(final String typeName, final String name, final UIFrame owner,
 			final String inherits, final int createContext) {
+		return inflateByType(typeName, name, owner, inherits, createContext, true);
+	}
+
+	/**
+	 * A frame its owner draws, lays out and hit-tests itself, as a list box does its rows: it is not added to the
+	 * interface, where it would be drawn a second time without the owner's fading and scale, and where a list rebuilding
+	 * its rows during a hit test would change the child list being walked.
+	 */
+	public UIFrame createOwnedFrameByType(final String typeName, final String name, final UIFrame owner,
+			final String inherits, final int createContext) {
+		return inflateByType(typeName, name, owner, inherits, createContext, false);
+	}
+
+	private UIFrame inflateByType(final String typeName, final String name, final UIFrame owner,
+			final String inherits, final int createContext, final boolean attach) {
 		// The template to copy is the one the script names in "inherits"; a frame without one takes the fields of a
 		// template of its own name.
 		final boolean withChildren = "WITHCHILDREN".equals(inherits);
@@ -1901,7 +1916,9 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 		try {
 			final UIFrame inflatedFrame = inflate(frameDefinition, owner, null,
 					frameDefinition.has("DecorateFileNames"));
-			attachToOwner(inflatedFrame, owner);
+			if (attach) {
+				attachToOwner(inflatedFrame, owner);
+			}
 			return inflatedFrame;
 		}
 		finally {

@@ -17,7 +17,7 @@ public abstract class AbstractListItemDisplay {
         this.dataType = dataType;
 
         // parentFrame = (SimpleFrame) gameUI.createSimpleFrame(null, rootList, 0);
-        parentFrame = (SimpleFrame) gameUI.createFrameByType("FRAME", name, rootList, "", 0);
+        parentFrame = (SimpleFrame) gameUI.createOwnedFrameByType("FRAME", name, rootList, "", 0);
         parentFrame.setWidth(rootList.getRenderBounds().width - 2 * rootList.getListBoxBorder());
         parentFrame.setHeight(rootList.getFrameFont().getLineHeight());
     }
