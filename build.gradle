@@ -8,11 +8,11 @@ buildscript {
         gradlePluginPortal()
         google()
     }
-    dependencies {
-        classpath "com.android.tools.build:gradle:9.5.1"
-    }
 }
 
+// The Android plugin is declared in android/build.gradle, which is only included
+// when an Android SDK is available. Declaring it here would resolve AGP on macOS
+// too and break Gradle sync/tasks for the desktop-only build.
 allprojects {
     apply plugin: "eclipse"
     apply plugin: "idea"
@@ -34,6 +34,8 @@ allprojects {
         google()
         gradlePluginPortal()
         maven { url = "https://jitpack.io" }
+        // LWJGL 2 rebuild with macOS arm64 natives (the 2015 original only ships x86_64).
+        maven { url = "https://maven.legacyfabric.net/" }
     }
 }
 
@@ -56,8 +58,15 @@ project(":desktop") {
         implementation project(":lua")
         runtimeOnly project(path: ":lua", configuration: "desktopNatives")
         api "com.badlogicgames.gdx:gdx-backend-lwjgl:$gdxVersion"
+        // libGDX and FreeType natives are needed on every desktop OS; the jar also carries libgdxarm64.dylib.
         api "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-desktop"
         api "com.badlogicgames.gdx:gdx-freetype-platform:$gdxVersion:natives-desktop"
+        // Only the LWJGL replacement is macOS-specific: the stock 2015 build has no arm64 natives.
+        // Windows and Linux keep the stock LWJGL 2.9.3 and its own natives from transitive dependencies.
+        if (org.gradle.internal.os.OperatingSystem.current().isMacOsX()) {
+            api "org.lwjgl.lwjgl:lwjgl:2.9.4+legacyfabric.18"
+            api "org.lwjgl.lwjgl:lwjgl-platform:2.9.4+legacyfabric.18:natives-osx"
+        }
         api "com.google.guava:guava:$guavaVersion"
         api "org.apache.commons:commons-compress:$commonsCompressVersion"
         api "commons-io:commons-io:$commonsIoVersion"

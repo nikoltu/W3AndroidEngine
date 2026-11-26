@@ -43,13 +43,13 @@ import com.etheller.warsmash.audio.OpenALAudio;
 import com.etheller.warsmash.input.touch.ControlScheme;
 import com.etheller.warsmash.input.touch.MouseTouchBridge;
 import com.etheller.warsmash.input.touch.TouchInputRouter;
+import com.etheller.warsmash.viewer5.gl.DesktopShaderAdapter;
 
 /**
  * An OpenGL surface fullscreen or in a lightweight window. This was modified by
  * Retera in accordance with the permission to do so from the Apache 2.0 license
- * listed at the top of the file. The ONLY reason for this modified file
- * override currently is to use a replacement for the OpenALAudio class that
- * will now support the 3D sound!
+ * listed at the top of the file. It uses a replacement for the OpenALAudio class
+ * that supports 3D sound and installs the macOS-only shader compatibility hook.
  */
 public class LwjglApplication implements Application {
 	protected final LwjglGraphics graphics;
@@ -95,6 +95,7 @@ public class LwjglApplication implements Application {
 	public LwjglApplication(final ApplicationListener listener, final LwjglApplicationConfiguration config,
 			final LwjglGraphics graphics) {
 		LwjglNativesLoader.load();
+		DesktopShaderAdapter.install();
 		setApplicationLogger(new LwjglApplicationLogger());
 
 		if (config.title == null) {

@@ -1,1 +1,43 @@
-include 'desktop', 'core', 'server', 'shared', 'fdfparser', 'jassparser', 'android', 'lua'
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        google()
+        mavenCentral()
+    }
+}
+
+// :lua is used by the desktop client and tests too, so it must be present on every platform.
+include 'desktop', 'core', 'server', 'shared', 'fdfparser', 'jassparser', 'lua'
+
+def isValidDir = { String path ->
+    if (!path?.trim()) return false
+    def dir = new File(path.trim())
+    if (!dir.isAbsolute()) {
+        dir = new File(settingsDir, path.trim())
+    }
+    return dir.isDirectory()
+}
+
+def hasAndroidSdk = { ->
+    def localPropsFile = new File(settingsDir, "local.properties")
+    if (localPropsFile.isFile()) {
+        def props = new Properties()
+        localPropsFile.withInputStream { props.load(it) }
+        if (isValidDir(props.getProperty("sdk.dir")) || isValidDir(props.getProperty("android.dir"))) {
+            return true
+        }
+    }
+    for (envName in ["ANDROID_HOME", "ANDROID_SDK_ROOT"]) {
+        if (isValidDir(System.getenv(envName))) {
+            return true
+        }
+    }
+    if (isValidDir(System.getProperty("android.home"))) {
+        return true
+    }
+    return false
+}()
+
+if (hasAndroidSdk) {
+    include 'android'
+}

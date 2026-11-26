@@ -41,6 +41,7 @@ import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Clipboard;
 import com.badlogic.gdx.utils.SharedLibraryLoader;
 import com.etheller.warsmash.audio.OpenALAudio;
+import com.etheller.warsmash.viewer5.gl.DesktopShaderAdapter;
 
 /**
  * An OpenGL surface on an AWT Canvas, allowing OpenGL to be embedded in a Swing
@@ -81,6 +82,7 @@ public class LwjglCanvas implements Application {
 
 	private void initialize(final ApplicationListener listener, final LwjglApplicationConfiguration config) {
 		LwjglNativesLoader.load();
+		DesktopShaderAdapter.install();
 		setApplicationLogger(new LwjglApplicationLogger());
 		this.canvas = new Canvas() {
 			private final Dimension minSize = new Dimension(1, 1);

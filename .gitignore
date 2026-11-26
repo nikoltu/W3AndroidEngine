@@ -141,6 +141,7 @@ Thumbs.db
 ## data
 /core/data
 /core/assets/Logs
+/desktop/Logs
 /core/assets/Save
 /core/assets/Replay
 /core/assets/texture-cache

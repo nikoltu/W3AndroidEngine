@@ -119,6 +119,13 @@ public class WebGL {
 		else {
 			vertexSrc = vertexSrc.replace("mediump", "");
 			fragmentSrc = fragmentSrc.replace("mediump", "");
+
+			// macOS only: DesktopShaderAdapter installs a GLSL 330 core prepend hook on
+			// ShaderProgram. Drop the original #version so that the hook supplies the only one.
+			if (DesktopShaderAdapter.isMacDesktop()) {
+				vertexSrc = DesktopShaderAdapter.stripVersionDirective(vertexSrc);
+				fragmentSrc = DesktopShaderAdapter.stripVersionDirective(fragmentSrc);
+			}
 		}
 		final Map<Integer, ShaderProgram> shaderPrograms = this.shaderPrograms;
 

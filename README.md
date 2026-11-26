@@ -1,11 +1,11 @@
 ![Warsmash Reforged](docs/images/banner.png)
 
 <p align="center">
-  <b>W3 on Windows and on Android phones and tablets: an engine and a launcher that play from your own copy of the game.</b>
+  <b>W3 on Windows, macOS and on Android phones and tablets: an engine and a launcher that play from your own copy of the game.</b>
 </p>
 
 <p align="center">
-  <img alt="Platform: Windows and Android" src="https://img.shields.io/badge/platform-Windows%20%7C%20Android%208.0%2B-3DDC84?logo=android&logoColor=white">
+  <img alt="Platform: Windows, macOS and Android" src="https://img.shields.io/badge/platform-Windows%20%7C%20Android%208.0%2B-3DDC84?logo=android&logoColor=white">
   <img alt="Version 0.5.67-hotfix1" src="https://img.shields.io/badge/version-0.5.67--hotfix1-blue">
   <img alt="Licence: AGPL-3.0" src="https://img.shields.io/badge/licence-AGPL--3.0-orange">
   <img alt="Engine: Warsmash" src="https://img.shields.io/badge/engine-Warsmash-8a2be2">
@@ -14,7 +14,7 @@
 </p>
 
 > [!IMPORTANT]
-> **This project contains no game content.** The Android APK and the Windows build hold the engine and the launcher only.
+> **This project contains no game content.** The Android APK and the desktop (Windows / macOS) build hold the engine and the launcher only.
 > Models, textures, sound, music, maps, campaigns, movies and texts are read at run time from **your own, legally
 > owned copy of W3**, whose folder you choose when the app starts for the first time.
 > No game data is distributed here and none may be requested here.
@@ -38,17 +38,18 @@
 
 ## What it is
 
-Warsmash Reforged is a continuation of Retera's [Warsmash](https://github.com/Retera/WarsmashModEngine) engine for Windows
-and Android. It has two parts:
+Warsmash Reforged is a continuation of Retera's [Warsmash](https://github.com/Retera/WarsmashModEngine) engine for Windows,
+macOS and Android. It has two parts:
 
 - **The engine** — a Java 17 / [libGDX](https://libgdx.com/) engine that reads the game's own data (CASC install or
   extracted files), runs the game simulation and the map scripts in its own JASS2 interpreter, and draws the game
-  with OpenGL ES shaders. This fork adds touch and S Pen controls, the campaign flow, save and load, cinematics,
-  graphics sets (Classic, HD, Reforged), determinism work for replays, and the memory and speed work needed on phones.
+  with OpenGL ES shaders (with OpenGL 3.3 Core Profile support on macOS). This fork adds touch and S Pen controls,
+  the campaign flow, save and load, cinematics, graphics sets (Classic, HD, Reforged), determinism work for replays,
+  and the memory and speed work needed on phones.
 - **The launcher** — the front end that replaces the engine's own menus: game data check, player profiles,
   campaign and mission lists, Custom Game, Load Game, Options, Help and the result page after every campaign
   mission. It is built from your game data in either the Classic or the Reforged look, and the same launcher
-  runs on Android (native views) and on Windows.
+  runs on Android (native views), Windows and macOS.
 
 The aim is to play W3 on phones and tablets with classic graphics at a steady 30 FPS on weaker devices and up to
 120 FPS on faster ones, with game rules as close to the original as measurements allow.
@@ -70,7 +71,7 @@ The aim is to play W3 on phones and tablets with classic graphics at a steady 30
   </tr>
 </table>
 
-<p align="center"><sub>The engine on Windows with the user's own game data; game art © Blizzard Entertainment.</sub></p>
+<p align="center"><sub>The engine on Desktop with the user's own game data; game art © Blizzard Entertainment.</sub></p>
 
 ## Feature status
 
@@ -109,7 +110,7 @@ Legend: **Working** — used in the regular test runs or played on real devices 
 
 - An Android phone or tablet with Android 8.0 (API 26) or later and OpenGL ES 3.0 (`arm64-v8a`, `armeabi-v7a` or `x86_64`).
   Development devices are a Samsung Galaxy Tab S8 Ultra, a Galaxy S20+ and a Galaxy S23 Ultra.
-- Or a Windows PC with Java 17 (movies need Windows x64).
+- Or a Windows PC or Mac (Apple Silicon & Intel) with Java 17 (movies need Windows x64).
 - Your own copy of W3, version 1.31 or newer (including Reforged): an installed game folder (CASC) or files
   extracted from it, for example with the [Reforged Extractor toolkit](https://github.com/nikoltu/W3-Android-prep-tool).
   Tested with 1.31.1, 1.32.10 (extracted files) and 3.0.1. Older releases that ship MPQ archives (1.29 and earlier)
@@ -138,7 +139,7 @@ Legend: **Working** — used in the regular test runs or played on real devices 
 
 The app only reads the game folder. Profiles, saves and settings are kept in the app's own storage.
 
-### Windows
+### Desktop (Windows and macOS)
 
 Without a map argument the program opens on its launcher, where you choose the game data folder. To start the
 engine directly instead:
@@ -146,6 +147,7 @@ engine directly instead:
 1. Copy `core/assets/warsmash.ini` to `core/assets/warsmash.local.ini`.
 2. Point `[DataSources]` at your game install:
 
+   **Windows:**
    ```ini
    [DataSources]
    Count=3
@@ -154,6 +156,20 @@ engine directly instead:
    Prefixes00=war3.w3mod,war3.w3mod\_deprecated.w3mod,war3.w3mod\_locales\enus.w3mod
    Type01=Folder
    Path01="..\..\resources"
+   Type02=Folder
+   Path02="."
+   ```
+
+   **macOS (e.g. Warcraft III 1.31):**
+   ```ini
+   [DataSources]
+   Count=3
+   Type00=CASC
+   Path00="/Applications/Warcraft III"
+   Prefixes00=war3.w3mod,war3.w3mod/_deprecated.w3mod,war3.w3mod/_locales/enus.w3mod
+   OldFormat00=1
+   Type01=Folder
+   Path01="../../resources"
    Type02=Folder
    Path02="."
    ```
@@ -169,7 +185,7 @@ engine directly instead:
 ```mermaid
 flowchart LR
     GF[("Player's game data<br/>CASC install or extracted files")]
-    subgraph App["Android APK or Windows build — no game content"]
+    subgraph App["Android APK or Desktop build — no game content"]
         L["Launcher<br/>profiles · campaigns · custom game · load · options"]
         E["Engine (core)<br/>simulation · JASS2 interpreter · renderer"]
         DS["Data sources<br/>CASC · folders · ZIP"]
@@ -193,6 +209,7 @@ flowchart LR
 | Path | State |
 |---|---|
 | Windows host, JDK 17, debug APK and Windows build | Tested — this is how every development build is made |
+| macOS host (Apple Silicon arm64 & Intel x86_64), JDK 17 | Tested — desktop engine (OpenGL 3.3 Core Profile) and unit tests |
 | Release APK (minified) | Tested — `android:assembleRelease`, then signed with your own key (`zipalign` + `apksigner`) |
 | Linux / macOS host | Not tested |
 
@@ -205,12 +222,14 @@ flowchart LR
 
 The libGDX native libraries for each ABI are unpacked into `android/libs` by the build.
 
-**Windows:**
+**Desktop (Windows / macOS):**
 
 ```bash
 ./gradlew desktop:classes
 ./gradlew desktop:runGame -Pargs="-window -ini warsmash.local.ini"
 ```
+
+On macOS the desktop runtime installs `DesktopShaderAdapter`, which uses libGDX's `ShaderProgram.prependVertexCode`/`prependFragmentCode` hooks (available in libGDX 1.14.2, the version used here) to add a GLSL 330 core compatibility header to every shader, including libGDX's own SpriteBatch shaders. `WebGL` strips an existing `#version` line first so the hook supplies the only one. No libGDX class is copied, and on other operating systems nothing is installed.
 
 ## Tests
 
@@ -230,13 +249,13 @@ devices before every version; those tools are not part of this repository.
 ## Project layout
 
 ```
-core/                   engine: simulation, JASS2 interpreter, rendering, launcher logic shared by both platforms
+core/                   engine: simulation, JASS2 interpreter, rendering, launcher logic shared by platforms
   src/com/etheller/warsmash/launcher/    launch request, game result, campaigns, skins, profiles
   src/com/etheller/warsmash/viewer5/     model and terrain rendering, game simulation
   assets/               engine settings, shaders, icons
   test/                 unit tests
 android/                Android app: launcher pages, data folder screen, engine activity
-desktop/                Windows launcher and engine start (LWJGL)
+desktop/                Desktop launcher and engine start (LWJGL 2, Windows & macOS)
 shared/                 networking protocol shared by client and server
 server/                 game server (inherited from Warsmash)
 jassparser/             JASS2 grammar (ANTLR)
@@ -254,8 +273,8 @@ Current version: **v0.5.67-hotfix1**
 - **Campaigns:** Reign of Chaos and The Frozen Throne can be completed to the end. Tweaking required.
 - **Controls:** full touch screen control, with S Pen support.
 - **Launcher:** built from your own game data, with Campaign, Custom Game, Load Game, Options and Help; the same
-  launcher on Android and Windows.
-- **Cinematics:** campaign intro, opening and ending movies play from the game data (Windows x64 and Android).
+  launcher on Android, Windows and macOS.
+- **Cinematics:** campaign intro, opening and ending movies play from the game data (Windows x64 and Android; skipped on macOS because JavaCPP/FFmpeg decoder natives are currently bundled for Windows x64 only).
 - **Save and load**, also from the main menu.
 - **LAN games:** hosting and joining over the local network between phones, tablets and PCs; players that drop out
   rejoin the running game, and the game moves to another host if the host leaves.
@@ -269,7 +288,7 @@ Known issues: Forsaken Kingdom campaigns cannot be played yet; movies on Windows
 
 - **[Retera](https://github.com/Retera)** for [Warsmash](https://github.com/Retera/WarsmashModEngine), the engine this
   repository continues, and everyone who contributed to it.
-- **[libGDX](https://libgdx.com/)** with `gdx-freetype`, **LWJGL 2**, **ANTLR 4**, **Gson**, **Guava**,
+- **[libGDX](https://libgdx.com/)** with `gdx-freetype`, **LWJGL 2** (with Legacy Fabric rebuild for macOS arm64), **ANTLR 4**, **Gson**, **Guava**,
   **Apache Commons Compress and IO**, and **FFmpeg** (JavaCPP) for movies on Windows, each under its own licence.
 - **[Lua](https://www.lua.org/) 5.3.6** (MIT, PUC-Rio), **[Eris](https://github.com/fnuecke/eris)** (MIT, Florian Nücke) and
   the math routines of **[musl](https://musl.libc.org/)** (MIT) run the Lua scripts of custom maps.
