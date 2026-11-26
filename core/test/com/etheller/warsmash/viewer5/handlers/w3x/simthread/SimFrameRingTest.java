@@ -136,17 +136,6 @@ class SimFrameRingTest {
 		assertFalse(ring.get(1).fogChanged);
 	}
 
-	@Test
-	void clearStartsOver() {
-		final SimFrameRing ring = new SimFrameRing(3, pool);
-		fill(ring.beginWrite(), 7);
-		ring.publish();
-		ring.clear();
-		assertEquals(0, ring.publishedCount());
-		assertNull(ring.latest());
-		assertEquals(0, ring.beginWrite().sequence);
-	}
-
 	/** One writer racing one reader: every frame the reader sees is complete and in order, and nothing is overwritten while held. */
 	@Test
 	void concurrentWriterAndReaderSeeConsistentFrames() throws Exception {

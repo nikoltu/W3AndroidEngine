@@ -47,15 +47,8 @@ public class CAbilityPhoenixFire extends AbstractGenericNoIconAbility {
 	private CUnit searchUnit;
 	private CSimulation searchGame;
 	private CUnit searchChosen;
-	private final CUnitEnumFunction searchCallback = enumUnit -> {
-		if (this.searchUnit.canReach(enumUnit, this.areaOfEffect)
-				&& enumUnit.canBeTargetedBy(this.searchGame, this.searchUnit, this.targetsAllowed)
-				&& !isBurning(enumUnit)) {
-			this.searchChosen = enumUnit;
-			return true;
-		}
-		return false;
-	};
+	// A saved game drops lambdas, so the callback is made on first use and not in a field initializer.
+	private CUnitEnumFunction searchCallback;
 
 	public CAbilityPhoenixFire(final int handleId, final War3ID code, final War3ID alias, final float initialDamage,
 			final float damagePerSecond, final float areaOfEffect, final float cooldown, final float duration,
@@ -95,6 +88,17 @@ public class CAbilityPhoenixFire extends AbstractGenericNoIconAbility {
 				this.areaOfEffect * 2);
 		this.searchUnit = unit;
 		this.searchGame = game;
+		if (this.searchCallback == null) {
+			this.searchCallback = enumUnit -> {
+				if (this.searchUnit.canReach(enumUnit, this.areaOfEffect)
+						&& enumUnit.canBeTargetedBy(this.searchGame, this.searchUnit, this.targetsAllowed)
+						&& !isBurning(enumUnit)) {
+					this.searchChosen = enumUnit;
+					return true;
+				}
+				return false;
+			};
+		}
 		game.getWorldCollision().enumUnitsInRect(this.searchRect, this.searchCallback);
 		final CUnit target = this.searchChosen;
 		this.searchChosen = null;

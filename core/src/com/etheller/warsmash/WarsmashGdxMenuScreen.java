@@ -29,6 +29,7 @@ import com.badlogic.gdx.utils.viewport.ExtendViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import com.etheller.warsmash.launcher.GameResult;
 import com.etheller.warsmash.input.touch.SliderHost;
+import com.etheller.warsmash.input.touch.VirtualCursor;
 import com.etheller.warsmash.datasources.BorrowedDataSource;
 import com.etheller.warsmash.datasources.DataSource;
 import com.etheller.warsmash.networking.uberserver.GamingNetworkConnectionImpl;
@@ -911,7 +912,7 @@ public class WarsmashGdxMenuScreen implements InputProcessor, Screen, SingleMode
 		if (this.missionCinematic != null) {
 			return false;
 		}
-		return (this.menuUI != null) && this.menuUI.scrolled(Gdx.input.getX(), Gdx.input.getY(), amountY);
+		return (this.menuUI != null) && this.menuUI.scrolled(VirtualCursor.getX(), VirtualCursor.getY(), amountY);
 	}
 
 	@Override

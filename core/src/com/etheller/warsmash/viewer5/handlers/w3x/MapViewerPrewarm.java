@@ -108,13 +108,15 @@ final class MapViewerPrewarm {
 		viewer.scriptSpeaksLines = script.contains("Transmission") || script.contains("CinematicScene")
 				|| script.contains("Dialogue");
 		viewer.prefetchFrameTemplates();
+		// The weights of the tasks are about their time in that of loading one unit type, for the loading bar.
 		// First, so that the decoding runs beside the model loading that follows.
-		loader.addLoadTask(whenScanned(loader, () -> prefetchAmbientSounds(viewer, scans, loader), scans.ambientLabels));
-		loader.addLoadTask(() -> prefetchInterfaceTextures(viewer, loader));
-		loader.addLoadTask(whenScanned(loader, () -> prefetchScriptSounds(viewer, scans, loader), scans.soundFiles));
+		loader.addLoadTask(whenScanned(loader, () -> prefetchAmbientSounds(viewer, scans, loader), scans.ambientLabels),
+				2);
+		loader.addLoadTask(() -> prefetchInterfaceTextures(viewer, loader), 10);
+		loader.addLoadTask(whenScanned(loader, () -> prefetchScriptSounds(viewer, scans, loader), scans.soundFiles), 5);
 		loader.addLoadTask(whenScanned(loader, () -> prepareScriptLabels(viewer, script, scans), scans.labelParameters,
 				scans.labelCreations));
-		loader.addLoadTask(() -> SimulationClassPrewarm.queue(loader));
+		loader.addLoadTask(() -> SimulationClassPrewarm.queue(loader), 6);
 
 		final Set<War3ID> placed = new LinkedHashSet<>();
 		final Set<War3ID> ownTypes = new LinkedHashSet<>();
@@ -137,7 +139,8 @@ final class MapViewerPrewarm {
 		}
 		started.removeAll(placed);
 		otherTypes.removeAll(ownTypes);
-		loader.addLoadTask(() -> prefetchUnitSounds(viewer, ownTypes, otherTypes, loader));
+		loader.addLoadTask(() -> prefetchUnitSounds(viewer, ownTypes, otherTypes, loader),
+				1 + ((ownTypes.size() + otherTypes.size()) / 5.0));
 		// The map's items share the file with the units, and its script makes them in the first step.
 		final RenderItemTypeData items = viewer.miscData == null ? null
 				: new RenderItemTypeData(viewer.allObjectData.getItems(), viewer.mapMpq, viewer, viewer.miscData);
@@ -148,15 +151,15 @@ final class MapViewerPrewarm {
 			loader.addLoadTask(loader.modelTask(() -> load(viewer, types, items, typeId)));
 		}
 		loader.addLoadTask(whenScanned(loader, () -> queuePreloads(viewer, w3i, script, scans, loader),
-				scans.preloaders, scans.preloadedFiles, scans.skyModels, scans.effectModels));
+				scans.preloaders, scans.preloadedFiles, scans.skyModels, scans.effectModels), 10);
 		final Set<War3ID> known = new LinkedHashSet<>(placed);
 		known.addAll(started);
 		loader.addLoadTask(settledWhenScanned(loader,
 				() -> queueScriptCreations(viewer, script, scans, known, types, items, loader),
-				scans.units, scans.items, scans.destructables, scans.variations, scans.rawCodes));
+				scans.units, scans.items, scans.destructables, scans.variations, scans.rawCodes), 8);
 		loader.addLoadTask(loader.modelTask(() -> loadSleepEffect(viewer)));
 		loader.addLoadTask(whenScanned(loader, () -> queueSimulationTypes(viewer, scans, known, loader),
-				scans.units, scans.rawCodes));
+				scans.units, scans.rawCodes), 4);
 		if (viewer.scriptSpeaksLines) {
 			// Last, so that it runs beside the decoding of the textures the loading still has under way.
 			loader.addLoadTask(() -> viewer.faceFxLibrary().prepare());
@@ -203,7 +206,7 @@ final class MapViewerPrewarm {
 			final Set<War3ID> known, final MapLoader loader) throws IOException {
 		final Set<War3ID> typeIds = new LinkedHashSet<>(known);
 		typeIds.addAll(scans.units.join());
-		loader.addSlices(typeIds.iterator(), typeId -> loadSimulationType(viewer.simulation, typeId), () -> {
+		loader.addSlices(typeIds, typeId -> loadSimulationType(viewer.simulation, typeId), () -> {
 		});
 		loader.addLoadTask(() -> queuePathingData(viewer, typeIds, scans, loader));
 	}
@@ -244,7 +247,7 @@ final class MapViewerPrewarm {
 		if (viewer.playsOpeningSteps()) {
 			viewer.deferPathingParts(walkers);
 		}
-		loader.addSlices(walkers.iterator(), viewer.simulation::prewarmPathing, () -> {
+		loader.addSlices(walkers, viewer.simulation::prewarmPathing, () -> {
 		});
 	}
 
@@ -601,13 +604,13 @@ final class MapViewerPrewarm {
 		final long started = System.nanoTime();
 		final int total = pending.size() + learned.size();
 		final int[] loadedAhead = new int[1];
-		loader.addSlices(learned.iterator(), candidate -> {
+		loader.addSlices(learned, candidate -> {
 			candidate.load.run();
 			loadedAhead[0]++;
 		}, () -> ((viewer.getTextureBytes() - baseline) + (loadedAhead[0] * MODEL_HEAP_BYTES)) < learnedBudget
 				&& heapHasRoom(),
 				() -> loader.addNextTask(loader.settled(loader.modelTask(() -> loadScriptCreations(viewer, pending,
-						budget, baseline, started, loadedAhead[0], total, null, 0, seen, loader)))));
+						budget, baseline, started, loadedAhead[0], total, null, 0, seen, loader)))), pending.size());
 	}
 
 	/**
@@ -649,7 +652,7 @@ final class MapViewerPrewarm {
 		}
 		pending.poll().load.run();
 		loader.addNextTask(loader.settled(loader.modelTask(() -> loadScriptCreations(viewer, pending, budget, baseline,
-				started, loaded + 1, total, next, now, seen, loader))));
+				started, loaded + 1, total, next, now, seen, loader))), pending.size());
 	}
 
 	/** What the types took in texture memory when last loaded ahead, which the next loading sorts them by. */
@@ -750,7 +753,7 @@ final class MapViewerPrewarm {
 			throws IOException {
 		ImageUtils.dropPrefetched();
 		final List<String> paths = ImageUtils.readUiTextureList();
-		loader.addSlices(paths.iterator(), path -> ImageUtils.prefetchTexture(viewer.mapMpq, path), () -> {
+		loader.addSlices(paths, path -> ImageUtils.prefetchTexture(viewer.mapMpq, path), () -> {
 		});
 	}
 
@@ -911,7 +914,7 @@ final class MapViewerPrewarm {
 	private static void prefetchAmbientSounds(final War3MapViewer viewer, final MapScriptScans scans,
 			final MapLoader loader) throws IOException {
 		final Set<String> labels = new LinkedHashSet<>(scans.ambientLabels.join());
-		loader.addSlices(labels.iterator(), label -> {
+		loader.addSlices(labels, label -> {
 			final UnitSound sound = viewer.uiSounds.getSound(label);
 			if (sound.getSoundCount() <= MAX_PREFETCHED_FILES) {
 				sound.prefetch();
@@ -937,7 +940,7 @@ final class MapViewerPrewarm {
 			final MapLoader loader) throws IOException {
 		// Each time a path is named, as two sounds of the same file each take a decoding.
 		final List<String> files = scans.soundFiles.join();
-		loader.addSlices(files.iterator(),
+		loader.addSlices(files,
 				file -> UnitSound.prefetchSound(viewer.mapMpq, viewer.getScriptSoundFile(file)), () -> {
 				});
 	}
@@ -980,7 +983,7 @@ final class MapViewerPrewarm {
 		MapViewerLoading.addMadeUnitTypes(viewer, made);
 		made.removeAll(own);
 		others.removeAll(own);
-		loader.addSlices(soundPrefetches(viewer, own, made, others).iterator(), Runnable::run, () -> {
+		loader.addSlices(soundPrefetches(viewer, own, made, others), Runnable::run, () -> {
 		});
 	}
 

@@ -205,6 +205,12 @@ final class FrameNatives implements FrameEventSink {
 		return value == null ? null : value.visit(StringJassValueVisitor.getInstance());
 	}
 
+	/** A text the script gives a frame: a null string shows as nothing. */
+	private static String text(final List<JassValue> arguments, final int index) {
+		final String text = string(arguments, index);
+		return text == null ? "" : text;
+	}
+
 	private static int integer(final List<JassValue> arguments, final int index) {
 		return arguments.get(index).visit(IntegerJassValueVisitor.getInstance());
 	}
@@ -341,7 +347,7 @@ final class FrameNatives implements FrameEventSink {
 			}
 		});
 		addCall("BlzCreateFrame", (arguments, globalScope, triggerScope) -> {
-			final UIFrame frame = gameUI().createFrame(string(arguments, 0), ownerOrRoot(arguments, 1),
+			final UIFrame frame = gameUI().createScriptFrame(string(arguments, 0), ownerOrRoot(arguments, 1),
 					integer(arguments, 2), integer(arguments, 3));
 			created(frame);
 			return handle(globalScope, frame);
@@ -353,7 +359,7 @@ final class FrameNatives implements FrameEventSink {
 			return handle(globalScope, frame);
 		});
 		addCall("BlzCreateFrameByType", (arguments, globalScope, triggerScope) -> {
-			final UIFrame frame = gameUI().createFrameByType(string(arguments, 0), string(arguments, 1),
+			final UIFrame frame = gameUI().createScriptFrameByType(string(arguments, 0), string(arguments, 1),
 					ownerOrRoot(arguments, 2), string(arguments, 3), integer(arguments, 4));
 			created(frame);
 			return handle(globalScope, frame);
@@ -633,7 +639,7 @@ final class FrameNatives implements FrameEventSink {
 	private void registerContent() {
 		addCommand("BlzFrameSetText", (arguments, globalScope, triggerScope) -> {
 			final UIFrame frame = object(arguments, 0);
-			final String text = gameUI().getTrigStr(string(arguments, 1));
+			final String text = gameUI().getTrigStr(text(arguments, 1));
 			if (frame instanceof EditBoxFrame) {
 				((EditBoxFrame) frame).setText(text, gameUI(), this.uiViewport);
 			}
@@ -663,7 +669,7 @@ final class FrameNatives implements FrameEventSink {
 		addCommand("BlzFrameAddText", (arguments, globalScope, triggerScope) -> {
 			final UIFrame frame = object(arguments, 0);
 			if (frame instanceof TextAreaFrame) {
-				((TextAreaFrame) frame).addItem(gameUI().getTrigStr(string(arguments, 1)), gameUI(), this.uiViewport);
+				((TextAreaFrame) frame).addItem(gameUI().getTrigStr(text(arguments, 1)), gameUI(), this.uiViewport);
 			}
 			return null;
 		});
@@ -715,19 +721,24 @@ final class FrameNatives implements FrameEventSink {
 		});
 		addCommand("BlzFrameSetTexture", (arguments, globalScope, triggerScope) -> {
 			final UIFrame frame = object(arguments, 0);
+			final String file = string(arguments, 1);
+			if (file == null) {
+				return null;
+			}
 			final TextureFrame texture = textureOf(frame);
 			if (texture != null) {
-				texture.setTexture(string(arguments, 1), gameUI());
+				texture.setTexture(file, gameUI());
 			}
 			else if (frame instanceof BackdropFrame) {
-				((BackdropFrame) frame).setBackground(gameUI().loadTexture(string(arguments, 1)));
+				((BackdropFrame) frame).setBackground(gameUI().loadTexture(file));
 			}
 			return null;
 		});
 		addCommand("BlzFrameSetModel", (arguments, globalScope, triggerScope) -> {
 			final UIFrame frame = object(arguments, 0);
-			if (frame instanceof SpriteFrame) {
-				gameUI().setSpriteFrameModel((SpriteFrame) frame, string(arguments, 1));
+			final String file = string(arguments, 1);
+			if ((frame instanceof SpriteFrame) && (file != null)) {
+				gameUI().setSpriteFrameModel((SpriteFrame) frame, file);
 			}
 			return null;
 		});
@@ -967,7 +978,8 @@ final class FrameNatives implements FrameEventSink {
 			}
 			return null;
 		});
-		add("BlzFrameSetFocus", (arguments, globalScope, triggerScope) -> {
+		// the focus brings up the screen keyboard, which only the render thread may do
+		addCommand("BlzFrameSetFocus", (arguments, globalScope, triggerScope) -> {
 			final UIFrame frame = object(arguments, 0);
 			if ((frame != null) && (this.ui != null)) {
 				this.ui.setScriptFocus(frame, bool(arguments, 1));

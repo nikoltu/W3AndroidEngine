@@ -8,6 +8,7 @@ import com.etheller.warsmash.util.War3ID;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CSimulation;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CUnit;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.CWidget;
+import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.skills.undead.units.CBuffUnsummoning;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityPointTarget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.CBehavior;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.behaviors.harvest.CBehaviorAcolyteHarvest;
@@ -21,6 +22,10 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.SimulationRend
 
 public class CAbilityBlightedGoldMine extends CAbilityOverlayedMine {
 	public static final int NO_MINER = -1;
+	private static final War3ID UNSUMMON_BUFF_ID = War3ID.fromString("Buns");
+	/** Measured: a Haunted Gold Mine without gold unsummons itself, as with Unsummon Building: half the cost back. */
+	private static final float EMPTY_MINE_SALVAGE_RATIO = 0.5f;
+	private static final float EMPTY_MINE_LIFE_PER_SECOND = 50f;
 	private int goldPerInterval;
 	private float intervalDuration;
 	private int maxNumberOfMiners;
@@ -80,6 +85,12 @@ public class CAbilityBlightedGoldMine extends CAbilityOverlayedMine {
 
 	@Override
 	public void onTick(final CSimulation game, final CUnit unit) {
+		final CAbilityGoldMinable emptyCheck = getParentGoldMineAbility();
+		if ((emptyCheck != null) && (emptyCheck.getGold() <= 0) && !unit.isDead()
+				&& (unit.getFirstAbilityOfType(CBuffUnsummoning.class) == null)) {
+			unit.add(game, new CBuffUnsummoning(game.getHandleIdAllocator().createId(), UNSUMMON_BUFF_ID,
+					EMPTY_MINE_SALVAGE_RATIO, EMPTY_MINE_LIFE_PER_SECOND, true));
+		}
 		if (this.currentActiveMinerCount <= 0) {
 			this.mined = false;
 		}
@@ -178,6 +189,11 @@ public class CAbilityBlightedGoldMine extends CAbilityOverlayedMine {
 
 	@Override
 	public void onCancelFromQueue(final CSimulation game, final CUnit unit, final int playerIndex, final int orderId) {
+	}
+
+	public boolean isEmpty() {
+		final CAbilityGoldMinable parent = getParentGoldMineAbility();
+		return (parent != null) && (parent.getGold() <= 0);
 	}
 
 	public int tryAddMiner(final CUnit acolyte, final CBehaviorAcolyteHarvest behaviorAcolyteHarvest) {

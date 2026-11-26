@@ -72,6 +72,13 @@ final class MapViewerSimThread {
 	private static final long WHILE_PAUSED_NANOS = 16_000_000L;
 	/** How long the render thread waits for a step that runs when the game is left. */
 	private static final long STOP_WAIT_MILLIS = 3000;
+	/**
+	 * The most frames the simulation thread publishes between two steps when it has nothing due: the commands, a
+	 * pause's work, the interface's answer. It starts that work only with room for all of them.
+	 */
+	private static final int IDLE_FRAMES = 3;
+	/** The frames of a step: what the commands drained before it said, and the step's own. */
+	private static final int STEP_FRAMES = 2;
 
 	private final SimThreadRunner thread;
 	/** The thread of {@link SimThreadMode#ON}, which makes the steps on its own; null in SERIAL. */
@@ -85,6 +92,11 @@ final class MapViewerSimThread {
 	private final IntMap<CUnit> units = new IntMap<>();
 	private final java.util.IdentityHashMap<CUnit, UnitAnimationListenerImpl> madeAhead = new java.util.IdentityHashMap<>();
 	private final IntMap<CDestructable> destructables = new IntMap<>();
+	/**
+	 * Destructables the simulation made whose peer exists and whose creation event is not played yet, with the real
+	 * listener (null until the peer made it).
+	 */
+	private final java.util.IdentityHashMap<CDestructable, CUnitAnimationListener> destructablesAhead = new java.util.IdentityHashMap<>();
 	private final IntMap<CUnitAnimationListener> listeners = new IntMap<>();
 	private final MapViewerPeers peers;
 	/** Units whose simulation listener the peer made (they were not made by the simulation); their tags still need seeding. */
@@ -145,40 +157,28 @@ final class MapViewerSimThread {
 		this.peers = new MapViewerPeers(viewer, this);
 		this.buffering = new BufferingRenderController(this.sink,
 				new MapViewerSimWorld(viewer, this.sink, this.peers.queue(), this.thread::isSimThread));
-		this.player = new RenderEventPlayer(this.real, new RenderEventPlayer.Resolver() {
+		final RenderEventPlayer.Resolver resolver = new RenderEventPlayer.Resolver() {
 			@Override
 			public CUnit unit(final int handle) {
-				MapViewerSimThread.this.peers.ensure(handle);
-				final CUnit unit = MapViewerSimThread.this.units.get(handle);
-				return unit != null ? unit : MapViewerSimThread.this.simulation.getUnit(handle);
+				final CWidget widget = MapViewerSimThread.this.widget(handle);
+				return widget instanceof CUnit ? (CUnit) widget : null;
 			}
 
 			@Override
 			public CItem item(final int handle) {
-				MapViewerSimThread.this.peers.ensure(handle);
-				final CItem made = MapViewerSimThread.this.peers.item(handle);
-				if (made != null) {
-					return made;
-				}
-				final CWidget widget = MapViewerSimThread.this.simulation.getWidget(handle);
+				final CWidget widget = MapViewerSimThread.this.widget(handle);
 				return widget instanceof CItem ? (CItem) widget : null;
 			}
 
 			@Override
 			public CDestructable destructable(final int handle) {
-				MapViewerSimThread.this.peers.ensure(handle);
-				final CDestructable destructable = MapViewerSimThread.this.destructables.get(handle);
-				return destructable != null ? destructable : MapViewerSimThread.this.simulation.getDestructable(handle);
+				final CWidget widget = MapViewerSimThread.this.widget(handle);
+				return widget instanceof CDestructable ? (CDestructable) widget : null;
 			}
 
 			@Override
 			public CWidget widget(final int handle) {
-				final CUnit unit = unit(handle);
-				if (unit != null) {
-					return unit;
-				}
-				final CDestructable destructable = destructable(handle);
-				return destructable != null ? destructable : MapViewerSimThread.this.simulation.getWidget(handle);
+				return MapViewerSimThread.this.widget(handle);
 			}
 
 			@Override
@@ -187,29 +187,81 @@ final class MapViewerSimThread {
 			}
 
 			@Override
-			public void unitRemoved(final int handle) {
-				MapViewerSimThread.this.units.remove(handle);
-				MapViewerSimThread.this.listeners.remove(handle);
+			public void unitRemoved(final int handle, final CUnit unit) {
+				MapViewerSimThread.this.madeAhead.remove(unit);
+				if (MapViewerSimThread.this.units.get(handle) == unit) {
+					MapViewerSimThread.this.units.remove(handle);
+					MapViewerSimThread.this.listeners.remove(handle);
+					MapViewerSimThread.this.unseeded.remove(handle);
+				}
 			}
 
 			@Override
-			public void destructableRemoved(final int handle) {
-				MapViewerSimThread.this.destructables.remove(handle);
-				MapViewerSimThread.this.listeners.remove(handle);
+			public void itemRemoved(final int handle, final CItem item) {
+				MapViewerSimThread.this.peers.itemRemoved(handle, item);
 			}
-		}, null, this.peers);
+
+			@Override
+			public void destructableRemoved(final int handle, final CDestructable destructable) {
+				MapViewerSimThread.this.destructablesAhead.remove(destructable);
+				if (MapViewerSimThread.this.destructables.get(handle) == destructable) {
+					MapViewerSimThread.this.destructables.remove(handle);
+					MapViewerSimThread.this.listeners.remove(handle);
+				}
+			}
+		};
+		this.player = new RenderEventPlayer(this.real, resolver, null, this.peers);
 		this.player.setAnimationPlayer(new BufferedAnimationListener.Player(new BufferedAnimationListener.Player.Lookup() {
 			@Override
 			public CUnitAnimationListener listener(final int handle) {
-				MapViewerSimThread.this.peers.ensure(handle);
-				return MapViewerSimThread.this.listeners.get(handle);
+				final CUnitAnimationListener listener = MapViewerSimThread.this.listeners.get(handle);
+				if (listener != null) {
+					return listener;
+				}
+				// an object whose creation event is still to come: the real listener its peer made, if any yet
+				final Object made = MapViewerSimThread.this.peers.beforeCreation(handle);
+				if (made instanceof CUnit) {
+					return MapViewerSimThread.this.madeAhead.get(made);
+				}
+				return made instanceof CDestructable ? MapViewerSimThread.this.destructablesAhead.get(made) : null;
 			}
 
 			@Override
 			public CWidget widget(final int handle) {
-				return MapViewerSimThread.this.simulation.getWidget(handle);
+				return resolver.widget(handle);
 			}
 		}));
+	}
+
+	/**
+	 * Render thread: the object an event names by its handle. The handle names the object whose creation event was
+	 * played last for it (or one the map made) until its removal is played, then the next object made with it, also
+	 * for the events that come before that object's creation event. The simulation's present holder of the handle,
+	 * which may be steps ahead of the events, only for an object the render side knows nothing of.
+	 */
+	private CWidget widget(final int handle) {
+		if (handle == 0) {
+			return null;
+		}
+		final CUnit unit = this.units.get(handle);
+		if (unit != null) {
+			return unit;
+		}
+		final CItem item = this.peers.item(handle);
+		if (item != null) {
+			return item;
+		}
+		final CDestructable destructable = this.destructables.get(handle);
+		if (destructable != null) {
+			return destructable;
+		}
+		final Object made = this.peers.beforeCreation(handle);
+		if (made instanceof CWidget) {
+			return (CWidget) made;
+		}
+		// one the render side never had a peer of (the map's own, without a model): every object the simulation
+		// makes is announced, so a later holder of the handle would have been found above
+		return this.simulation.getWidget(handle);
 	}
 
 	/**
@@ -218,11 +270,25 @@ final class MapViewerSimThread {
 	 */
 	void destructablePeerCreated(final CDestructable destructable) {
 		final int handle = destructable.getHandleId();
+		final CUnitAnimationListener real = destructable.getPeerAnimationListener();
+		if (destructable.hasSimulationAnimationListener() && (this.destructables.get(handle) != destructable)) {
+			// made by the simulation, its creation event still to come: the handle may still name the one before
+			this.destructablesAhead.put(destructable, real);
+			return;
+		}
 		this.destructables.put(handle, destructable);
 		if (!destructable.hasSimulationAnimationListener()) {
 			destructable.setSimulationAnimationListener(new BufferedAnimationListener(this.sink, handle));
 		}
-		final CUnitAnimationListener real = destructable.getPeerAnimationListener();
+		if (real != null) {
+			this.listeners.put(handle, real);
+		}
+	}
+
+	/** Render thread (the create event of a destructable the simulation made was played): its handle names it now. */
+	void destructableMade(final int handle, final CDestructable destructable) {
+		this.destructables.put(handle, destructable);
+		final CUnitAnimationListener real = this.destructablesAhead.remove(destructable);
 		if (real != null) {
 			this.listeners.put(handle, real);
 		}
@@ -303,6 +369,7 @@ final class MapViewerSimThread {
 	CPlayerUnitOrderListener orderListener(final CPlayerUnitOrderListener target, final int playerIndex) {
 		this.orderTarget = target;
 		this.orders = new ThreadedOrderListener(this.inbox, playerIndex);
+		this.orders.setShownSerial(this::shownSerial);
 		return this.orders;
 	}
 
@@ -355,12 +422,36 @@ final class MapViewerSimThread {
 		if ((this.orders != null) || ((this.simulation != null) && (this.inbox.pendingCount() > 0))) {
 			final int tick = this.simulation.getGameTurnTick();
 			if (this.orders != null) {
-				this.orders.drain(tick, this.orderTarget, this::applyMessage);
+				this.orders.drain(tick, this.orderTarget, this::applyMessage, this::liveSerial);
 			}
 			else {
 				this.inbox.drain(tick, this::applyMessage);
 			}
 		}
+	}
+
+	/**
+	 * The creation serial of the widget the frames played so far name with the handle, or 0. A command a script gives
+	 * through the interface's listener on the simulation thread names what the simulation has: 0, nothing to check.
+	 */
+	private int shownSerial(final int handle) {
+		if (this.thread.isSimThread()) {
+			return 0;
+		}
+		CWidget widget = this.units.get(handle);
+		if (widget == null) {
+			widget = this.peers.item(handle);
+		}
+		if (widget == null) {
+			widget = this.destructables.get(handle);
+		}
+		return widget == null ? 0 : widget.getCreationSerial();
+	}
+
+	/** Simulation thread: the creation serial of the widget that has the handle now, or 0. */
+	private int liveSerial(final int handle) {
+		final CWidget widget = this.simulation.getWidget(handle);
+		return widget == null ? 0 : widget.getCreationSerial();
 	}
 
 	private void applyMessage(final OrderMessage message) {
@@ -411,6 +502,7 @@ final class MapViewerSimThread {
 	}
 
 	private void playFramesBelow(final long upTo) {
+		this.peers.notePlacedItems();
 		final long published = Math.min(upTo, this.ring.publishedCount());
 		for (long sequence = this.nextFrame; sequence < published; sequence++) {
 			final SimFrame frame = this.ring.get(sequence);
@@ -453,12 +545,8 @@ final class MapViewerSimThread {
 
 	/** Render thread (the create event of a unit the simulation made was played): its handle names it from now on. */
 	void unitMade(final int handle, final CUnit unit) {
-		final CUnit made = unit != null ? unit : this.simulation.getUnit(handle);
-		if (made == null) {
-			return;
-		}
-		this.units.put(handle, made);
-		final UnitAnimationListenerImpl real = this.madeAhead.remove(made);
+		this.units.put(handle, unit);
+		final UnitAnimationListenerImpl real = this.madeAhead.remove(unit);
 		if (real != null) {
 			this.listeners.put(handle, real);
 		}
@@ -536,6 +624,16 @@ final class MapViewerSimThread {
 	}
 
 	/**
+	 * Render thread, while the simulation is held (or waits for the render thread): the render side is brought up to
+	 * the steps made so far, as before a call of the simulation is served. The events of every published frame are
+	 * played and the peers of everything announced are built, so what reads the render side together with the
+	 * simulation (a save) finds both at the same step.
+	 */
+	void catchUpRenderState() {
+		catchUp();
+	}
+
+	/**
 	 * Render thread: the steps the frame's time made due go to the simulation thread; the steps still waiting are kept
 	 * to about a second of game time.
 	 */
@@ -591,9 +689,28 @@ final class MapViewerSimThread {
 		return this.units.get(handle);
 	}
 
+	/**
+	 * Render thread, after a saved game was loaded into the running map and its units and items got new peers: the
+	 * items' handles name the loaded items.
+	 */
+	void savedGameLoaded() {
+		this.peers.itemPeersRebuilt();
+	}
+
+	/** Render thread: as {@link #unitOf(int)} for a frame row, null when the row is of another unit with the handle. */
+	CUnit unitOf(final int handle, final int serial) {
+		final CUnit unit = this.units.get(handle);
+		return (unit != null) && (unit.getCreationSerial() == serial) ? unit : null;
+	}
+
 	/** Render thread: true when the ring has room for the frames of one more step (and what is said outside steps). */
 	boolean hasFrameRoom() {
-		return (this.ring.capacity() - (this.ring.publishedCount() - this.ring.oldestHeld())) >= 4;
+		return freeFrameSlots() >= 4;
+	}
+
+	/** Frames the writer may still publish before the render side gives one back. */
+	private int freeFrameSlots() {
+		return (int) (this.ring.capacity() - (this.ring.publishedCount() - this.ring.oldestHeld()));
 	}
 
 	/** Render thread: drops the steps not yet made (a skip ahead makes its own). */
@@ -652,15 +769,15 @@ final class MapViewerSimThread {
 	/** Simulation thread: one step, if the game can make one now (see {@link SimThread.Stepper#step}). */
 	private int stepOnThread(final int pendingSteps) {
 		final War3MapViewer viewer = this.viewer;
+		if (freeFrameSlots() < STEP_FRAMES) {
+			// the render side still holds the frames: the step (and the commands before it) waits rather than find the
+			// ring full
+			return canStep(viewer) ? SimThread.WAIT : SimThread.BLOCKED;
+		}
 		drainOrdersNow();
 		publishPending();
-		if (viewer.gameEnded || viewer.worldHidden || viewer.isFastForwarding()
-				|| viewer.isGamePausedOnSimulation()) {
+		if (!canStep(viewer)) {
 			return SimThread.BLOCKED;
-		}
-		if ((this.ring.capacity() - (this.ring.publishedCount() - this.ring.oldestHeld())) < 2) {
-			// the render side still holds the frames: the step waits rather than find the ring full
-			return SimThread.WAIT;
 		}
 		final GameTurnManager manager = viewer.gameTurnManager;
 		final int latestTurn = manager.getLatestCompletedTurn();
@@ -688,9 +805,18 @@ final class MapViewerSimThread {
 		return SimThread.STEPPED;
 	}
 
+	private static boolean canStep(final War3MapViewer viewer) {
+		return !(viewer.gameEnded || viewer.worldHidden || viewer.isFastForwarding()
+				|| viewer.isGamePausedOnSimulation());
+	}
+
 	/** Simulation thread, no step due: commands, a pause's work for the turn manager, saves. */
 	private void idleOnThread() {
 		if (this.simulation == null) {
+			return;
+		}
+		if (freeFrameSlots() < IDLE_FRAMES) {
+			// the render side gives frames back as the presentation goes on, also while paused; the commands wait
 			return;
 		}
 		drainOrdersNow();

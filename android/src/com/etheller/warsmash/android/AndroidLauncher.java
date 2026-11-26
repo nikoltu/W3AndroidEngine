@@ -77,6 +77,7 @@ import com.etheller.warsmash.units.Element;
 import com.etheller.warsmash.units.DataTable;
 import com.etheller.warsmash.datasources.IndependentStream;
 import com.etheller.warsmash.util.DataSourceFileHandle;
+import com.etheller.warsmash.util.InputLatencyProbe;
 import com.etheller.warsmash.util.StringBundle;
 import com.etheller.warsmash.util.WarsmashConstants;
 import com.etheller.warsmash.viewer5.AudioContext;
@@ -120,6 +121,7 @@ public class AndroidLauncher extends AndroidApplication {
 	static final String EXTRA_MEMORY_TIER = "memtier";
 	static final String EXTRA_SIM_THREAD = "simthread";
 	private AndroidPointerSource pointerSource;
+	private AndroidMouseCapture mouseCapture;
 	/** Started by the launcher: the game begins at once and the launcher comes back when it ends. */
 	private boolean fromLauncher;
 	private volatile boolean resultWritten;
@@ -311,9 +313,7 @@ public class AndroidLauncher extends AndroidApplication {
 		if (seed != null) {
 			System.setProperty("warsmash.seed", seed);
 		}
-		if (!this.fromLauncher && getIntent().getBooleanExtra("inputlatency", false)) {
-			System.setProperty("warsmash.inputlatency", "true");
-		}
+		InputLatencyProbe.setEnabled(!this.fromLauncher && getIntent().getBooleanExtra("inputlatency", false));
 		// A map started from outside the launcher (automated runs) may name its own profile, as the desktop
 		// -Dwarsmash.profile does, so its saves and caches stay out of the player's. The process outlives the run, so
 		// a later game must not inherit it.
@@ -347,6 +347,8 @@ public class AndroidLauncher extends AndroidApplication {
 		Gdx.input.setCatchKey(Input.Keys.ESCAPE, true);
 		GlContextWatch.dropContextOnPauseIfAsked(this, this.graphics.getView());
 		trackOnscreenKeyboard();
+		this.mouseCapture = new AndroidMouseCapture(this.graphics.getView());
+		this.pointerSource.setMouseCapture(this.mouseCapture);
 		Gdx.app.postRunnable(() -> {
 			// The launcher's Options page may have changed the file since an earlier game in this process read it.
 			GameOptions.reload();
@@ -718,6 +720,7 @@ public class AndroidLauncher extends AndroidApplication {
 		// libGDX keeps the application object in Gdx.app until the next game starts; it must not keep the game.
 		this.game = null;
 		this.pointerSource = null;
+		this.mouseCapture = null;
 	}
 
 	/**
@@ -795,6 +798,17 @@ public class AndroidLauncher extends AndroidApplication {
 		super.onWindowFocusChanged(hasFocus);
 		if (hasFocus) {
 			hideSystemBars();
+			if (this.mouseCapture != null) {
+				this.mouseCapture.request();
+			}
+		}
+	}
+
+	@Override
+	public void onPointerCaptureChanged(final boolean hasCapture) {
+		super.onPointerCaptureChanged(hasCapture);
+		if (this.mouseCapture != null) {
+			this.mouseCapture.captureChanged(hasCapture);
 		}
 	}
 

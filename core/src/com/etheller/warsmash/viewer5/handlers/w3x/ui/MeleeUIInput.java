@@ -1510,13 +1510,15 @@ final class MeleeUIInput {
 		final SimFrame frame = this.ui.unitView.presentedFrame();
 		if (frame != null) {
 			// the type is compared on the frame on screen, as the units found are
-			final int clickedRow = frame.units.indexOf(mouseOverUnit.getSimulationUnit().getHandleId());
+			final int clickedRow = frame.units.indexOf(mouseOverUnit.getSimulationUnit().getHandleId(),
+					mouseOverUnit.getSimulationUnit().getCreationSerial());
 			if (clickedRow < 0) {
 				return;
 			}
 			final int typeId = frame.units.typeId[clickedRow];
 			this.ui.war3MapViewer.enumPresentedUnitsInRect(area, (peer) -> {
-				final int row = frame.units.indexOf(peer.getSimulationUnit().getHandleId());
+				final int row = frame.units.indexOf(peer.getSimulationUnit().getHandleId(),
+						peer.getSimulationUnit().getCreationSerial());
 				if ((row >= 0) && (frame.units.typeId[row] == typeId)) {
 					processClickSelect(unitList, shiftDown, peer);
 				}

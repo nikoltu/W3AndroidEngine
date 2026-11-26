@@ -345,7 +345,14 @@ public class DataTable implements ObjectData {
 				}
 				final int nIndex = kInput.indexOf("N");
 				eIndexCutoff = ((nIndex != -1) && (nIndex < eIndexCutoff)) ? nIndex : eIndexCutoff;
-				final int fieldIdEndIndex = kInput != input ? input.length() : eIndexCutoff - 1;
+				int fieldIdEndIndex = kInput != input ? input.length() : eIndexCutoff - 1;
+				if (subXIndex != -1) {
+					// "C;X4;Y2060;K..." (X before Y) must not feed the Y field into the column number.
+					final int fieldIdSemicolon = input.indexOf(';', subXIndex + 1);
+					if ((fieldIdSemicolon != -1) && (fieldIdSemicolon < fieldIdEndIndex)) {
+						fieldIdEndIndex = fieldIdSemicolon;
+					}
+				}
 				final int fieldId = (subXIndex == -1) || (subXIndex > fieldIdEndIndex) ? 1
 						: parseInt(input, subXIndex + 1, fieldIdEndIndex);
 				if (dataNames[fieldId - 1] != null) {

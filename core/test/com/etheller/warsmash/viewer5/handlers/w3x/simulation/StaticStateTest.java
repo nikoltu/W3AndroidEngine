@@ -234,6 +234,8 @@ class StaticStateTest {
 			// Where the lists of large data folders are kept, set from the files of the app, and the age a folder must have to be kept.
 			"core.datasources.FolderIndexStore#directory", "core.datasources.FolderSignature#settleMillis",
 			"core.datasources.FolderSignature#OPENED_FILES",
+			// The hash of the path looked up last, a pure function of that path, used only for the very same string.
+			"core.datasources.CascDataSource#lastQuery", "core.datasources.FolderDataSource#lastKeyHash",
 			// Parse trees of interface files, kept while memory allows and checked against the file's bytes.
 			"core.parsers.fdf.DataSourceFDFParserBuilder#PARSED", "core.units.HashedGameObject#SHARED_KEYS",
 			"core.units.HashedGameObject#SHARED_VALUES", "core.units.HashedGameObject#SHARED_SINGLE_LISTS",
@@ -262,7 +264,9 @@ class StaticStateTest {
 			"core.input.touch.OnscreenKeyboard#coveredHeightPixels", "core.input.touch.TouchInputRouter#installed",
 			"core.input.touch.VirtualCursor#active", "core.input.touch.VirtualCursor#x", "core.input.touch.VirtualCursor#y",
 			"core.input.touch.VirtualCursor#fingerInput", "core.input.touch.VirtualCursor#mouseOver",
-			"core.input.touch.VirtualCursor#mouseX", "core.input.touch.VirtualCursor#mouseY", "core.input.touch.VirtualCursor#touchDevice",
+			"core.input.touch.VirtualCursor#mouseX", "core.input.touch.VirtualCursor#mouseY", "core.input.touch.VirtualCursor#touchDevice", "core.input.touch.VirtualCursor#mouseCaptured",
+			"core.input.touch.CapturedMouse#samples", "core.input.touch.CapturedMouse#active", "core.input.touch.CapturedMouse#activeChanged",
+			"core.input.touch.CapturedMouse#x", "core.input.touch.CapturedMouse#y", "core.input.touch.CapturedMouse#buttons",
 			"core.input.touch.VirtualModifiers#shift", "core.input.touch.VirtualModifiers#penButtonShift",
 			"core.input.touch.VirtualModifiers#penButtonCtrl",
 			// The one LAN session of the process (it belongs to the player, not to a game), and the test program's
@@ -298,7 +302,7 @@ class StaticStateTest {
 			// The GL memory accounting of a diagnostic switch; counts the platform GL objects, not a game's state.
 			"core.util.GlMemory#ON", "core.util.GlMemory#OWNERS", "core.util.GlMemory#unit", "core.util.GlMemory#vao", "core.util.GlMemory#renderbuffer", "core.util.GlMemory#textureBytes", "core.util.GlMemory#bufferBytes", "core.util.GlMemory#renderbufferBytes", "core.util.GlMemory#unknownFormats",
 			// The input latency probe of a diagnostic switch; times one order of this machine's player.
-			"core.util.InputLatencyProbe#watchId", "core.util.InputLatencyProbe#state", "core.util.InputLatencyProbe#eventNanos", "core.util.InputLatencyProbe#lastInputNanos", "core.util.InputLatencyProbe#submitNanos", "core.util.InputLatencyProbe#drainNanos", "core.util.InputLatencyProbe#applyNanos", "core.util.InputLatencyProbe#reactNanos", "core.util.InputLatencyProbe#haveBase", "core.util.InputLatencyProbe#movedBefore", "core.util.InputLatencyProbe#baseX", "core.util.InputLatencyProbe#baseY", "core.util.InputLatencyProbe#baseFacing",
+			"core.util.InputLatencyProbe#ENABLED", "core.util.InputLatencyProbe#watchId", "core.util.InputLatencyProbe#state", "core.util.InputLatencyProbe#eventNanos", "core.util.InputLatencyProbe#lastInputNanos", "core.util.InputLatencyProbe#submitNanos", "core.util.InputLatencyProbe#drainNanos", "core.util.InputLatencyProbe#applyNanos", "core.util.InputLatencyProbe#reactNanos", "core.util.InputLatencyProbe#haveBase", "core.util.InputLatencyProbe#movedBefore", "core.util.InputLatencyProbe#baseX", "core.util.InputLatencyProbe#baseY", "core.util.InputLatencyProbe#baseFacing",
 			// Counters of the performance report; only counted when the switch is set, and not a game's state.
 			"core.util.PerfStats#ENABLED", "core.util.PerfStats#WINDOW_HISTOGRAM", "core.util.PerfStats#RUN_HISTOGRAM", "core.util.PerfStats#firstFrame", "core.util.PerfStats#frameLoads", "core.util.PerfStats#frameLoadNanos", "core.util.PerfStats#frameTextureNanos", "core.util.PerfStats#slowestLoadNanos", "core.util.PerfStats#slowestLoad", "core.util.PerfStats#checkedLocalFile", "core.util.PerfStats#TOTALS",
 			"core.util.PerfStats#STEP_TOTALS", "core.util.PerfStats#textureBytes", "core.util.PerfStats#evictedTextures", "core.util.PerfStats#evictedModels", "core.util.PerfStats#FRAME_SECTIONS", "core.util.PerfStats#WORST_SECTIONS",

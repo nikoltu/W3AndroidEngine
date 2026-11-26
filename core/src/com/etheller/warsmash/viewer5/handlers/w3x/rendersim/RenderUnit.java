@@ -104,6 +104,7 @@ public class RenderUnit implements RenderWidget {
 
 	// With a presentation clock the unit is shown from the frames of the game, never from the live simulation unit.
 	private int handleId;
+	private int serial;
 	private final MovementType[] movementTypes = MovementType.values();
 	private boolean frameMode;
 	private boolean havePose;
@@ -130,6 +131,7 @@ public class RenderUnit implements RenderWidget {
 			final float scalingValue) {
 		this.simulationUnit = simulationUnit;
 		this.handleId = simulationUnit.getHandleId();
+		this.serial = simulationUnit.getCreationSerial();
 		this.frameMode = map.getPresentation() != null;
 		resetRenderUnit(map, x, y, z, playerIndex, simulationUnit, typeData, true, buildingShadow,
 				selectionCircleScaleFactor, animationWalkSpeed, animationRunSpeed, scalingValue);
@@ -247,7 +249,7 @@ public class RenderUnit implements RenderWidget {
 		final int teamColor;
 		if (fromFrame) {
 			this.frameMode = true;
-			this.havePose = Extrapolator.sampleUnit(clock, this.handleId, this.pose);
+			this.havePose = Extrapolator.sampleUnit(clock, this.handleId, this.serial, this.pose);
 			if (!this.havePose) {
 				// no frame has the unit yet, it shows once one has
 				this.instance.hide();

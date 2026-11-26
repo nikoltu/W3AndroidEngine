@@ -159,9 +159,21 @@ public final class SerialSimThread implements SimThreadRunner {
 		}
 	}
 
-	/** Ends the thread; a job that is running finishes first. */
+	/**
+	 * Render thread: ends the thread and waits for it. No job runs then, as the render thread waits in {@link #run} for
+	 * each one, so the thread only has to leave its wait for the next.
+	 */
 	public void stop() {
 		this.stopped = true;
 		this.thread.interrupt();
+		if (!isSimThread()) {
+			try {
+				this.thread.join();
+			}
+			catch (final InterruptedException e) {
+				Thread.currentThread().interrupt();
+				throw new IllegalStateException("Interrupted waiting for the simulation thread to end", e);
+			}
+		}
 	}
 }

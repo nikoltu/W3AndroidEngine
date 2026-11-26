@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.Set;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import com.badlogic.gdx.math.Rectangle;
 import com.etheller.interpreter.ast.scope.GlobalScope;
@@ -13,6 +14,7 @@ import com.etheller.interpreter.ast.scope.trigger.Trigger;
 import com.etheller.interpreter.ast.util.CAllocatedHandle;
 import com.etheller.interpreter.ast.util.CExtensibleHandleAbstract;
 import com.etheller.warsmash.parsers.jass.scope.CommonTriggerExecutionScope;
+import com.etheller.warsmash.viewer5.handlers.w3x.save.SavedTransient;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.abilities.targeting.AbilityTarget;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.CAttackType;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.combat.CDamageFlags;
@@ -29,7 +31,14 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.BooleanAbility
  */
 public abstract class CWidget extends CExtensibleHandleAbstract implements AbilityTarget, CAllocatedHandle {
 	protected static final Rectangle tempRect = new Rectangle();
+	private static final AtomicInteger SERIALS = new AtomicInteger();
 	private final int handleId;
+	/**
+	 * Tells this widget from an earlier or later one with the same handle id: a freed id is given out again, while
+	 * the render side may still show the widget that held it. 0 for a widget loaded from a save.
+	 */
+	@SavedTransient
+	private final int creationSerial = SERIALS.incrementAndGet();
 	private boolean handleReleased;
 	private boolean handleIdKept;
 	private int referenceCount;
@@ -51,6 +60,11 @@ public abstract class CWidget extends CExtensibleHandleAbstract implements Abili
 	@Override
 	public int getHandleId() {
 		return this.handleId;
+	}
+
+	/** Any thread: see {@link #creationSerial}. */
+	public int getCreationSerial() {
+		return this.creationSerial;
 	}
 
 	/** Widgets are numbered when they are made. */

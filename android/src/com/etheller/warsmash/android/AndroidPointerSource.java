@@ -16,6 +16,7 @@ import com.etheller.warsmash.input.touch.VirtualCursor;
 final class AndroidPointerSource {
 	private final TouchInputRouter router;
 	private final float touchMajorScale;
+	private volatile AndroidMouseCapture mouseCapture;
 
 	/**
 	 * @param touchMajorScale factor from the device's raw TOUCH_MAJOR units to screen pixels, see
@@ -24,6 +25,10 @@ final class AndroidPointerSource {
 	AndroidPointerSource(final TouchInputRouter router, final float touchMajorScale) {
 		this.router = router;
 		this.touchMajorScale = touchMajorScale;
+	}
+
+	void setMouseCapture(final AndroidMouseCapture mouseCapture) {
+		this.mouseCapture = mouseCapture;
 	}
 
 	static boolean hasStylus() {
@@ -66,6 +71,7 @@ final class AndroidPointerSource {
 		if (tool == MotionEvent.TOOL_TYPE_MOUSE) {
 			TouchInputRouter.mouseUsed();
 			VirtualCursor.mouseAt(Math.round(event.getX()), Math.round(event.getY()));
+			noteMouse(event);
 			return false;
 		}
 		VirtualCursor.mouseGone();
@@ -113,6 +119,7 @@ final class AndroidPointerSource {
 			}
 			else {
 				VirtualCursor.mouseAt(Math.round(event.getX()), Math.round(event.getY()));
+				noteMouse(event);
 			}
 			return false;
 		}
@@ -130,6 +137,13 @@ final class AndroidPointerSource {
 			return true;
 		default:
 			return false;
+		}
+	}
+
+	private void noteMouse(final MotionEvent event) {
+		final AndroidMouseCapture capture = this.mouseCapture;
+		if (capture != null) {
+			capture.mouseSeen(event);
 		}
 	}
 

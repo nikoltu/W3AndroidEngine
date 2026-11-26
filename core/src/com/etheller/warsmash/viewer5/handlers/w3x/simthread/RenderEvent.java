@@ -51,7 +51,11 @@ public final class RenderEvent {
 	public float f1;
 	public float f2;
 	public float f3;
-	/** Immutable or otherwise thread-safe payload only (a string, a model path); never a simulation object. */
+	/**
+	 * Immutable or otherwise thread-safe payload only (a string, a model path). A simulation object only as an
+	 * identity the render side reads nothing of: the object a removal or an item's event is about, since its handle may
+	 * already name a later object by the time the event is played.
+	 */
 	public Object o0;
 
 	void clear() {

@@ -13,6 +13,7 @@ public final class VirtualCursor {
 	private static volatile int y;
 	private static volatile boolean fingerInput;
 	private static volatile boolean touchDevice;
+	private static volatile boolean mouseCaptured;
 
 	private static volatile boolean mouseOver;
 	private static volatile int mouseX;
@@ -42,7 +43,12 @@ public final class VirtualCursor {
 	 *         where the last pointer was, pen included
 	 */
 	public static boolean isCursorHidden() {
-		return touchDevice || fingerInput;
+		return fingerInput || (touchDevice && !mouseCaptured);
+	}
+
+	/** A captured mouse has no system pointer, so the cursor is drawn for it even on a touch device. */
+	static void setMouseCaptured(final boolean captured) {
+		mouseCaptured = captured;
 	}
 
 	/** Hands the cursor back to libGDX, for when a mouse moves after the pen or a finger had it. */

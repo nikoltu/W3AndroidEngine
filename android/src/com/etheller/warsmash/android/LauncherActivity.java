@@ -248,7 +248,7 @@ public class LauncherActivity extends AndroidApplication {
 
 	/** The launcher's own text for a glue string the game data lacks, in the language of the game. */
 	String glueFallback(final String key) {
-		final int id = getResources().getIdentifier("glue_" + key.toLowerCase(Locale.ROOT), "string", R.class.getPackage().getName());
+		final int id = getResources().getIdentifier("glue_" + key.toLowerCase(Locale.ROOT), "string", getPackageName());
 		return id != 0 ? getString(id) : key;
 	}
 

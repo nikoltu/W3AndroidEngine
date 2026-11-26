@@ -52,7 +52,8 @@ public class MappedData implements Iterable<Map.Entry<String, MappedDataRow>> {
 					if ("_".equals(rowKey) && (keyColumn != 0)) {
 						rowKey = row.get(0);
 					}
-					String name = (String) rowKey;
+					String name = rowKey instanceof Float ? numericKey((Float) rowKey)
+							: (rowKey == null ? null : rowKey.toString());
 
 					if (name != null) {
 						name = name.toLowerCase(Locale.ROOT);
@@ -96,6 +97,10 @@ public class MappedData implements Iterable<Map.Entry<String, MappedDataRow>> {
 				}
 			}
 		}
+	}
+
+	private static String numericKey(final float value) {
+		return (value == (long) value) ? Long.toString((long) value) : Float.toString(value);
 	}
 
 	public MappedDataRow getRow(final String key) {

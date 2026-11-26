@@ -267,6 +267,37 @@ public class WarsmashGdxMapScreen implements InputProcessor, Screen, TouchTarget
 		return this.setupStep >= SETUP_STEPS;
 	}
 
+	/**
+	 * The part of the setup done, for the loading bar: each step by about the part of a setup it takes (the opening
+	 * steps most, then the interface's main and the script's load).
+	 */
+	public float getSetupRatio() {
+		float done = 0;
+		for (int step = 0; step < this.setupStep; step++) {
+			done += setupStepWeight(step);
+		}
+		if (this.setupStep == (SETUP_STEPS - 1)) {
+			done += setupStepWeight(this.setupStep) * this.viewer.getFirstFrameRatio();
+		}
+		return Math.min(1, done / 100);
+	}
+
+	/** The part of a setup, in percent, the step takes, as measured on a campaign map. */
+	private static float setupStepWeight(final int step) {
+		switch (step) {
+		case 1:
+			return 20;
+		case 3:
+			return 10;
+		case 5:
+			return 8;
+		case 6:
+			return 56;
+		default:
+			return 2;
+		}
+	}
+
 	/** Whether every setup step has run and {@link #show()} only switches to the game. */
 	public boolean isSetUp() {
 		return this.setupStep >= SETUP_STEPS;
@@ -403,6 +434,7 @@ public class WarsmashGdxMapScreen implements InputProcessor, Screen, TouchTarget
 					}
 
 					private void leaveGame() {
+						WarsmashGdxMapScreen.this.viewer.stopSimulation();
 						final GameResult result = gameResult(
 								WarsmashGdxMapScreen.this.scriptFailed ? "error" : localPlayerResult());
 						if ("victory".equals(result.result)
@@ -433,13 +465,27 @@ public class WarsmashGdxMapScreen implements InputProcessor, Screen, TouchTarget
 							WarsmashGdxMapScreen.this.menuScreen.showMapLoadError();
 						}
 						CGameCache.dropUnsaved();
+						final WarsmashGdxMenuScreen menu = WarsmashGdxMapScreen.this.menuScreen;
 						if (exit.getNextReplay() != null) {
-							WarsmashGdxMapScreen.this.menuScreen.startReplay(exit.getNextReplay(),
-									exit.getNextReplayStartTick(), exit.isNextReplayForced());
+							afterDispose(() -> menu.startReplay(exit.getNextReplay(), exit.getNextReplayStartTick(),
+									exit.isNextReplayForced()));
 						}
 						else if (exit.hasNextLevel()) {
-							WarsmashGdxMapScreen.this.menuScreen.startMap(exit.getNextLevel(),
-									exit.getNextComputerSlots(), exit.getSavedGame(), exit.isSavedGameLoadedByScript());
+							afterDispose(() -> menu.startMap(exit.getNextLevel(), exit.getNextComputerSlots(),
+									exit.getSavedGame(), exit.isSavedGameLoadedByScript()));
+						}
+					}
+
+					/**
+					 * The next game starts once this one is taken apart: leaving the screen queued its dispose, which
+					 * runs first, or ran it already when the application closes.
+					 */
+					private void afterDispose(final Runnable start) {
+						if (WarsmashGdxMapScreen.this.disposed) {
+							start.run();
+						}
+						else {
+							Gdx.app.postRunnable(start);
 						}
 					}
 				});
@@ -1166,7 +1212,7 @@ public class WarsmashGdxMapScreen implements InputProcessor, Screen, TouchTarget
 		}
 		try {
 			final boolean[] saved = new boolean[1];
-			this.viewer.whileSimulationHeld(() -> saved[0] = SavedGame.save(this.viewer, file));
+			this.viewer.whileSimulationHeldCaughtUp(() -> saved[0] = SavedGame.save(this.viewer, file));
 			return saved[0];
 		}
 		catch (final RuntimeException e) {

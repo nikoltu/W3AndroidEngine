@@ -418,6 +418,7 @@ public final class SimFrameWriter implements CSimulation.StepEndListener {
 		final int maxMana = unit.getMaximumMana();
 		final CPlayer ownerPlayer = game.getPlayer(owner);
 		state.handle[row] = unit.getHandleId();
+		state.serial[row] = unit.getCreationSerial();
 		state.typeId[row] = unit.getTypeId().getValue();
 		state.owner[row] = owner;
 		state.x[row] = x;
@@ -552,6 +553,7 @@ public final class SimFrameWriter implements CSimulation.StepEndListener {
 			count++;
 			final int row = state.addRow();
 			state.handle[row] = id;
+			state.serial[row] = 0;
 			state.x[row] = projectile.getX();
 			state.y[row] = projectile.getY();
 			state.z[row] = 0f;
@@ -641,6 +643,7 @@ public final class SimFrameWriter implements CSimulation.StepEndListener {
 				flags |= WorldObjectFrameState.CARRIED;
 			}
 			state.handle[row] = item.getHandleId();
+			state.serial[row] = item.getCreationSerial();
 			state.x[row] = x;
 			state.y[row] = y;
 			state.z[row] = item.getFlyHeight();
@@ -681,6 +684,7 @@ public final class SimFrameWriter implements CSimulation.StepEndListener {
 			final int row = state.addRow();
 			final float maxLife = destructable.getMaxLife();
 			state.handle[row] = destructable.getHandleId();
+			state.serial[row] = destructable.getCreationSerial();
 			state.x[row] = destructable.getX();
 			state.y[row] = destructable.getY();
 			state.z[row] = destructable.getFlyHeight();

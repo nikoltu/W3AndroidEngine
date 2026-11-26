@@ -56,7 +56,7 @@ public final class SimThreadGuard {
 	private static boolean hookInstalled;
 
 	/** Called by the thread that runs simulation steps, when it starts. */
-	public static void registerSim(final Thread thread) {
+	public static synchronized void registerSim(final Thread thread) {
 		simThread = thread;
 		simStartNanos = System.nanoTime();
 	}
@@ -70,7 +70,12 @@ public final class SimThreadGuard {
 	 * The game's simulation thread has ended: until the next game starts one, the render thread loads and takes apart
 	 * simulations alone.
 	 */
-	public static void simulationStopped() {
+	public static synchronized void simulationStopped() {
+		final Thread registered = simThread;
+		if ((registered != null) && registered.isAlive()) {
+			// the ended game's thread is gone before this is called; a live one is the next game's
+			return;
+		}
 		simThread = null;
 		threadsAlternate = false;
 	}

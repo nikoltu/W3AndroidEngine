@@ -7,7 +7,7 @@
         android:shortcutShortLabel="@string/shortcut_game_data">
         <intent
             android:action="android.intent.action.VIEW"
-            android:targetPackage="com.etheller.warsmash.android"
+            android:targetPackage="com.etheller.warsmash.android.multithread"
             android:targetClass="com.etheller.warsmash.android.DataFolderActivity">
             <extra android:name="openLauncher" android:value="true" />
         </intent>

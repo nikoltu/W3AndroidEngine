@@ -6,7 +6,7 @@
 
 <p align="center">
   <img alt="Platform: Windows and Android" src="https://img.shields.io/badge/platform-Windows%20%7C%20Android%208.0%2B-3DDC84?logo=android&logoColor=white">
-  <img alt="Version 0.5.58" src="https://img.shields.io/badge/version-0.5.58-blue">
+  <img alt="Version 0.5.67-hotfix1" src="https://img.shields.io/badge/version-0.5.67--hotfix1-blue">
   <img alt="Licence: AGPL-3.0" src="https://img.shields.io/badge/licence-AGPL--3.0-orange">
   <img alt="Engine: Warsmash" src="https://img.shields.io/badge/engine-Warsmash-8a2be2">
   <img alt="Languages: Java 17, JASS2, GLSL" src="https://img.shields.io/badge/code-Java%2017%20%7C%20JASS2%20%7C%20GLSL-lightgrey">
@@ -248,7 +248,7 @@ docs/images/            images used in this file
 
 ## Status and roadmap
 
-Current version: **v0.5.58**
+Current version: **v0.5.67-hotfix1**
 
 - **Custom games:** work end-to-end.
 - **Campaigns:** Reign of Chaos and The Frozen Throne can be completed to the end. Tweaking required.

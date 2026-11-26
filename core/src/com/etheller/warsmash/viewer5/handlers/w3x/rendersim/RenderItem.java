@@ -33,6 +33,7 @@ public class RenderItem implements RenderWidget {
 	private int shownScriptColor = -1;
 	// With a presentation clock the state is read from the frames of the game, by the handle.
 	private final int handleId;
+	private final int serial;
 	private final Extrapolator.ObjectPose pose = new Extrapolator.ObjectPose();
 
 	public RenderItem(final War3MapViewer map, RenderItemType itemType, final float x, final float y, final float z,
@@ -40,6 +41,7 @@ public class RenderItem implements RenderWidget {
 		this.portraitModel = itemType.getPortraitModel();
 		this.simulationItem = simulationItem;
 		this.handleId = simulationItem.getHandleId();
+		this.serial = simulationItem.getCreationSerial();
 		final MdxComplexInstance instance = (MdxComplexInstance) itemType.getModel().addWaitingInstance();
 
 		this.angle = angle;
@@ -119,7 +121,7 @@ public class RenderItem implements RenderWidget {
 		final float flyHeight;
 		final PresentationClock clock = map.getPresentation();
 		if (clock != null) {
-			if (!Extrapolator.sampleObject(clock, Extrapolator.ITEMS, this.handleId, this.pose)) {
+			if (!Extrapolator.sampleObject(clock, Extrapolator.ITEMS, this.handleId, this.serial, this.pose)) {
 				return;
 			}
 			final WorldObjectFrameState state = this.pose.state;

@@ -20,19 +20,26 @@ public class CBuffUnsummoning extends CBuffTimed implements CPausedTickingBuff {
 	private final float lifePerSecond;
 	private float goldOwed;
 	private float lumberOwed;
+	private final boolean firstStepAtOnce;
 	private int nextStepTick;
 
 	public CBuffUnsummoning(final int handleId, final War3ID alias, final float salvageCostRatio,
 			final float lifePerSecond) {
+		this(handleId, alias, salvageCostRatio, lifePerSecond, false);
+	}
+
+	public CBuffUnsummoning(final int handleId, final War3ID alias, final float salvageCostRatio,
+			final float lifePerSecond, final boolean firstStepAtOnce) {
 		super(handleId, alias, alias, 0);
 		this.salvageCostRatio = salvageCostRatio;
 		this.lifePerSecond = lifePerSecond;
+		this.firstStepAtOnce = firstStepAtOnce;
 	}
 
 	@Override
 	protected void onBuffAdd(final CSimulation game, final CUnit unit) {
 		unit.setPaused(true);
-		this.nextStepTick = game.getGameTurnTick() + TICKS_PER_SECOND;
+		this.nextStepTick = game.getGameTurnTick() + (this.firstStepAtOnce ? 0 : TICKS_PER_SECOND);
 		game.unitLoopSoundEffectEvent(unit, getAlias());
 	}
 
@@ -74,7 +81,12 @@ public class CBuffUnsummoning extends CBuffTimed implements CPausedTickingBuff {
 				game.unitGainResourceEvent(unit, unit.getPlayerIndex(), ResourceType.LUMBER, lumber);
 			}
 		}
-		if (finished) {
+		if (finished && this.firstStepAtOnce) {
+			// Measured: a Haunted Gold Mine that ran out of gold dies and plays its death before it is gone.
+			unit.remove(game, this);
+			unit.kill(game);
+		}
+		else if (finished) {
 			unit.remove(game, this);
 			unit.killPathingInstance();
 			game.removeUnit(unit);

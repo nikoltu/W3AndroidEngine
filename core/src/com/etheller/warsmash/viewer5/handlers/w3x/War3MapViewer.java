@@ -899,6 +899,10 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 	}
 
 	public boolean isGamePaused() {
+		if (!isSimulationThreaded()) {
+			// the one thread steps the game and draws it: the dialog's pause is read when asked, not from an older step
+			this.scriptDialogPaused = this.scriptDialogPause.getAsBoolean();
+		}
 		return (this.pauseSources != 0) || this.scriptDialogPaused;
 	}
 
@@ -1168,6 +1172,7 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 	public void finishLoadingSavedGame(final Collection<CDestructable> preparedDestructables) {
 		MapViewerUnits.finishLoadingSavedGame(this, preparedDestructables);
 		if (this.simThread != null) {
+			this.simThread.savedGameLoaded();
 			this.simThread.playFrames();
 		}
 	}
@@ -1620,13 +1625,9 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 				while (hasDeferredTextures() && finishReadyDeferredTexture() && (System.nanoTime() < end)) {
 				}
 			}
-			if (isSimulationThreaded()) {
-				// the simulation thread does a pause's work and the saves the steps ask for
-				if (paused && ((this.pendingSave != null) || (this.pendingLoad != null))) {
-					whileSimulationHeld(() -> MapViewerSaves.runPendingSaveRequests(this));
-				}
-			}
-			else {
+			if (!isSimulationThreaded()) {
+				// With the thread the simulation side does a pause's work, and the saves and loads asked for, paused
+				// or not: it asks the render thread for them once the frames of its steps are played there.
 				if (paused) {
 					MapViewerSaves.runPendingSaveRequests(this);
 				}
@@ -1709,6 +1710,26 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 	}
 
 	/**
+	 * Render thread: as {@link #whileSimulationHeld}, with the render side first brought up to the steps made so far,
+	 * for what reads both sides together (a save).
+	 */
+	public void whileSimulationHeldCaughtUp(final Runnable action) {
+		final MapViewerSimThread thread = this.simThread;
+		if ((thread == null) || !thread.isThreaded()) {
+			action.run();
+			return;
+		}
+		thread.hold();
+		try {
+			thread.catchUpRenderState();
+			action.run();
+		}
+		finally {
+			thread.release();
+		}
+	}
+
+	/**
 	 * Render thread: like {@link #whileSimulationHeld}, but only when no step runs now.
 	 *
 	 * @return false when the action was not run
@@ -1720,6 +1741,16 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 			return true;
 		}
 		return thread.tryWhileHeld(action);
+	}
+
+	/**
+	 * Render thread, the game is left: the simulation thread finishes the step it is in and ends, so that what the game
+	 * ended with is read from a simulation nothing changes any more.
+	 */
+	public void stopSimulation() {
+		if (isSimulationThreaded()) {
+			this.simThread.shutdown();
+		}
 	}
 
 	/** Render thread (the app leaves the screen): no step runs until {@link #unparkSimulation}. */
@@ -2054,6 +2085,24 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 		}
 		}
 		return this.firstFrameStage == FIRST_FRAME_DONE;
+	}
+
+	/** The part of {@link #prepareFirstFrameNext} done, for the loading bar: the steps take most of it. */
+	public float getFirstFrameRatio() {
+		switch (this.firstFrameStage) {
+		case FIRST_FRAME_SHADOWS:
+			return 0;
+		case FIRST_FRAME_STEPS:
+			return (0.8f * this.openingStepsDone) / OPENING_STEPS;
+		case FIRST_FRAME_PATHING:
+			return 0.8f;
+		case FIRST_FRAME_SOUNDS:
+			return 0.85f;
+		case FIRST_FRAME_DONE:
+			return 1;
+		default:
+			return 0.95f;
+		}
 	}
 
 	private void afterOpeningSteps(final int next) {
@@ -2792,7 +2841,7 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 			final float size = units.collisionSize[row];
 			if (((units.x[row] - size) < (rect.x + rect.width)) && ((units.x[row] + size) > rect.x)
 					&& ((units.y[row] - size) < (rect.y + rect.height)) && ((units.y[row] + size) > rect.y)) {
-				final CUnit unit = this.simThread.unitOf(units.handle[row]);
+				final CUnit unit = this.simThread.unitOf(units.handle[row], units.serial[row]);
 				final RenderUnit peer = unit == null ? null : this.unitToRenderPeer.get(unit);
 				if (peer != null) {
 					callback.accept(peer);
@@ -3247,13 +3296,30 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 		private static final int MODEL_BACKLOG = 6;
 		/** The textures that may wait for their decoding while the loader goes on with other tasks. */
 		private static final int TEXTURE_BACKLOG = 32;
+		/** The end of the loading, building the last models and textures, beside the weights of the first tasks. */
+		private static final double FINISH_WEIGHT = 0.5;
 
 		private final LoadMapTask deferredTexturesTask = this::loadDeferredTextures;
 		/** Whether the last look at the deferred textures found none to upload and left the loader to its tasks. */
 		private boolean texturesNotReady;
 
 		private final LinkedList<LoadMapTask> loadMapTasks = new LinkedList<>();
-		private int startingTaskCount;
+		/**
+		 * The part of the loading bar each queued task stands for, together with everything it queues: the count of
+		 * queued tasks says little, as a few of them queue most of the work while they run.
+		 */
+		private final IdentityHashMap<LoadMapTask, Double> shares = new IdentityHashMap<>();
+		private LoadMapTask runningTask;
+		private double runningShare;
+		/** The running task's own work beside that of the tasks it queues, which {@link #spawnWeights} weigh. */
+		private double selfWeight;
+		private final List<LoadMapTask> spawned = new ArrayList<>();
+		private final List<Double> spawnWeights = new ArrayList<>();
+		private double sharesDone;
+		/** The models and textures still being built once no task is left, which the end of the bar stands for. */
+		private int finishBacklog = -1;
+		private double finishShare;
+		private boolean loaded;
 
 		private char tileset;
 		private DataSource tilesetSource;
@@ -3266,7 +3332,7 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 			final PathSolver wc3PathSolver = War3MapViewer.this.wc3PathSolver;
 			War3MapViewer.this.deferModelsWhileLoading = !NO_RENDER && (War3MapViewer.this.fastForwardTarget < 0);
 
-			this.loadMapTasks.add(() -> {
+			addStart(0.3, () -> {
 				this.tileset = 'A';
 				this.tileset = w3iFile.getTileset();
 				int gameDataSet = w3iFile.getGameDataSet();
@@ -3327,39 +3393,39 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 				}
 			});
 
-			this.loadMapTasks.add(() -> {
+			addStart(0.1, () -> {
 				setDataSource(this.tilesetSource);
 				War3MapViewer.this.mapMpq.setDataSource(this.tilesetSource);
 			});
-			this.loadMapTasks.add(() -> {
+			addStart(0.1, () -> {
 				War3MapViewer.this.worldEditStrings = new WorldEditStrings(War3MapViewer.this.dataSource);
 			});
-			this.loadMapTasks.add(() -> {
+			addStart(2.6, () -> {
 				loadSLKs(War3MapViewer.this.worldEditStrings);
 			});
-			this.loadMapTasks.add(() -> {
+			addStart(0.1, () -> {
 				MapViewerVision.applyMapTerrainFog(War3MapViewer.this, w3iFile);
 			});
 
-			this.loadMapTasks.add(() -> {
+			addStart(0.1, () -> {
 				War3MapViewer.this.solverParams.tileset = Character.toLowerCase(this.tileset);
 			});
 
-			this.loadMapTasks.add(() -> {
+			addStart(0.2, () -> {
 				this.terrainData = War3MapViewer.this.mapMpq.readEnvironment();
 			});
 
-			this.loadMapTasks.add(() -> {
+			addStart(0.2, () -> {
 				this.terrainPathing = War3MapViewer.this.mapMpq.readPathing();
 			});
 
-			this.loadMapTasks.add(() -> {
+			addStart(5, () -> {
 				War3MapViewer.this.terrain = new Terrain(this.terrainData, this.terrainPathing, w3iFile,
 						War3MapViewer.this.webGL, War3MapViewer.this.dataSource, War3MapViewer.this.worldEditStrings,
 						War3MapViewer.this, War3MapViewer.this.worldEditData);
 			});
 
-			this.loadMapTasks.add(() -> {
+			addStart(0.1, () -> {
 				final float[] centerOffset = this.terrainData.getCenterOffset();
 				final int[] mapSize = this.terrainData.getMapSize();
 
@@ -3372,7 +3438,7 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 						(mapSize[0] * 128) - 128, (mapSize[1] * 128) - 128);
 			});
 
-			this.loadMapTasks.add(() -> {
+			addStart(0.1, () -> {
 				final MdxModel confirmation = (MdxModel) load("UI\\Feedback\\Confirmation\\Confirmation.mdx",
 						PathSolver.DEFAULT, null);
 				War3MapViewer.this.confirmationInstance = (MdxComplexInstance) confirmation.addInstance();
@@ -3382,7 +3448,7 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 				War3MapViewer.this.confirmationInstance.setScene(War3MapViewer.this.worldScene);
 			});
 
-			this.loadMapTasks.add(() -> {
+			addStart(6, () -> {
 				final Warcraft3MapRuntimeObjectData.Loading loading = War3MapViewer.this.mapMpq
 						.readModificationsInSteps(War3MapViewer.this.preloadedWTS);
 				addNextTask(() -> War3MapViewer.this.allObjectData = loading.getResult());
@@ -3392,7 +3458,7 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 					addNextTask(step::run);
 				}
 			});
-			this.loadMapTasks.add(() -> {
+			addStart(1.8, () -> {
 				War3MapViewer.this.mapRenderController = new War3MapRenderController(War3MapViewer.this);
 				final SimThreadMode simThreadMode = SimThreadMode.current();
 				SimulationRenderController simulationSide = War3MapViewer.this.mapRenderController;
@@ -3428,7 +3494,7 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 			});
 
 			// Makes every unit type ahead, which the first cast of some abilities would otherwise do in a frame.
-			this.loadMapTasks.add(new LoadMapTask() {
+			addStart(1, new LoadMapTask() {
 				@Override
 				public void run() {
 					if (!War3MapViewer.this.simulation.getUnitData().scanUnitTypesLightweightFor(SLICE_NANOS)) {
@@ -3437,7 +3503,7 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 				}
 			});
 
-			this.loadMapTasks.add(() -> {
+			addStart(10, () -> {
 				War3MapViewer.this.walkableObjectsTree = new Quadtree<>(War3MapViewer.this.terrain.getEntireMap());
 				if (War3MapViewer.this.doodadsAndDestructiblesLoaded) {
 					MapViewerDoodads.queueDoodadsAndDestructibles(War3MapViewer.this, War3MapViewer.this.allObjectData,
@@ -3448,27 +3514,43 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 				}
 			});
 
-			this.loadMapTasks.add(() -> {
+			addStart(0.1, () -> {
 				MapViewerLoading.loadSounds(War3MapViewer.this);
 			});
 
-			this.loadMapTasks.add(() -> {
+			addStart(0.1, () -> {
 				War3MapViewer.this.terrain.createWaves();
 			});
 
-			this.loadMapTasks.add(() -> {
+			addStart(0.1, () -> {
 				applyTilesetDayNightModels(this.tileset);
 			});
 
-			this.loadMapTasks.add(() -> {
+			addStart(0.1, () -> {
 				MapViewerEffects.applyMapGlobalWeather(War3MapViewer.this, w3iFile);
 			});
 
-			this.loadMapTasks.add(() -> {
+			addStart(72, () -> {
 				MapViewerPrewarm.queue(War3MapViewer.this, w3iFile, this);
 			});
 
-			this.startingTaskCount = this.loadMapTasks.size();
+			double total = FINISH_WEIGHT;
+			for (final Double weight : this.shares.values()) {
+				total += weight;
+			}
+			for (final Map.Entry<LoadMapTask, Double> entry : this.shares.entrySet()) {
+				entry.setValue(entry.getValue() / total);
+			}
+			this.finishShare = FINISH_WEIGHT / total;
+		}
+
+		/**
+		 * A task of the start of the loading, whose weight is about its part of the time a loading takes, with all it
+		 * queues (measured on a campaign map, where the unit types loaded last take most of it).
+		 */
+		private void addStart(final double weight, final LoadMapTask task) {
+			this.loadMapTasks.add(task);
+			this.shares.put(task, weight);
 		}
 
 		/**
@@ -3487,7 +3569,19 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 
 		public boolean process() throws IOException {
 			final LoadMapTask nextTask = this.loadMapTasks.pollFirst();
-			nextTask.run();
+			final Double share = this.shares.remove(nextTask);
+			this.runningTask = nextTask;
+			this.runningShare = share == null ? 0 : share;
+			this.selfWeight = 1;
+			try {
+				nextTask.run();
+				settleShare();
+			}
+			finally {
+				this.runningTask = null;
+				this.spawned.clear();
+				this.spawnWeights.clear();
+			}
 			if (War3MapViewer.this.deferModelsWhileLoading) {
 				keepModelsComing();
 			}
@@ -3500,8 +3594,34 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 			final boolean done = this.loadMapTasks.isEmpty();
 			if (done) {
 				War3MapViewer.this.deferModelsWhileLoading = false;
+				this.loaded = true;
 			}
 			return done;
+		}
+
+		/** Hands the running task's share on to the tasks it queued, by weight, and counts the rest as done. */
+		private void settleShare() {
+			double share = this.runningShare;
+			if ((share > 0) && !this.spawned.isEmpty()) {
+				double whole = this.selfWeight;
+				for (final Double weight : this.spawnWeights) {
+					whole += weight;
+				}
+				if (whole > 0) {
+					for (int i = 0; i < this.spawned.size(); i++) {
+						this.shares.merge(this.spawned.get(i), (share * this.spawnWeights.get(i)) / whole, Double::sum);
+					}
+					share = (share * this.selfWeight) / whole;
+				}
+			}
+			this.sharesDone += share;
+		}
+
+		private void spawn(final LoadMapTask task, final double weight) {
+			if ((this.runningTask != null) && (task != this.deferredTexturesTask)) {
+				this.spawned.add(task);
+				this.spawnWeights.add(weight);
+			}
 		}
 
 		private void buildReadyModels(final long nanos) {
@@ -3581,48 +3701,101 @@ public class War3MapViewer extends AbstractMdxModelViewer implements MdxAssetLoa
 		/**
 		 * Runs the items in slices of a frame each, ahead of the tasks still waiting, and then the task that follows.
 		 */
-		public <T> void addSlices(final Iterator<T> items, final Consumer<T> each, final LoadMapTask after)
+		public <T> void addSlices(final Collection<? extends T> items, final Consumer<T> each, final LoadMapTask after)
 				throws IOException {
-			addSlices(items, each, () -> true, after);
+			addSlices(items, each, () -> true, after, 1);
 		}
 
-		/** {@link #addSlices(Iterator, Consumer, LoadMapTask)} that stops taking items once keepGoing says no. */
-		public <T> void addSlices(final Iterator<T> items, final Consumer<T> each, final BooleanSupplier keepGoing,
-				final LoadMapTask after) throws IOException {
+		/**
+		 * {@link #addSlices(Collection, Consumer, LoadMapTask)} that stops taking items once keepGoing says no.
+		 *
+		 * @param afterWeight the work of what follows, counted in items, for the loading bar
+		 */
+		public <T> void addSlices(final Collection<? extends T> items, final Consumer<T> each,
+				final BooleanSupplier keepGoing, final LoadMapTask after, final int afterWeight) throws IOException {
+			addSlices(items.iterator(), items.size(), each, keepGoing, after, afterWeight);
+		}
+
+		private <T> void addSlices(final Iterator<? extends T> items, final int left, final Consumer<T> each,
+				final BooleanSupplier keepGoing, final LoadMapTask after, final int afterWeight) throws IOException {
 			if (!items.hasNext() || !keepGoing.getAsBoolean()) {
 				after.run();
 				return;
 			}
 			addNextTask(modelTask(() -> {
 				final long end = System.nanoTime() + SLICE_NANOS;
+				int count = 0;
 				do {
 					each.accept(items.next());
+					count++;
 				}
 				while (items.hasNext() && keepGoing.getAsBoolean() && (System.nanoTime() < end)
 						&& (pendingModelCount() < MODEL_BACKLOG));
-				addSlices(items, each, keepGoing, after);
-			}));
+				this.selfWeight = count;
+				final int spawnedBefore = this.spawned.size();
+				final boolean last = !items.hasNext() || !keepGoing.getAsBoolean();
+				addSlices(items, Math.max(0, left - count), each, keepGoing, after, afterWeight);
+				if (last) {
+					// What follows the items ran now; whatever it queued stands for its weight.
+					final int queued = this.spawned.size() - spawnedBefore;
+					for (int i = spawnedBefore; i < this.spawned.size(); i++) {
+						this.spawnWeights.set(i, afterWeight / (double) queued);
+					}
+				}
+			}), left + afterWeight);
 		}
 
 		/** Puts a task ahead of those waiting, for the rest of work a task spreads over several frames. */
 		public void addNextTask(final LoadMapTask task) {
+			addNextTask(task, 1);
+		}
+
+		/**
+		 * {@link #addNextTask(LoadMapTask)} for a task whose work, with all it queues, is about weight times the work
+		 * of the running task itself, for the loading bar.
+		 */
+		public void addNextTask(final LoadMapTask task, final double weight) {
 			this.loadMapTasks.addFirst(task);
-			this.startingTaskCount++;
+			spawn(task, weight);
 		}
 
 		/** Puts a task that is not ready to run back behind the others, without counting it as a new one. */
 		public void retryLater(final LoadMapTask task) {
 			this.loadMapTasks.add(task);
+			if ((task == this.runningTask) && (this.runningShare > 0)) {
+				this.shares.merge(task, this.runningShare, Double::sum);
+				this.runningShare = 0;
+			}
 			LockSupport.parkNanos(500_000L);
 		}
 
 		public void addLoadTask(final LoadMapTask task) {
-			this.loadMapTasks.add(task);
-			this.startingTaskCount++;
+			addLoadTask(task, 1);
 		}
 
+		/** {@link #addLoadTask(LoadMapTask)} with a weight as {@link #addNextTask(LoadMapTask, double)} has. */
+		public void addLoadTask(final LoadMapTask task, final double weight) {
+			this.loadMapTasks.add(task);
+			spawn(task, weight);
+		}
+
+		/**
+		 * The part of the loading done: the shares of the tasks run, then the models and textures still being built
+		 * once no task is left. It never goes back, and it is whole only when the loading is.
+		 */
 		public float getCompletionRatio() {
-			return 1.0f - (this.loadMapTasks.size() / (float) this.startingTaskCount);
+			if (this.loaded) {
+				return 1;
+			}
+			double done = this.sharesDone;
+			if (this.shares.isEmpty()) {
+				final int backlog = pendingModelCount() + deferredTextureCount();
+				if (this.finishBacklog < 0) {
+					this.finishBacklog = Math.max(1, backlog);
+				}
+				done += this.finishShare * (1 - (Math.min(backlog, this.finishBacklog) / (double) this.finishBacklog));
+			}
+			return (float) Math.min(1, done);
 		}
 	}
 

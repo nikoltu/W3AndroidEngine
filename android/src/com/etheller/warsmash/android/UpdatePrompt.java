@@ -58,6 +58,8 @@ import com.etheller.warsmash.launcher.UpdateCheck;
 final class UpdatePrompt {
 	private static final String TAG = "Warsmash";
 	private static final String ACTION_RESULT = "com.etheller.warsmash.android.UPDATE_RESULT";
+	/** The package the published releases install as. */
+	private static final String RELEASE_PACKAGE = "com.etheller.warsmash.android";
 	/** An intent extra of a debuggable build: the release check answers as {@link UpdateCheck#FAKE_PROPERTY} says. */
 	static final String EXTRA_FAKE_UPDATE = "fakeUpdate";
 	private static final int CHECK_TIMEOUT_MILLIS = 2000;
@@ -133,7 +135,9 @@ final class UpdatePrompt {
 				return false;
 			}
 			if (!started) {
-				if (!preferences.getBoolean(LauncherKeys.KEY_UPDATE_CHECK, true)) {
+				if (!preferences.getBoolean(LauncherKeys.KEY_UPDATE_CHECK, true)
+						|| !RELEASE_PACKAGE.equals(activity.getPackageName())) {
+					// the releases are APKs of the main package; a build kept beside it cannot take them
 					state = State.DONE;
 					return false;
 				}

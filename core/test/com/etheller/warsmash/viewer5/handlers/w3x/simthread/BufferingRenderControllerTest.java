@@ -900,11 +900,32 @@ class BufferingRenderControllerTest {
 			assertEquals(TICK, event.tick);
 			assertEquals(expectedOrder++, event.order);
 			final Object payload = event.o0;
+			if (carriesItsObject(event.code)) {
+				// the object itself names it, as its handle may name a later one by the time the event is played
+				final int handle = event.code == RenderCallCodes.UI_GET_ITEM_SOUND
+						|| event.code == RenderCallCodes.UI_DROP_ITEM_SOUND ? event.b : event.a;
+				assertEquals(handle, ((CWidget) payload).getHandleId(), "object of code " + event.code);
+				continue;
+			}
 			assertFalse(payload instanceof CWidget || payload instanceof CProjectile || payload instanceof TextTag
 					|| payload instanceof SimulationRenderComponent || payload instanceof CUnitAttackSettings
 					|| payload instanceof CUnitAttackInstant, "payload of code " + event.code);
 		}
 		assertTrue(expectedOrder > 60);
+	}
+
+	private static boolean carriesItsObject(final int code) {
+		switch (code) {
+		case RenderCallCodes.UNIT_REMOVE:
+		case RenderCallCodes.ITEM_REMOVE:
+		case RenderCallCodes.ITEM_UPDATE_MODEL:
+		case RenderCallCodes.DESTRUCTABLE_REMOVE:
+		case RenderCallCodes.UI_GET_ITEM_SOUND:
+		case RenderCallCodes.UI_DROP_ITEM_SOUND:
+			return true;
+		default:
+			return false;
+		}
 	}
 
 	@Test

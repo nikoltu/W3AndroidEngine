@@ -6,10 +6,10 @@ import com.badlogic.gdx.Gdx;
 
 /**
  * Measures how long a unit order takes from the input event to the first frame that shows the unit turning or moving, one order
- * at a time. Only active with -Dwarsmash.inputlatency=true; every hook is a no-op otherwise.
+ * at a time. Only active with -Dwarsmash.inputlatency=true or {@link #setEnabled}; every hook is a no-op otherwise.
  */
 public final class InputLatencyProbe {
-	public static final boolean ENABLED = Boolean.getBoolean("warsmash.inputlatency");
+	public static boolean ENABLED = Boolean.getBoolean("warsmash.inputlatency");
 
 	private static final int IDLE = 0;
 	private static final int SUBMITTED = 1;
@@ -35,6 +35,15 @@ public final class InputLatencyProbe {
 	private static float baseFacing;
 
 	private InputLatencyProbe() {
+	}
+
+	/**
+	 * Before a game starts: whether its orders are timed. The process outlives a game, so each start says it again and
+	 * a measured run leaves nothing on for the next.
+	 */
+	public static synchronized void setEnabled(final boolean enabled) {
+		reset();
+		ENABLED = enabled;
 	}
 
 	/** A touch event reached the game. */

@@ -177,7 +177,7 @@ final class SimulationClassPrewarm {
 
 	/** Queues the classes onto the loader, as many in each of its steps as take a frame's share of time. */
 	static void queue(final MapLoader loader) throws IOException {
-		loader.addSlices(Arrays.asList(names()).iterator(), SimulationClassPrewarm::load, () -> {
+		loader.addSlices(Arrays.asList(names()), SimulationClassPrewarm::load, () -> {
 		});
 	}
 

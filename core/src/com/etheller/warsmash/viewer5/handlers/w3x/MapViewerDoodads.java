@@ -77,13 +77,13 @@ final class MapViewerDoodads {
 			viewer.doodadsReady = true;
 			viewer.anyReady = true;
 		};
-		final LoadMapTask terrainDoodads = () -> loader.addSlices(doo.getTerrainDoodads().iterator(),
+		final LoadMapTask terrainDoodads = () -> loader.addSlices(doo.getTerrainDoodads(),
 				doodad -> loadTerrainDoodad(viewer, modifications, doodad), finish);
-		loader.addSlices(placed.iterator(), doodad -> {
+		loader.addSlices(placed, doodad -> {
 			final float[] location = doodad.getLocation();
 			createDestructableOrDoodad(viewer, doodad.getId(), modifications, doodad.getVariation(), location,
 					doodad.getAngle(), doodad.getLife(), doodad.getScale());
-		}, terrainDoodads);
+		}, () -> true, terrainDoodads, doo.getTerrainDoodads().size() + 1);
 	}
 
 	private static void loadTerrainDoodad(final War3MapViewer viewer, final Warcraft3MapRuntimeObjectData modifications,

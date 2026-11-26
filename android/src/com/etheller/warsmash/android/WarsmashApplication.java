@@ -34,7 +34,7 @@ public class WarsmashApplication extends Application {
 		com.etheller.warsmash.lan.LanSessions.setNetwork(new AndroidLanNetwork(this));
 		com.etheller.warsmash.launcher.LauncherText.use((name, arguments) -> {
 			final Resources words = languageResources != null ? languageResources : getResources();
-			final int id = words.getIdentifier(name, "string", R.class.getPackage().getName());
+			final int id = words.getIdentifier(name, "string", getPackageName());
 			if (id == 0) {
 				return name;
 			}

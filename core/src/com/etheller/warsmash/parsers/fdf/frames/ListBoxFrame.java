@@ -1,6 +1,7 @@
 package com.etheller.warsmash.parsers.fdf.frames;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
 
 import com.badlogic.gdx.graphics.Color;
@@ -34,6 +35,9 @@ public class ListBoxFrame extends ControlFrame
 	private float listBoxBorder;
 	private int selectedIndex = -1;
 	private int mouseOverIndex = -1;
+	private float builtRowWidth = -1;
+	private BitmapFont builtFont;
+	private final EnumMap<ListItemEnum, Float> rowHeights = new EnumMap<>(ListItemEnum.class);
 	private float pressX;
 	private float pressY;
 	private int pressScrollValue;
@@ -280,45 +284,41 @@ public class ListBoxFrame extends ControlFrame
 		boolean foundSelected = false;
 		boolean foundMouseOver = false;
 		
-		float itemSize = this.frameFont.getLineHeight();
-		if (!this.listFrames.isEmpty()) {
-			itemSize = (float)Math.floor(this.listFrames.get(0).getParentFrame().getRenderBounds().height);
+		final float rowWidth = this.renderBounds.width - 2 * this.listBoxBorder;
+		if ((rowWidth != this.builtRowWidth) || (this.frameFont != this.builtFont)) {
+			this.rowHeights.clear();
 		}
-		final int numStringFrames = (int) Math.min(this.listItems.size(),
-				(Math.floor((this.renderBounds.height - (this.listBoxBorder * 2)) / itemSize)));
+		final float itemSize = this.listItems.isEmpty() ? 0 : measureRowHeight(gameUI, viewport);
+		final int numStringFrames = (itemSize <= 0) ? 0
+				: (int) Math.min(this.listItems.size(),
+						Math.floor(((this.renderBounds.height - (this.listBoxBorder * 2)) / itemSize) + 0.001f));
 
 		syncScrollRange(numStringFrames);
 		final int scrollOffset = computeScrollOffset(numStringFrames);
-		if (numStringFrames != this.listFrames.size()) {
+		// The rows are rebuilt only when how many fit, or how wide they are, has changed; hovering or selecting only
+		// moves the highlights and refills the rows.
+		if ((numStringFrames != this.listFrames.size()) || (rowWidth != this.builtRowWidth)
+				|| (this.frameFont != this.builtFont)) {
+			this.builtRowWidth = rowWidth;
+			this.builtFont = this.frameFont;
 			for (int i = 0; i < this.listFrames.size(); i++) {
 				this.listFrames.get(i).remove(gameUI);
 			}
 			this.listFrames.clear();
 
-			float curY = 0;
-			float prevY = 0;
 			for (int stringFrameIndex = 0; stringFrameIndex < numStringFrames; stringFrameIndex++) {
-				if (curY + prevY >= this.getRenderBounds().height - 2 * this.listBoxBorder) {
-					break;
-				}
-				
 				final int index = stringFrameIndex + scrollOffset;
 				final boolean selected = (index == this.selectedIndex);
 				final boolean mousedOver = (index == this.mouseOverIndex) && (index < this.listItems.size())
 						&& this.listItems.get(index).isSelectable();
 
-				AbstractListItemDisplay listDisplay = AbstractListItemDisplay.createFromType(ListItemEnum.ITEM_STRING, "LISTY_" + stringFrameIndex, this, gameUI, viewport);
-				if (index < this.listItems.size()) {
-					AbstractListItemProperty itemProperty = this.listItems.get(index);
-					if (!listDisplay.compareType(itemProperty)) {
-						listDisplay.remove(gameUI);
-						listDisplay = AbstractListItemDisplay.createFromType(itemProperty.getItemType(), "LISTY_" + stringFrameIndex, this, gameUI, viewport);
-					}
+				final AbstractListItemProperty itemProperty = (index < this.listItems.size()) ? this.listItems.get(index) : null;
+				final AbstractListItemDisplay listDisplay = AbstractListItemDisplay.createFromType(
+						(itemProperty == null) ? ListItemEnum.ITEM_STRING : itemProperty.getItemType(),
+						"LISTY_" + stringFrameIndex, this, gameUI, viewport);
+				if (itemProperty != null) {
 					listDisplay.setValuesFromProperty(itemProperty);
 				}
-				prevY = listDisplay.getParentFrame().getRenderBounds().height;
-				curY += prevY;
-
 				if (prev != null) {
 					listDisplay.getParentFrame().addSetPoint(new SetPoint(FramePoint.TOPLEFT, prev, FramePoint.BOTTOMLEFT, 0, 0));
 				} else {
@@ -390,6 +390,28 @@ public class ListBoxFrame extends ControlFrame
 		this.selectionFrame.setVisible(foundSelected);
 		this.mouseHighlightFrame.setVisible(foundMouseOver);
 		positionChildren(gameUI, viewport);
+	}
+
+	/**
+	 * The height every row is counted with: the tallest of the item types in the list, so how many rows fit does not
+	 * change with which items are scrolled into view.
+	 */
+	private float measureRowHeight(final GameUI gameUI, final Viewport viewport) {
+		float tallest = 0;
+		for (int i = 0; i < this.listItems.size(); i++) {
+			final ListItemEnum type = this.listItems.get(i).getItemType();
+			Float height = this.rowHeights.get(type);
+			if (height == null) {
+				final AbstractListItemDisplay probe = AbstractListItemDisplay.createFromType(type, "LISTY_PROBE", this,
+						gameUI, viewport);
+				probe.positionBounds(gameUI, viewport);
+				height = probe.getParentFrame().getRenderBounds().height;
+				probe.remove(gameUI);
+				this.rowHeights.put(type, height);
+			}
+			tallest = Math.max(tallest, height);
+		}
+		return tallest;
 	}
 
 	/** Keeps the scroll bar's range at the hidden item count and the first shown item where it was. */
@@ -531,13 +553,13 @@ public class ListBoxFrame extends ControlFrame
 			int mouseOverIndex = -1;
 			for (final AbstractListItemDisplay listFrame : this.listFrames) {
 				if (listFrame.getParentFrame().getRenderBounds().contains(screenX, screenY)) {
-					mouseOverIndex = index;
+					mouseOverIndex = index + computeScrollOffset(this.listFrames.size());
 					break;
 				}
 				index++;
 			}
 			if (this.mouseOverIndex != mouseOverIndex) {
-				this.mouseOverIndex = mouseOverIndex + computeScrollOffset(this.listFrames.size());
+				this.mouseOverIndex = mouseOverIndex;
 				updateUI(this.gameUI, this.viewport);
 			}
 		}

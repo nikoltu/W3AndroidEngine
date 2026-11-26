@@ -30,6 +30,14 @@ public final class OrderMessage {
 	public int appliedTick;
 	public byte[] payload = new byte[32];
 	public int payloadLength;
+	/**
+	 * The widgets a command targets, as the interface showed them: handle and creation serial. A handle is given out
+	 * again once its widget is gone, and the simulation may be steps ahead of what was shown; a command whose target
+	 * handle names a later widget by the time it is applied is not applied.
+	 */
+	public int targetCount;
+	public final int[] targetHandle = new int[2];
+	public final int[] targetSerial = new int[2];
 
 	public void setPayload(final byte[] source, final int offset, final int length) {
 		if (payload.length < length) {
@@ -50,5 +58,6 @@ public final class OrderMessage {
 		submitNanos = 0;
 		appliedTick = 0;
 		payloadLength = 0;
+		targetCount = 0;
 	}
 }

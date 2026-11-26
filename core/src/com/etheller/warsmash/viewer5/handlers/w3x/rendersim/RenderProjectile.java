@@ -125,7 +125,7 @@ public class RenderProjectile implements RenderEffect {
 		final boolean wasDone = this.done;
 		boolean havePose = false;
 		if (fromFrame) {
-			havePose = (clock != null) && Extrapolator.sampleObject(clock, Extrapolator.PROJECTILES, this.frameId, this.pose);
+			havePose = (clock != null) && Extrapolator.sampleObject(clock, Extrapolator.PROJECTILES, this.frameId, 0, this.pose);
 			this.hadPose |= havePose;
 			// a missile the frames no longer list has landed
 			this.done = havePose ? (this.pose.state.flags[this.pose.row] & WorldObjectFrameState.DEAD) != 0

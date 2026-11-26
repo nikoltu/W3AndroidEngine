@@ -162,9 +162,8 @@ public class CAbilityWispHarvest extends AbstractGenericSingleIconActiveAbility 
 		return this.artAttachmentHeight;
 	}
 
-	// Measured: with a duration of 7.5 the original game pays lumber every 8 seconds.
 	private static int intervalTicks(final float duration) {
-		return CTimer.wholeSteps(duration + 0.5f);
+		return CTimer.wholeSteps(duration);
 	}
 
 	public int getPeriodicIntervalLengthTicks() {

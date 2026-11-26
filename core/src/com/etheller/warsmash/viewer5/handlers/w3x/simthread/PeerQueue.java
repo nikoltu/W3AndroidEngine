@@ -18,6 +18,8 @@ import com.badlogic.gdx.utils.IntMap;
  * <li>or at once for everything ({@link #flush}), before the render thread does something that needs the peers.</li>
  * </ul>
  * Peers are built in the order the objects were made, whichever rule asks: asking for one builds those before it.
+ * A handle given out again names several waiting objects one after the other; asking for the handle means the
+ * earliest of them, the one whose creation event comes first.
  * <p>
  * {@link #announce} may be called from any thread; everything else is the render thread's.
  */
@@ -41,6 +43,8 @@ public final class PeerQueue {
 		private final int handle;
 		private final Object data;
 		private final long announcedFrame;
+		/** The next waiting object with the same handle (made after this one), or null. */
+		private Item laterSameHandle;
 
 		Item(final int handle, final Object data, final long announcedFrame) {
 			this.handle = handle;
@@ -53,6 +57,7 @@ public final class PeerQueue {
 	private final LongSupplier nanos;
 	private final ConcurrentLinkedQueue<Item> incoming = new ConcurrentLinkedQueue<>();
 	private final ArrayDeque<Item> waiting = new ArrayDeque<>();
+	/** The earliest waiting object of each handle; the later ones hang off it. */
 	private final IntMap<Item> waitingByHandle = new IntMap<>();
 	private volatile long frame;
 
@@ -85,7 +90,16 @@ public final class PeerQueue {
 		Item item;
 		while ((item = this.incoming.poll()) != null) {
 			this.waiting.add(item);
-			this.waitingByHandle.put(item.handle, item);
+			Item earlier = this.waitingByHandle.get(item.handle);
+			if (earlier == null) {
+				this.waitingByHandle.put(item.handle, item);
+			}
+			else {
+				while (earlier.laterSameHandle != null) {
+					earlier = earlier.laterSameHandle;
+				}
+				earlier.laterSameHandle = item;
+			}
 		}
 	}
 
@@ -95,7 +109,14 @@ public final class PeerQueue {
 			this.builder.builtCold(item.data);
 			this.cold++;
 		}
-		this.waitingByHandle.remove(item.handle);
+		// peers are built in the order the objects were made, so the head is the earliest of its handle
+		if (item.laterSameHandle != null) {
+			this.waitingByHandle.put(item.handle, item.laterSameHandle);
+			item.laterSameHandle = null;
+		}
+		else {
+			this.waitingByHandle.remove(item.handle);
+		}
 		this.maxWaitFrames = Math.max(this.maxWaitFrames, this.frame - item.announcedFrame);
 		final long start = this.nanos.getAsLong();
 		this.builder.build(item.handle, item.data);
@@ -140,8 +161,8 @@ public final class PeerQueue {
 	}
 
 	/**
-	 * The creation event of an object came due: its peer is there when this returns. Does nothing for a handle that
-	 * is built already.
+	 * The creation event of an object came due: its peer is there when this returns (the earliest waiting object of
+	 * the handle). Does nothing for a handle that is built already.
 	 *
 	 * @return true when the peer had to be built now and had waited a frame or more, so it shows later than it should
 	 */

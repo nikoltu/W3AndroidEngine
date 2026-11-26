@@ -26,7 +26,7 @@ public class ListItemMapDisplay extends AbstractListItemDisplay {
         final BitmapFont refFont = ((StringFrame)gameUI.getFrameByName("MaxPlayersValue", 0)).getFrameFont();
         this.gameUI = gameUI;
 
-        mapBackdrop = (BackdropFrame) gameUI.createFrameByType("BACKDROP", name + "_BACKDROP", parentFrame, "", 0);
+        mapBackdrop = (BackdropFrame) gameUI.createOwnedFrameByType("BACKDROP", name + "_BACKDROP", parentFrame, "", 0);
         mapName = new SingleStringFrame(name + "_NAME", parentFrame, Color.WHITE, TextJustify.LEFT, TextJustify.MIDDLE, rootList.getFrameFont());
         mapPlayerCount = new SingleStringFrame(name + "_COUNT", parentFrame, Color.YELLOW, TextJustify.CENTER, TextJustify.MIDDLE, refFont);
 

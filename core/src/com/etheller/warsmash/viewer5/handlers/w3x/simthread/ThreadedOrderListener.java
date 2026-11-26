@@ -1,6 +1,7 @@
 package com.etheller.warsmash.viewer5.handlers.w3x.simthread;
 
 import java.util.function.Consumer;
+import java.util.function.IntUnaryOperator;
 
 import com.etheller.warsmash.util.InputLatencyProbe;
 import com.etheller.warsmash.viewer5.handlers.w3x.simulation.players.CPlayerCommandCodec;
@@ -21,10 +22,20 @@ public final class ThreadedOrderListener implements CPlayerUnitOrderListener {
 	private final OrderInbox inbox;
 	private final int playerIndex;
 	private final CPlayerCommandCodec.Encoder encoder = new CPlayerCommandCodec.Encoder();
+	/** Interface thread: the creation serial of the widget shown with a handle, or 0 when it shows none it knows. */
+	private IntUnaryOperator shownSerial = handle -> 0;
+	private int targetCount;
+	private final int[] targetHandle = new int[2];
+	private final int[] targetSerial = new int[2];
 
 	public ThreadedOrderListener(final OrderInbox inbox, final int playerIndex) {
 		this.inbox = inbox;
 		this.playerIndex = playerIndex;
+	}
+
+	/** Interface thread, before commands are given: how the serial of a shown target widget is found. */
+	public void setShownSerial(final IntUnaryOperator shownSerial) {
+		this.shownSerial = shownSerial;
 	}
 
 	/**
@@ -41,9 +52,19 @@ public final class ThreadedOrderListener implements CPlayerUnitOrderListener {
 	 * @param other receives the messages that are not encoded commands (pause, save, speed), or null to refuse them
 	 */
 	public int drain(final int tick, final CPlayerUnitOrderListener target, final Consumer<OrderMessage> other) {
+		return drain(tick, target, other, handle -> 0);
+	}
+
+	/**
+	 * @param liveSerial the creation serial of the widget that has a handle now, or 0 when none has it
+	 */
+	public int drain(final int tick, final CPlayerUnitOrderListener target, final Consumer<OrderMessage> other,
+			final IntUnaryOperator liveSerial) {
 		return this.inbox.drain(tick, message -> {
 			if (message.kind == OrderMessage.COMMAND) {
-				CPlayerCommandCodec.decode(message.payload, 0, message.payloadLength, target);
+				if (targetsStillNamed(message, liveSerial)) {
+					CPlayerCommandCodec.decode(message.payload, 0, message.payloadLength, target);
+				}
 			}
 			else if (other != null) {
 				other.accept(message);
@@ -54,9 +75,43 @@ public final class ThreadedOrderListener implements CPlayerUnitOrderListener {
 		});
 	}
 
+	/**
+	 * Whether every target the command was given with still names the widget the interface showed; a widget gone in
+	 * the meantime whose handle a later one took is no target for it.
+	 */
+	static boolean targetsStillNamed(final OrderMessage message, final IntUnaryOperator liveSerial) {
+		for (int i = 0; i < message.targetCount; i++) {
+			final int shown = message.targetSerial[i];
+			if (shown == 0) {
+				continue;
+			}
+			final int live = liveSerial.applyAsInt(message.targetHandle[i]);
+			if ((live != 0) && (live != shown)) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	private void target(final int handle) {
+		if (handle != 0) {
+			this.targetHandle[this.targetCount] = handle;
+			this.targetSerial[this.targetCount] = this.shownSerial.applyAsInt(handle);
+			this.targetCount++;
+		}
+	}
+
 	private void submit() {
 		final byte[] command = this.encoder.take();
-		this.inbox.submitCommand(this.playerIndex, command, 0, command.length);
+		final OrderMessage message = this.inbox.obtain();
+		message.kind = OrderMessage.COMMAND;
+		message.playerIndex = this.playerIndex;
+		message.setPayload(command, 0, command.length);
+		message.targetCount = this.targetCount;
+		System.arraycopy(this.targetHandle, 0, message.targetHandle, 0, this.targetCount);
+		System.arraycopy(this.targetSerial, 0, message.targetSerial, 0, this.targetCount);
+		this.targetCount = 0;
+		this.inbox.submit(message);
 	}
 
 	@Override
@@ -66,6 +121,7 @@ public final class ThreadedOrderListener implements CPlayerUnitOrderListener {
 			InputLatencyProbe.submitted(unitHandleId);
 		}
 		this.encoder.issueTargetOrder(unitHandleId, abilityHandleId, orderId, targetHandleId, queue);
+		target(targetHandleId);
 		submit();
 	}
 
@@ -93,6 +149,7 @@ public final class ThreadedOrderListener implements CPlayerUnitOrderListener {
 	public synchronized void issueDropItemAtPointOrder(final int unitHandleId, final int abilityHandleId,
 			final int orderId, final int targetHandleId, final float x, final float y, final boolean queue) {
 		this.encoder.issueDropItemAtPointOrder(unitHandleId, abilityHandleId, orderId, targetHandleId, x, y, queue);
+		target(targetHandleId);
 		submit();
 	}
 
@@ -101,6 +158,8 @@ public final class ThreadedOrderListener implements CPlayerUnitOrderListener {
 			final int orderId, final int targetItemHandleId, final int targetHeroHandleId, final boolean queue) {
 		this.encoder.issueDropItemAtTargetOrder(unitHandleId, abilityHandleId, orderId, targetItemHandleId,
 				targetHeroHandleId, queue);
+		target(targetItemHandleId);
+		target(targetHeroHandleId);
 		submit();
 	}
 

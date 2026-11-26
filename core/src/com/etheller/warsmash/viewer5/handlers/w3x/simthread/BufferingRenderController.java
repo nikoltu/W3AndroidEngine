@@ -308,13 +308,17 @@ public final class BufferingRenderController implements SimulationRenderControll
 
 	@Override
 	public void updateItemModel(final CItem item) {
-		begin(RenderCallCodes.ITEM_UPDATE_MODEL).a = handle(item);
+		final RenderEvent event = begin(RenderCallCodes.ITEM_UPDATE_MODEL);
+		event.a = handle(item);
+		event.o0 = item;
 		emit();
 	}
 
 	@Override
 	public void removeItem(final CItem item) {
-		begin(RenderCallCodes.ITEM_REMOVE).a = handle(item);
+		final RenderEvent event = begin(RenderCallCodes.ITEM_REMOVE);
+		event.a = handle(item);
+		event.o0 = item;
 		emit();
 	}
 
@@ -382,13 +386,17 @@ public final class BufferingRenderController implements SimulationRenderControll
 
 	@Override
 	public void removeUnit(final CUnit unit) {
-		begin(RenderCallCodes.UNIT_REMOVE).a = handle(unit);
+		final RenderEvent event = begin(RenderCallCodes.UNIT_REMOVE);
+		event.a = handle(unit);
+		event.o0 = unit;
 		emit();
 	}
 
 	@Override
 	public void removeDestructable(final CDestructable dest) {
-		begin(RenderCallCodes.DESTRUCTABLE_REMOVE).a = handle(dest);
+		final RenderEvent event = begin(RenderCallCodes.DESTRUCTABLE_REMOVE);
+		event.a = handle(dest);
+		event.o0 = dest;
 		emit();
 	}
 
@@ -550,6 +558,7 @@ public final class BufferingRenderController implements SimulationRenderControll
 		final RenderEvent event = begin(RenderCallCodes.UI_GET_ITEM_SOUND);
 		event.a = handle(cUnit);
 		event.b = handle(item);
+		event.o0 = item;
 		emit();
 	}
 
@@ -558,6 +567,7 @@ public final class BufferingRenderController implements SimulationRenderControll
 		final RenderEvent event = begin(RenderCallCodes.UI_DROP_ITEM_SOUND);
 		event.a = handle(cUnit);
 		event.b = handle(item);
+		event.o0 = item;
 		emit();
 	}
 

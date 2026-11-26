@@ -67,6 +67,11 @@ public final class UnitFrameState {
 
 	public int count;
 	public int[] handle = new int[0];
+	/**
+	 * The unit's creation serial: a freed handle is given to a later unit, and a row names the unit it was written
+	 * for only with both.
+	 */
+	public int[] serial = new int[0];
 	public int[] typeId = new int[0];
 	public int[] owner = new int[0];
 	public float[] x = new float[0];
@@ -132,6 +137,7 @@ public final class UnitFrameState {
 		count = other.count;
 		final int n = count;
 		System.arraycopy(other.handle, 0, handle, 0, n);
+		System.arraycopy(other.serial, 0, serial, 0, n);
 		System.arraycopy(other.typeId, 0, typeId, 0, n);
 		System.arraycopy(other.owner, 0, owner, 0, n);
 		System.arraycopy(other.x, 0, x, 0, n);
@@ -170,12 +176,19 @@ public final class UnitFrameState {
 		return index >= 0 ? index : -1;
 	}
 
+	/** Row of the unit with the handle and creation serial, or -1 (a later unit with the handle has another serial). */
+	public int indexOf(final int unitHandle, final int unitSerial) {
+		final int index = indexOf(unitHandle);
+		return (index >= 0) && (serial[index] == unitSerial) ? index : -1;
+	}
+
 	public boolean has(final int row, final int flag) {
 		return (flags[row] & flag) != 0;
 	}
 
 	private void grow(final int capacity) {
 		handle = Arrays.copyOf(handle, capacity);
+		serial = Arrays.copyOf(serial, capacity);
 		typeId = Arrays.copyOf(typeId, capacity);
 		owner = Arrays.copyOf(owner, capacity);
 		x = Arrays.copyOf(x, capacity);

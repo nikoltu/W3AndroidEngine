@@ -3,8 +3,6 @@ package com.etheller.warsmash.viewer5.handlers.w3x.simthread;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.function.Supplier;
 
-import com.etheller.warsmash.util.Log;
-
 /**
  * How script natives that draw or lay out things (frames, effects, doodads, the terrain fog) reach the render side.
  * A native that changes something and returns nothing is a {@link #send command}: with a simulation thread it goes into
@@ -14,6 +12,10 @@ import com.etheller.warsmash.util.Log;
  * <p>
  * Simulation thread: {@link #send}, {@link #call}. Render thread: the queued commands. A command captures only values
  * and render objects it finds by key.
+ * <p>
+ * A command must not throw for any value a script can give: the script's arguments are read and checked where the
+ * native is called, and what the command does with them on the render side takes every case. Without the thread a
+ * failing command would end the script's trigger, with it the render thread, so the two would play differently.
  */
 public final class RenderCommands {
 	private final class Command implements Runnable {
@@ -29,13 +31,7 @@ public final class RenderCommands {
 			RenderCommands.this.waiting.remove(this);
 			if (!this.done) {
 				this.done = true;
-				try {
-					this.action.run();
-				}
-				catch (final RuntimeException exc) {
-					// where the script made the call, the same error would have ended that trigger; here only the call fails
-					Log.error(exc);
-				}
+				this.action.run();
 			}
 		}
 	}

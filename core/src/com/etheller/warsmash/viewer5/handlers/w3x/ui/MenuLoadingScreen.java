@@ -214,6 +214,10 @@ final class MenuLoadingScreen {
 		this.waitForTap = waitForTap;
 	}
 
+	boolean isWaitForTap() {
+		return this.waitForTap;
+	}
+
 	boolean isReforgedLoadingScreens() {
 		return this.reforgedLoadingScreens;
 	}

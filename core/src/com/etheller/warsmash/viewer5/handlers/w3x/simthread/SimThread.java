@@ -92,6 +92,8 @@ public final class SimThread implements SimThreadRunner {
 	private volatile long attempts;
 	/** Played before a call from the simulation is run, so the render side is up to date with the steps made. */
 	private volatile Runnable beforeCall;
+	/** What ended the thread in the middle of its work; the render thread throws it (see {@link #rethrowFailure}). */
+	private volatile Throwable failure;
 	private Object hintSession;
 	private Method hintReport;
 
@@ -125,6 +127,45 @@ public final class SimThread implements SimThreadRunner {
 
 	private void loop() {
 		setUpThread();
+		try {
+			steps();
+		}
+		catch (final Throwable t) {
+			fail(t);
+		}
+		finally {
+			closeHints();
+		}
+	}
+
+	/**
+	 * Simulation thread: the game is left as the failure found it, half a step done, so nothing of it runs again; the
+	 * render thread throws the failure where it next deals with the thread, as the step would have thrown there without
+	 * the thread.
+	 */
+	private void fail(final Throwable t) {
+		if (this.failure == null) {
+			this.failure = t;
+		}
+		this.stopped = true;
+		this.credits.set(0);
+	}
+
+	/** Render thread: the failure of the simulation thread, thrown as it was thrown there. */
+	private void rethrowFailure() {
+		final Throwable t = this.failure;
+		if (t instanceof RuntimeException) {
+			throw (RuntimeException) t;
+		}
+		if (t instanceof Error) {
+			throw (Error) t;
+		}
+		if (t != null) {
+			throw new IllegalStateException("The simulation failed", t);
+		}
+	}
+
+	private void steps() {
 		long lastIdle = 0;
 		while (!this.stopped) {
 			final Runnable job = this.toSim.poll();
@@ -134,7 +175,7 @@ public final class SimThread implements SimThreadRunner {
 			}
 			final int pending = this.credits.get();
 			if ((pending > 0) && !this.parkedOrHeld() && this.state.compareAndSet(IDLE, BUSY)) {
-				int result;
+				final int result;
 				final long start = System.nanoTime();
 				this.stepping = true;
 				try {
@@ -142,8 +183,9 @@ public final class SimThread implements SimThreadRunner {
 					result = this.stepper.step(pending);
 				}
 				catch (final Throwable t) {
-					Log.error("Simulation step failed", t);
-					result = BLOCKED;
+					// before the step lets go of the simulation, so a hold that waited for it does not read it
+					fail(t);
+					throw t;
 				}
 				finally {
 					this.stepping = false;
@@ -177,7 +219,6 @@ public final class SimThread implements SimThreadRunner {
 			}
 			parkFor(pending > 0 ? WAIT_PARK_NANOS : IDLE_PARK_NANOS);
 		}
-		closeHints();
 	}
 
 	private boolean parkedOrHeld() {
@@ -193,7 +234,8 @@ public final class SimThread implements SimThreadRunner {
 			this.stepper.idle();
 		}
 		catch (final Throwable t) {
-			Log.error("Simulation idle work failed", t);
+			fail(t);
+			throw t;
 		}
 		finally {
 			this.crossedInStep = false;
@@ -221,6 +263,7 @@ public final class SimThread implements SimThreadRunner {
 	 * @return the steps dropped because the game is too far behind
 	 */
 	public int grant(final int steps, final int maxPending) {
+		rethrowFailure();
 		if (steps <= 0) {
 			return 0;
 		}
@@ -252,6 +295,7 @@ public final class SimThread implements SimThreadRunner {
 	 * steps make meanwhile. For a game that is not drawn, where there is nothing else to do.
 	 */
 	public void awaitGranted() {
+		rethrowFailure();
 		final long since = this.attempts;
 		while (!this.stopped) {
 			final boolean idle = this.state.get() != BUSY;
@@ -264,6 +308,7 @@ public final class SimThread implements SimThreadRunner {
 				runCall(request);
 			}
 		}
+		rethrowFailure();
 		// the steps' writes are seen from here on
 		hold();
 		release();
@@ -275,7 +320,9 @@ public final class SimThread implements SimThreadRunner {
 	 */
 	@Override
 	public void run(final Runnable job) {
-		if (isSimThread() || !this.started) {
+		rethrowFailure();
+		if (isSimThread() || !this.started || (this.stopped && !this.thread.isAlive())) {
+			// no thread runs the simulation (any more): the render thread has it to itself
 			job.run();
 			return;
 		}
@@ -294,15 +341,19 @@ public final class SimThread implements SimThreadRunner {
 			}
 		});
 		wake();
-		try {
-			Runnable request;
-			while ((request = this.toRender.take()) != done) {
+		while (true) {
+			final Runnable request = poll(1_000_000L);
+			if (request == done) {
+				break;
+			}
+			if (request != null) {
 				runCall(request);
 			}
-		}
-		catch (final InterruptedException e) {
-			Thread.currentThread().interrupt();
-			throw new IllegalStateException("Interrupted waiting for the simulation thread", e);
+			else if (!this.thread.isAlive() && this.toRender.isEmpty()) {
+				// it ended before it took the job
+				rethrowFailure();
+				throw new IllegalStateException("The simulation thread ended before it ran the job");
+			}
 		}
 		if (failure[0] instanceof RuntimeException) {
 			throw (RuntimeException) failure[0];
@@ -328,12 +379,7 @@ public final class SimThread implements SimThreadRunner {
 	private void runPosted() {
 		Runnable job;
 		while ((job = this.posted.poll()) != null) {
-			try {
-				job.run();
-			}
-			catch (final Throwable t) {
-				Log.error("Simulation job failed", t);
-			}
+			job.run();
 		}
 	}
 
@@ -354,7 +400,7 @@ public final class SimThread implements SimThreadRunner {
 		if (this.stepping) {
 			this.crossedInStep = true;
 		}
-		final FutureTask<T> task = new FutureTask<>(call::get);
+		final Call<T> task = new Call<>(call);
 		this.toRender.add(task);
 		final long waitStart = SimThreadGuard.collecting() ? System.nanoTime() : 0L;
 		try {
@@ -402,6 +448,17 @@ public final class SimThread implements SimThreadRunner {
 		return type.cast(proxy);
 	}
 
+	/** A call of the simulation thread that it waits for; it ends with an answer or with the failure that kept it. */
+	private static final class Call<T> extends FutureTask<T> {
+		Call(final Supplier<T> call) {
+			super(call::get);
+		}
+
+		void fail(final Throwable t) {
+			setException(t);
+		}
+	}
+
 	private static Object invoke(final Method method, final Object target, final Object[] args) {
 		try {
 			return method.invoke(target, args);
@@ -426,6 +483,7 @@ public final class SimThread implements SimThreadRunner {
 	 * serving until the step ends or the budget is used up.
 	 */
 	public void serve() {
+		rethrowFailure();
 		final long end = System.nanoTime() + SERVE_BUDGET_NANOS;
 		while (true) {
 			Runnable request = this.toRender.poll();
@@ -453,10 +511,11 @@ public final class SimThread implements SimThreadRunner {
 	}
 
 	private void runCall(final Runnable request) {
-		if (!(request instanceof FutureTask)) {
+		if (!(request instanceof Call)) {
 			request.run();
 			return;
 		}
+		final Call<?> call = (Call<?>) request;
 		// the simulation thread waits for this answer, so the render side may read it meanwhile
 		final boolean wasHeld = this.heldByRender;
 		this.heldByRender = true;
@@ -464,9 +523,16 @@ public final class SimThread implements SimThreadRunner {
 		try {
 			final Runnable before = this.beforeCall;
 			if (before != null) {
-				before.run();
+				try {
+					before.run();
+				}
+				catch (final Throwable t) {
+					// the call fails as it would have where the simulation made it, and the waiting step with it
+					call.fail(t);
+					throw t;
+				}
 			}
-			request.run();
+			call.run();
 		}
 		finally {
 			this.heldByRender = wasHeld;
@@ -485,6 +551,7 @@ public final class SimThread implements SimThreadRunner {
 	 * @return true when held; then {@link #release} must follow
 	 */
 	public boolean tryHold() {
+		rethrowFailure();
 		if (!this.started) {
 			return true;
 		}
@@ -501,6 +568,7 @@ public final class SimThread implements SimThreadRunner {
 
 	/** Render thread: waits for the step that runs (serving its calls) and keeps the next one from starting. */
 	public void hold() {
+		rethrowFailure();
 		if (!this.started) {
 			return;
 		}
@@ -510,6 +578,7 @@ public final class SimThread implements SimThreadRunner {
 		}
 		while (!this.state.compareAndSet(IDLE, HELD)) {
 			if (this.stopped && !this.thread.isAlive()) {
+				rethrowFailure();
 				return;
 			}
 			final Runnable request = poll(200_000L);
@@ -517,6 +586,8 @@ public final class SimThread implements SimThreadRunner {
 				runCall(request);
 			}
 		}
+		// the step waited for ended on a failure: what it left is not to be read
+		rethrowFailure();
 		held(true);
 	}
 
@@ -541,6 +612,7 @@ public final class SimThread implements SimThreadRunner {
 	 * @return whether the simulation is held
 	 */
 	public boolean park(final long maxWaitMillis) {
+		rethrowFailure();
 		if (!this.started || this.parked) {
 			return this.parked;
 		}
@@ -577,10 +649,12 @@ public final class SimThread implements SimThreadRunner {
 	}
 
 	/**
-	 * Render thread: ends the thread and waits up to the time for it, serving its calls meanwhile, so that a step that
-	 * runs finishes before the game it plays is taken apart.
+	 * Render thread: ends the thread and waits until it has ended, serving its calls meanwhile, so that the step that
+	 * runs finishes before the game it plays is taken apart; nothing the step uses may be let go while it runs, as
+	 * without the thread the step would have ended before anything else. A step that takes longer than the time is
+	 * written to the log with where it is, and waited for further.
 	 *
-	 * @return whether the thread ended in time
+	 * @return whether the thread ended within the time
 	 */
 	public boolean shutdown(final long maxWaitMillis) {
 		this.stopped = true;
@@ -591,30 +665,31 @@ public final class SimThread implements SimThreadRunner {
 		if (!this.started) {
 			return true;
 		}
-		final long end = System.nanoTime() + (maxWaitMillis * 1_000_000L);
-		while (this.thread.isAlive() && (System.nanoTime() < end)) {
+		final long wait = maxWaitMillis * 1_000_000L;
+		long reportAt = System.nanoTime() + wait;
+		boolean inTime = true;
+		while (this.thread.isAlive()) {
 			final Runnable request = poll(1_000_000L);
 			if (request != null) {
-				try {
-					runCall(request);
-				}
-				catch (final RuntimeException e) {
-					Log.error(e);
-				}
+				runCall(request);
+			}
+			else if (System.nanoTime() >= reportAt) {
+				inTime = false;
+				reportAt = System.nanoTime() + wait;
+				Log.warn("The simulation thread is still in its step: " + where(this.thread));
 			}
 		}
-		if (this.thread.isAlive()) {
-			this.thread.interrupt();
-			try {
-				this.thread.join(100);
-			}
-			catch (final InterruptedException e) {
-				Thread.currentThread().interrupt();
-			}
-		}
-		// calls the thread left: whoever waits for them is gone, they are dropped
+		// calls the thread left that nobody waits for (an interface's notice): the game they were for is over
 		this.toRender.clear();
-		return !this.thread.isAlive();
+		return inTime;
+	}
+
+	private static String where(final Thread thread) {
+		final StringBuilder text = new StringBuilder();
+		for (final StackTraceElement element : thread.getStackTrace()) {
+			text.append("\n    at ").append(element);
+		}
+		return text.toString();
 	}
 
 	/** Whether a step or a job runs on the simulation thread at this moment. */

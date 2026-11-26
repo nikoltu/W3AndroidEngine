@@ -29,7 +29,11 @@ import com.etheller.warsmash.viewer5.handlers.w3x.simulation.util.TextTagConfigT
  * for those ids reach them.
  */
 public final class RenderEventPlayer {
-	/** The simulation objects of the handles events carry; a handle of 0 or an unknown one gives null. */
+	/**
+	 * The simulation objects of the handles events carry; a handle of 0 or an unknown one gives null. A handle is
+	 * given out again once its object is gone, so it names the object whose creation event was played last for it
+	 * (or, before that event, the earliest object made with it whose creation event is still to come).
+	 */
 	public interface Resolver {
 		CUnit unit(int handle);
 
@@ -44,10 +48,13 @@ public final class RenderEventPlayer {
 		CProjectile projectile(int id);
 
 		/** The unit's remove event was played: its handle names the next unit made with it, not this one. */
-		default void unitRemoved(final int handle) {
+		default void unitRemoved(final int handle, final CUnit unit) {
 		}
 
-		default void destructableRemoved(final int handle) {
+		default void itemRemoved(final int handle, final CItem item) {
+		}
+
+		default void destructableRemoved(final int handle, final CDestructable destructable) {
 		}
 	}
 
@@ -127,10 +134,6 @@ public final class RenderEventPlayer {
 
 	private CUnit unit(final int handle) {
 		return handle == 0 ? null : this.resolver.unit(handle);
-	}
-
-	private CItem item(final int handle) {
-		return handle == 0 ? null : this.resolver.item(handle);
 	}
 
 	private CWidget widget(final int handle) {
@@ -233,11 +236,15 @@ public final class RenderEventPlayer {
 				this.peers.itemCreated(e.a, id(e.b), e.f0, e.f1, (WorldPeerData.Item) e.o0);
 			}
 			break;
-		case RenderCallCodes.ITEM_REMOVE:
-			this.target.removeItem(item(e.a));
+		case RenderCallCodes.ITEM_REMOVE: {
+			// the event names its object: the handle may name a later item by now
+			final CItem item = (CItem) e.o0;
+			this.target.removeItem(item);
+			this.resolver.itemRemoved(e.a, item);
 			break;
+		}
 		case RenderCallCodes.ITEM_UPDATE_MODEL:
-			this.target.updateItemModel(item(e.a));
+			this.target.updateItemModel((CItem) e.o0);
 			break;
 		case RenderCallCodes.DESTRUCTABLE_CREATE:
 			if (this.peers == null) {
@@ -257,14 +264,18 @@ public final class RenderEventPlayer {
 						(WorldPeerData.Destructable) e.o0);
 			}
 			break;
-		case RenderCallCodes.UNIT_REMOVE:
-			this.target.removeUnit(unit(e.a));
-			this.resolver.unitRemoved(e.a);
+		case RenderCallCodes.UNIT_REMOVE: {
+			final CUnit unit = (CUnit) e.o0;
+			this.target.removeUnit(unit);
+			this.resolver.unitRemoved(e.a, unit);
 			break;
-		case RenderCallCodes.DESTRUCTABLE_REMOVE:
-			this.target.removeDestructable(destructable(e.a));
-			this.resolver.destructableRemoved(e.a);
+		}
+		case RenderCallCodes.DESTRUCTABLE_REMOVE: {
+			final CDestructable destructable = (CDestructable) e.o0;
+			this.target.removeDestructable(destructable);
+			this.resolver.destructableRemoved(e.a, destructable);
 			break;
+		}
 		case RenderCallCodes.INSTANT_ATTACK_EFFECT:
 			if ((e.o0 instanceof WorldPeerData.InstantAttack) && (this.target instanceof ValueTarget)) {
 				((ValueTarget) this.target).createInstantAttackEffect(unit(e.a), (WorldPeerData.InstantAttack) e.o0,
@@ -296,10 +307,10 @@ public final class RenderEventPlayer {
 			this.target.spawnUnitReadySound(unit(e.a));
 			break;
 		case RenderCallCodes.UI_GET_ITEM_SOUND:
-			this.target.spawnUIUnitGetItemSound(unit(e.a), item(e.b));
+			this.target.spawnUIUnitGetItemSound(unit(e.a), (CItem) e.o0);
 			break;
 		case RenderCallCodes.UI_DROP_ITEM_SOUND:
-			this.target.spawnUIUnitDropItemSound(unit(e.a), item(e.b));
+			this.target.spawnUIUnitDropItemSound(unit(e.a), (CItem) e.o0);
 			break;
 		case RenderCallCodes.DEATH_EXPLODE_EFFECT:
 			this.target.spawnDeathExplodeEffect(unit(e.a), e.c == 1 ? null : new War3ID(e.b));

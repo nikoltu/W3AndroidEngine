@@ -70,7 +70,9 @@ public class CBehaviorWispHarvest extends CAbstractRangedBehavior {
 					&& tree.canBeTargetedBy(simulation, this.unit, CAbilityWispHarvest.TREE_ALIVE_TYPE_ONLY)
 					&& (!withinReachOnly || this.unit.canReach(tree, 0))) {
 				final double distance = tree.distanceSquaredNoCollision(this.unit);
-				if (distance < nearestDistance) {
+				// Measured on 1.29: of two trees equally near, the Wisp takes the southern one.
+				if ((distance < nearestDistance)
+						|| ((distance == nearestDistance) && (nearest != null) && (tree.getY() < nearest.getY()))) {
 					nearestDistance = distance;
 					nearest = tree;
 				}
@@ -87,6 +89,10 @@ public class CBehaviorWispHarvest extends CAbstractRangedBehavior {
 			simulation.unitRepositioned(this.unit); // dont interpolate, instant jump
 		}
 		final int gameTurnTick = simulation.getGameTurnTick();
+		if (!this.harvesting) {
+			// Measured on 1.29: the first lumber comes one whole interval after the Wisp starts on the tree.
+			this.lastIncomeTick = gameTurnTick;
+		}
 		if ((gameTurnTick - this.lastIncomeTick) >= this.abilityWispHarvest.getPeriodicIntervalLengthTicks()) {
 			this.lastIncomeTick = gameTurnTick;
 			final CPlayer player = simulation.getPlayer(this.unit.getPlayerIndex());

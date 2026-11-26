@@ -21,6 +21,8 @@ public final class SimFrameRing {
 	private volatile long released;
 	/** Writer only: the frame handed out by beginWrite and not yet published. */
 	private SimFrame writing;
+	/** Writer only: told of each frame beginWrite starts, before anything is written into it. */
+	private java.util.function.Consumer<SimFrame> onBegin;
 
 	public SimFrameRing(final int capacity, final RenderEventPool pool) {
 		if (capacity < 3) {
@@ -53,7 +55,15 @@ public final class SimFrameRing {
 		frame.reset(pool);
 		frame.sequence = sequence;
 		writing = frame;
+		if (onBegin != null) {
+			onBegin.accept(frame);
+		}
 		return frame;
+	}
+
+	/** Writer: what is to go first into every frame begun from now on (events that found the ring full). */
+	public void setOnBeginWrite(final java.util.function.Consumer<SimFrame> onBegin) {
+		this.onBegin = onBegin;
 	}
 
 	/** Writer. Makes the frame from {@link #beginWrite()} visible to the reader. */
@@ -96,17 +106,5 @@ public final class SimFrameRing {
 		if (limit > released) {
 			released = limit;
 		}
-	}
-
-	/** Neither thread running: drops every frame, recycling their events, and starts again from sequence 0. */
-	public void clear() {
-		for (final SimFrame frame : frames) {
-			frame.reset(pool);
-			frame.fogLength = 0;
-			frame.fogVersion = 0;
-		}
-		writing = null;
-		published = 0;
-		released = 0;
 	}
 }

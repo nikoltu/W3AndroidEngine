@@ -127,13 +127,16 @@ final class ReforgedEffectNatives {
 			final String name = ScriptAnimTypes.animName(constant(arguments, 1));
 			if ((effect != null) && (name != null)) {
 				effect.playScriptAnimation(name);
-				effect.getModelInstance().setAnimationSpeed(real(arguments, 2));
+				// an effect whose model could not be made has nothing to play
+				if (effect.getModelInstance() != null) {
+					effect.getModelInstance().setAnimationSpeed(real(arguments, 2));
+				}
 			}
 			return null;
 		});
 		addCommand("BlzSetSpecialEffectAnimationBlendTime", (arguments, globalScope, triggerScope) -> {
 			final RenderSpellEffect effect = effect(arguments);
-			if (effect != null) {
+			if ((effect != null) && (effect.getModelInstance() != null)) {
 				effect.getModelInstance().setBlendTime(Math.max(0, real(arguments, 1)) * 1000.0f);
 			}
 			return null;

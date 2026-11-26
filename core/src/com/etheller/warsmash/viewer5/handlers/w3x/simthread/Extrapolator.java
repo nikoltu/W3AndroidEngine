@@ -15,6 +15,9 @@ public final class Extrapolator {
 	public static final int ITEMS = 1;
 	public static final int TREES = 2;
 
+	/** Matches a row of any creation serial (a lookup by handle alone). */
+	public static final int ANY_SERIAL = Integer.MIN_VALUE;
+
 	/** A unit that moves further than this between two frames was moved by the game (a blink), not walked. */
 	private static final float TELEPORT_DISTANCE = 200f;
 
@@ -56,18 +59,25 @@ public final class Extrapolator {
 		public boolean extrapolated;
 	}
 
-	/**
-	 * Fills the pose for the unit with the handle; false when no frame near the presentation time has the unit (it
-	 * is not made yet, or already gone), and the pose is then left as it was.
-	 */
+	/** As {@link #sampleUnit(PresentationClock, int, int, UnitPose)} for whichever unit has the handle. */
 	public static boolean sampleUnit(final PresentationClock clock, final int handle, final UnitPose pose) {
+		return sampleUnit(clock, handle, ANY_SERIAL, pose);
+	}
+
+	/**
+	 * Fills the pose for the unit with the handle and creation serial; false when no frame near the presentation time
+	 * has the unit (it is not made yet, or already gone, and a later unit may hold the handle), and the pose is then
+	 * left as it was.
+	 */
+	public static boolean sampleUnit(final PresentationClock clock, final int handle, final int serial,
+			final UnitPose pose) {
 		final SimFrame before = clock.frameBefore();
 		if (before == null) {
 			return false;
 		}
 		final SimFrame after = clock.frameAfter();
-		final int rowBefore = rowOf(before.units, handle, pose.hintBefore);
-		final int rowAfter = after == null ? -1 : rowOf(after.units, handle, pose.hintAfter);
+		final int rowBefore = rowOf(before.units, handle, serial, pose.hintBefore);
+		final int rowAfter = after == null ? -1 : rowOf(after.units, handle, serial, pose.hintAfter);
 		pose.hintBefore = rowBefore;
 		pose.hintAfter = rowAfter;
 		if (rowBefore < 0) {
@@ -116,13 +126,13 @@ public final class Extrapolator {
 		pose.constructRatio = b.constructRatio[rowBefore];
 		final long extra = after == null ? clock.extrapolatedMillis() : 0;
 		if ((extra > 0) && (b.speed[rowBefore] > 0)) {
-			extrapolateUnit(clock, before, handle, rowBefore, extra, pose);
+			extrapolateUnit(clock, before, handle, serial, rowBefore, extra, pose);
 		}
 		return true;
 	}
 
 	private static void extrapolateUnit(final PresentationClock clock, final SimFrame before, final int handle,
-			final int row, final long extraMillis, final UnitPose pose) {
+			final int serial, final int row, final long extraMillis, final UnitPose pose) {
 		final UnitFrameState s = before.units;
 		float remaining = (s.speed[row] * extraMillis) / 1000f;
 		float cx = s.x[row];
@@ -150,7 +160,7 @@ public final class Extrapolator {
 		}
 		else {
 			final SimFrame previous = clock.framePrevious();
-			final int previousRow = previous == null ? -1 : rowOf(previous.units, handle, pose.hintPrevious);
+			final int previousRow = previous == null ? -1 : rowOf(previous.units, handle, serial, pose.hintPrevious);
 			pose.hintPrevious = previousRow;
 			if (previousRow < 0) {
 				return;
@@ -174,16 +184,16 @@ public final class Extrapolator {
 	 * taken from that unit's row in the frame.
 	 */
 	public static boolean sampleObject(final PresentationClock clock, final int kind, final int handle,
-			final ObjectPose pose) {
+			final int serial, final ObjectPose pose) {
 		final SimFrame before = clock.frameBefore();
 		if (before == null) {
 			return false;
 		}
 		final SimFrame after = clock.frameAfter();
 		final WorldObjectFrameState b = objects(before, kind);
-		final int rowBefore = rowOf(b, handle, pose.hintBefore);
+		final int rowBefore = rowOf(b, handle, serial, pose.hintBefore);
 		final WorldObjectFrameState a = after == null ? null : objects(after, kind);
-		final int rowAfter = a == null ? -1 : rowOf(a, handle, pose.hintAfter);
+		final int rowAfter = a == null ? -1 : rowOf(a, handle, serial, pose.hintAfter);
 		pose.hintBefore = rowBefore;
 		pose.hintAfter = rowAfter;
 		pose.extrapolated = false;
@@ -247,13 +257,25 @@ public final class Extrapolator {
 
 	/** Row of the handle in the state, trying the hint first; -1 when absent. */
 	public static int rowOf(final UnitFrameState s, final int handle, final int hint) {
-		if ((hint >= 0) && (hint < s.count) && (s.handle[hint] == handle)) {
-			return hint;
-		}
-		return s.indexOf(handle);
+		return rowOf(s, handle, ANY_SERIAL, hint);
+	}
+
+	/** Row of the handle and creation serial ({@link #ANY_SERIAL} for any), trying the hint first; -1 when absent. */
+	public static int rowOf(final UnitFrameState s, final int handle, final int serial, final int hint) {
+		final int row = ((hint >= 0) && (hint < s.count) && (s.handle[hint] == handle)) ? hint : s.indexOf(handle);
+		return (row >= 0) && (serial != ANY_SERIAL) && (s.serial[row] != serial) ? -1 : row;
 	}
 
 	public static int rowOf(final WorldObjectFrameState s, final int handle, final int hint) {
+		return rowOf(s, handle, ANY_SERIAL, hint);
+	}
+
+	public static int rowOf(final WorldObjectFrameState s, final int handle, final int serial, final int hint) {
+		final int row = findRow(s, handle, hint);
+		return (row >= 0) && (serial != ANY_SERIAL) && (s.serial[row] != serial) ? -1 : row;
+	}
+
+	private static int findRow(final WorldObjectFrameState s, final int handle, final int hint) {
 		if ((hint >= 0) && (hint < s.count) && (s.handle[hint] == handle)) {
 			return hint;
 		}

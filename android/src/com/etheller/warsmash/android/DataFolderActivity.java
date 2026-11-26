@@ -697,7 +697,7 @@ public class DataFolderActivity extends Activity {
 	}
 
 	private String problemText(final DataContentCheck.Problem problem) {
-		return getString(getResources().getIdentifier(problem.message, "string", R.class.getPackage().getName()));
+		return getString(getResources().getIdentifier(problem.message, "string", getPackageName()));
 	}
 
 	/** The problems after the first, which the status line names. */

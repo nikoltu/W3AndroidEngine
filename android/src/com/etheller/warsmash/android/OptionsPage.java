@@ -249,7 +249,7 @@ final class OptionsPage extends LauncherViews {
 	}
 
 	int stringId(final String name) {
-		return this.activity.getResources().getIdentifier(name, "string", R.class.getPackage().getName());
+		return this.activity.getResources().getIdentifier(name, "string", this.activity.getPackageName());
 	}
 
 	/** The engine's sound settings; their defaults are the engine's (music at 40, as Warcraft III has it). */

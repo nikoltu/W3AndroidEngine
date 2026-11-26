@@ -46,6 +46,7 @@ public class RenderDestructable extends RenderDoodad implements RenderWidget {
 	private boolean active;
 	// With a presentation clock the state is read from the frames of the game, by the handle.
 	private final int handleId;
+	private final int serial;
 	private final float maxLife;
 	private final Extrapolator.ObjectPose pose = new Extrapolator.ObjectPose();
 	private boolean frameDead;
@@ -97,6 +98,7 @@ public class RenderDestructable extends RenderDoodad implements RenderWidget {
 		this.portraitModel = portraitModel;
 		this.life = simulationDestructable.getLife();
 		this.handleId = simulationDestructable.getHandleId();
+		this.serial = simulationDestructable.getCreationSerial();
 		this.maxLife = simulationDestructable.getMaxLife();
 		this.destructableShadow = destructableShadow;
 		this.simulationDestructable = simulationDestructable;
@@ -177,7 +179,10 @@ public class RenderDestructable extends RenderDoodad implements RenderWidget {
 			}
 			this.unitAnimationListenerImpl = listener;
 			this.simulationDestructable.setUnitAnimationListener(listener);
-			this.map.destructablePeerCreated(this.simulationDestructable);
+			if (!this.released) {
+				// a removal already played has dropped the handle, which a late entry would keep for a recycled one
+				this.map.destructablePeerCreated(this.simulationDestructable);
+			}
 			listener.playAnimation(true, getAnimation(), SequenceUtils.EMPTY, 1.0f, true);
 			listener.setActivityObserver(this::wake);
 		}
@@ -293,7 +298,7 @@ public class RenderDestructable extends RenderDoodad implements RenderWidget {
 
 	/** Takes the state the frames give at the presentation time; false when no frame has this destructable. */
 	private boolean readFrame(final PresentationClock clock) {
-		if (!Extrapolator.sampleObject(clock, Extrapolator.TREES, this.handleId, this.pose)) {
+		if (!Extrapolator.sampleObject(clock, Extrapolator.TREES, this.handleId, this.serial, this.pose)) {
 			return false;
 		}
 		final WorldObjectFrameState state = this.pose.state;

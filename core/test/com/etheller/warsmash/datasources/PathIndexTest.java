@@ -96,6 +96,32 @@ class PathIndexTest {
 	}
 
 	@Test
+	void aQueryUnderAPrefixIsAnsweredAsThePathAndPrefixAre() {
+		final PathIndex index = new PathIndex(LISTED);
+		final List<String> asked = new ArrayList<>();
+		for (final String path : LISTED) {
+			asked.add(path);
+			asked.add(path.toUpperCase(Locale.ROOT) + "\\/");
+			asked.add(path.replace('\\', '/'));
+			asked.add(path.replace("war3.w3mod\\", ""));
+			asked.add(path.replace("war3.w3mod\\", "").replace('\\', ':'));
+		}
+		asked.add("\\");
+		asked.add("/:");
+		asked.add("Units/Orc/Grunt/Grunt.mdx");
+		asked.add("İstanbul\\dotted.mdx");
+		final String[] prefixes = { null, "war3.w3mod", "War3.w3mod\\_HD.w3mod", "war3.w3mod\\", "café", "" };
+		for (final String path : asked) {
+			final PathIndex.Query query = new PathIndex.Query(path);
+			assertEquals(CascDataSource.normalizedHashUncached(path), query.normalizedHash, path);
+			for (final String prefix : prefixes) {
+				assertEquals(index.indexOf(prefix, path),
+						index.indexOf(prefix == null ? null : new PathIndex.Prefix(prefix), query), prefix + " + " + path);
+			}
+		}
+	}
+
+	@Test
 	void aDuplicatePathGivesTheFirstPosition() {
 		final PathIndex index = new PathIndex(LISTED);
 		assertEquals(0, index.indexOf("WAR3.W3MOD\\UNITS\\HUMAN\\FOOTMAN\\FOOTMAN.MDX"));
@@ -123,6 +149,11 @@ class PathIndexTest {
 		for (final String path : listed) {
 			assertEquals(true, index.indexOf(path.toUpperCase(Locale.ROOT)) != -1, path);
 			assertEquals(lowered.contains(path.toLowerCase(Locale.ROOT) + "x"), index.indexOf(path + "x") != -1);
+			final String inside = path.substring("war3.w3mod\\".length());
+			assertEquals(index.indexOf(path),
+					index.indexOf(new PathIndex.Prefix("WAR3.w3mod"), new PathIndex.Query(inside.replace('\\', '/'))));
+			assertEquals(index.indexOf(path + "x"), index.indexOf(new PathIndex.Prefix("war3.w3mod"),
+					new PathIndex.Query(inside + "x")));
 		}
 		assertEquals(-1, index.indexOf("war3.w3mod"));
 	}

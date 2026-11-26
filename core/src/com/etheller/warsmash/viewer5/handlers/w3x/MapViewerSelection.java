@@ -56,7 +56,8 @@ final class MapViewerSelection {
 		if (frame == null) {
 			return 0;
 		}
-		final int row = frame.units.indexOf(widget.getSimulationWidget().getHandleId());
+		final int row = frame.units.indexOf(widget.getSimulationWidget().getHandleId(),
+				widget.getSimulationWidget().getCreationSerial());
 		return row < 0 ? 0 : frame.units.flags[row];
 	}
 
@@ -534,7 +535,7 @@ final class MapViewerSelection {
 			final float unitX;
 			final float unitY;
 			if (frame != null) {
-				final int row = frame.units.indexOf(unit.getHandleId());
+				final int row = frame.units.indexOf(unit.getHandleId(), unit.getCreationSerial());
 				if ((row < 0) || ((frame.units.flags[row] & BUILDING_RISING) != BUILDING_RISING)
 						|| !widget.getInstance().shown() || !filter.call(unit)) {
 					continue;
@@ -591,7 +592,7 @@ final class MapViewerSelection {
 			final float treeX;
 			final float treeY;
 			if (frame != null) {
-				final int row = frame.trees.indexOf(tree.getHandleId());
+				final int row = frame.trees.indexOf(tree.getHandleId(), tree.getCreationSerial());
 				if ((row < 0) || ((frame.trees.flags[row] & WorldObjectFrameState.DEAD) != 0)
 						|| ((frame.trees.flags[row] & WorldObjectFrameState.TREE) == 0)
 						|| !widget.getInstance().shown() || !widget.getInstance().isVisible(viewer.worldScene.camera)) {

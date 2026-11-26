@@ -20,6 +20,8 @@ public final class WorldObjectFrameState {
 
 	public int count;
 	public int[] handle = new int[0];
+	/** Items and trees: the creation serial of the object (see {@link UnitFrameState#serial}); projectiles: 0. */
+	public int[] serial = new int[0];
 	public float[] x = new float[0];
 	public float[] y = new float[0];
 	public float[] z = new float[0];
@@ -41,10 +43,17 @@ public final class WorldObjectFrameState {
 		return index >= 0 ? index : -1;
 	}
 
+	/** Row of the object with the handle and creation serial, or -1. */
+	public int indexOf(final int objectHandle, final int objectSerial) {
+		final int index = indexOf(objectHandle);
+		return (index >= 0) && (serial[index] == objectSerial) ? index : -1;
+	}
+
 	public int addRow() {
 		if (count == handle.length) {
 			final int capacity = Math.max(32, count * 2);
 			handle = Arrays.copyOf(handle, capacity);
+			serial = Arrays.copyOf(serial, capacity);
 			x = Arrays.copyOf(x, capacity);
 			y = Arrays.copyOf(y, capacity);
 			z = Arrays.copyOf(z, capacity);

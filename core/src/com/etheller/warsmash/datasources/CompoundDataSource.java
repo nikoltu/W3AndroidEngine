@@ -28,6 +28,7 @@ public class CompoundDataSource implements DataSource {
 				this.mpqList.add(dataSource);
 			}
 		}
+		sourcesSet();
 		loadFileAliases();
 	}
 
@@ -37,6 +38,7 @@ public class CompoundDataSource implements DataSource {
 	 */
 	public void addSource(final DataSource dataSource) {
 		this.mpqList.add(dataSource);
+		sourcesSet();
 		sourcesChanged();
 	}
 
@@ -134,10 +136,29 @@ public class CompoundDataSource implements DataSource {
 		return fileAliases.get(CascDataSource.normalizePath(filepath));
 	}
 
+	/**
+	 * Whether the answers of the sources are worth remembering: not when each of them looks a path up in an index of
+	 * its own. Such a compound is the game data under the folders of its prefixes, which asks it for every name under
+	 * every prefix, and remembering them took half a million entries for one map and longer than asking again.
+	 */
+	private volatile boolean rememberSources = true;
+
+	private void sourcesSet() {
+		boolean indexed = true;
+		for (final DataSource source : this.mpqList) {
+			indexed &= (source instanceof CascDataSource) || (source instanceof FolderDataSource)
+					|| (source instanceof MpqDataSource) || (source instanceof MapsFolderDataSource);
+		}
+		this.rememberSources = !indexed;
+	}
+
 	private int findSourceIndex(final String filepath) {
-		final int cached = this.sourceIndexCache.get(filepath, UNKNOWN);
-		if (cached != UNKNOWN) {
-			return cached;
+		final boolean remember = this.rememberSources;
+		if (remember) {
+			final int cached = this.sourceIndexCache.get(filepath, UNKNOWN);
+			if (cached != UNKNOWN) {
+				return cached;
+			}
 		}
 		int found = MISSING;
 		for (int i = this.mpqList.size() - 1; i >= 0; i--) {
@@ -146,7 +167,9 @@ public class CompoundDataSource implements DataSource {
 				break;
 			}
 		}
-		this.sourceIndexCache.put(filepath, found);
+		if (remember) {
+			this.sourceIndexCache.put(filepath, found);
+		}
 		return found;
 	}
 
@@ -305,7 +328,8 @@ public class CompoundDataSource implements DataSource {
 
 	@Override
 	public boolean has(final String filepath) {
-		if (this.cache.containsKey(filepath)) {
+		// Only files copied out with getFile are in the cache, seldom any, and hashing each path asked cost time.
+		if (!this.cache.isEmpty() && this.cache.containsKey(filepath)) {
 			return true;
 		}
 		if (findSourceIndex(filepath) != MISSING) {
@@ -318,12 +342,26 @@ public class CompoundDataSource implements DataSource {
 	@Override
 	public String findFirst(final String... filepaths) {
 		// The latest source with any of the paths decides, so a file in an override folder wins over the game data
-		// even when it has another of the names (a .blp beside the game's .dds).
-		for (int i = this.mpqList.size() - 1; i >= 0; i--) {
-			final String found = this.mpqList.get(i).findFirst(filepaths);
-			if (found != null) {
-				return found;
+		// even when it has another of the names (a .blp beside the game's .dds). Every source finds one of the paths
+		// exactly when it has one of them, so that source is the latest of the sources remembered for the paths, and
+		// only when it has several of them does it choose among them. Asking each source in turn walked all the data
+		// below each of them again for every texture and sound of a map.
+		int latest = MISSING;
+		String latestPath = null;
+		boolean several = false;
+		for (final String filepath : filepaths) {
+			final int index = findSourceIndex(filepath);
+			if (index > latest) {
+				latest = index;
+				latestPath = filepath;
+				several = false;
 			}
+			else if ((index == latest) && (index != MISSING)) {
+				several = true;
+			}
+		}
+		if (latest != MISSING) {
+			return several ? this.mpqList.get(latest).findFirst(filepaths) : latestPath;
 		}
 		for (final String filepath : filepaths) {
 			final String alias = resolveAlias(filepath);
@@ -355,6 +393,7 @@ public class CompoundDataSource implements DataSource {
 				this.mpqList.add(descriptor.createDataSource());
 			}
 		}
+		sourcesSet();
 		loadFileAliases();
 	}
 

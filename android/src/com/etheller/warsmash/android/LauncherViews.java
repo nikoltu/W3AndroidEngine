@@ -67,7 +67,7 @@ abstract class LauncherViews {
 	/** What a map's issue is told with: the sentence, or the few words that stand beside the map in a list. */
 	String issueText(final MapIssue issue, final boolean tag) {
 		final String name = tag ? issue.tag : issue.message;
-		final int id = this.activity.getResources().getIdentifier(name, "string", R.class.getPackage().getName());
+		final int id = this.activity.getResources().getIdentifier(name, "string", this.activity.getPackageName());
 		return id != 0 ? this.activity.getString(id) : issue.english;
 	}
 

@@ -466,7 +466,22 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 		return text.isEmpty() ? 0 : text.charAt(0);
 	}
 
+	/**
+	 * For the engine's own interface, which adds a frame made under another owner where it belongs itself: adding it to
+	 * the owner as well would draw it twice, the second time over the owner's later children.
+	 */
 	public UIFrame createFrame(final String name, final UIFrame owner, final int priority, final int createContext) {
+		return createFrame(name, owner, createContext, Attach.ROOT);
+	}
+
+	/** For a map's script, whose frames are drawn with the owner it names. */
+	public UIFrame createScriptFrame(final String name, final UIFrame owner, final int priority,
+			final int createContext) {
+		return createFrame(name, owner, createContext, Attach.OWNER);
+	}
+
+	private UIFrame createFrame(final String name, final UIFrame owner, final int createContext,
+			final Attach attach) {
 		final FrameDefinition frameDefinition = this.templates.getFrame(name);
 		if (frameDefinition == null) {
 			// A map's script may ask for a frame its own files never defined; the game gives it no frame.
@@ -476,7 +491,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 		try {
 			final UIFrame inflatedFrame = inflate(frameDefinition, owner, null,
 					frameDefinition.has("DecorateFileNames"));
-			attachToOwner(inflatedFrame, owner);
+			attach(inflatedFrame, owner, attach);
 			return inflatedFrame;
 		}
 		finally {
@@ -484,12 +499,25 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 		}
 	}
 
-	/** A frame the script makes under an owner is drawn with it; an owner that holds no children leaves it at the root. */
-	private void attachToOwner(final UIFrame frame, final UIFrame owner) {
-		if (frame == null) {
+	private enum Attach {
+		/** Added to the interface only when made under it. */
+		ROOT,
+		/** Added to its owner, or to the interface when the owner holds no children. */
+		OWNER,
+		/** Drawn by its owner alone. */
+		NONE
+	}
+
+	private void attach(final UIFrame frame, final UIFrame owner, final Attach attach) {
+		if ((frame == null) || (attach == Attach.NONE)) {
 			return;
 		}
-		if (owner instanceof AbstractUIFrame) {
+		if (attach == Attach.ROOT) {
+			if (owner == this) {
+				add(frame);
+			}
+		}
+		else if (owner instanceof AbstractUIFrame) {
 			((AbstractUIFrame) owner).add(frame);
 		}
 		else {
@@ -1886,9 +1914,16 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 		spriteFrame.setModel(model);
 	}
 
+	/** For the engine's own interface, which adds a frame made under another owner where it belongs itself. */
 	public UIFrame createFrameByType(final String typeName, final String name, final UIFrame owner,
 			final String inherits, final int createContext) {
-		return inflateByType(typeName, name, owner, inherits, createContext, true);
+		return inflateByType(typeName, name, owner, inherits, createContext, Attach.ROOT);
+	}
+
+	/** For a map's script, whose frames are drawn with the owner it names. */
+	public UIFrame createScriptFrameByType(final String typeName, final String name, final UIFrame owner,
+			final String inherits, final int createContext) {
+		return inflateByType(typeName, name, owner, inherits, createContext, Attach.OWNER);
 	}
 
 	/**
@@ -1898,11 +1933,11 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 	 */
 	public UIFrame createOwnedFrameByType(final String typeName, final String name, final UIFrame owner,
 			final String inherits, final int createContext) {
-		return inflateByType(typeName, name, owner, inherits, createContext, false);
+		return inflateByType(typeName, name, owner, inherits, createContext, Attach.NONE);
 	}
 
 	private UIFrame inflateByType(final String typeName, final String name, final UIFrame owner,
-			final String inherits, final int createContext, final boolean attach) {
+			final String inherits, final int createContext, final Attach attach) {
 		// The template to copy is the one the script names in "inherits"; a frame without one takes the fields of a
 		// template of its own name.
 		final boolean withChildren = "WITHCHILDREN".equals(inherits);
@@ -1916,9 +1951,7 @@ public final class GameUI extends AbstractUIFrame implements UIFrame {
 		try {
 			final UIFrame inflatedFrame = inflate(frameDefinition, owner, null,
 					frameDefinition.has("DecorateFileNames"));
-			if (attach) {
-				attachToOwner(inflatedFrame, owner);
-			}
+			attach(inflatedFrame, owner, attach);
 			return inflatedFrame;
 		}
 		finally {

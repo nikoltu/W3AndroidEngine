@@ -51,7 +51,7 @@ import com.hiveworkshop.json.JSONObject;
 import com.hiveworkshop.json.JSONTokener;
 
 public class CascDataSource implements DataSource {
-	private final String[] prefixes;
+	private final PathIndex.Prefix[] indexPrefixes;
 	private final Mount mount;
 	private Map<String, String> fileAliases = Collections.emptyMap();
 	/** The hash codes of the alias sources, so that a path without an alias is looked up without normalizing it. */
@@ -60,11 +60,14 @@ public class CascDataSource implements DataSource {
 
 	public CascDataSource(final String warcraft3InstallPath, final String[] prefixes, final String product,
 			final boolean old131Format) {
-		this.prefixes = prefixes;
 		for (int i = 0; i < (prefixes.length / 2); i++) {
 			final String temp = prefixes[i];
 			prefixes[i] = prefixes[prefixes.length - i - 1];
 			prefixes[prefixes.length - i - 1] = temp;
+		}
+		this.indexPrefixes = new PathIndex.Prefix[prefixes.length];
+		for (int i = 0; i < prefixes.length; i++) {
+			this.indexPrefixes[i] = new PathIndex.Prefix(prefixes[i]);
 		}
 
 		try {
@@ -194,14 +197,14 @@ public class CascDataSource implements DataSource {
 	 * answered from the index of listed paths, so the answer is not kept for each path asked.
 	 */
 	private String findReadable(final String filepath) {
-		final String path = resolveAlias(filepath);
-		for (final String prefix : this.prefixes) {
+		final PathIndex.Query path = resolveAlias(filepath);
+		for (final PathIndex.Prefix prefix : this.indexPrefixes) {
 			if (isReadable(prefix, path)) {
-				return prefix + "\\" + normalizePath(path);
+				return prefix.text + "\\" + normalizePath(path.path);
 			}
 		}
 		if (isReadable(null, path)) {
-			return normalizePath(path);
+			return normalizePath(path.path);
 		}
 		return null;
 	}
@@ -210,21 +213,22 @@ public class CascDataSource implements DataSource {
 	 * The alias target of a path, or the path as asked. The index finds a path in any letter case and with either
 	 * separator, so it is not normalized unless some alias may apply to it.
 	 */
-	private String resolveAlias(final String filepath) {
+	private PathIndex.Query resolveAlias(final String filepath) {
+		final PathIndex.Query query = query(filepath);
 		if (this.fileAliases.isEmpty()) {
-			return filepath;
+			return query;
 		}
-		final int hash = normalizedHash(filepath);
+		final int hash = query.normalizedHash;
 		if ((hash != NOT_ASCII) && !this.aliasHashes.contains(hash)) {
-			return filepath;
+			return query;
 		}
 		final String resolvedAlias = this.fileAliases.get(normalizePath(filepath));
-		return resolvedAlias != null ? resolvedAlias : filepath;
+		return resolvedAlias != null ? new PathIndex.Query(resolvedAlias) : query;
 	}
 
 	private boolean isFound(final String filepath) {
-		final String path = resolveAlias(filepath);
-		for (final String prefix : this.prefixes) {
+		final PathIndex.Query path = resolveAlias(filepath);
+		for (final PathIndex.Prefix prefix : this.indexPrefixes) {
 			if (isReadable(prefix, path)) {
 				return true;
 			}
@@ -235,10 +239,34 @@ public class CascDataSource implements DataSource {
 	static final int NOT_ASCII = 0;
 
 	/**
+	 * The query made last, on any thread. The data sources over a storage ask it and then the sources beside it for
+	 * the same path, so its hash is often wanted again at once. The query does not change, so a stale or another
+	 * thread's one does no harm: it is only used for the very same path.
+	 */
+	private static PathIndex.Query lastQuery;
+
+	private static PathIndex.Query query(final String path) {
+		PathIndex.Query query = lastQuery;
+		if ((query == null) || (query.path != path)) {
+			query = new PathIndex.Query(path);
+			lastQuery = query;
+		}
+		return query;
+	}
+
+	/**
 	 * The hash code of normalizePath(path) without making it, or NOT_ASCII for a path that is not plain ASCII (or
 	 * whose form happens to hash to it).
 	 */
 	static int normalizedHash(final String path) {
+		final PathIndex.Query query = lastQuery;
+		if ((query != null) && (query.path == path)) {
+			return query.normalizedHash;
+		}
+		return normalizedHashUncached(path);
+	}
+
+	static int normalizedHashUncached(final String path) {
 		int hash = 0;
 		final int length = path.length();
 		for (int i = 0; i < length; i++) {
@@ -425,11 +453,11 @@ public class CascDataSource implements DataSource {
 
 	@Override
 	public String findFirst(final String... filepaths) {
-		final String[] resolvedPaths = new String[filepaths.length];
+		final PathIndex.Query[] resolvedPaths = new PathIndex.Query[filepaths.length];
 		for (int i = 0; i < filepaths.length; i++) {
 			resolvedPaths[i] = resolveAlias(filepaths[i]);
 		}
-		for (final String prefix : this.prefixes) {
+		for (final PathIndex.Prefix prefix : this.indexPrefixes) {
 			for (int i = 0; i < resolvedPaths.length; i++) {
 				if (isReadable(prefix, resolvedPaths[i])) {
 					return filepaths[i];
@@ -451,10 +479,10 @@ public class CascDataSource implements DataSource {
 	 * paths, as walking the file system for each of them was slow.
 	 */
 	private boolean isReadable(final String tempFilepath) {
-		return isReadable(null, tempFilepath);
+		return isReadable(null, new PathIndex.Query(tempFilepath));
 	}
 
-	private boolean isReadable(final String prefix, final String path) {
+	private boolean isReadable(final PathIndex.Prefix prefix, final PathIndex.Query path) {
 		final int index = this.mount.index.indexOf(prefix, path);
 		if (index == -1) {
 			return false;
@@ -463,13 +491,14 @@ public class CascDataSource implements DataSource {
 		if (known != 0) {
 			return known == READABLE;
 		}
+		final String prefixText = prefix == null ? null : prefix.text;
 		try {
-			final boolean readable = this.mount.fileSystem.isReadableFile(storedPath(prefix, path));
+			final boolean readable = this.mount.fileSystem.isReadableFile(storedPath(prefixText, path.path));
 			this.mount.readable[index] = readable ? READABLE : UNREADABLE;
 			return readable;
 		}
 		catch (final IOException e) {
-			throw new RuntimeException("CASC parser error for: " + storedPath(prefix, path), e);
+			throw new RuntimeException("CASC parser error for: " + storedPath(prefixText, path.path), e);
 		}
 	}
 

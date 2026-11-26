@@ -36,6 +36,14 @@ public class CBehaviorAcolyteHarvest extends CAbstractRangedBehavior {
 
 	@Override
 	protected CBehavior update(final CSimulation simulation, final boolean withinFacingWindow) {
+		if (isMineEmpty()) {
+			// Measured: the Acolytes of a Haunted Gold Mine that ran out of gold stand idle at once.
+			if (this.harvesting) {
+				onStopHarvesting(simulation);
+				this.harvesting = false;
+			}
+			return this.unit.pollNextOrderBehavior(simulation);
+		}
 		if (!this.harvesting) {
 			final HarvestStartResult result = onStartHarvesting(simulation);
 			if (result == HarvestStartResult.DENIED) {
@@ -67,6 +75,18 @@ public class CBehaviorAcolyteHarvest extends CAbstractRangedBehavior {
 			}
 		}
 		return this;
+	}
+
+	private boolean isMineEmpty() {
+		if (!(this.target instanceof CUnit)) {
+			return false;
+		}
+		for (final CAbility ability : ((CUnit) this.target).getAbilities()) {
+			if ((ability instanceof CAbilityBlightedGoldMine) && ((CAbilityBlightedGoldMine) ability).isEmpty()) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private HarvestStartResult onStartHarvesting(final CSimulation simulation) {
